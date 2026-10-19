@@ -110,27 +110,27 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
   return (
     <section className="space-y-6" aria-label="Multiplayer Game Arcade">
       {/* Game Selector Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
             Multiplayer Game Arcade
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-zinc-400">
             Live WebSocket multiplayer telemetry · Real-time scores synced across all connected players
           </p>
         </div>
 
-        <div className="flex items-center gap-1 p-1 bg-slate-900 border border-slate-800 rounded-lg">
+        <div className="flex items-center gap-1 p-1 bg-[#0A0A0C] border border-zinc-800 rounded-md">
           <button
             type="button"
             onClick={() => {
               setActiveGame('subway');
               setShellState('title');
             }}
-            className={`px-3.5 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
+            className={`px-3.5 py-2 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
               activeGame === 'subway'
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-white text-black'
+                : 'text-zinc-400 hover:text-white'
             }`}
           >
             01. Subway Runner
@@ -141,10 +141,10 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
               setActiveGame('catapult');
               setShellState('title');
             }}
-            className={`px-3.5 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
+            className={`px-3.5 py-2 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
               activeGame === 'catapult'
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-white text-black'
+                : 'text-zinc-400 hover:text-white'
             }`}
           >
             02. Angry Catapult
@@ -155,10 +155,10 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
               setActiveGame('blocks');
               setShellState('title');
             }}
-            className={`px-3.5 py-2 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
+            className={`px-3.5 py-2 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
               activeGame === 'blocks'
-                ? 'bg-indigo-600 text-white'
-                : 'text-slate-300 hover:text-white'
+                ? 'bg-white text-black'
+                : 'text-zinc-400 hover:text-white'
             }`}
           >
             03. Block Arena
@@ -168,12 +168,12 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Main Game Shell Viewport (8 cols) */}
-        <div className="lg:col-span-8 relative rounded-xl border border-slate-800 bg-slate-900 overflow-hidden min-h-[520px] flex flex-col justify-between">
+        <div className="lg:col-span-8 relative rounded-lg border border-zinc-800/80 bg-[#0A0A0C] overflow-hidden min-h-[520px] flex flex-col justify-between">
           {/* HUD Top Bar */}
-          <div className="flex items-center justify-between px-5 py-3 bg-slate-950/90 border-b border-slate-800 z-10">
+          <div className="flex items-center justify-between px-5 py-3 bg-[#050505] border-b border-zinc-800/80 z-10">
             <div className="flex items-center gap-6">
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                   SCORE
                 </div>
                 <div className="text-2xl font-bold font-mono tabular-nums text-white" data-testid="game-score">
@@ -181,15 +181,15 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
                 </div>
               </div>
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                   BEST
                 </div>
-                <div className="text-2xl font-bold font-mono tabular-nums text-indigo-400">
+                <div className="text-2xl font-bold font-mono tabular-nums text-emerald-400">
                   {Math.round(bestScore)}
                 </div>
               </div>
               <div>
-                <div className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
                   VITALITY
                 </div>
                 <div className="flex items-center gap-1.5 mt-1" aria-label={`Vitality ${hp} of 3`}>
@@ -197,8 +197,8 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
                     <svg key={pip} viewBox="0 0 24 24" className="w-5 h-5">
                       <polygon
                         points="12,2 22,9 18,21 6,21 2,9"
-                        fill={pip <= hp ? '#10b981' : '#1e293b'}
-                        stroke="#0f172a"
+                        fill={pip <= hp ? '#10b981' : '#18181b'}
+                        stroke="#050505"
                         strokeWidth="2"
                       />
                     </svg>
@@ -217,7 +217,7 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
                     setShellState('paused');
                   }}
                   aria-label="Pause Game"
-                  className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md whitespace-nowrap shrink-0"
+                  className="px-3 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded whitespace-nowrap shrink-0"
                 >
                   Pause [P]
                 </button>
@@ -227,7 +227,7 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
                 tabIndex={-1}
                 onClick={(e) => startGame(e)}
                 aria-label="Restart Game"
-                className="px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md whitespace-nowrap shrink-0"
+                className="px-3 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded whitespace-nowrap shrink-0"
               >
                 Restart [R]
               </button>
@@ -278,11 +278,11 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
 
             {/* Title Overlay */}
             {shellState === 'title' && (
-              <div className="absolute inset-0 bg-slate-950/92 flex flex-col items-center justify-center p-8 text-center z-20">
+              <div className="absolute inset-0 bg-[#050505]/95 flex flex-col items-center justify-center p-8 text-center z-20">
                 <svg viewBox="0 0 120 48" className="w-28 h-12 mb-4" aria-hidden="true">
-                  <rect x="6" y="6" width="108" height="36" rx="8" fill="#1e1b4b" stroke="#6366f1" strokeWidth="2.5" />
+                  <rect x="6" y="6" width="108" height="36" rx="6" fill="#0A0A0C" stroke="#fafafa" strokeWidth="2" />
                   <circle cx="32" cy="24" r="9" fill="#10b981" />
-                  <polygon points="58,14 78,24 58,34" fill="#f8fafc" />
+                  <polygon points="58,14 78,24 58,34" fill="#fafafa" />
                   <rect x="86" y="16" width="16" height="16" rx="3" fill="#f59e0b" />
                 </svg>
                 <h2 className="text-3xl font-bold text-white tracking-tight mb-2">
@@ -290,7 +290,7 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
                   {activeGame === 'catapult' && 'Angry Physics Catapult'}
                   {activeGame === 'blocks' && 'Multiplayer Block Arena'}
                 </h2>
-                <p className="text-sm text-slate-300 max-w-md mb-6">
+                <p className="text-sm text-zinc-400 max-w-md mb-6">
                   {activeGame === 'subway' &&
                     'Dodge high-speed rail barriers across 3 tracks, leap over hurdles, and collect gold tokens while competing live.'}
                   {activeGame === 'catapult' &&
@@ -302,11 +302,11 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
                   type="button"
                   data-start="true"
                   onClick={(e) => startGame(e)}
-                  className="px-6 py-3 text-sm font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg shadow-sm transition-colors whitespace-nowrap shrink-0"
+                  className="px-6 py-3 text-sm font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0"
                 >
                   Start Match
                 </button>
-                <div className="mt-6 text-xs text-slate-400">
+                <div className="mt-6 text-xs text-zinc-500 font-mono">
                   A / D or Left / Right Move · Space Jump or Launch · P Pause
                 </div>
               </div>
@@ -314,31 +314,31 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
 
             {/* Pause Modal */}
             {shellState === 'paused' && (
-              <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-6 text-center z-20">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full space-y-4">
+              <div className="absolute inset-0 bg-[#050505]/95 flex flex-col items-center justify-center p-6 text-center z-20">
+                <div className="bg-[#0A0A0C] border border-zinc-800 rounded-lg p-6 max-w-sm w-full space-y-4">
                   <h3 className="text-xl font-bold text-white">Match Paused</h3>
                   <div className="grid grid-cols-2 gap-3 py-2">
-                    <div className="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                      <div className="text-xs text-slate-400">CURRENT SCORE</div>
+                    <div className="p-3 bg-[#050505] rounded-md border border-zinc-800">
+                      <div className="text-xs text-zinc-400">CURRENT SCORE</div>
                       <div className="text-lg font-mono font-bold tabular-nums text-white">{score}</div>
                     </div>
-                    <div className="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                      <div className="text-xs text-slate-400">BEST SCORE</div>
-                      <div className="text-lg font-mono font-bold tabular-nums text-indigo-400">{bestScore}</div>
+                    <div className="p-3 bg-[#050505] rounded-md border border-zinc-800">
+                      <div className="text-xs text-zinc-400">BEST SCORE</div>
+                      <div className="text-lg font-mono font-bold tabular-nums text-emerald-400">{bestScore}</div>
                     </div>
                   </div>
                   <div className="flex items-center justify-center gap-3">
                     <button
                       type="button"
                       onClick={() => setShellState('playing')}
-                      className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg whitespace-nowrap shrink-0"
+                      className="px-4 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
                     >
                       Resume Match
                     </button>
                     <button
                       type="button"
                       onClick={(e) => startGame(e)}
-                      className="px-4 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg whitespace-nowrap shrink-0"
+                      className="px-4 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
                     >
                       Restart
                     </button>
@@ -349,27 +349,27 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
 
             {/* Game Over / Victory Modal */}
             {shellState === 'gameover' && (
-              <div className="absolute inset-0 bg-slate-950/90 flex flex-col items-center justify-center p-6 text-center z-20">
-                <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 max-w-sm w-full space-y-4">
+              <div className="absolute inset-0 bg-[#050505]/95 flex flex-col items-center justify-center p-6 text-center z-20">
+                <div className="bg-[#0A0A0C] border border-zinc-800 rounded-lg p-6 max-w-sm w-full space-y-4">
                   <h3 className="text-xl font-bold text-white">Run Complete</h3>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-zinc-400">
                     Your score has been broadcast to all online players in the arcade room.
                   </p>
                   <div className="grid grid-cols-2 gap-3 py-2">
-                    <div className="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                      <div className="text-xs text-slate-400">FINAL SCORE</div>
+                    <div className="p-3 bg-[#050505] rounded-md border border-zinc-800">
+                      <div className="text-xs text-zinc-400">FINAL SCORE</div>
                       <div className="text-xl font-mono font-bold tabular-nums text-emerald-400">{score}</div>
                     </div>
-                    <div className="p-3 bg-slate-950 rounded-lg border border-slate-800">
-                      <div className="text-xs text-slate-400">PERSONAL BEST</div>
-                      <div className="text-xl font-mono font-bold tabular-nums text-indigo-400">{bestScore}</div>
+                    <div className="p-3 bg-[#050505] rounded-md border border-zinc-800">
+                      <div className="text-xs text-zinc-400">PERSONAL BEST</div>
+                      <div className="text-xl font-mono font-bold tabular-nums text-white">{bestScore}</div>
                     </div>
                   </div>
                   <button
                     type="button"
                     data-start="true"
                     onClick={(e) => startGame(e)}
-                    className="w-full py-2.5 px-4 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg whitespace-nowrap shrink-0"
+                    className="w-full py-2.5 px-4 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
                   >
                     Play Again
                   </button>
@@ -380,35 +380,35 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
         </div>
 
         {/* Live Multiplayer Room Telemetry (4 cols) */}
-        <div className="lg:col-span-4 rounded-xl border border-slate-800 bg-slate-900 p-5 space-y-4">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="lg:col-span-4 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] p-5 space-y-4">
+          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
             <div>
               <h2 className="text-base font-bold text-white">Live Room Standings</h2>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-zinc-400">
                 Real-time WebSocket scores from active players
               </p>
             </div>
-            <span className="text-xs font-mono tabular-nums text-slate-400">
+            <span className="text-xs font-mono tabular-nums text-zinc-400">
               {activeLeaderboard.length} active
             </span>
           </div>
 
           {activeLeaderboard.length === 0 ? (
             <div className="py-8 text-center space-y-2">
-              <p className="text-sm text-slate-300 font-medium">No live scores recorded yet</p>
-              <p className="text-xs text-slate-400">
+              <p className="text-sm text-zinc-300 font-medium">No live scores recorded yet</p>
+              <p className="text-xs text-zinc-400">
                 Start a match on the left to broadcast your real-time score to everyone online.
               </p>
             </div>
           ) : (
-            <div className="divide-y divide-slate-800">
+            <div className="divide-y divide-zinc-800/80">
               {activeLeaderboard.map((entry, idx) => (
                 <div key={`${entry.uid}-${idx}`} className="py-2.5 flex items-center justify-between text-sm">
                   <div className="flex items-center gap-2.5 min-w-0">
-                    <span className="font-mono text-xs text-slate-400 w-5 tabular-nums">
+                    <span className="font-mono text-xs text-zinc-400 w-5 tabular-nums">
                       {idx + 1}.
                     </span>
-                    <span className="font-medium text-slate-100 truncate">
+                    <span className="font-medium text-white truncate">
                       {entry.displayName}
                       {entry.uid === currentUid ? ' (You)' : ''}
                     </span>
@@ -421,9 +421,9 @@ export const GameArcadeView: React.FC<GameArcadeProps> = ({
             </div>
           )}
 
-          <div className="pt-3 border-t border-slate-800 text-xs text-slate-400 space-y-1">
-            <div>Active Player: <span className="text-slate-200 font-medium">{currentName}</span></div>
-            <div>Multiplayer Sync: <span className="text-emerald-400 font-medium">Server-Authoritative WebSocket</span></div>
+          <div className="pt-3 border-t border-zinc-800/80 text-xs text-zinc-400 space-y-1">
+            <div>Active Player: <span className="text-white font-medium">{currentName}</span></div>
+            <div>Multiplayer Sync: <span className="text-emerald-400 font-mono">Server-Authoritative WebSocket</span></div>
           </div>
         </div>
       </div>

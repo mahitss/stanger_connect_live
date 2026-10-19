@@ -4,9 +4,71 @@
  * 2. Subway Runner 3-lane obstacle collision & score calculation
  * 3. Angry Catapult projectile trajectory & structure impact physics
  * 4. Block Arena grid placement, line clearing & score math
- * 5. Pomodoro Study Timer formatting, Study Room invite codes & shareable links
+ * 5. Pomodoro Study Timer formatting, Study Room invite codes, shareable links & Ambient Soundscape toggling
  * 6. Privacy visibility filtering & password strength validation
  */
+
+export type AmbientPresetId =
+  | 'off'
+  | 'rainfall'
+  | 'coffeeshop'
+  | 'whitenoise'
+  | 'binaural'
+  | 'lofi';
+
+export interface AmbientPresetMeta {
+  id: Exclude<AmbientPresetId, 'off'>;
+  label: string;
+  subtitle: string;
+  frequencyProfile: string;
+  cadence: string;
+}
+
+export const AMBIENT_SOUNDSCAPES: AmbientPresetMeta[] = [
+  {
+    id: 'rainfall',
+    label: 'Rainfall',
+    subtitle: 'Steady warm rain bed with pattering window droplets',
+    frequencyProfile: '120Hz – 920Hz Low-Pass Pink',
+    cadence: 'Continuous Acoustic Bed',
+  },
+  {
+    id: 'coffeeshop',
+    label: 'Coffee Shop',
+    subtitle: 'Warm café room murmur with subtle porcelain acoustics',
+    frequencyProfile: '460Hz Band-Pass Room Envelope',
+    cadence: 'Organic Room Cadence',
+  },
+  {
+    id: 'whitenoise',
+    label: 'White Noise',
+    subtitle: 'Calibrated broadband masking to block external distractions',
+    frequencyProfile: '20Hz – 4.2kHz Flat Mask',
+    cadence: 'Zero-Variance Shield',
+  },
+  {
+    id: 'binaural',
+    label: '432Hz Alpha Focus',
+    subtitle: 'Phase-locked 8Hz alpha binaural harmonic carrier',
+    frequencyProfile: '216Hz L / 224Hz R Sine',
+    cadence: '8.0Hz Alpha Entrainment',
+  },
+  {
+    id: 'lofi',
+    label: 'Lo-Fi Study Chords',
+    subtitle: 'Warm analog Cmaj7–Am7–Fmaj7–G6 harmonic progression',
+    frequencyProfile: '174Hz – 493Hz Triangle Pad',
+    cadence: '20 BPM Chord Cycle',
+  },
+];
+
+export function toggleAmbientSoundscape(
+  current: AmbientPresetId,
+  clicked: AmbientPresetId
+): AmbientPresetId {
+  if (clicked === 'off') return 'off';
+  return current === clicked ? 'off' : clicked;
+}
 
 export interface StreakState {
   streakCount: number;

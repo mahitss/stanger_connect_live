@@ -4,8 +4,12 @@ import {
   normalizeStudyRoomCode,
   generateStudyRoomCode,
   buildStudyRoomInviteUrl,
+  AMBIENT_SOUNDSCAPES,
+  AmbientPresetId,
+  toggleAmbientSoundscape,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
+import { Volume2, VolumeX, CloudRain, Coffee, Radio, Waves, Music, Copy, Check } from 'lucide-react';
 
 export interface StudyDeskItem {
   uid: string;
@@ -45,9 +49,20 @@ interface StudyRoomViewProps {
   studyDesks: StudyDeskItem[];
   studyNotes: StudyNoteRecord[];
   studyChat: StudyChatMessage[];
-  onJoinDesk: (roomCode: string, roomName: string, subject: string, positiveNote: string, timerMinutes: number) => void;
+  onJoinDesk: (
+    roomCode: string,
+    roomName: string,
+    subject: string,
+    positiveNote: string,
+    timerMinutes: number
+  ) => void;
   onLeaveDesk: () => void;
-  onSaveStudyNote: (roomCode: string, subject: string, positiveNote: string, focusMinutes: number) => Promise<void>;
+  onSaveStudyNote: (
+    roomCode: string,
+    subject: string,
+    positiveNote: string,
+    focusMinutes: number
+  ) => Promise<void>;
   onSendStudyChat: (roomCode: string, text: string) => void;
 }
 
@@ -91,7 +106,10 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   const [durationMinutes, setDurationMinutes] = useState(25);
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
   const [isRunning, setIsRunning] = useState(false);
-  const [ambientMode, setAmbientMode] = useState<'off' | 'rain' | 'binaural' | 'lofi'>('off');
+
+  // Ambient Soundscape State (Rainfall, Coffee Shop, White Noise, Binaural, Lo-Fi)
+  const [ambientMode, setAmbientMode] = useState<AmbientPresetId>('off');
+  const [masterVolume, setMasterVolume] = useState<number>(65);
 
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [newRoomTitle, setNewRoomTitle] = useState('Deep Work Study Room');
@@ -102,7 +120,6 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   const [formError, setFormError] = useState('');
   const [chatInput, setChatInput] = useState('');
 
-  // Personal study checklist tasks inside Study Mode
   const [studyTasks, setStudyTasks] = useState<
     { id: string; title: string; completed: boolean }[]
   >([
@@ -140,9 +157,15 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setIsRunning(false);
   };
 
-  const handleAmbientChange = (mode: 'off' | 'rain' | 'binaural' | 'lofi') => {
-    setAmbientMode(mode);
-    soundEngine.startAmbient(mode);
+  const handleToggleSoundscape = (clickedId: AmbientPresetId) => {
+    const nextMode = toggleAmbientSoundscape(ambientMode, clickedId);
+    setAmbientMode(nextMode);
+    soundEngine.startAmbient(nextMode);
+  };
+
+  const handleVolumeChange = (nextPercent: number) => {
+    setMasterVolume(nextPercent);
+    soundEngine.setVolume(nextPercent / 100);
   };
 
   const handleCopyInvite = async (kind: 'code' | 'link') => {
@@ -217,6 +240,21 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setChatInput('');
   };
 
+  const renderSoundscapeIcon = (id: AmbientPresetId) => {
+    switch (id) {
+      case 'rainfall':
+        return <CloudRain className="w-4 h-4 shrink-0" />;
+      case 'coffeeshop':
+        return <Coffee className="w-4 h-4 shrink-0" />;
+      case 'whitenoise':
+        return <Radio className="w-4 h-4 shrink-0" />;
+      case 'binaural':
+        return <Waves className="w-4 h-4 shrink-0" />;
+      default:
+        return <Music className="w-4 h-4 shrink-0" />;
+    }
+  };
+
   const desksInCurrentRoom = studyDesks.filter((d) => d.roomCode === activeRoomCode);
   const notesInCurrentRoom = studyNotes.filter(
     (n) => !n.roomCode || n.roomCode === activeRoomCode || activeRoomCode === 'STUDY-GLOBAL'
@@ -225,18 +263,19 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     (c) => !c.roomCode || c.roomCode === activeRoomCode
   );
   const isSeated = desksInCurrentRoom.some((d) => d.uid === currentUid);
+  const activePresetMeta = AMBIENT_SOUNDSCAPES.find((s) => s.id === ambientMode);
 
   return (
-    <section className="space-y-6" aria-label="Study Mode and Shareable Study Room">
-      {/* Top Header & Shareable Room Invite Banner */}
-      <div className="p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-5">
-        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-800 pb-4">
+    <section className="space-y-8" aria-label="Study Mode and Shareable Study Room">
+      {/* Top Header & Shareable Room Invite Strip */}
+      <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-6">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-5">
           <div className="space-y-1">
             <h1 className="text-2xl font-bold tracking-tight text-white">
               Study Mode & Live Study Room
             </h1>
-            <p className="text-sm text-slate-400">
-              Invite friends with a shareable room code or direct link, synchronize your focus timer, and study with synthesized ambient soundscapes.
+            <p className="text-sm text-zinc-400">
+              Invite friends via room code or shareable link, synchronize focus timers, and toggle studio-synthesized ambient soundscapes.
             </p>
           </div>
 
@@ -245,7 +284,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               <button
                 type="button"
                 onClick={onLeaveDesk}
-                className="px-4 py-2 text-xs font-semibold bg-rose-600/20 text-rose-300 border border-rose-500/40 rounded-lg hover:bg-rose-600/30 whitespace-nowrap shrink-0"
+                className="px-4 py-2 text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded-md hover:bg-rose-500/25 transition-colors whitespace-nowrap shrink-0"
               >
                 Leave Study Desk
               </button>
@@ -261,7 +300,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                     durationMinutes
                   )
                 }
-                className="px-4 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg whitespace-nowrap shrink-0"
+                className="px-4 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0"
               >
                 Sit at Desk in {activeRoomCode}
               </button>
@@ -270,12 +309,12 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         </div>
 
         {/* Invite Friends by Code or Link Bar */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-          <div className="lg:col-span-5 p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-2">
-            <div className="flex items-center justify-between text-xs text-slate-400">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-end">
+          <div className="lg:col-span-5 p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2.5">
+            <div className="flex items-center justify-between text-xs text-zinc-400">
               <span>Active Study Room Code</span>
-              <span className="text-emerald-400 font-medium">
-                {desksInCurrentRoom.length} {desksInCurrentRoom.length === 1 ? 'Scholar' : 'Scholars'} in Room
+              <span className="text-emerald-400 font-mono tabular-nums">
+                {desksInCurrentRoom.length} {desksInCurrentRoom.length === 1 ? 'Scholar' : 'Scholars'} Seated
               </span>
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -289,26 +328,27 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 <button
                   type="button"
                   onClick={() => handleCopyInvite('code')}
-                  className="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-md whitespace-nowrap shrink-0"
+                  className="px-3 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-800 rounded whitespace-nowrap shrink-0 flex items-center gap-1.5"
                 >
-                  {copiedFeedback === 'code' ? 'Copied Code!' : 'Copy Room Code'}
+                  {copiedFeedback === 'code' ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                  <span>{copiedFeedback === 'code' ? 'Copied Code' : 'Copy Code'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleCopyInvite('link')}
-                  className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-md whitespace-nowrap shrink-0"
+                  className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
                 >
-                  {copiedFeedback === 'link' ? 'Copied Link!' : 'Copy Invite Link'}
+                  {copiedFeedback === 'link' ? 'Copied Invite Link' : 'Copy Invite Link'}
                 </button>
               </div>
             </div>
-            <div className="text-[11px] font-mono text-slate-400 truncate">
-              Shareable URL: {inviteUrl}
+            <div className="text-[11px] font-mono text-zinc-500 truncate">
+              {inviteUrl}
             </div>
           </div>
 
           <form onSubmit={handleJoinByCode} className="lg:col-span-4 space-y-1.5">
-            <label htmlFor="join-room-code-input" className="block text-xs font-medium text-slate-300">
+            <label htmlFor="join-room-code-input" className="block text-xs font-medium text-zinc-300">
               Join Friend's Study Room via Code
             </label>
             <div className="flex gap-2">
@@ -317,12 +357,12 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 type="text"
                 value={joinCodeInput}
                 onChange={(e) => setJoinCodeInput(e.target.value)}
-                placeholder="Enter code (e.g. ROOM-8F4K2A)"
-                className="flex-1 px-3.5 py-2 text-xs font-mono uppercase bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                placeholder="ROOM-8F4K2A"
+                className="flex-1 px-3.5 py-2 text-xs font-mono uppercase bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
               />
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white rounded-lg whitespace-nowrap shrink-0"
+                className="px-4 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
               >
                 Join Room
               </button>
@@ -330,8 +370,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           </form>
 
           <div className="lg:col-span-3 space-y-1.5">
-            <label htmlFor="create-room-title" className="block text-xs font-medium text-slate-300">
-              Create New Shareable Study Room
+            <label htmlFor="create-room-title" className="block text-xs font-medium text-zinc-300">
+              Create Shareable Room
             </label>
             <div className="flex gap-2">
               <input
@@ -340,12 +380,12 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 value={newRoomTitle}
                 onChange={(e) => setNewRoomTitle(e.target.value)}
                 placeholder="Room title..."
-                className="flex-1 px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                className="flex-1 px-3 py-2 text-xs bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
               />
               <button
                 type="button"
                 onClick={handleCreatePrivateStudyRoom}
-                className="px-3.5 py-2 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg whitespace-nowrap shrink-0"
+                className="px-3.5 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
               >
                 New Code
               </button>
@@ -354,51 +394,164 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         </div>
       </div>
 
-      {/* Curated Study Modules Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {STUDY_MODULES.map((mod) => (
-          <div
-            key={mod.id}
-            className="p-5 rounded-xl border border-slate-800 bg-slate-900 flex flex-col justify-between space-y-3"
-          >
-            <div className="space-y-1">
-              <div className="text-xs font-mono text-indigo-400">{mod.cadence}</div>
-              <h2 className="text-sm font-bold text-white">{mod.title}</h2>
-              <p className="text-xs text-slate-400 leading-relaxed">{mod.description}</p>
+      {/* Dedicated Ambient Focus Soundscape Mixer (Rainfall, Coffee Shop, White Noise, Binaural, Lo-Fi) */}
+      <div
+        className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-5"
+        data-testid="ambient-soundscape-panel"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5">
+              <h2 className="text-base font-bold text-white">
+                Ambient Focus Soundscapes
+              </h2>
+              <span className="text-xs text-zinc-500">·</span>
+              <span
+                className="text-xs font-mono tabular-nums text-emerald-400"
+                data-testid="active-soundscape-status"
+              >
+                {activePresetMeta
+                  ? `Playing: ${activePresetMeta.label} (${activePresetMeta.frequencyProfile})`
+                  : 'Standby · Click any soundscape to toggle'}
+              </span>
             </div>
+            <p className="text-xs text-zinc-400">
+              Toggle real-time synthesized Rainfall, Coffee Shop, White Noise, 432Hz Alpha Focus, or Lo-Fi Chords while studying.
+            </p>
+          </div>
+
+          {/* Master Gain Slider & Mute Toggle */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2.5">
+              <Volume2 className="w-4 h-4 text-zinc-400" />
+              <label htmlFor="soundscape-volume" className="text-xs text-zinc-400 font-mono tabular-nums">
+                Gain {masterVolume}%
+              </label>
+              <input
+                id="soundscape-volume"
+                type="range"
+                min={0}
+                max={100}
+                value={masterVolume}
+                onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                aria-label="Ambient Soundscape Master Volume"
+                className="w-24 accent-white cursor-pointer"
+              />
+            </div>
+
             <button
               type="button"
-              onClick={() => handleSelectDuration(mod.minutes)}
-              className={`w-full py-2 px-3 text-xs font-semibold rounded-lg transition-colors whitespace-nowrap shrink-0 ${
-                durationMinutes === mod.minutes
-                  ? 'bg-indigo-600 text-white'
-                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
-              }`}
+              onClick={() => handleToggleSoundscape('off')}
+              disabled={ambientMode === 'off'}
+              className="px-3 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-200 border border-zinc-800 rounded-md flex items-center gap-1.5 whitespace-nowrap shrink-0"
             >
-              Load {mod.minutes}m Module Timer
+              <VolumeX className="w-3.5 h-3.5" />
+              <span>Mute Soundscape</span>
             </button>
           </div>
-        ))}
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          {AMBIENT_SOUNDSCAPES.map((preset) => {
+            const isSelected = ambientMode === preset.id;
+            return (
+              <button
+                key={preset.id}
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => handleToggleSoundscape(preset.id)}
+                className={`p-4 rounded-md border text-left transition-colors flex flex-col justify-between gap-3 ${
+                  isSelected
+                    ? 'bg-white text-black border-white'
+                    : 'bg-[#050505] border-zinc-800/80 text-zinc-200 hover:border-zinc-600'
+                }`}
+              >
+                <div className="space-y-1.5 w-full">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex items-center gap-2 text-xs font-bold">
+                      {renderSoundscapeIcon(preset.id)}
+                      <span>{preset.label}</span>
+                    </span>
+                    <span
+                      className={`text-[11px] font-mono uppercase ${
+                        isSelected ? 'text-black font-bold' : 'text-zinc-500'
+                      }`}
+                    >
+                      {isSelected ? 'Active' : 'Off'}
+                    </span>
+                  </div>
+                  <p
+                    className={`text-[11px] leading-relaxed ${
+                      isSelected ? 'text-zinc-800' : 'text-zinc-400'
+                    }`}
+                  >
+                    {preset.subtitle}
+                  </p>
+                </div>
+
+                <div
+                  className={`pt-2 border-t text-[10px] font-mono tabular-nums ${
+                    isSelected
+                      ? 'border-zinc-300 text-zinc-900'
+                      : 'border-zinc-900 text-zinc-500'
+                  }`}
+                >
+                  {preset.frequencyProfile}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Curated Study Modules Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {STUDY_MODULES.map((mod) => {
+          const isCurrent = durationMinutes === mod.minutes;
+          return (
+            <div
+              key={mod.id}
+              className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] flex flex-col justify-between space-y-4"
+            >
+              <div className="space-y-1.5">
+                <div className="text-xs font-mono text-zinc-400">{mod.cadence}</div>
+                <h2 className="text-sm font-bold text-white">{mod.title}</h2>
+                <p className="text-xs text-zinc-400 leading-relaxed">{mod.description}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleSelectDuration(mod.minutes)}
+                className={`w-full py-2 px-3 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                  isCurrent
+                    ? 'bg-white text-black'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800'
+                }`}
+              >
+                Load {mod.minutes}m Module Timer
+              </button>
+            </div>
+          );
+        })}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Timer, Soundscapes, Study Checklist & Positive Note Form (5 cols) */}
+        {/* Left Column: Timer, Study Checklist & Positive Note Form (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-5">
+          <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-5">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
                 Room Synchronized Focus Timer
               </span>
-              <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800">
+              <div className="flex items-center gap-1 bg-[#050505] p-1 rounded-md border border-zinc-800">
                 {[25, 50, 15, 5].map((mins) => (
                   <button
                     key={mins}
                     type="button"
                     onClick={() => handleSelectDuration(mins)}
-                    className={`px-2.5 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap shrink-0 ${
+                    className={`px-2.5 py-1 text-xs font-mono font-medium rounded transition-colors whitespace-nowrap shrink-0 ${
                       durationMinutes === mins
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-white text-black font-bold'
+                        : 'text-zinc-400 hover:text-white'
                     }`}
                   >
                     {mins}m
@@ -407,14 +560,14 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               </div>
             </div>
 
-            <div className="py-6 text-center bg-slate-950 rounded-xl border border-slate-800">
+            <div className="py-7 text-center bg-[#050505] rounded-lg border border-zinc-800/80">
               <div
                 className="text-6xl font-bold font-mono tabular-nums tracking-tight text-white"
                 data-testid="study-timer-display"
               >
                 {formatTimerMMSS(secondsLeft)}
               </div>
-              <p className="mt-2 text-xs text-slate-400">
+              <p className="mt-2 text-xs text-zinc-400">
                 {isRunning
                   ? `Studying live in room ${activeRoomCode}`
                   : `Ready to start ${durationMinutes}-minute module`}
@@ -425,7 +578,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsRunning((prev) => !prev)}
-                className="flex-1 py-2.5 px-4 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0"
+                className="flex-1 py-2.5 px-4 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0"
               >
                 {isRunning ? 'Pause Timer' : 'Start Focus Timer'}
               </button>
@@ -435,51 +588,21 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                   setIsRunning(false);
                   setSecondsLeft(durationMinutes * 60);
                 }}
-                className="py-2.5 px-4 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                className="py-2.5 px-4 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md transition-colors whitespace-nowrap shrink-0"
               >
                 Reset
               </button>
             </div>
-
-            {/* Ambient Web Audio Soundscapes */}
-            <div className="pt-4 border-t border-slate-800 space-y-3">
-              <div className="text-xs font-semibold text-slate-300">
-                Synthesized Study Music & Focus Soundscapes
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(
-                  [
-                    { id: 'off', label: 'Silence' },
-                    { id: 'rain', label: 'Warm Rain' },
-                    { id: 'binaural', label: '432Hz Focus' },
-                    { id: 'lofi', label: 'Lo-Fi Chords' },
-                  ] as const
-                ).map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleAmbientChange(preset.id)}
-                    className={`py-2 px-3 text-xs font-medium rounded-lg border transition-colors whitespace-nowrap shrink-0 ${
-                      ambientMode === preset.id
-                        ? 'bg-emerald-600/20 border-emerald-500 text-emerald-300'
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
           {/* Study Session Checklist Module */}
-          <div className="p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-4">
+          <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
             <h2 className="text-base font-bold text-white">Study Module Checklist</h2>
             <div className="space-y-2">
               {studyTasks.map((t) => (
                 <label
                   key={t.id}
-                  className="flex items-center gap-3 p-2.5 rounded-lg bg-slate-950 border border-slate-800 text-xs text-slate-200 cursor-pointer"
+                  className="flex items-center gap-3 p-2.5 rounded-md bg-[#050505] border border-zinc-800/80 text-xs text-zinc-200 cursor-pointer"
                 >
                   <input
                     type="checkbox"
@@ -491,9 +614,9 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                         )
                       )
                     }
-                    className="rounded accent-indigo-500"
+                    className="rounded accent-white"
                   />
-                  <span className={t.completed ? 'line-through text-slate-500' : ''}>
+                  <span className={t.completed ? 'line-through text-zinc-500' : ''}>
                     {t.title}
                   </span>
                 </label>
@@ -506,11 +629,11 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 onChange={(e) => setNewTaskTitle(e.target.value)}
                 placeholder="Add a study module goal..."
                 aria-label="New study task"
-                className="flex-1 px-3 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500"
+                className="flex-1 px-3 py-2 text-xs bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
               />
               <button
                 type="submit"
-                className="px-3.5 py-2 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-white rounded-lg whitespace-nowrap shrink-0"
+                className="px-3.5 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
               >
                 Add Goal
               </button>
@@ -520,13 +643,13 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           {/* Post a Positive Study Intention */}
           <form
             onSubmit={handlePublishIntention}
-            className="p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-4"
+            className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4"
           >
             <h2 className="text-base font-bold text-white">
               Share Positive Note in {activeRoomCode}
             </h2>
             <div className="space-y-1.5">
-              <label htmlFor="study-subject" className="block text-xs font-medium text-slate-300">
+              <label htmlFor="study-subject" className="block text-xs font-medium text-zinc-300">
                 Study Subject / Module Topic
               </label>
               <input
@@ -535,13 +658,13 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 maxLength={100}
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="e.g., System Design & Algorithms"
-                className="w-full px-3.5 py-2 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                placeholder="e.g., Distributed Systems & Consensus"
+                className="w-full px-3.5 py-2 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
               />
             </div>
 
             <div className="space-y-1.5">
-              <label htmlFor="study-positive-note" className="block text-xs font-medium text-slate-300">
+              <label htmlFor="study-positive-note" className="block text-xs font-medium text-zinc-300">
                 Positive Note for Friends in Room
               </label>
               <textarea
@@ -551,7 +674,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 value={positiveNote}
                 onChange={(e) => setPositiveNote(e.target.value)}
                 placeholder="Share an encouraging note for everyone in this study room..."
-                className="w-full px-3.5 py-2 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                className="w-full px-3.5 py-2 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
               />
             </div>
 
@@ -559,7 +682,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
 
             <button
               type="submit"
-              className="w-full py-2.5 px-4 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors whitespace-nowrap shrink-0"
+              className="w-full py-2.5 px-4 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0"
             >
               Publish Positive Note & Sit at Desk
             </button>
@@ -568,21 +691,21 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
 
         {/* Right Column: Live Study Desks in Room, Positive Notes Wall & Room Chit-Chat (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
-          <div className="p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
               <div>
                 <h2 className="text-base font-bold text-white">
                   Live Desks in Room {activeRoomCode} ({desksInCurrentRoom.length})
                 </h2>
-                <p className="text-xs text-slate-400">
-                  Share code <strong className="text-slate-200 font-mono">{activeRoomCode}</strong> with friends so they appear right here.
+                <p className="text-xs text-zinc-400">
+                  Share code <strong className="text-white font-mono">{activeRoomCode}</strong> with friends so they appear right here.
                 </p>
               </div>
-              <span className="text-xs text-emerald-400 font-medium">Live Room Sync</span>
+              <span className="text-xs font-mono text-emerald-400">Live Sync</span>
             </div>
 
             {desksInCurrentRoom.length === 0 ? (
-              <p className="text-sm text-slate-400 py-4">
+              <p className="text-sm text-zinc-400 py-4">
                 No desks occupied in {activeRoomCode} yet. Click "Sit at Desk in {activeRoomCode}" above to start studying!
               </p>
             ) : (
@@ -590,14 +713,14 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 {desksInCurrentRoom.map((desk) => (
                   <div
                     key={desk.uid}
-                    className="p-4 rounded-lg bg-slate-950 border border-slate-800 space-y-1.5"
+                    className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-1.5"
                   >
-                    <div className="flex items-center justify-between text-xs text-slate-400">
-                      <span className="font-semibold text-slate-100">{desk.displayName}</span>
+                    <div className="flex items-center justify-between text-xs text-zinc-400">
+                      <span className="font-semibold text-white">{desk.displayName}</span>
                       <span className="font-mono tabular-nums">{desk.timerMinutes}m block</span>
                     </div>
-                    <div className="text-xs font-medium text-indigo-400">{desk.subject}</div>
-                    <p className="text-xs text-slate-300 leading-relaxed">"{desk.positiveNote}"</p>
+                    <div className="text-xs font-medium text-emerald-400">{desk.subject}</div>
+                    <p className="text-xs text-zinc-300 leading-relaxed">"{desk.positiveNote}"</p>
                   </div>
                 ))}
               </div>
@@ -605,24 +728,24 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           </div>
 
           {/* Positive Notes Wall */}
-          <div className="p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
               <h2 className="text-base font-bold text-white">
                 Positive Study Notes ({notesInCurrentRoom.length})
               </h2>
-              <span className="text-xs text-slate-400">Synced with Firestore</span>
+              <span className="text-xs text-zinc-500 font-mono">Firestore Synced</span>
             </div>
 
             {notesInCurrentRoom.length === 0 ? (
-              <p className="text-sm text-slate-400 py-4">
+              <p className="text-sm text-zinc-400 py-4">
                 No study notes posted in this room yet. Post the first positive note on the left!
               </p>
             ) : (
-              <div className="divide-y divide-slate-800">
+              <div className="divide-y divide-zinc-800/80">
                 {notesInCurrentRoom.map((note) => (
                   <div key={note.id} className="py-3.5 space-y-1">
-                    <div className="flex items-center gap-2 text-xs text-slate-400">
-                      <span className="font-semibold text-slate-200">{note.authorName}</span>
+                    <div className="flex items-center gap-2 text-xs text-zinc-400">
+                      <span className="font-semibold text-white">{note.authorName}</span>
                       <span aria-hidden="true">·</span>
                       <span>{note.subject}</span>
                       <span aria-hidden="true">·</span>
@@ -630,7 +753,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                       <span aria-hidden="true">·</span>
                       <span className="font-mono tabular-nums">{note.focusMinutes}m</span>
                     </div>
-                    <p className="text-sm text-slate-100">{note.positiveNote}</p>
+                    <p className="text-sm text-zinc-100">{note.positiveNote}</p>
                   </div>
                 ))}
               </div>
@@ -638,23 +761,23 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           </div>
 
           {/* Study Room Chit-Chat */}
-          <div className="p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-4">
+          <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-base font-bold text-white">
                 Room {activeRoomCode} Study Lounge Chat ({currentName})
               </h2>
-              <span className="text-xs text-slate-400">Real-Time WebSocket</span>
+              <span className="text-xs text-zinc-500 font-mono">WebSocket Live</span>
             </div>
-            <div className="h-44 overflow-y-auto bg-slate-950 border border-slate-800 rounded-lg p-3 space-y-2">
+            <div className="h-44 overflow-y-auto bg-[#050505] border border-zinc-800/80 rounded-md p-3 space-y-2">
               {chatInCurrentRoom.length === 0 ? (
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-zinc-500">
                   Quiet study room lounge. Send a message to peers in {activeRoomCode}!
                 </p>
               ) : (
                 chatInCurrentRoom.map((msg) => (
                   <div key={msg.id} className="text-xs leading-relaxed">
-                    <span className="font-semibold text-indigo-400">{msg.senderName}: </span>
-                    <span className="text-slate-200">{msg.text}</span>
+                    <span className="font-semibold text-white">{msg.senderName}: </span>
+                    <span className="text-zinc-300">{msg.text}</span>
                   </div>
                 ))
               )}
@@ -666,11 +789,11 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 onChange={(e) => setChatInput(e.target.value)}
                 placeholder={`Message everyone in ${activeRoomCode}...`}
                 aria-label="Study room chat message"
-                className="flex-1 px-3.5 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                className="flex-1 px-3.5 py-2 text-xs bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
               />
               <button
                 type="submit"
-                className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg whitespace-nowrap shrink-0"
+                className="px-4 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
               >
                 Send
               </button>

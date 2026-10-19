@@ -111,7 +111,6 @@ export const TalkingRoomView: React.FC<TalkingRoomViewProps> = ({
     onSendSignal(targetUid, mode, { type: 'offer', sdp: offer });
   };
 
-  // Handle incoming WebRTC signaling messages
   useEffect(() => {
     if (!incomingSignal) return;
     const { fromUid, callType: incomingMode, signalData } = incomingSignal;
@@ -178,38 +177,37 @@ export const TalkingRoomView: React.FC<TalkingRoomViewProps> = ({
 
   return (
     <section className="space-y-6" aria-label="Voice and Video Talking Mode">
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-100">
+          <h1 className="text-2xl font-bold tracking-tight text-white">
             Live Voice & Video Calling
           </h1>
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-zinc-400">
             Peer-to-peer WebRTC audio and video streams negotiated over the real-time WebSocket signaling server
           </p>
         </div>
-        <div className="text-xs text-slate-400">
-          Caller Identity: <span className="text-slate-100 font-semibold">{currentName}</span>
+        <div className="text-xs text-zinc-400 font-mono">
+          Caller Identity: <span className="text-white font-semibold">{currentName}</span>
         </div>
       </div>
 
       {mediaError && (
-        <div className="p-4 rounded-xl bg-rose-950/50 border border-rose-500/40 text-xs text-rose-200">
+        <div className="p-4 rounded-md bg-rose-950/40 border border-rose-500/40 text-xs text-rose-200">
           {mediaError}
         </div>
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Connected Peers Available to Call (4 cols) */}
-        <div className="lg:col-span-4 p-5 rounded-xl border border-slate-800 bg-slate-900 space-y-4">
-          <h2 className="text-base font-bold text-white border-b border-slate-800 pb-3">
+        <div className="lg:col-span-4 p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
+          <h2 className="text-base font-bold text-white border-b border-zinc-800/80 pb-3">
             Online Connections ({acceptedPeers.length})
           </h2>
 
           {acceptedPeers.length === 0 ? (
-            <div className="py-6 space-y-2 text-xs text-slate-400">
-              <p className="text-slate-200 font-medium">No online connections ready to call</p>
+            <div className="py-6 space-y-2 text-xs text-zinc-400">
+              <p className="text-white font-medium">No online connections ready to call</p>
               <p>
-                Send a connection request to an online person in the Online Hub. Once accepted, you can start a live voice or video call with them here.
+                Send a connection request to an online person in the Online Directory. Once accepted, you can start a live voice or video call with them here.
               </p>
             </div>
           ) : (
@@ -217,13 +215,13 @@ export const TalkingRoomView: React.FC<TalkingRoomViewProps> = ({
               {acceptedPeers.map((peer) => (
                 <div
                   key={peer.uid}
-                  className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between gap-3"
+                  className="p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 flex items-center justify-between gap-3"
                 >
                   <div className="min-w-0">
                     <div className="text-sm font-semibold text-white truncate">
                       {peer.displayName}
                     </div>
-                    <div className="text-xs text-slate-400">
+                    <div className="text-xs text-zinc-400 font-mono tabular-nums">
                       Streak {peer.streakCount}d · Online now
                     </div>
                   </div>
@@ -231,14 +229,14 @@ export const TalkingRoomView: React.FC<TalkingRoomViewProps> = ({
                     <button
                       type="button"
                       onClick={() => startCall(peer.uid, 'audio')}
-                      className="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-100 rounded-md whitespace-nowrap shrink-0"
+                      className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-800 rounded whitespace-nowrap shrink-0"
                     >
                       Voice Call
                     </button>
                     <button
                       type="button"
                       onClick={() => startCall(peer.uid, 'video')}
-                      className="px-3 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-md whitespace-nowrap shrink-0"
+                      className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
                     >
                       Video Call
                     </button>
@@ -248,22 +246,21 @@ export const TalkingRoomView: React.FC<TalkingRoomViewProps> = ({
             </div>
           )}
 
-          <div className="pt-3 border-t border-slate-800 space-y-2">
-            <div className="text-xs font-semibold text-slate-300">Camera & Mic Self-Check</div>
+          <div className="pt-3 border-t border-zinc-800/80 space-y-2">
+            <div className="text-xs font-semibold text-zinc-300">Camera & Mic Self-Check</div>
             <button
               type="button"
               onClick={() => acquireLocalMedia('video')}
-              className="w-full py-2 px-3 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg whitespace-nowrap shrink-0"
+              className="w-full py-2 px-3 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
             >
               Preview My Camera & Microphone
             </button>
           </div>
         </div>
 
-        {/* Dual Video Stage (8 cols) */}
-        <div className="lg:col-span-8 p-5 rounded-xl border border-slate-800 bg-slate-900 space-y-4">
+        <div className="lg:col-span-8 p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="relative aspect-video bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center">
+            <div className="relative aspect-video bg-[#050505] border border-zinc-800/80 rounded-md overflow-hidden flex items-center justify-center">
               <video
                 ref={localVideoRef}
                 autoPlay
@@ -271,19 +268,19 @@ export const TalkingRoomView: React.FC<TalkingRoomViewProps> = ({
                 muted
                 className="w-full h-full object-cover"
               />
-              <div className="absolute bottom-3 left-3 text-xs font-medium text-slate-200 bg-slate-950/80 px-2.5 py-1 rounded">
+              <div className="absolute bottom-3 left-3 text-xs font-mono text-zinc-200 bg-black/80 border border-zinc-800 px-2.5 py-1 rounded">
                 {currentName} (Local Stream)
               </div>
             </div>
 
-            <div className="relative aspect-video bg-slate-950 border border-slate-800 rounded-xl overflow-hidden flex items-center justify-center">
+            <div className="relative aspect-video bg-[#050505] border border-zinc-800/80 rounded-md overflow-hidden flex items-center justify-center">
               <video
                 ref={remoteVideoRef}
                 autoPlay
                 playsInline
                 className="w-full h-full object-cover"
               />
-              <div className="absolute bottom-3 left-3 text-xs font-medium text-slate-200 bg-slate-950/80 px-2.5 py-1 rounded">
+              <div className="absolute bottom-3 left-3 text-xs font-mono text-zinc-200 bg-black/80 border border-zinc-800 px-2.5 py-1 rounded">
                 {callStatus === 'connected'
                   ? 'Remote Peer Stream (Connected)'
                   : callStatus === 'calling'
@@ -293,29 +290,29 @@ export const TalkingRoomView: React.FC<TalkingRoomViewProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800">
-            <div className="text-xs text-slate-400">
-              Call State: <span className="text-slate-200 font-semibold uppercase">{callStatus}</span>
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-800/80">
+            <div className="text-xs text-zinc-400 font-mono">
+              Call State: <span className="text-white font-semibold uppercase">{callStatus}</span>
             </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={toggleMute}
-                className="px-3.5 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg whitespace-nowrap shrink-0"
+                className="px-3.5 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
               >
                 {micMuted ? 'Unmute Mic' : 'Mute Mic'}
               </button>
               <button
                 type="button"
                 onClick={toggleCamera}
-                className="px-3.5 py-2 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg whitespace-nowrap shrink-0"
+                className="px-3.5 py-2 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
               >
                 {camOff ? 'Enable Camera' : 'Disable Camera'}
               </button>
               <button
                 type="button"
                 onClick={hangupCall}
-                className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg whitespace-nowrap shrink-0"
+                className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-md whitespace-nowrap shrink-0"
               >
                 End Call
               </button>

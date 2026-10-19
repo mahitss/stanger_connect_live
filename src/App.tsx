@@ -238,7 +238,8 @@ export default function App() {
               displayName: String(data.displayName || user.displayName || 'Member'),
               bio: String(data.bio || 'Connected on Mr. Stranger'),
               avatarUrl: String(data.avatarUrl || user.photoURL || ''),
-              privacyVisibility: (data.privacyVisibility as AccountIdentity['privacyVisibility']) || 'everyone',
+              privacyVisibility:
+                (data.privacyVisibility as AccountIdentity['privacyVisibility']) || 'everyone',
               readReceiptsEnabled: true,
               allowCallsFromConnectionsOnly: true,
               ...updated,
@@ -546,7 +547,12 @@ export default function App() {
   const handleEmailPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const isSignUp = authTab === 'signup';
-    const check = validateAccountCredentials(emailInput, passwordInput, accountNameInput, isSignUp);
+    const check = validateAccountCredentials(
+      emailInput,
+      passwordInput,
+      accountNameInput,
+      isSignUp
+    );
     if (!check.valid) {
       setAuthFormError(check.error);
       return;
@@ -627,7 +633,9 @@ export default function App() {
 
     if (!authUser) {
       if (!signOutPasswordConfirm || signOutPasswordConfirm.length < 8) {
-        setSignOutError('Please enter your account password (minimum 8 characters) to verify sign out.');
+        setSignOutError(
+          'Please enter your account password (minimum 8 characters) to verify sign out.'
+        );
         return;
       }
       const resp = await fetch('/api/auth/verify-password', {
@@ -804,12 +812,10 @@ export default function App() {
     const safeCaption = captionText.replace(/[<>&"']/g, '');
     const safeAuthor = author.replace(/[<>&"']/g, '');
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
-      <rect width="800" height="500" fill="#0f172a"/>
-      <circle cx="650" cy="120" r="180" fill="#1e1b4b"/>
-      <circle cx="160" cy="400" r="210" fill="#064e3b"/>
-      <rect x="48" y="48" width="704" height="404" rx="16" fill="none" stroke="#334155" stroke-width="2"/>
-      <text x="80" y="230" fill="#f8fafc" font-family="sans-serif" font-size="32" font-weight="bold">${safeCaption.slice(0, 36)}</text>
-      <text x="80" y="280" fill="#94a3b8" font-family="monospace" font-size="18">Captured by ${safeAuthor} · Mr. Stranger Verified Feed</text>
+      <rect width="800" height="500" fill="#050505"/>
+      <rect x="48" y="48" width="704" height="404" rx="8" fill="#0A0A0C" stroke="#27272a" stroke-width="2"/>
+      <text x="80" y="230" fill="#fafafa" font-family="sans-serif" font-size="32" font-weight="bold">${safeCaption.slice(0, 36)}</text>
+      <text x="80" y="280" fill="#a1a1aa" font-family="monospace" font-size="18">Captured by ${safeAuthor} · Mr. Stranger Verified Feed</text>
     </svg>`;
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   };
@@ -870,62 +876,62 @@ export default function App() {
   };
 
   // ==========================================================================
-  // DEDICATED MNC-GRADE SIGN-IN & CREATE ACCOUNT PAGE (Email ID, Password & Account)
+  // DEDICATED MNC-GRADE SIGN-IN & CREATE ACCOUNT PAGE (Carbon Matte Black)
   // ==========================================================================
   if (!currentIdentity) {
     return (
-      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col justify-between p-6 md:p-12">
-        <div className="max-w-6xl w-full mx-auto flex items-center justify-between gap-4 border-b border-slate-800 pb-5">
+      <div className="min-h-screen bg-[#050505] text-zinc-100 flex flex-col justify-between p-6 md:p-12">
+        <div className="max-w-6xl w-full mx-auto flex items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
           <span className="text-xl font-bold tracking-tight text-white font-display whitespace-nowrap shrink-0">
             Mr. Stranger
           </span>
-          <span className="text-xs text-slate-400 truncate">
+          <span className="text-xs text-zinc-400 font-mono truncate">
             Enterprise Privacy · Real-Time Presence, Study Rooms & Multiplayer Arcade
           </span>
         </div>
 
-        <main className="max-w-6xl w-full mx-auto my-auto py-10 grid grid-cols-1 lg:grid-cols-12 gap-10 items-stretch">
+        <main className="max-w-6xl w-full mx-auto my-auto py-10 grid grid-cols-1 lg:grid-cols-12 gap-12 items-stretch">
           <div className="lg:col-span-7 flex flex-col justify-center space-y-6">
             <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
               Real people online. Private rooms, live calls, study sessions & multiplayer games.
             </h1>
-            <p className="text-base text-slate-300 leading-relaxed max-w-2xl">
+            <p className="text-base text-zinc-400 leading-relaxed max-w-2xl">
               Sign in with your Email ID, Password, and Account profile. See everyone currently online, send real-time connection requests, jump into voice and video calls, invite friends to Study Rooms via shareable room codes or links, and compete across three built-in multiplayer games.
             </p>
 
             {initialRoomParam && (
-              <div className="p-4 rounded-xl bg-indigo-950/60 border border-indigo-500/40 text-xs text-indigo-200">
+              <div className="p-4 rounded-md bg-[#0A0A0C] border border-zinc-700 text-xs text-zinc-200">
                 You were invited to join Study Room <strong className="font-mono text-white">{initialRoomParam}</strong>. Sign in or create your account on the right to enter the room immediately.
               </div>
             )}
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-2">
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-xs text-slate-400">Presence & Chat</div>
+              <div className="p-4 rounded-md bg-[#0A0A0C] border border-zinc-800/80">
+                <div className="text-xs text-zinc-500 font-mono">01 / PRESENCE</div>
                 <div className="text-sm font-semibold text-white mt-1">Real-Time Requests</div>
               </div>
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-xs text-slate-400">Study Sanctuary</div>
-                <div className="text-sm font-semibold text-white mt-1">Invite Code & Link</div>
+              <div className="p-4 rounded-md bg-[#0A0A0C] border border-zinc-800/80">
+                <div className="text-xs text-zinc-500 font-mono">02 / SANCTUARY</div>
+                <div className="text-sm font-semibold text-white mt-1">Soundscapes & Code</div>
               </div>
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-xs text-slate-400">Built-In Arcade</div>
+              <div className="p-4 rounded-md bg-[#0A0A0C] border border-zinc-800/80">
+                <div className="text-xs text-zinc-500 font-mono">03 / ARCADE</div>
                 <div className="text-sm font-semibold text-white mt-1">3 Multiplayer Games</div>
               </div>
-              <div className="p-4 rounded-xl bg-slate-900 border border-slate-800">
-                <div className="text-xs text-slate-400">Zero-Trust Vault</div>
+              <div className="p-4 rounded-md bg-[#0A0A0C] border border-zinc-800/80">
+                <div className="text-xs text-zinc-500 font-mono">04 / VAULT</div>
                 <div className="text-sm font-semibold text-white mt-1">PII Isolation & Ghost</div>
               </div>
             </div>
           </div>
 
-          <div className="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-xl p-6 sm:p-8 flex flex-col justify-between space-y-6">
-            <div className="space-y-4">
+          <div className="lg:col-span-5 bg-[#0A0A0C] border border-zinc-800/80 rounded-lg p-6 sm:p-8 flex flex-col justify-between space-y-6">
+            <div className="space-y-5">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <h2 className="text-xl font-bold text-white whitespace-nowrap shrink-0">
                   {authTab === 'signup' ? 'Create Your Account' : 'Sign In to Account'}
                 </h2>
-                <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-lg">
+                <div className="flex items-center gap-1 p-1 bg-[#050505] border border-zinc-800 rounded-md">
                   <button
                     type="button"
                     onClick={() => {
@@ -934,8 +940,8 @@ export default function App() {
                     }}
                     className={`px-3 py-1 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
                       authTab === 'signup'
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-white text-black'
+                        : 'text-zinc-400 hover:text-white'
                     }`}
                   >
                     Create Account
@@ -948,8 +954,8 @@ export default function App() {
                     }}
                     className={`px-3 py-1 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
                       authTab === 'signin'
-                        ? 'bg-indigo-600 text-white'
-                        : 'text-slate-400 hover:text-white'
+                        ? 'bg-white text-black'
+                        : 'text-zinc-400 hover:text-white'
                     }`}
                   >
                     Sign In
@@ -959,7 +965,7 @@ export default function App() {
 
               <form onSubmit={handleEmailPasswordSubmit} className="space-y-4">
                 <div className="space-y-1.5">
-                  <label htmlFor="auth-email" className="block text-xs font-medium text-slate-300">
+                  <label htmlFor="auth-email" className="block text-xs font-medium text-zinc-300">
                     Email ID
                   </label>
                   <input
@@ -969,12 +975,12 @@ export default function App() {
                     value={emailInput}
                     onChange={(e) => setEmailInput(e.target.value)}
                     placeholder="name@company.com"
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3.5 py-2.5 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <label htmlFor="auth-password" className="block text-xs font-medium text-slate-300">
+                  <label htmlFor="auth-password" className="block text-xs font-medium text-zinc-300">
                     Password (minimum 8 characters)
                   </label>
                   <input
@@ -984,14 +990,14 @@ export default function App() {
                     value={passwordInput}
                     onChange={(e) => setPasswordInput(e.target.value)}
                     placeholder="Enter your secure account password"
-                    className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                    className="w-full px-3.5 py-2.5 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                   />
                 </div>
 
                 {authTab === 'signup' && (
                   <>
                     <div className="space-y-1.5">
-                      <label htmlFor="auth-account-name" className="block text-xs font-medium text-slate-300">
+                      <label htmlFor="auth-account-name" className="block text-xs font-medium text-zinc-300">
                         Account Display Name
                       </label>
                       <input
@@ -1001,12 +1007,12 @@ export default function App() {
                         value={accountNameInput}
                         onChange={(e) => setAccountNameInput(e.target.value)}
                         placeholder="e.g., Mahit Saxena"
-                        className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3.5 py-2.5 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label htmlFor="auth-account-bio" className="block text-xs font-medium text-slate-300">
+                      <label htmlFor="auth-account-bio" className="block text-xs font-medium text-zinc-300">
                         Account Bio / Status
                       </label>
                       <input
@@ -1014,8 +1020,8 @@ export default function App() {
                         type="text"
                         value={accountBioInput}
                         onChange={(e) => setAccountBioInput(e.target.value)}
-                        placeholder="e.g., Engineering · Focusing in Study Room"
-                        className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                        placeholder="e.g., Principal Engineer · Study Room"
+                        className="w-full px-3.5 py-2.5 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                       />
                     </div>
                   </>
@@ -1026,7 +1032,7 @@ export default function App() {
                 <button
                   type="submit"
                   disabled={isSubmittingAuth}
-                  className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs rounded-lg transition-colors whitespace-nowrap shrink-0"
+                  className="w-full py-3 px-4 bg-white hover:bg-zinc-200 disabled:opacity-50 text-black font-semibold text-xs rounded-md transition-colors whitespace-nowrap shrink-0"
                 >
                   {authTab === 'signup'
                     ? 'Create Account & Enter Workspace'
@@ -1035,30 +1041,30 @@ export default function App() {
               </form>
 
               <div className="relative flex py-1 items-center">
-                <div className="flex-grow border-t border-slate-800" />
-                <span className="flex-shrink mx-3 text-xs text-slate-500">
+                <div className="flex-grow border-t border-zinc-800/80" />
+                <span className="flex-shrink mx-3 text-xs text-zinc-500">
                   Or SSO Authentication
                 </span>
-                <div className="flex-grow border-t border-slate-800" />
+                <div className="flex-grow border-t border-zinc-800/80" />
               </div>
 
               <button
                 type="button"
                 onClick={handleGoogleSignIn}
-                className="w-full py-2.5 px-4 bg-white hover:bg-slate-100 text-slate-950 font-semibold text-xs rounded-lg transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
+                className="w-full py-2.5 px-4 bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-800 font-semibold text-xs rounded-md transition-colors flex items-center justify-center gap-2 whitespace-nowrap shrink-0"
               >
                 Continue with Verified Google Account
               </button>
             </div>
 
-            <div className="text-[11px] text-slate-400 border-t border-slate-800 pt-4 flex items-center justify-between">
+            <div className="text-[11px] text-zinc-500 border-t border-zinc-800/80 pt-4 flex items-center justify-between font-mono">
               <span>PII Isolated Vault (`privateAccounts`)</span>
-              <span className="font-mono">scrypt + E2EE Fingerprint</span>
+              <span>scrypt + E2EE</span>
             </div>
           </div>
         </main>
 
-        <footer className="max-w-6xl w-full mx-auto border-t border-slate-900 pt-4 flex items-center justify-between text-xs text-slate-500">
+        <footer className="max-w-6xl w-full mx-auto border-t border-zinc-900 pt-4 flex items-center justify-between text-xs text-zinc-500">
           <span>Mr. Stranger · Enterprise Real-Time Social Workspace</span>
           <span>Available for everyone · Zero Fake Data</span>
         </footer>
@@ -1078,18 +1084,18 @@ export default function App() {
   const e2eeFingerprint = deriveE2eeFingerprint(currentIdentity.uid, currentIdentity.email);
 
   // ==========================================================================
-  // MNC-LEVEL WORKSPACE CANVAS: LEFT SIDEBAR NAVIGATION + TOP HEADER + VIEWPORT
+  // MNC-LEVEL WORKSPACE CANVAS: CARBON MATTE BLACK SIDEBAR + VIEWPORT
   // ==========================================================================
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row">
+    <div className="min-h-screen bg-[#050505] text-zinc-100 flex flex-col md:flex-row">
       {/* Persistent Left Sidebar Navigation (260px on desktop) */}
       <aside
-        className="w-full md:w-64 bg-slate-900 border-b md:border-b-0 md:border-r border-slate-800 flex flex-col justify-between shrink-0"
+        className="w-full md:w-64 bg-[#0A0A0C] border-b md:border-b-0 md:border-r border-zinc-800/80 flex flex-col justify-between shrink-0"
         aria-label="Workspace Sidebar Navigation"
       >
         <div className="p-5 space-y-6">
           {/* Brand & Live Streak Badge */}
-          <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
             <button
               type="button"
               onClick={() => setActivePage('hub')}
@@ -1108,16 +1114,16 @@ export default function App() {
 
           {/* Primary Communication & Study Modes */}
           <div className="space-y-1">
-            <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <div className="px-3 pb-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500">
               Core Modes
             </div>
             <button
               type="button"
               onClick={() => setActivePage('hub')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'hub'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
@@ -1130,10 +1136,10 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActivePage('chat')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'chat'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
@@ -1146,26 +1152,26 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActivePage('talk')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'talk'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
                 <PhoneCall className="w-4 h-4" />
                 <span>Talking Mode</span>
               </span>
-              <span className="text-[11px] text-slate-400">WebRTC</span>
+              <span className="text-[11px] font-mono">WebRTC</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActivePage('study')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'study'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
@@ -1178,70 +1184,70 @@ export default function App() {
 
           {/* Dedicated Multiplayer Game Pages on Sidebar */}
           <div className="space-y-1">
-            <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <div className="px-3 pb-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500">
               Multiplayer Games
             </div>
             <button
               type="button"
               onClick={() => setActivePage('game_subway')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'game_subway'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
                 <Gamepad2 className="w-4 h-4" />
                 <span>Subway Runner</span>
               </span>
-              <span className="text-[11px] text-slate-400">3-Lane</span>
+              <span className="text-[11px] font-mono">3-Lane</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActivePage('game_catapult')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'game_catapult'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
                 <Gamepad2 className="w-4 h-4" />
                 <span>Angry Catapult</span>
               </span>
-              <span className="text-[11px] text-slate-400">Physics</span>
+              <span className="text-[11px] font-mono">Physics</span>
             </button>
 
             <button
               type="button"
               onClick={() => setActivePage('game_blocks')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'game_blocks'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
                 <Gamepad2 className="w-4 h-4" />
                 <span>Block Arena</span>
               </span>
-              <span className="text-[11px] text-slate-400">Grid</span>
+              <span className="text-[11px] font-mono">Grid</span>
             </button>
           </div>
 
           {/* Social Media Feed & Privacy Center */}
           <div className="space-y-1">
-            <div className="px-3 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            <div className="px-3 pb-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500">
               Social & Security
             </div>
             <button
               type="button"
               onClick={() => setActivePage('moments')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'moments'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
@@ -1254,17 +1260,17 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActivePage('privacy')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'privacy'
-                  ? 'bg-indigo-600 text-white'
-                  : 'text-slate-300 hover:bg-slate-800/70 hover:text-white'
+                  ? 'bg-white text-black'
+                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
                 <ShieldCheck className="w-4 h-4" />
                 <span>Privacy & Security</span>
               </span>
-              <span className="text-[11px] text-emerald-400">
+              <span className="text-[11px] font-mono text-emerald-400">
                 {currentIdentity.privacyVisibility === 'ghost' ? 'Ghost' : 'Active'}
               </span>
             </button>
@@ -1272,22 +1278,22 @@ export default function App() {
         </div>
 
         {/* Bottom Sidebar Account Card & Sign-Out Page Trigger */}
-        <div className="p-4 border-t border-slate-800 bg-slate-950/60 space-y-3">
+        <div className="p-4 border-t border-zinc-800/80 bg-[#050505] space-y-3">
           <div className="min-w-0">
             <div className="text-xs font-bold text-white truncate">
               {currentIdentity.displayName}
             </div>
-            <div className="text-[11px] text-slate-400 truncate">
+            <div className="text-[11px] text-zinc-500 font-mono truncate">
               {currentIdentity.email}
             </div>
           </div>
           <button
             type="button"
             onClick={() => setActivePage('signout')}
-            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
               activePage === 'signout'
                 ? 'bg-rose-600 text-white'
-                : 'bg-slate-800 hover:bg-slate-700 text-slate-200'
+                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800'
             }`}
           >
             <LogOut className="w-3.5 h-3.5" />
@@ -1299,31 +1305,31 @@ export default function App() {
       {/* Right Main Workspace Viewport */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Workspace Header (Follows SaaS Top Bar Contract: Breadcrumb left, Streak & Primary Action right) */}
-        <header className="flex items-center justify-between gap-6 px-6 py-4 border-b border-slate-800 bg-slate-950">
-          <div className="flex items-center gap-2 text-xs text-slate-400 truncate">
-            <span className="font-semibold text-slate-200">Workspace</span>
+        <header className="flex items-center justify-between gap-6 px-6 py-4 border-b border-zinc-800/80 bg-[#050505]">
+          <div className="flex items-center gap-2 text-xs text-zinc-400 truncate">
+            <span className="font-semibold text-zinc-300">Workspace</span>
             <span aria-hidden="true">/</span>
             <span className="text-white font-semibold capitalize">
               {activePage.replace('_', ' ')}
             </span>
             <span aria-hidden="true">·</span>
-            <span className="font-mono tabular-nums">
+            <span className="font-mono tabular-nums text-zinc-400">
               Room: {activeStudyRoomCode}
             </span>
           </div>
 
           <div className="flex items-center gap-4 shrink-0 text-xs font-mono tabular-nums">
-            <span className="text-slate-300">
+            <span className="text-zinc-300">
               Streak: <strong className="text-amber-400">{currentIdentity.streakCount} Days</strong>
             </span>
-            <span aria-hidden="true" className="text-slate-700">·</span>
-            <span className="text-slate-300">
+            <span aria-hidden="true" className="text-zinc-700">·</span>
+            <span className="text-zinc-300">
               Score: <strong className="text-emerald-400">{currentIdentity.participationPoints} pts</strong>
             </span>
             <button
               type="button"
               onClick={() => setActivePage('study')}
-              className="px-3.5 py-1.5 text-xs font-sans font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg whitespace-nowrap shrink-0"
+              className="px-3.5 py-1.5 text-xs font-sans font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
             >
               Invite to Study Room
             </button>
@@ -1338,40 +1344,42 @@ export default function App() {
           {activePage === 'hub' && (
             <section className="space-y-8" aria-label="Online Presence Directory">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-5 rounded-xl border border-slate-800 bg-slate-900 space-y-1">
-                  <div className="text-xs text-slate-400">Signed-In Account</div>
+                <div className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1">
+                  <div className="text-xs text-zinc-400">Signed-In Account</div>
                   <div className="text-base font-bold text-white truncate">
                     {currentIdentity.displayName}
                   </div>
-                  <div className="text-xs text-slate-400 truncate">{currentIdentity.email}</div>
+                  <div className="text-xs text-zinc-500 font-mono truncate">
+                    {currentIdentity.email}
+                  </div>
                 </div>
 
-                <div className="p-5 rounded-xl border border-slate-800 bg-slate-900 space-y-1">
-                  <div className="text-xs text-slate-400">Active Login Streak</div>
+                <div className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1">
+                  <div className="text-xs text-zinc-400">Active Login Streak</div>
                   <div className="text-2xl font-bold font-mono tabular-nums text-amber-400">
                     {currentIdentity.streakCount} {currentIdentity.streakCount === 1 ? 'Day' : 'Days'}
                   </div>
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-zinc-500 font-mono">
                     Checked in: {currentIdentity.lastLoginDate}
                   </div>
                 </div>
 
-                <div className="p-5 rounded-xl border border-slate-800 bg-slate-900 space-y-1">
-                  <div className="text-xs text-slate-400">Participation Points</div>
+                <div className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1">
+                  <div className="text-xs text-zinc-400">Participation Points</div>
                   <div className="text-2xl font-bold font-mono tabular-nums text-emerald-400">
                     {currentIdentity.participationPoints} pts
                   </div>
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-zinc-500">
                     Study, Chat, Moments & Games
                   </div>
                 </div>
 
-                <div className="p-5 rounded-xl border border-slate-800 bg-slate-900 space-y-1">
-                  <div className="text-xs text-slate-400">Privacy Shield</div>
-                  <div className="text-base font-bold text-indigo-400 capitalize">
+                <div className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1">
+                  <div className="text-xs text-zinc-400">Privacy Shield</div>
+                  <div className="text-base font-bold text-white capitalize">
                     {currentIdentity.privacyVisibility.replace('_', ' ')}
                   </div>
-                  <div className="text-xs text-slate-400 font-mono truncate">
+                  <div className="text-xs text-zinc-500 font-mono truncate">
                     Key: {e2eeFingerprint.slice(0, 9)}
                   </div>
                 </div>
@@ -1379,13 +1387,13 @@ export default function App() {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 {/* Live Online Users Directory (7 cols) */}
-                <div className="lg:col-span-7 p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-4">
-                  <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="lg:col-span-7 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
+                  <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
                     <div>
                       <h1 className="text-lg font-bold text-white">
                         Real People Online Now ({onlinePeers.length})
                       </h1>
-                      <p className="text-xs text-slate-400">
+                      <p className="text-xs text-zinc-400">
                         Send a connection request to anyone online. Once accepted, chat and voice/video calls unlock immediately.
                       </p>
                     </div>
@@ -1406,20 +1414,20 @@ export default function App() {
                       return (
                         <div
                           key={peer.uid}
-                          className="p-4 rounded-lg bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                          className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
                         >
                           <div className="space-y-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-bold text-white truncate">
                                 {peer.displayName} {isMe ? '(You — Online)' : ''}
                               </span>
-                              <span aria-hidden="true" className="text-slate-600">·</span>
-                              <span className="text-xs text-emerald-400 font-medium capitalize">
+                              <span aria-hidden="true" className="text-zinc-600">·</span>
+                              <span className="text-xs text-emerald-400 font-mono capitalize">
                                 {peer.currentMode.replace('_', ' ')}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-400 truncate">{peer.bio}</p>
-                            <div className="text-xs text-slate-500 font-mono tabular-nums">
+                            <p className="text-xs text-zinc-400 truncate">{peer.bio}</p>
+                            <div className="text-xs text-zinc-500 font-mono tabular-nums">
                               Streak: {peer.streakCount}d · Participation: {peer.participationPoints} pts
                             </div>
                           </div>
@@ -1439,12 +1447,12 @@ export default function App() {
                                     }
                                     placeholder="Add a note..."
                                     aria-label={`Request note for ${peer.displayName}`}
-                                    className="px-2.5 py-1.5 text-xs bg-slate-900 border border-slate-800 rounded-md text-white placeholder:text-slate-500 w-32"
+                                    className="px-2.5 py-1.5 text-xs bg-[#0A0A0C] border border-zinc-800 rounded text-white placeholder:text-zinc-600 w-32"
                                   />
                                   <button
                                     type="button"
                                     onClick={() => handleSendRequest(peer)}
-                                    className="px-3.5 py-1.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-md whitespace-nowrap shrink-0"
+                                    className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
                                   >
                                     Send Request
                                   </button>
@@ -1456,12 +1464,12 @@ export default function App() {
                                     setActiveChatPeerUid(peer.uid);
                                     setActivePage('chat');
                                   }}
-                                  className="px-3.5 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-md whitespace-nowrap shrink-0"
+                                  className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
                                 >
                                   Message Now
                                 </button>
                               ) : (
-                                <span className="text-xs text-amber-400 font-medium">
+                                <span className="text-xs text-amber-400 font-mono">
                                   Request {existingReq.status}
                                 </span>
                               )}
@@ -1472,7 +1480,7 @@ export default function App() {
                     })}
 
                     {otherOnlinePeers.length === 0 && (
-                      <div className="p-4 rounded-lg bg-slate-950/60 border border-slate-800/80 text-xs text-slate-400">
+                      <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs text-zinc-400">
                         Open this app link in another browser window or share your Study Room invite link with friends to see live multi-user presence and exchange real-time requests.
                       </div>
                     )}
@@ -1480,18 +1488,18 @@ export default function App() {
                 </div>
 
                 {/* Connection Requests Box (5 cols) */}
-                <div className="lg:col-span-5 p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-4">
-                  <div className="border-b border-slate-800 pb-3">
+                <div className="lg:col-span-5 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
+                  <div className="border-b border-zinc-800/80 pb-3">
                     <h2 className="text-lg font-bold text-white">
                       Connection Requests ({requests.length})
                     </h2>
-                    <p className="text-xs text-slate-400">
+                    <p className="text-xs text-zinc-400">
                       Accept incoming requests to unlock Chat Mode and Talking Mode.
                     </p>
                   </div>
 
                   {requests.length === 0 ? (
-                    <p className="text-xs text-slate-400 py-6">
+                    <p className="text-xs text-zinc-400 py-6">
                       No pending or accepted requests yet. Send a request to any online user on the left.
                     </p>
                   ) : (
@@ -1501,7 +1509,7 @@ export default function App() {
                         return (
                           <div
                             key={req.id}
-                            className="p-3.5 rounded-lg bg-slate-950 border border-slate-800 space-y-2"
+                            className="p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2"
                           >
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-semibold text-white">
@@ -1509,24 +1517,24 @@ export default function App() {
                                   ? `From: ${req.fromName}`
                                   : `Sent to: ${req.toName}`}
                               </span>
-                              <span className="text-slate-400 uppercase font-mono">
+                              <span className="text-zinc-400 uppercase font-mono">
                                 {req.status}
                               </span>
                             </div>
-                            <p className="text-xs text-slate-300">"{req.note}"</p>
+                            <p className="text-xs text-zinc-300">"{req.note}"</p>
                             {isIncoming && req.status === 'pending' && (
                               <div className="flex items-center gap-2 pt-1">
                                 <button
                                   type="button"
                                   onClick={() => handleRespondRequest(req, 'accepted')}
-                                  className="px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-md whitespace-nowrap shrink-0"
+                                  className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
                                 >
                                   Accept Request
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleRespondRequest(req, 'declined')}
-                                  className="px-3 py-1.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-md whitespace-nowrap shrink-0"
+                                  className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded whitespace-nowrap shrink-0"
                                 >
                                   Decline
                                 </button>
@@ -1547,39 +1555,45 @@ export default function App() {
               ================================================================ */}
           {activePage === 'chat' && (
             <section className="space-y-6" aria-label="Real-Time Chat Mode">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-100">
+                  <h1 className="text-2xl font-bold tracking-tight text-white">
                     Real-Time Chat Mode
                   </h1>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-zinc-400">
                     End-to-end verified session messaging with accepted online connections
                   </p>
                 </div>
-                <span className="text-xs font-mono text-slate-400">
+                <span className="text-xs font-mono text-zinc-400">
                   Fingerprint: {e2eeFingerprint}
                 </span>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                <div className="lg:col-span-4 p-5 rounded-xl border border-slate-800 bg-slate-900 space-y-3">
-                  <h2 className="text-base font-bold text-white border-b border-slate-800 pb-3">
+                <div className="lg:col-span-4 p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-3">
+                  <h2 className="text-base font-bold text-white border-b border-zinc-800/80 pb-3">
                     Connected Channels
                   </h2>
 
                   <button
                     type="button"
                     onClick={() => setActiveChatPeerUid(currentIdentity.uid)}
-                    className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                    className={`w-full text-left p-3 rounded-md border transition-colors ${
                       activeChatPeerUid === '' || activeChatPeerUid === currentIdentity.uid
-                        ? 'bg-indigo-600/20 border-indigo-500 text-white'
-                        : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                        ? 'bg-white text-black border-white'
+                        : 'bg-[#050505] border-zinc-800/80 text-zinc-300 hover:text-white'
                     }`}
                   >
                     <div className="text-sm font-semibold">
                       {currentIdentity.displayName} (Personal Scratchpad)
                     </div>
-                    <div className="text-xs text-slate-400">
+                    <div
+                      className={`text-xs ${
+                        activeChatPeerUid === '' || activeChatPeerUid === currentIdentity.uid
+                          ? 'text-zinc-700'
+                          : 'text-zinc-500'
+                      }`}
+                    >
                       Verify live WebSocket & Firestore message delivery
                     </div>
                   </button>
@@ -1589,32 +1603,32 @@ export default function App() {
                       key={peer.uid}
                       type="button"
                       onClick={() => setActiveChatPeerUid(peer.uid)}
-                      className={`w-full text-left p-3 rounded-lg border transition-colors ${
+                      className={`w-full text-left p-3 rounded-md border transition-colors ${
                         activeChatPeerUid === peer.uid
-                          ? 'bg-indigo-600/20 border-indigo-500 text-white'
-                          : 'bg-slate-950 border-slate-800 text-slate-300 hover:text-white'
+                          ? 'bg-white text-black border-white'
+                          : 'bg-[#050505] border-zinc-800/80 text-zinc-300 hover:text-white'
                       }`}
                     >
                       <div className="text-sm font-semibold">{peer.displayName}</div>
-                      <div className="text-xs text-emerald-400">Connected · Online now</div>
+                      <div className="text-xs text-emerald-500 font-mono">Connected · Online now</div>
                     </button>
                   ))}
                 </div>
 
-                <div className="lg:col-span-8 p-6 rounded-xl border border-slate-800 bg-slate-900 flex flex-col h-[520px] justify-between">
-                  <div className="border-b border-slate-800 pb-3 flex items-center justify-between">
+                <div className="lg:col-span-8 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] flex flex-col h-[520px] justify-between">
+                  <div className="border-b border-zinc-800/80 pb-3 flex items-center justify-between">
                     <div className="text-sm font-bold text-white">
                       Encrypted Channel Stream
                     </div>
-                    <span className="text-xs text-slate-400 font-mono tabular-nums">
+                    <span className="text-xs text-zinc-400 font-mono tabular-nums">
                       {messages.length} messages
                     </span>
                   </div>
 
                   <div className="flex-1 overflow-y-auto py-4 space-y-3">
                     {messages.length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-center text-xs text-slate-400 space-y-1">
-                        <p className="text-slate-200 font-medium">No messages in this channel yet</p>
+                      <div className="h-full flex flex-col items-center justify-center text-center text-xs text-zinc-400 space-y-1">
+                        <p className="text-white font-medium">No messages in this channel yet</p>
                         <p>Send a message below to transmit immediately over WebSocket and Firestore.</p>
                       </div>
                     ) : (
@@ -1625,14 +1639,14 @@ export default function App() {
                             key={msg.id}
                             className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
                           >
-                            <div className="text-[11px] text-slate-400 mb-1">
+                            <div className="text-[11px] text-zinc-500 mb-1">
                               {msg.senderName}
                             </div>
                             <div
-                              className={`px-4 py-2.5 rounded-xl max-w-md text-sm ${
+                              className={`px-4 py-2.5 rounded-md max-w-md text-sm ${
                                 isMine
-                                  ? 'bg-indigo-600 text-white'
-                                  : 'bg-slate-950 border border-slate-800 text-slate-100'
+                                  ? 'bg-white text-black font-medium'
+                                  : 'bg-[#050505] border border-zinc-800 text-zinc-100'
                               }`}
                             >
                               {msg.text}
@@ -1643,7 +1657,7 @@ export default function App() {
                     )}
                   </div>
 
-                  <form onSubmit={handleSendDirectMessage} className="pt-3 border-t border-slate-800 space-y-2">
+                  <form onSubmit={handleSendDirectMessage} className="pt-3 border-t border-zinc-800/80 space-y-2">
                     {chatError && <p className="text-xs text-rose-400">{chatError}</p>}
                     <div className="flex gap-2">
                       <input
@@ -1652,11 +1666,11 @@ export default function App() {
                         onChange={(e) => setChatMessageInput(e.target.value)}
                         placeholder="Write a real-time message..."
                         aria-label="Direct chat message input"
-                        className="flex-1 px-4 py-2.5 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                        className="flex-1 px-4 py-2.5 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                       />
                       <button
                         type="submit"
-                        className="px-5 py-2.5 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg whitespace-nowrap shrink-0"
+                        className="px-5 py-2.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
                       >
                         Send Message
                       </button>
@@ -1823,12 +1837,12 @@ export default function App() {
               ================================================================ */}
           {activePage === 'moments' && (
             <section className="space-y-6" aria-label="Photos and Social Media Sync">
-              <div className="border-b border-slate-800 pb-4 flex flex-wrap items-center justify-between gap-4">
+              <div className="border-b border-zinc-800/80 pb-4 flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-slate-100">
+                  <h1 className="text-2xl font-bold tracking-tight text-white">
                     Photos & Social Media Sync
                   </h1>
-                  <p className="text-sm text-slate-400">
+                  <p className="text-sm text-zinc-400">
                     Upload real photos from your device and control whether posts are visible to everyone or only accepted connections.
                   </p>
                 </div>
@@ -1837,12 +1851,12 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 <form
                   onSubmit={handlePublishMoment}
-                  className="lg:col-span-5 p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-4"
+                  className="lg:col-span-5 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4"
                 >
                   <h2 className="text-base font-bold text-white">Upload a Real Photo</h2>
 
                   <div className="space-y-1.5">
-                    <label htmlFor="moment-photo-file" className="block text-xs font-medium text-slate-300">
+                    <label htmlFor="moment-photo-file" className="block text-xs font-medium text-zinc-300">
                       Select Photo File (PNG, JPG, WebP)
                     </label>
                     <input
@@ -1850,12 +1864,12 @@ export default function App() {
                       type="file"
                       accept="image/*"
                       onChange={handlePhotoFileSelect}
-                      className="w-full text-xs text-slate-300 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-slate-800 file:text-slate-100 hover:file:bg-slate-700"
+                      className="w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-900 file:text-zinc-100 hover:file:bg-zinc-800"
                     />
                   </div>
 
                   <div className="space-y-1.5">
-                    <label htmlFor="moment-visibility" className="block text-xs font-medium text-slate-300">
+                    <label htmlFor="moment-visibility" className="block text-xs font-medium text-zinc-300">
                       Audience Privacy
                     </label>
                     <select
@@ -1864,7 +1878,7 @@ export default function App() {
                       onChange={(e) =>
                         setMomentVisibility(e.target.value as 'public' | 'connections')
                       }
-                      className="w-full px-3.5 py-2 text-xs bg-slate-950 border border-slate-800 rounded-lg text-white"
+                      className="w-full px-3.5 py-2 text-xs bg-[#050505] border border-zinc-800 rounded-md text-white"
                     >
                       <option value="public">Available to All Members</option>
                       <option value="connections">Accepted Connections Only</option>
@@ -1872,7 +1886,7 @@ export default function App() {
                   </div>
 
                   <div className="space-y-1.5">
-                    <label htmlFor="moment-caption" className="block text-xs font-medium text-slate-300">
+                    <label htmlFor="moment-caption" className="block text-xs font-medium text-zinc-300">
                       Caption / Story Behind This Moment
                     </label>
                     <textarea
@@ -1882,7 +1896,7 @@ export default function App() {
                       value={momentCaption}
                       onChange={(e) => setMomentCaption(e.target.value)}
                       placeholder="Share what you are working on, studying, or experiencing right now..."
-                      className="w-full px-3.5 py-2 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3.5 py-2 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                     />
                   </div>
 
@@ -1890,7 +1904,7 @@ export default function App() {
 
                   <button
                     type="submit"
-                    className="w-full py-2.5 px-4 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg whitespace-nowrap shrink-0"
+                    className="w-full py-2.5 px-4 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
                   >
                     Publish Real Photo Moment
                   </button>
@@ -1898,11 +1912,11 @@ export default function App() {
 
                 <div className="lg:col-span-7 space-y-4">
                   {moments.length === 0 ? (
-                    <div className="p-8 rounded-xl border border-slate-800 bg-slate-900 text-center space-y-2">
+                    <div className="p-8 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] text-center space-y-2">
                       <p className="text-sm font-semibold text-white">
                         No Photos Uploaded Yet
                       </p>
-                      <p className="text-xs text-slate-400 max-w-md mx-auto">
+                      <p className="text-xs text-zinc-400 max-w-md mx-auto">
                         Mr. Stranger enforces a strict zero-fake-data policy. Only real photos uploaded by authenticated accounts appear here.
                       </p>
                     </div>
@@ -1911,28 +1925,28 @@ export default function App() {
                       {moments.map((item) => (
                         <article
                           key={item.id}
-                          className="rounded-xl border border-slate-800 bg-slate-900 overflow-hidden"
+                          className="rounded-lg border border-zinc-800/80 bg-[#0A0A0C] overflow-hidden"
                         >
                           <img
                             src={item.photoDataUrl}
                             alt={item.caption}
                             referrerPolicy="no-referrer"
-                            className="w-full max-h-80 object-cover bg-slate-950"
+                            className="w-full max-h-80 object-cover bg-[#050505]"
                           />
                           <div className="p-5 flex items-start justify-between gap-4">
                             <div className="space-y-1">
-                              <div className="text-xs text-slate-400">
+                              <div className="text-xs text-zinc-400">
                                 <span className="font-semibold text-white">{item.authorName}</span>
                                 <span aria-hidden="true"> · </span>
                                 <span className="capitalize">{item.visibility} Moment</span>
                               </div>
-                              <p className="text-sm text-slate-100">{item.caption}</p>
+                              <p className="text-sm text-zinc-100">{item.caption}</p>
                             </div>
                             {item.authorUid === currentIdentity.uid && (
                               <button
                                 type="button"
                                 onClick={() => handleDeleteMoment(item.id)}
-                                className="px-3 py-1 text-xs text-rose-400 hover:text-rose-300 bg-slate-950 border border-slate-800 rounded-md whitespace-nowrap shrink-0"
+                                className="px-3 py-1 text-xs text-rose-400 hover:text-rose-300 bg-[#050505] border border-zinc-800 rounded whitespace-nowrap shrink-0"
                               >
                                 Delete
                               </button>
@@ -1952,21 +1966,21 @@ export default function App() {
               ================================================================ */}
           {activePage === 'privacy' && (
             <section className="space-y-6 max-w-3xl" aria-label="Privacy and Security Center">
-              <div className="border-b border-slate-800 pb-4">
+              <div className="border-b border-zinc-800/80 pb-4">
                 <h1 className="text-2xl font-bold tracking-tight text-white">
                   Privacy & Zero-Trust Security Center
                 </h1>
-                <p className="text-sm text-slate-400">
+                <p className="text-sm text-zinc-400">
                   Control your live presence visibility, call permissions, and isolated PII vault settings.
                 </p>
               </div>
 
-              <div className="p-6 rounded-xl border border-slate-800 bg-slate-900 space-y-6">
+              <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-6">
                 <div className="space-y-3">
                   <h2 className="text-base font-bold text-white">
                     Online Presence & Directory Visibility
                   </h2>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-zinc-400">
                     Choose who can see you in the Online Directory and send you connection requests.
                   </p>
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -1999,30 +2013,38 @@ export default function App() {
                             currentIdentity.allowCallsFromConnectionsOnly
                           )
                         }
-                        className={`p-4 rounded-lg border text-left transition-colors ${
+                        className={`p-4 rounded-md border text-left transition-colors ${
                           currentIdentity.privacyVisibility === opt.id
-                            ? 'bg-indigo-600/20 border-indigo-500 text-white'
-                            : 'bg-slate-950 border-slate-800 text-slate-300 hover:border-slate-700'
+                            ? 'bg-white text-black border-white'
+                            : 'bg-[#050505] border-zinc-800/80 text-zinc-300 hover:border-zinc-600'
                         }`}
                       >
                         <div className="text-xs font-bold">{opt.title}</div>
-                        <div className="text-[11px] text-slate-400 mt-1">{opt.desc}</div>
+                        <div
+                          className={`text-[11px] mt-1 ${
+                            currentIdentity.privacyVisibility === opt.id
+                              ? 'text-zinc-800'
+                              : 'text-zinc-500'
+                          }`}
+                        >
+                          {opt.desc}
+                        </div>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="pt-4 border-t border-slate-800 space-y-3">
+                <div className="pt-4 border-t border-zinc-800/80 space-y-3">
                   <h2 className="text-base font-bold text-white">
                     Communication & WebRTC Call Guards
                   </h2>
 
-                  <label className="flex items-center justify-between p-3.5 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
+                  <label className="flex items-center justify-between p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 cursor-pointer">
                     <div>
                       <div className="text-xs font-semibold text-white">
                         Restrict Voice & Video Calls to Accepted Connections Only
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-[11px] text-zinc-400">
                         Blocks unsolicited WebRTC signaling offers from non-connected accounts
                       </div>
                     </div>
@@ -2036,16 +2058,16 @@ export default function App() {
                           e.target.checked
                         )
                       }
-                      className="accent-indigo-500 w-4 h-4"
+                      className="accent-white w-4 h-4"
                     />
                   </label>
 
-                  <label className="flex items-center justify-between p-3.5 rounded-lg bg-slate-950 border border-slate-800 cursor-pointer">
+                  <label className="flex items-center justify-between p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 cursor-pointer">
                     <div>
                       <div className="text-xs font-semibold text-white">
                         Send Message Delivery & Read Receipts
                       </div>
-                      <div className="text-[11px] text-slate-400">
+                      <div className="text-[11px] text-zinc-400">
                         Allow accepted connections to see when you read their messages
                       </div>
                     </div>
@@ -2059,17 +2081,17 @@ export default function App() {
                           currentIdentity.allowCallsFromConnectionsOnly
                         )
                       }
-                      className="accent-indigo-500 w-4 h-4"
+                      className="accent-white w-4 h-4"
                     />
                   </label>
                 </div>
 
-                <div className="pt-4 border-t border-slate-800 space-y-2">
+                <div className="pt-4 border-t border-zinc-800/80 space-y-2">
                   <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
                     <Lock className="w-4 h-4" />
                     <span>Isolated PII Vault & Cryptographic Identity</span>
                   </div>
-                  <div className="p-4 rounded-lg bg-slate-950 border border-slate-800 text-xs font-mono text-slate-300 space-y-1">
+                  <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs font-mono text-zinc-300 space-y-1">
                     <div>Account UID: {currentIdentity.uid}</div>
                     <div>Isolated Email Vault: {currentIdentity.email} (Owner-Only Read)</div>
                     <div>E2EE Verification Fingerprint: {e2eeFingerprint}</div>
@@ -2084,32 +2106,32 @@ export default function App() {
               ================================================================ */}
           {activePage === 'signout' && (
             <section className="max-w-xl mx-auto py-6" aria-label="Account Verification and Sign Out">
-              <div className="p-8 rounded-xl border border-slate-800 bg-slate-900 space-y-6">
-                <div className="space-y-1 border-b border-slate-800 pb-4">
+              <div className="p-8 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-6">
+                <div className="space-y-1 border-b border-zinc-800/80 pb-4">
                   <h1 className="text-2xl font-bold text-white">
                     Account Verification & Sign Out
                   </h1>
-                  <p className="text-xs text-slate-400">
+                  <p className="text-xs text-zinc-400">
                     Confirm your account details, Email ID, and Password below to securely close your live presence session.
                   </p>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="p-4 rounded-lg bg-slate-950 border border-slate-800">
-                    <div className="text-xs text-slate-400">Active Account</div>
+                  <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80">
+                    <div className="text-xs text-zinc-400">Active Account</div>
                     <div className="text-sm font-bold text-white mt-1 truncate">
                       {currentIdentity.displayName}
                     </div>
-                    <div className="text-xs text-slate-400 font-mono truncate">
+                    <div className="text-xs text-zinc-500 font-mono truncate">
                       {currentIdentity.email}
                     </div>
                   </div>
-                  <div className="p-4 rounded-lg bg-slate-950 border border-slate-800">
-                    <div className="text-xs text-slate-400">Preserved Streak</div>
+                  <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80">
+                    <div className="text-xs text-zinc-400">Preserved Streak</div>
                     <div className="text-sm font-bold font-mono tabular-nums text-amber-400 mt-1">
                       {currentIdentity.streakCount} Days · {currentIdentity.participationPoints} pts
                     </div>
-                    <div className="text-xs text-slate-400">
+                    <div className="text-xs text-zinc-500">
                       Synced with Account Vault
                     </div>
                   </div>
@@ -2117,7 +2139,7 @@ export default function App() {
 
                 <form onSubmit={handleConfirmSignOut} className="space-y-4">
                   <div className="space-y-1.5">
-                    <label htmlFor="signout-email" className="block text-xs font-medium text-slate-300">
+                    <label htmlFor="signout-email" className="block text-xs font-medium text-zinc-300">
                       Confirm Account Email ID ({currentIdentity.email})
                     </label>
                     <input
@@ -2127,13 +2149,13 @@ export default function App() {
                       value={signOutEmailConfirm}
                       onChange={(e) => setSignOutEmailConfirm(e.target.value)}
                       placeholder={currentIdentity.email}
-                      className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                      className="w-full px-3.5 py-2.5 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                     />
                   </div>
 
                   {!authUser && (
                     <div className="space-y-1.5">
-                      <label htmlFor="signout-password" className="block text-xs font-medium text-slate-300">
+                      <label htmlFor="signout-password" className="block text-xs font-medium text-zinc-300">
                         Confirm Account Password
                       </label>
                       <input
@@ -2143,7 +2165,7 @@ export default function App() {
                         value={signOutPasswordConfirm}
                         onChange={(e) => setSignOutPasswordConfirm(e.target.value)}
                         placeholder="Enter your account password to sign out"
-                        className="w-full px-3.5 py-2.5 text-sm bg-slate-950 border border-slate-800 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:border-indigo-500"
+                        className="w-full px-3.5 py-2.5 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                       />
                     </div>
                   )}
@@ -2154,13 +2176,13 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => setActivePage('hub')}
-                      className="px-4 py-2.5 text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg whitespace-nowrap shrink-0"
+                      className="px-4 py-2.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
                     >
                       Cancel & Stay Online
                     </button>
                     <button
                       type="submit"
-                      className="px-5 py-2.5 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg whitespace-nowrap shrink-0"
+                      className="px-5 py-2.5 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-md whitespace-nowrap shrink-0"
                     >
                       Verify & Sign Out
                     </button>
