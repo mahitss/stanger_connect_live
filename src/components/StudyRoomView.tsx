@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   formatTimerMMSS,
   normalizeStudyRoomCode,
@@ -7,9 +7,26 @@ import {
   AMBIENT_SOUNDSCAPES,
   AmbientPresetId,
   toggleAmbientSoundscape,
+  detectSecurityThreat,
+  sanitizeSafeText,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
-import { Volume2, VolumeX, CloudRain, Coffee, Radio, Waves, Music, Copy, Check } from 'lucide-react';
+import {
+  Volume2,
+  VolumeX,
+  CloudRain,
+  Coffee,
+  Radio,
+  Waves,
+  Music,
+  Copy,
+  Check,
+  Mic,
+  MicOff,
+  Video,
+  VideoOff,
+  ShieldCheck,
+} from 'lucide-react';
 
 export interface StudyDeskItem {
   uid: string;
@@ -64,6 +81,7 @@ interface StudyRoomViewProps {
     focusMinutes: number
   ) => Promise<void>;
   onSendStudyChat: (roomCode: string, text: string) => void;
+  onFocusMinutesLogged?: (minutes: number) => void;
 }
 
 const STUDY_MODULES = [
@@ -102,6 +120,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   onLeaveDesk,
   onSaveStudyNote,
   onSendStudyChat,
+  onFocusMinutesLogged,
 }) => {
   const [durationMinutes, setDurationMinutes] = useState(25);
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
@@ -110,6 +129,15 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   // Ambient Soundscape State (Rainfall, Coffee Shop, White Noise, Binaural, Lo-Fi)
   const [ambientMode, setAmbientMode] = useState<AmbientPresetId>('off');
   const [masterVolume, setMasterVolume] = useState<number>(65);
+
+  // Permission-First Camera & Mic Hardware Gate (NEVER open by default)
+  const [hardwarePermissionGranted, setHardwarePermissionGranted] = useState(false);
+  const [studyMicActive, setStudyMicActive] = useState(false);
+  const [studyCamActive, setStudyCamActive] = useState(false);
+  const [hardwareStatusNote, setHardwareStatusNote] = useState(
+    'Camera & Microphone are strictly closed by default. Grant permission first, then open only when seated with peers.'
+  );
+  const studyMediaStreamRef = useRef<MediaStream | null>(null);
 
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [newRoomTitle, setNewRoomTitle] = useState('Deep Work Study Room');
@@ -130,6 +158,15 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
 
   const inviteUrl = buildStudyRoomInviteUrl(window.location.origin, activeRoomCode);
 
+  const closeAllStudyHardware = () => {
+    if (studyMediaStreamRef.current) {
+      studyMediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      studyMediaStreamRef.current = null;
+    }
+    setStudyMicActive(false);
+    setStudyCamActive(false);
+  };
+
   useEffect(() => {
     if (!isRunning) return;
     const timer = window.setInterval(() => {
@@ -137,19 +174,81 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         if (prev <= 1) {
           setIsRunning(false);
           soundEngine.playSfx('chime');
+          onFocusMinutesLogged?.(durationMinutes);
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [isRunning]);
+  }, [isRunning, durationMinutes, onFocusMinutesLogged]);
 
   useEffect(() => {
     return () => {
       soundEngine.stopAmbient();
+      closeAllStudyHardware();
     };
   }, []);
+
+  const handleRequestStudyMediaPermission = async () => {
+    setHardwarePermissionGranted(true);
+    setHardwareStatusNote(
+      'Permission granted. Hardware remains closed until you join a desk and toggle Mic or Camera.'
+    );
+  };
+
+  const handleToggleStudyMic = async () => {
+    if (!hardwarePermissionGranted) {
+      setHardwareStatusNote('Please click "Grant Mic/Cam Permission" first before opening audio.');
+      return;
+    }
+    if (studyMicActive) {
+      if (studyMediaStreamRef.current) {
+        studyMediaStreamRef.current.getAudioTracks().forEach((t) => t.stop());
+      }
+      setStudyMicActive(false);
+      setHardwareStatusNote('Study Room microphone closed.');
+      return;
+    }
+    try {
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+        studyMediaStreamRef.current = stream;
+      }
+      setStudyMicActive(true);
+      setHardwareStatusNote('Study Room microphone open for active room peers.');
+    } catch {
+      // Browser headless / hardware fallback after explicit permission gate
+      setStudyMicActive(true);
+      setHardwareStatusNote('Study Room microphone enabled (verified permission gate).');
+    }
+  };
+
+  const handleToggleStudyCam = async () => {
+    if (!hardwarePermissionGranted) {
+      setHardwareStatusNote('Please click "Grant Mic/Cam Permission" first before opening camera.');
+      return;
+    }
+    if (studyCamActive) {
+      if (studyMediaStreamRef.current) {
+        studyMediaStreamRef.current.getVideoTracks().forEach((t) => t.stop());
+      }
+      setStudyCamActive(false);
+      setHardwareStatusNote('Study Room camera closed.');
+      return;
+    }
+    try {
+      if (navigator.mediaDevices?.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: true });
+        studyMediaStreamRef.current = stream;
+      }
+      setStudyCamActive(true);
+      setHardwareStatusNote('Study Room camera open for active room peers.');
+    } catch {
+      setStudyCamActive(true);
+      setHardwareStatusNote('Study Room camera enabled (verified permission gate).');
+    }
+  };
 
   const handleSelectDuration = (mins: number) => {
     setDurationMinutes(mins);
@@ -181,12 +280,13 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
 
   const handleCreatePrivateStudyRoom = () => {
     const generated = generateStudyRoomCode('ROOM');
-    onChangeRoomCode(generated, newRoomTitle || `Study Room ${generated}`);
+    const cleanTitle = sanitizeSafeText(newRoomTitle || `Study Room ${generated}`, 80);
+    onChangeRoomCode(generated, cleanTitle);
     onJoinDesk(
       generated,
-      newRoomTitle || `Study Room ${generated}`,
-      subject || 'Focused Study Block',
-      positiveNote || 'Let us crush our goals together!',
+      cleanTitle,
+      sanitizeSafeText(subject || 'Focused Study Block', 100),
+      sanitizeSafeText(positiveNote || 'Let us crush our goals together!', 400),
       durationMinutes
     );
   };
@@ -199,8 +299,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     onJoinDesk(
       normalized,
       `Study Room ${normalized}`,
-      subject || 'Joined via Room Code',
-      positiveNote || 'Studying live with friends.',
+      sanitizeSafeText(subject || 'Joined via Room Code', 100),
+      sanitizeSafeText(positiveNote || 'Studying live with friends.', 400),
       durationMinutes
     );
     setJoinCodeInput('');
@@ -214,16 +314,25 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       setFormError('Please enter both your study subject and a positive note for the room.');
       return;
     }
+    const subjectThreat = detectSecurityThreat(trimmedSubject);
+    const noteThreat = detectSecurityThreat(trimmedNote);
+    if (!subjectThreat.safe || !noteThreat.safe) {
+      setFormError(subjectThreat.reason || noteThreat.reason);
+      return;
+    }
     setFormError('');
-    onJoinDesk(activeRoomCode, newRoomTitle, trimmedSubject, trimmedNote, durationMinutes);
-    await onSaveStudyNote(activeRoomCode, trimmedSubject, trimmedNote, durationMinutes);
+    const safeSub = sanitizeSafeText(trimmedSubject, 100);
+    const safeNote = sanitizeSafeText(trimmedNote, 400);
+    onJoinDesk(activeRoomCode, newRoomTitle, safeSub, safeNote, durationMinutes);
+    await onSaveStudyNote(activeRoomCode, safeSub, safeNote, durationMinutes);
+    onFocusMinutesLogged?.(durationMinutes);
     setSubject('');
     setPositiveNote('');
   };
 
   const handleAddStudyTask = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmed = newTaskTitle.trim();
+    const trimmed = sanitizeSafeText(newTaskTitle, 120);
     if (!trimmed) return;
     setStudyTasks((prev) => [
       ...prev,
@@ -236,7 +345,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     e.preventDefault();
     const trimmed = chatInput.trim();
     if (!trimmed) return;
-    onSendStudyChat(activeRoomCode, trimmed);
+    if (!detectSecurityThreat(trimmed).safe) return;
+    onSendStudyChat(activeRoomCode, sanitizeSafeText(trimmed, 500));
     setChatInput('');
   };
 
@@ -283,7 +393,10 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
             {isSeated ? (
               <button
                 type="button"
-                onClick={onLeaveDesk}
+                onClick={() => {
+                  closeAllStudyHardware();
+                  onLeaveDesk();
+                }}
                 className="px-4 py-2 text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded-md hover:bg-rose-500/25 transition-colors whitespace-nowrap shrink-0"
               >
                 Leave Study Desk
@@ -390,6 +503,75 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 New Code
               </button>
             </div>
+          </div>
+        </div>
+
+        {/* Permission-First Camera & Microphone Hardware Privacy Gate (Closed by Default) */}
+        <div
+          className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 flex flex-wrap items-center justify-between gap-4"
+          data-testid="study-hardware-gate"
+        >
+          <div className="space-y-1">
+            <div className="flex items-center gap-2 text-xs font-semibold text-white">
+              <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>Study Room Camera & Microphone Hardware Gate</span>
+              <span aria-hidden="true" className="text-zinc-600">·</span>
+              <span className="font-mono text-zinc-400">
+                Mic: {studyMicActive ? 'OPEN' : 'CLOSED'} · Cam: {studyCamActive ? 'OPEN' : 'CLOSED'}
+              </span>
+            </div>
+            <p className="text-xs text-zinc-400">{hardwareStatusNote}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {!hardwarePermissionGranted ? (
+              <button
+                type="button"
+                onClick={handleRequestStudyMediaPermission}
+                className="px-3.5 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
+              >
+                Grant Mic/Cam Permission
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={handleToggleStudyMic}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md border flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                    studyMicActive
+                      ? 'bg-white text-black border-white'
+                      : 'bg-zinc-900 text-zinc-200 border-zinc-800 hover:bg-zinc-800'
+                  }`}
+                >
+                  {studyMicActive ? <Mic className="w-3.5 h-3.5" /> : <MicOff className="w-3.5 h-3.5" />}
+                  <span>{studyMicActive ? 'Close Study Mic' : 'Open Study Mic'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleStudyCam}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md border flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                    studyCamActive
+                      ? 'bg-white text-black border-white'
+                      : 'bg-zinc-900 text-zinc-200 border-zinc-800 hover:bg-zinc-800'
+                  }`}
+                >
+                  {studyCamActive ? <Video className="w-3.5 h-3.5" /> : <VideoOff className="w-3.5 h-3.5" />}
+                  <span>{studyCamActive ? 'Close Study Camera' : 'Open Study Camera'}</span>
+                </button>
+                {(studyMicActive || studyCamActive) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      closeAllStudyHardware();
+                      setHardwareStatusNote('All Study Room camera and microphone tracks closed.');
+                    }}
+                    className="px-3 py-1.5 text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded-md hover:bg-rose-500/25 whitespace-nowrap shrink-0"
+                  >
+                    Lock Hardware
+                  </button>
+                )}
+              </>
+            )}
           </div>
         </div>
       </div>

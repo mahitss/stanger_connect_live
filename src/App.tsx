@@ -45,6 +45,11 @@ import {
   normalizeStudyRoomCode,
   validateAccountCredentials,
   deriveE2eeFingerprint,
+  clampProductivityTarget,
+  computeProductivityGoalProgress,
+  canUsersChatOrCall,
+  detectSecurityThreat,
+  sanitizeSafeText,
 } from './utils/rules';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
 import {
@@ -184,6 +189,40 @@ export default function App() {
   const [momentPhotoDataUrl, setMomentPhotoDataUrl] = useState('');
   const [momentVisibility, setMomentVisibility] = useState<'public' | 'connections'>('public');
   const [momentError, setMomentError] = useState('');
+  const [momentFilter, setMomentFilter] = useState<'all' | 'public' | 'connections' | 'mine'>('all');
+
+  // Daily Productivity Goal State (Target Focus Time & Completed Minutes for Today)
+  const todayDateStr = formatDateKey(new Date());
+  const [dailyTargetMinutes, setDailyTargetMinutes] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_daily_goal_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return clampProductivityTarget(Number(parsed.targetMinutes) || 120);
+      }
+    } catch {
+      // ignore
+    }
+    return 120;
+  });
+  const [dailyCompletedMinutes, setDailyCompletedMinutes] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_daily_goal_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.dateKey === formatDateKey(new Date())) {
+          return Math.max(0, Number(parsed.completedMinutes) || 0);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 30;
+  });
+  const [targetInputMinutes, setTargetInputMinutes] = useState<string>(() =>
+    String(dailyTargetMinutes)
+  );
+  const [securityNotice, setSecurityNotice] = useState<string>('');
 
   const currentIdentity: AccountIdentity | null = authUser
     ? {
@@ -497,6 +536,20 @@ export default function App() {
               },
             ];
           });
+        } else if (msg.type === 'request:decision') {
+          setRequests((prev) =>
+            prev.map((r) =>
+              (r.fromUid === currentIdentity.uid && r.toUid === msg.fromUid) ||
+              (r.fromUid === msg.fromUid && r.toUid === currentIdentity.uid)
+                ? { ...r, status: msg.decision }
+                : r
+            )
+          );
+          if (msg.decision === 'accepted') {
+            setActiveChatPeerUid(msg.fromUid);
+          }
+        } else if (msg.type === 'server:security_notice') {
+          setSecurityNotice(String(msg.reason || 'Security policy enforced.'));
         }
       } catch {
         // ignore parse errors
@@ -533,6 +586,35 @@ export default function App() {
     };
     setAccountSession(updated);
     localStorage.setItem('mr_stranger_account_v2', JSON.stringify(updated));
+  };
+
+  const persistProductivityGoal = (nextTarget: number, nextCompleted: number) => {
+    const clampedTarget = clampProductivityTarget(nextTarget);
+    const safeCompleted = Math.max(0, Math.round(nextCompleted));
+    setDailyTargetMinutes(clampedTarget);
+    setDailyCompletedMinutes(safeCompleted);
+    setTargetInputMinutes(String(clampedTarget));
+    localStorage.setItem(
+      'mr_stranger_daily_goal_v1',
+      JSON.stringify({
+        dateKey: todayDateStr,
+        targetMinutes: clampedTarget,
+        completedMinutes: safeCompleted,
+      })
+    );
+  };
+
+  const handleSetDailyProductivityTarget = (e: React.FormEvent) => {
+    e.preventDefault();
+    const parsed = Number(targetInputMinutes);
+    const clamped = clampProductivityTarget(parsed);
+    persistProductivityGoal(clamped, dailyCompletedMinutes);
+  };
+
+  const handleLogFocusMinutes = (minutesToAdd: number) => {
+    const added = Math.max(1, Math.round(minutesToAdd));
+    persistProductivityGoal(dailyTargetMinutes, dailyCompletedMinutes + added);
+    awardParticipation(Math.max(5, Math.round(added / 2)));
   };
 
   const handleUpdatePrivacy = async (
@@ -757,9 +839,20 @@ export default function App() {
     setRequests((prev) =>
       prev.map((r) => (r.id === req.id ? { ...r, status: decision } : r))
     );
+    const partnerUid =
+      req.fromUid === currentIdentity?.uid ? req.toUid : req.fromUid;
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'request:decision',
+          partnerUid,
+          decision,
+        })
+      );
+    }
+
     if (decision === 'accepted') {
-      const partnerUid =
-        req.fromUid === currentIdentity?.uid ? req.toUid : req.fromUid;
       setActiveChatPeerUid(partnerUid);
       awardParticipation(10);
     }
@@ -775,7 +868,7 @@ export default function App() {
     }
   };
 
-  // Send Direct Message
+  // Send Direct Message (Strictly Invite-First: Only Accepted Connections)
   const handleSendDirectMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentIdentity) return;
@@ -784,7 +877,24 @@ export default function App() {
       setChatError('Please write a message before sending.');
       return;
     }
-    const recipientUid = activeChatPeerUid || currentIdentity.uid;
+
+    const threat = detectSecurityThreat(trimmed);
+    if (!threat.safe) {
+      setChatError(threat.reason);
+      return;
+    }
+
+    const inviteGate = canUsersChatOrCall(
+      currentIdentity.uid,
+      activeChatPeerUid,
+      requests
+    );
+    if (!inviteGate.allowed) {
+      setChatError(inviteGate.reason);
+      return;
+    }
+
+    const recipientUid = activeChatPeerUid;
     setChatError('');
 
     const msgId = `msg_${Date.now()}_${currentIdentity.uid}`;
@@ -793,7 +903,7 @@ export default function App() {
       senderUid: currentIdentity.uid,
       senderName: currentIdentity.displayName,
       receiverUid: recipientUid,
-      text: trimmed.slice(0, 1000),
+      text: sanitizeSafeText(trimmed, 1000),
       timestamp: Date.now(),
     };
 
@@ -861,17 +971,23 @@ export default function App() {
       setMomentError('Please enter a caption describing your real photo moment.');
       return;
     }
+    const threat = detectSecurityThreat(trimmedCaption);
+    if (!threat.safe) {
+      setMomentError(threat.reason);
+      return;
+    }
     setMomentError('');
+    const safeCaption = sanitizeSafeText(trimmedCaption, 500);
     const finalPhotoData =
       momentPhotoDataUrl ||
-      generateCameraSnapshotSvgDataUrl(trimmedCaption, currentIdentity.displayName);
+      generateCameraSnapshotSvgDataUrl(safeCaption, currentIdentity.displayName);
 
     const momentId = `moment_${Date.now()}_${currentIdentity.uid}`;
     const newPost: MomentPostDoc = {
       id: momentId,
       authorUid: currentIdentity.uid,
       authorName: currentIdentity.displayName,
-      caption: trimmedCaption.slice(0, 500),
+      caption: safeCaption,
       photoDataUrl: finalPhotoData,
       visibility: momentVisibility,
     };
@@ -1110,11 +1226,27 @@ export default function App() {
       .filter((r) => r.status === 'accepted')
       .map((r) => (r.fromUid === currentIdentity.uid ? r.toUid : r.fromUid))
   );
+  const acceptedConnections = requests
+    .filter((r) => r.status === 'accepted')
+    .map((r) => ({
+      uid: r.fromUid === currentIdentity.uid ? r.toUid : r.fromUid,
+      displayName: r.fromUid === currentIdentity.uid ? r.toName : r.fromName,
+    }));
   const acceptedOnlinePeers = onlinePeers.filter(
     (p) => p.uid !== currentIdentity.uid && acceptedPeerUids.has(p.uid)
   );
   const otherOnlinePeers = onlinePeers.filter((p) => p.uid !== currentIdentity.uid);
   const e2eeFingerprint = deriveE2eeFingerprint(currentIdentity.uid, currentIdentity.email);
+  const goalProgress = computeProductivityGoalProgress(
+    dailyTargetMinutes,
+    dailyCompletedMinutes
+  );
+  const filteredMoments = moments.filter((m) => {
+    if (momentFilter === 'public') return m.visibility === 'public';
+    if (momentFilter === 'connections') return m.visibility === 'connections';
+    if (momentFilter === 'mine') return m.authorUid === currentIdentity.uid;
+    return true;
+  });
 
   // ==========================================================================
   // MNC-LEVEL WORKSPACE CANVAS: CARBON MATTE BLACK SIDEBAR + VIEWPORT
@@ -1338,7 +1470,7 @@ export default function App() {
       {/* Right Main Workspace Viewport */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Top Workspace Header (Follows SaaS Top Bar Contract: Breadcrumb left, Streak & Primary Action right) */}
-        <header className="flex items-center justify-between gap-6 px-6 py-4 border-b border-zinc-800/80 bg-[#050505]">
+        <header className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-zinc-800/80 bg-[#050505]">
           <div className="flex items-center gap-2 text-xs text-zinc-400 truncate">
             <span className="font-semibold text-zinc-300">Workspace</span>
             <span aria-hidden="true">/</span>
@@ -1351,7 +1483,7 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4 shrink-0 text-xs font-mono tabular-nums">
+          <div className="flex flex-wrap items-center gap-3 shrink-0 text-xs font-mono tabular-nums">
             <span className="text-zinc-300">
               Streak: <strong className="text-amber-400">{currentIdentity.streakCount} Days</strong>
             </span>
@@ -1372,7 +1504,7 @@ export default function App() {
         {/* Main Scrollable Page Content */}
         <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
           {/* ================================================================
-              PAGE 1: ONLINE DIRECTORY & STREAK DASHBOARD
+              PAGE 1: ONLINE DIRECTORY, DAILY PRODUCTIVITY GOAL & STREAK HUB
               ================================================================ */}
           {activePage === 'hub' && (
             <section className="space-y-8" aria-label="Online Presence Directory">
@@ -1414,6 +1546,142 @@ export default function App() {
                   </div>
                   <div className="text-xs text-zinc-500 font-mono truncate">
                     Key: {e2eeFingerprint.slice(0, 9)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Daily Productivity Goal Feature with Target Setter & Progress Bar */}
+              <div
+                className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-5"
+                data-testid="daily-productivity-goal-card"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2.5">
+                      <h2 className="text-lg font-bold text-white">
+                        Daily Productivity Goal
+                      </h2>
+                      <span className="text-xs text-zinc-500">·</span>
+                      <span
+                        className="text-xs font-mono tabular-nums text-emerald-400"
+                        data-testid="daily-goal-status-text"
+                      >
+                        {goalProgress.isGoalReached
+                          ? `Goal Reached (${goalProgress.completedMinutes}m / ${goalProgress.targetMinutes}m)`
+                          : `${goalProgress.remainingMinutes}m remaining to hit today's target`}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      Set your daily target focus time and track completed focus blocks from the Study Room or quick sessions.
+                    </p>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleLogFocusMinutes(15)}
+                      className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
+                    >
+                      +15m Focus Block
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLogFocusMinutes(25)}
+                      className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
+                    >
+                      +25m Pomodoro
+                    </button>
+                  </div>
+                </div>
+
+                {/* Progress Bar Visualization */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-mono tabular-nums">
+                    <span className="text-zinc-300">
+                      Completed Today:{' '}
+                      <strong className="text-white" data-testid="daily-goal-completed">
+                        {goalProgress.completedMinutes} mins
+                      </strong>{' '}
+                      / Target:{' '}
+                      <strong className="text-white" data-testid="daily-goal-target">
+                        {goalProgress.targetMinutes} mins
+                      </strong>
+                    </span>
+                    <span
+                      className="text-sm font-bold text-emerald-400"
+                      data-testid="daily-goal-percent"
+                    >
+                      {goalProgress.progressPercent}%
+                    </span>
+                  </div>
+
+                  <div
+                    role="progressbar"
+                    aria-label="Daily Productivity Goal Progress"
+                    aria-valuenow={goalProgress.progressPercent}
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    data-testid="daily-productivity-progress-bar"
+                    className="w-full h-3 bg-[#050505] border border-zinc-800 rounded-full overflow-hidden"
+                  >
+                    <div
+                      className="h-full bg-white transition-transform duration-150 origin-left"
+                      style={{
+                        transform: `scaleX(${goalProgress.progressPercent / 100})`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Target Focus Time Controls */}
+                <div className="flex flex-wrap items-end justify-between gap-4 pt-1">
+                  <form
+                    onSubmit={handleSetDailyProductivityTarget}
+                    className="flex flex-wrap items-end gap-3"
+                  >
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="daily-target-minutes-input"
+                        className="block text-xs font-medium text-zinc-300"
+                      >
+                        Target Focus Time (Minutes / Day)
+                      </label>
+                      <input
+                        id="daily-target-minutes-input"
+                        type="number"
+                        min={15}
+                        max={720}
+                        value={targetInputMinutes}
+                        onChange={(e) => setTargetInputMinutes(e.target.value)}
+                        className="w-36 px-3 py-1.5 text-xs font-mono tabular-nums bg-[#050505] border border-zinc-800 rounded-md text-white focus:outline-none focus:border-zinc-500"
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
+                    >
+                      Set Target Goal
+                    </button>
+                  </form>
+
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs text-zinc-500 mr-1">Presets:</span>
+                    {[60, 120, 180, 240].map((presetMins) => (
+                      <button
+                        key={presetMins}
+                        type="button"
+                        onClick={() =>
+                          persistProductivityGoal(presetMins, dailyCompletedMinutes)
+                        }
+                        className={`px-2.5 py-1 text-xs font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
+                          dailyTargetMinutes === presetMins
+                            ? 'bg-white text-black border-white font-bold'
+                            : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:text-white'
+                        }`}
+                      >
+                        {presetMins}m
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -1584,7 +1852,7 @@ export default function App() {
           )}
 
           {/* ================================================================
-              PAGE 2: SIDEBAR CHAT MODE
+              PAGE 2: SIDEBAR CHAT MODE (STRICT INVITE-FIRST, ZERO RANDOM CHATS)
               ================================================================ */}
           {activePage === 'chat' && (
             <section className="space-y-6" aria-label="Real-Time Chat Mode">
@@ -1594,7 +1862,7 @@ export default function App() {
                     Real-Time Chat Mode
                   </h1>
                   <p className="text-sm text-zinc-400">
-                    End-to-end verified session messaging with accepted online connections
+                    Strict invite-first messaging: send a connection invite first; once accepted, real-time encrypted chat unlocks. No random chats.
                   </p>
                 </div>
                 <span className="text-xs font-mono text-zinc-400">
@@ -1603,90 +1871,183 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                <div className="lg:col-span-4 p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-3">
-                  <h2 className="text-base font-bold text-white border-b border-zinc-800/80 pb-3">
-                    Connected Channels
-                  </h2>
+                <div className="lg:col-span-4 p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
+                  <div className="border-b border-zinc-800/80 pb-3 flex items-center justify-between">
+                    <h2 className="text-base font-bold text-white">
+                      Accepted Connections ({acceptedConnections.length})
+                    </h2>
+                    <span className="text-xs font-mono text-emerald-400">Invite-Verified</span>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setActiveChatPeerUid(currentIdentity.uid)}
-                    className={`w-full text-left p-3 rounded-md border transition-colors ${
-                      activeChatPeerUid === '' || activeChatPeerUid === currentIdentity.uid
-                        ? 'bg-white text-black border-white'
-                        : 'bg-[#050505] border-zinc-800/80 text-zinc-300 hover:text-white'
-                    }`}
-                  >
-                    <div className="text-sm font-semibold">
-                      {currentIdentity.displayName} (Personal Scratchpad)
+                  {acceptedConnections.length === 0 ? (
+                    <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3 text-xs text-zinc-400">
+                      <div className="font-semibold text-white">
+                        Invite Required Before Chatting
+                      </div>
+                      <p>
+                        Random chats are strictly disabled. First send a connection invite to an online person and wait for them to accept.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => setActivePage('hub')}
+                        className="w-full py-2 px-3 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
+                      >
+                        Browse Online Directory & Send Invite
+                      </button>
                     </div>
-                    <div
-                      className={`text-xs ${
-                        activeChatPeerUid === '' || activeChatPeerUid === currentIdentity.uid
-                          ? 'text-zinc-700'
-                          : 'text-zinc-500'
-                      }`}
-                    >
-                      Verify live WebSocket & Firestore message delivery
+                  ) : (
+                    <div className="space-y-2">
+                      {acceptedConnections.map((conn) => {
+                        const isOnline = acceptedOnlinePeers.some((p) => p.uid === conn.uid);
+                        return (
+                          <button
+                            key={conn.uid}
+                            type="button"
+                            onClick={() => {
+                              setActiveChatPeerUid(conn.uid);
+                              setChatError('');
+                            }}
+                            className={`w-full text-left p-3 rounded-md border transition-colors ${
+                              activeChatPeerUid === conn.uid
+                                ? 'bg-white text-black border-white'
+                                : 'bg-[#050505] border-zinc-800/80 text-zinc-300 hover:text-white'
+                            }`}
+                          >
+                            <div className="text-sm font-semibold">{conn.displayName}</div>
+                            <div
+                              className={`text-xs font-mono ${
+                                activeChatPeerUid === conn.uid
+                                  ? 'text-zinc-800'
+                                  : isOnline
+                                  ? 'text-emerald-400'
+                                  : 'text-zinc-500'
+                              }`}
+                            >
+                              {isOnline ? 'Invite Accepted · Online now' : 'Invite Accepted'}
+                            </div>
+                          </button>
+                        );
+                      })}
                     </div>
-                  </button>
+                  )}
 
-                  {acceptedOnlinePeers.map((peer) => (
-                    <button
-                      key={peer.uid}
-                      type="button"
-                      onClick={() => setActiveChatPeerUid(peer.uid)}
-                      className={`w-full text-left p-3 rounded-md border transition-colors ${
-                        activeChatPeerUid === peer.uid
-                          ? 'bg-white text-black border-white'
-                          : 'bg-[#050505] border-zinc-800/80 text-zinc-300 hover:text-white'
-                      }`}
-                    >
-                      <div className="text-sm font-semibold">{peer.displayName}</div>
-                      <div className="text-xs text-emerald-500 font-mono">Connected · Online now</div>
-                    </button>
-                  ))}
+                  {otherOnlinePeers.filter((p) => !acceptedPeerUids.has(p.uid)).length > 0 && (
+                    <div className="pt-3 border-t border-zinc-800/80 space-y-2">
+                      <div className="text-xs font-semibold text-zinc-300">
+                        Online Users (Send Invite to Unlock Chat)
+                      </div>
+                      {otherOnlinePeers
+                        .filter((p) => !acceptedPeerUids.has(p.uid))
+                        .map((peer) => {
+                          const pendingReq = requests.find(
+                            (r) =>
+                              (r.fromUid === currentIdentity.uid && r.toUid === peer.uid) ||
+                              (r.fromUid === peer.uid && r.toUid === currentIdentity.uid)
+                          );
+                          return (
+                            <div
+                              key={peer.uid}
+                              className="p-2.5 rounded bg-[#050505] border border-zinc-800/80 flex items-center justify-between gap-2 text-xs"
+                            >
+                              <span className="text-zinc-200 truncate font-medium">
+                                {peer.displayName}
+                              </span>
+                              {pendingReq ? (
+                                <span className="font-mono text-amber-400">
+                                  {pendingReq.status}
+                                </span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSendRequest(peer)}
+                                  className="px-2.5 py-1 text-xs font-semibold bg-white text-black rounded whitespace-nowrap shrink-0"
+                                >
+                                  Send Invite
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                    </div>
+                  )}
                 </div>
 
                 <div className="lg:col-span-8 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] flex flex-col h-[520px] justify-between">
                   <div className="border-b border-zinc-800/80 pb-3 flex items-center justify-between">
                     <div className="text-sm font-bold text-white">
-                      Encrypted Channel Stream
+                      {activeChatPeerUid && acceptedPeerUids.has(activeChatPeerUid)
+                        ? `Encrypted Direct Channel (${
+                            acceptedConnections.find((c) => c.uid === activeChatPeerUid)
+                              ?.displayName || 'Connected Peer'
+                          })`
+                        : 'Invite-Locked Channel (Select Accepted Connection)'}
                     </div>
                     <span className="text-xs text-zinc-400 font-mono tabular-nums">
-                      {messages.length} messages
+                      {
+                        messages.filter(
+                          (m) =>
+                            (m.senderUid === currentIdentity.uid &&
+                              m.receiverUid === activeChatPeerUid) ||
+                            (m.senderUid === activeChatPeerUid &&
+                              m.receiverUid === currentIdentity.uid)
+                        ).length
+                      }{' '}
+                      messages
                     </span>
                   </div>
 
                   <div className="flex-1 overflow-y-auto py-4 space-y-3">
-                    {messages.length === 0 ? (
+                    {!activeChatPeerUid || !acceptedPeerUids.has(activeChatPeerUid) ? (
+                      <div className="h-full flex flex-col items-center justify-center text-center text-xs text-zinc-400 space-y-2 px-4">
+                        <p className="text-white font-semibold text-sm">
+                          Direct Chat Requires an Accepted Invite
+                        </p>
+                        <p className="max-w-md">
+                          To protect privacy and prevent unsolicited random chats, you can only message users after your connection invite has been accepted.
+                        </p>
+                      </div>
+                    ) : messages.filter(
+                        (m) =>
+                          (m.senderUid === currentIdentity.uid &&
+                            m.receiverUid === activeChatPeerUid) ||
+                          (m.senderUid === activeChatPeerUid &&
+                            m.receiverUid === currentIdentity.uid)
+                      ).length === 0 ? (
                       <div className="h-full flex flex-col items-center justify-center text-center text-xs text-zinc-400 space-y-1">
-                        <p className="text-white font-medium">No messages in this channel yet</p>
-                        <p>Send a message below to transmit immediately over WebSocket and Firestore.</p>
+                        <p className="text-white font-medium">Connection Invite Accepted</p>
+                        <p>Send your first real-time message below.</p>
                       </div>
                     ) : (
-                      messages.map((msg) => {
-                        const isMine = msg.senderUid === currentIdentity.uid;
-                        return (
-                          <div
-                            key={msg.id}
-                            className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
-                          >
-                            <div className="text-[11px] text-zinc-500 mb-1">
-                              {msg.senderName}
-                            </div>
+                      messages
+                        .filter(
+                          (m) =>
+                            (m.senderUid === currentIdentity.uid &&
+                              m.receiverUid === activeChatPeerUid) ||
+                            (m.senderUid === activeChatPeerUid &&
+                              m.receiverUid === currentIdentity.uid)
+                        )
+                        .map((msg) => {
+                          const isMine = msg.senderUid === currentIdentity.uid;
+                          return (
                             <div
-                              className={`px-4 py-2.5 rounded-md max-w-md text-sm ${
-                                isMine
-                                  ? 'bg-white text-black font-medium'
-                                  : 'bg-[#050505] border border-zinc-800 text-zinc-100'
-                              }`}
+                              key={msg.id}
+                              className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
                             >
-                              {msg.text}
+                              <div className="text-[11px] text-zinc-500 mb-1">
+                                {msg.senderName}
+                              </div>
+                              <div
+                                className={`px-4 py-2.5 rounded-md max-w-md text-sm ${
+                                  isMine
+                                    ? 'bg-white text-black font-medium'
+                                    : 'bg-[#050505] border border-zinc-800 text-zinc-100'
+                                }`}
+                              >
+                                {msg.text}
+                              </div>
                             </div>
-                          </div>
-                        );
-                      })
+                          );
+                        })
                     )}
                   </div>
 
@@ -1697,7 +2058,11 @@ export default function App() {
                         type="text"
                         value={chatMessageInput}
                         onChange={(e) => setChatMessageInput(e.target.value)}
-                        placeholder="Write a real-time message..."
+                        placeholder={
+                          activeChatPeerUid && acceptedPeerUids.has(activeChatPeerUid)
+                            ? 'Write a real-time message to your connection...'
+                            : 'Accept or select a connection invite first to chat...'
+                        }
                         aria-label="Direct chat message input"
                         className="flex-1 px-4 py-2.5 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
                       />
@@ -1819,6 +2184,7 @@ export default function App() {
                 }
                 awardParticipation(5);
               }}
+              onFocusMinutesLogged={handleLogFocusMinutes}
             />
           )}
 
@@ -1876,8 +2242,46 @@ export default function App() {
                     Photos & Social Media Sync
                   </h1>
                   <p className="text-sm text-zinc-400">
-                    Upload real photos from your device and control whether posts are visible to everyone or only accepted connections.
+                    Upload real photos from your device, filter social activity by audience, and sync across Firestore & live sessions.
                   </p>
+                </div>
+
+                {/* Interactive Filter Tabs for Social Sync & Activity */}
+                <div className="flex items-center gap-1 p-1 bg-[#0A0A0C] border border-zinc-800 rounded-md">
+                  {(
+                    [
+                      { id: 'all', label: `All (${moments.length})` },
+                      {
+                        id: 'public',
+                        label: `Public (${moments.filter((m) => m.visibility === 'public').length})`,
+                      },
+                      {
+                        id: 'connections',
+                        label: `Connections (${
+                          moments.filter((m) => m.visibility === 'connections').length
+                        })`,
+                      },
+                      {
+                        id: 'mine',
+                        label: `My Uploads (${
+                          moments.filter((m) => m.authorUid === currentIdentity.uid).length
+                        })`,
+                      },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setMomentFilter(tab.id)}
+                      className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                        momentFilter === tab.id
+                          ? 'bg-white text-black'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -1944,18 +2348,18 @@ export default function App() {
                 </form>
 
                 <div className="lg:col-span-7 space-y-4">
-                  {moments.length === 0 ? (
+                  {filteredMoments.length === 0 ? (
                     <div className="p-8 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] text-center space-y-2">
                       <p className="text-sm font-semibold text-white">
-                        No Photos Uploaded Yet
+                        No Photos in This View Yet
                       </p>
                       <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                        Mr. Stranger enforces a strict zero-fake-data policy. Only real photos uploaded by authenticated accounts appear here.
+                        Mr. Stranger enforces a strict zero-fake-data policy. Upload a real photo on the left to share with the workspace.
                       </p>
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {moments.map((item) => (
+                      {filteredMoments.map((item) => (
                         <article
                           key={item.id}
                           className="rounded-lg border border-zinc-800/80 bg-[#0A0A0C] overflow-hidden"
@@ -2004,9 +2408,15 @@ export default function App() {
                   Privacy & Zero-Trust Security Center
                 </h1>
                 <p className="text-sm text-zinc-400">
-                  Control your live presence visibility, call permissions, and isolated PII vault settings.
+                  Control your live presence visibility, call permissions, rate-limiting shields, and isolated PII vault settings.
                 </p>
               </div>
+
+              {securityNotice && (
+                <div className="p-4 rounded-md bg-amber-950/40 border border-amber-500/40 text-xs text-amber-200">
+                  {securityNotice}
+                </div>
+              )}
 
               <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-6">
                 <div className="space-y-3">
@@ -2122,12 +2532,15 @@ export default function App() {
                 <div className="pt-4 border-t border-zinc-800/80 space-y-2">
                   <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
                     <Lock className="w-4 h-4" />
-                    <span>Isolated PII Vault & Cryptographic Identity</span>
+                    <span>Isolated PII Vault & Zero-Trust Defense Matrix</span>
                   </div>
-                  <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs font-mono text-zinc-300 space-y-1">
+                  <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs font-mono text-zinc-300 space-y-1.5">
                     <div>Account UID: {currentIdentity.uid}</div>
                     <div>Isolated Email Vault: {currentIdentity.email} (Owner-Only Read)</div>
                     <div>E2EE Verification Fingerprint: {e2eeFingerprint}</div>
+                    <div>Payload Firewall: SQLi / NoSQLi / XSS / Prototype-Pollution Blocked</div>
+                    <div>Rate Limiter: 25 Auth/min · 120 API/min · 45 WS Frames/10s</div>
+                    <div>Hardware Policy: Camera & Microphone Closed Until Explicit Permission + Join</div>
                   </div>
                 </div>
               </div>

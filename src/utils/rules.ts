@@ -1,11 +1,14 @@
 /**
  * Pure domain logic for Mr. Stranger:
  * 1. Daily login streak and participation points math
- * 2. Subway Runner 3-lane obstacle collision & score calculation
- * 3. Angry Catapult projectile trajectory & structure impact physics
- * 4. Block Arena grid placement, line clearing & score math
- * 5. Pomodoro Study Timer formatting, Study Room invite codes, shareable links & Ambient Soundscape toggling
- * 6. Privacy visibility filtering & password strength validation
+ * 2. Daily Productivity Goal target & progress bar math
+ * 3. SQL / NoSQL Injection, XSS & Prototype Pollution detection + sanitization
+ * 4. Sliding-window rate limiting & strict invite-first chat/call authorization
+ * 5. Subway Runner 3-lane obstacle collision & score calculation
+ * 6. Angry Catapult projectile trajectory & structure impact physics
+ * 7. Block Arena grid placement, line clearing & score math
+ * 8. Pomodoro Study Timer formatting, Study Room invite codes, shareable links & Ambient Soundscape toggling
+ * 9. Privacy visibility filtering & password strength validation
  */
 
 export type AmbientPresetId =
@@ -68,6 +71,178 @@ export function toggleAmbientSoundscape(
 ): AmbientPresetId {
   if (clicked === 'off') return 'off';
   return current === clicked ? 'off' : clicked;
+}
+
+// --- Daily Productivity Goal Pure Math ---
+export interface DailyProductivityProgress {
+  targetMinutes: number;
+  completedMinutes: number;
+  progressPercent: number;
+  remainingMinutes: number;
+  isGoalReached: boolean;
+}
+
+export function clampProductivityTarget(rawTargetMinutes: number): number {
+  if (!Number.isFinite(rawTargetMinutes)) return 120;
+  return Math.min(720, Math.max(15, Math.round(rawTargetMinutes)));
+}
+
+export function computeProductivityGoalProgress(
+  targetMinutes: number,
+  completedMinutes: number
+): DailyProductivityProgress {
+  const safeTarget = clampProductivityTarget(targetMinutes);
+  const safeCompleted = Math.max(0, Math.round(Number(completedMinutes) || 0));
+  const progressPercent = Math.min(100, Math.round((safeCompleted / safeTarget) * 100));
+  const remainingMinutes = Math.max(0, safeTarget - safeCompleted);
+  return {
+    targetMinutes: safeTarget,
+    completedMinutes: safeCompleted,
+    progressPercent,
+    remainingMinutes,
+    isGoalReached: safeCompleted >= safeTarget,
+  };
+}
+
+// --- Enterprise Security: SQL / NoSQL Injection, XSS & Prototype Pollution Guard ---
+const SQL_INJECTION_PATTERNS: RegExp[] = [
+  /('|\b)(OR|AND)\s+['"]?\w+['"]?\s*=\s*['"]?\w+/i,
+  /\bUNION\s+(ALL\s+)?SELECT\b/i,
+  /\bDROP\s+(TABLE|DATABASE|USER|SCHEMA)\b/i,
+  /;\s*(DELETE|UPDATE|INSERT|EXEC|DROP|ALTER|TRUNCATE)\b/i,
+  /\bSELECT\s+.+\s+FROM\s+/i,
+  /--\s*$/,
+];
+
+const NOSQL_INJECTION_PATTERNS: RegExp[] = [
+  /\$(gt|gte|lt|lte|ne|nin|in|where|regex|expr|function)\b/i,
+  /__proto__|constructor\s*\[|prototype\s*\[/i,
+];
+
+const XSS_INJECTION_PATTERNS: RegExp[] = [
+  /<\s*script\b/i,
+  /javascript\s*:/i,
+  /\bon(error|load|click|mouseover|focus|submit)\s*=/i,
+  /<\s*(iframe|object|embed|svg\s+onload)\b/i,
+];
+
+export function detectSecurityThreat(input: string): {
+  safe: boolean;
+  threatType: 'none' | 'sql_injection' | 'nosql_injection' | 'xss_injection';
+  reason: string;
+} {
+  const str = String(input || '');
+  for (const pat of SQL_INJECTION_PATTERNS) {
+    if (pat.test(str)) {
+      return {
+        safe: false,
+        threatType: 'sql_injection',
+        reason: 'Blocked potential SQL injection pattern in input payload.',
+      };
+    }
+  }
+  for (const pat of NOSQL_INJECTION_PATTERNS) {
+    if (pat.test(str)) {
+      return {
+        safe: false,
+        threatType: 'nosql_injection',
+        reason: 'Blocked potential NoSQL operator or prototype pollution payload.',
+      };
+    }
+  }
+  for (const pat of XSS_INJECTION_PATTERNS) {
+    if (pat.test(str)) {
+      return {
+        safe: false,
+        threatType: 'xss_injection',
+        reason: 'Blocked potential executable script or XSS vector.',
+      };
+    }
+  }
+  return { safe: true, threatType: 'none', reason: '' };
+}
+
+export function sanitizeSafeText(raw: string, maxLength = 500): string {
+  return String(raw || '')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '')
+    .replace(/[<>]/g, '')
+    .trim()
+    .slice(0, maxLength);
+}
+
+// --- Sliding-Window Rate Limiter ---
+export function checkSlidingWindowRateLimit(
+  previousTimestamps: number[],
+  nowMs: number,
+  windowMs: number,
+  maxRequests: number
+): {
+  allowed: boolean;
+  remaining: number;
+  retryAfterSeconds: number;
+  updatedTimestamps: number[];
+} {
+  const cutoff = nowMs - windowMs;
+  const active = previousTimestamps.filter((ts) => ts > cutoff);
+  if (active.length >= maxRequests) {
+    const oldest = active[0] || nowMs;
+    const retryAfterSeconds = Math.max(1, Math.ceil((oldest + windowMs - nowMs) / 1000));
+    return {
+      allowed: false,
+      remaining: 0,
+      retryAfterSeconds,
+      updatedTimestamps: active,
+    };
+  }
+  const updated = [...active, nowMs];
+  return {
+    allowed: true,
+    remaining: Math.max(0, maxRequests - updated.length),
+    retryAfterSeconds: 0,
+    updatedTimestamps: updated,
+  };
+}
+
+// --- Strict Invite-First Chat & Call Authorization ---
+export interface ConnectionInviteCheck {
+  fromUid: string;
+  toUid: string;
+  status: 'pending' | 'accepted' | 'declined';
+}
+
+export function canUsersChatOrCall(
+  currentUid: string,
+  targetUid: string,
+  requests: ConnectionInviteCheck[]
+): { allowed: boolean; reason: string } {
+  const cleanCurrent = String(currentUid || '').trim();
+  const cleanTarget = String(targetUid || '').trim();
+  if (!cleanCurrent || !cleanTarget) {
+    return {
+      allowed: false,
+      reason: 'Select an accepted online connection before sending a message or starting a call.',
+    };
+  }
+  if (cleanCurrent === cleanTarget) {
+    return {
+      allowed: false,
+      reason: 'Direct chat requires another real user with an accepted connection invite.',
+    };
+  }
+  const accepted = requests.some(
+    (r) =>
+      r.status === 'accepted' &&
+      ((r.fromUid === cleanCurrent && r.toUid === cleanTarget) ||
+        (r.fromUid === cleanTarget && r.toUid === cleanCurrent))
+  );
+  if (!accepted) {
+    return {
+      allowed: false,
+      reason:
+        'Chat & calls are locked until your connection invite is accepted by this user.',
+    };
+  }
+  return { allowed: true, reason: '' };
 }
 
 export interface StreakState {
@@ -162,14 +337,24 @@ export function validateAccountCredentials(
   isSignUp = false
 ): { valid: boolean; error: string } {
   const trimmedEmail = email.trim();
+  const emailThreat = detectSecurityThreat(trimmedEmail);
+  if (!emailThreat.safe) {
+    return { valid: false, error: emailThreat.reason };
+  }
   if (!trimmedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
     return { valid: false, error: 'Please enter a valid email address (e.g. name@domain.com).' };
   }
   if (!password || password.length < 8) {
     return { valid: false, error: 'Password must be at least 8 characters long for account security.' };
   }
-  if (isSignUp && (!displayName || displayName.trim().length < 2)) {
-    return { valid: false, error: 'Please enter your full account display name (at least 2 characters).' };
+  if (isSignUp) {
+    if (!displayName || displayName.trim().length < 2) {
+      return { valid: false, error: 'Please enter your full account display name (at least 2 characters).' };
+    }
+    const nameThreat = detectSecurityThreat(displayName);
+    if (!nameThreat.safe) {
+      return { valid: false, error: nameThreat.reason };
+    }
   }
   return { valid: true, error: '' };
 }

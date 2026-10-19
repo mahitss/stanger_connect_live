@@ -5,6 +5,11 @@ import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { createServer as createViteServer } from 'vite';
+import {
+  detectSecurityThreat,
+  sanitizeSafeText,
+  checkSlidingWindowRateLimit,
+} from './src/utils/rules.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -17,7 +22,16 @@ export interface OnlinePeer {
   streakCount: number;
   participationPoints: number;
   privacyVisibility: 'everyone' | 'connections_only' | 'ghost';
-  currentMode: 'hub' | 'chat' | 'talk' | 'study' | 'game_subway' | 'game_catapult' | 'game_blocks' | 'moments' | 'privacy';
+  currentMode:
+    | 'hub'
+    | 'chat'
+    | 'talk'
+    | 'study'
+    | 'game_subway'
+    | 'game_catapult'
+    | 'game_blocks'
+    | 'moments'
+    | 'privacy';
   activeStudyRoomCode: string | null;
   activeGameId: string | null;
   connectedAt: number;
@@ -59,27 +73,122 @@ interface StoredAccount {
   createdAt: string;
 }
 
+const SERVER_HMAC_SECRET = crypto.randomBytes(32).toString('hex');
+
 function hashPassword(password: string, salt: string): string {
   return crypto.scryptSync(password, salt, 64).toString('hex');
 }
 
+function timingSafeCompareHex(aHex: string, bHex: string): boolean {
+  try {
+    const aBuf = Buffer.from(aHex, 'hex');
+    const bBuf = Buffer.from(bHex, 'hex');
+    if (aBuf.length !== bBuf.length) return false;
+    return crypto.timingSafeEqual(aBuf, bBuf);
+  } catch {
+    return false;
+  }
+}
+
+function signSessionToken(uid: string, email: string): string {
+  const issuedAt = Date.now();
+  const payload = `${uid}.${email}.${issuedAt}`;
+  const sig = crypto.createHmac('sha256', SERVER_HMAC_SECRET).update(payload).digest('hex');
+  return `${payload}.${sig}`;
+}
+
 function getTodayDateString(): string {
   const now = new Date();
-  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(
+    now.getUTCDate()
+  ).padStart(2, '0')}`;
+}
+
+function makeConnectionPairKey(uidA: string, uidB: string): string {
+  return [uidA, uidB].sort().join('::');
 }
 
 async function startServer() {
   const app = express();
-  app.use(express.json({ limit: '2mb' }));
+
+  // Enterprise HTTP Security Headers
+  app.disable('x-powered-by');
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-XSS-Protection', '0');
+    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+    next();
+  });
+
+  // Strict JSON body limit to prevent Denial-of-Memory payloads
+  app.use(express.json({ limit: '128kb' }));
+
+  // Sliding-Window HTTP Rate Limiters (Auth Brute-Force Guard + General API Guard)
+  const authRateMap = new Map<string, number[]>();
+  const apiRateMap = new Map<string, number[]>();
+
+  app.use('/api', (req, res, next) => {
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'local');
+    const isAuthRoute = req.path.startsWith('/auth/');
+    const windowMs = 60_000;
+    const maxReq = isAuthRoute ? 25 : 120;
+    const store = isAuthRoute ? authRateMap : apiRateMap;
+
+    const check = checkSlidingWindowRateLimit(
+      store.get(ip) || [],
+      Date.now(),
+      windowMs,
+      maxReq
+    );
+    store.set(ip, check.updatedTimestamps);
+
+    res.setHeader('X-RateLimit-Limit', String(maxReq));
+    res.setHeader('X-RateLimit-Remaining', String(check.remaining));
+
+    if (!check.allowed) {
+      res.setHeader('Retry-After', String(check.retryAfterSeconds));
+      res.status(429).json({
+        error: `Rate limit exceeded. Please wait ${check.retryAfterSeconds}s before retrying.`,
+      });
+      return;
+    }
+
+    // Inspect all incoming string body fields for SQLi / NoSQLi / XSS injection vectors
+    if (req.body && typeof req.body === 'object') {
+      for (const [key, val] of Object.entries(req.body)) {
+        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+          res.status(400).json({ error: 'Blocked forbidden prototype property.' });
+          return;
+        }
+        if (typeof val === 'string' && key !== 'password') {
+          const threat = detectSecurityThreat(val);
+          if (!threat.safe) {
+            res.status(400).json({ error: threat.reason });
+            return;
+          }
+        }
+      }
+    }
+
+    next();
+  });
 
   const httpServer = createServer(app);
-  const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+  const wss = new WebSocketServer({
+    server: httpServer,
+    path: '/ws',
+    maxPayload: 64 * 1024, // 64KB max frame size
+  });
 
   // Authoritative server-side real-time state (Zero fake or mock records)
   const accountsByEmail = new Map<string, StoredAccount>();
   const clients = new Map<string, { ws: WebSocket; peer: OnlinePeer }>();
   const studyDesks = new Map<string, StudyDesk>();
   const liveGameState = new Map<string, GameScoreEntry>();
+  const acceptedPairKeys = new Set<string>();
+  const wsRateMap = new Map<WebSocket, number[]>();
 
   function broadcastPresence() {
     const peers = Array.from(clients.values())
@@ -110,17 +219,20 @@ async function startServer() {
 
   // Real Account Registration & Sign-In Endpoints (Email + Password + Account Profile)
   app.post('/api/auth/register', (req, res) => {
-    const email = String(req.body?.email || '').trim().toLowerCase();
+    const email = sanitizeSafeText(String(req.body?.email || ''), 160).toLowerCase();
     const password = String(req.body?.password || '');
-    const displayName = String(req.body?.displayName || '').trim();
-    const bio = String(req.body?.bio || 'Verified Member on Mr. Stranger').trim();
+    const displayName = sanitizeSafeText(String(req.body?.displayName || ''), 64);
+    const bio = sanitizeSafeText(
+      String(req.body?.bio || 'Verified Member on Mr. Stranger'),
+      300
+    );
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       res.status(400).json({ error: 'Please provide a valid email address.' });
       return;
     }
-    if (password.length < 8) {
-      res.status(400).json({ error: 'Password must be at least 8 characters.' });
+    if (password.length < 8 || password.length > 128) {
+      res.status(400).json({ error: 'Password must be between 8 and 128 characters.' });
       return;
     }
     if (displayName.length < 2) {
@@ -128,7 +240,9 @@ async function startServer() {
       return;
     }
     if (accountsByEmail.has(email)) {
-      res.status(409).json({ error: 'An account with this email already exists. Please switch to Sign In.' });
+      res.status(409).json({
+        error: 'An account with this email already exists. Please switch to Sign In.',
+      });
       return;
     }
 
@@ -140,8 +254,8 @@ async function startServer() {
     const account: StoredAccount = {
       uid,
       email,
-      displayName: displayName.slice(0, 64),
-      bio: bio.slice(0, 300),
+      displayName,
+      bio,
       salt,
       passwordHash,
       streakCount: 1,
@@ -165,23 +279,25 @@ async function startServer() {
       privacyVisibility: account.privacyVisibility,
       readReceiptsEnabled: account.readReceiptsEnabled,
       allowCallsFromConnectionsOnly: account.allowCallsFromConnectionsOnly,
+      sessionToken: signSessionToken(account.uid, account.email),
     });
   });
 
   app.post('/api/auth/login', (req, res) => {
-    const email = String(req.body?.email || '').trim().toLowerCase();
+    const email = sanitizeSafeText(String(req.body?.email || ''), 160).toLowerCase();
     const password = String(req.body?.password || '');
 
     const account = accountsByEmail.get(email);
     if (!account) {
       res.status(401).json({
-        error: 'No account found with this Email ID. Please create your account first or check your email.',
+        error:
+          'No account found with this Email ID. Please create your account first or check your email.',
       });
       return;
     }
 
     const attemptedHash = hashPassword(password, account.salt);
-    if (attemptedHash !== account.passwordHash) {
+    if (!timingSafeCompareHex(attemptedHash, account.passwordHash)) {
       res.status(401).json({ error: 'Invalid password for this Email ID.' });
       return;
     }
@@ -204,11 +320,12 @@ async function startServer() {
       privacyVisibility: account.privacyVisibility,
       readReceiptsEnabled: account.readReceiptsEnabled,
       allowCallsFromConnectionsOnly: account.allowCallsFromConnectionsOnly,
+      sessionToken: signSessionToken(account.uid, account.email),
     });
   });
 
   app.post('/api/auth/verify-password', (req, res) => {
-    const email = String(req.body?.email || '').trim().toLowerCase();
+    const email = sanitizeSafeText(String(req.body?.email || ''), 160).toLowerCase();
     const password = String(req.body?.password || '');
     const account = accountsByEmail.get(email);
     if (!account) {
@@ -216,8 +333,11 @@ async function startServer() {
       return;
     }
     const attemptedHash = hashPassword(password, account.salt);
-    if (attemptedHash !== account.passwordHash) {
-      res.status(401).json({ error: 'Password verification failed. Please enter your account password to confirm sign out.' });
+    if (!timingSafeCompareHex(attemptedHash, account.passwordHash)) {
+      res.status(401).json({
+        error:
+          'Password verification failed. Please enter your account password to confirm sign out.',
+      });
       return;
     }
     res.json({ verified: true });
@@ -225,23 +345,51 @@ async function startServer() {
 
   wss.on('connection', (ws) => {
     let registeredUid: string | null = null;
+    wsRateMap.set(ws, []);
 
     ws.on('message', (raw) => {
       try {
+        // Per-socket sliding-window flood & DoS rate limit (45 frames per 10 seconds)
+        const rateCheck = checkSlidingWindowRateLimit(
+          wsRateMap.get(ws) || [],
+          Date.now(),
+          10_000,
+          45
+        );
+        wsRateMap.set(ws, rateCheck.updatedTimestamps);
+        if (!rateCheck.allowed) {
+          ws.send(
+            JSON.stringify({
+              type: 'server:security_notice',
+              reason: `WebSocket rate limit active. Slow down (${rateCheck.retryAfterSeconds}s).`,
+            })
+          );
+          return;
+        }
+
         const msg = JSON.parse(String(raw));
 
         if (msg.type === 'peer:announce' && msg.peer?.uid) {
-          registeredUid = String(msg.peer.uid);
+          const cleanUid = String(msg.peer.uid).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
+          if (!cleanUid) return;
+          registeredUid = cleanUid;
           const peer: OnlinePeer = {
             uid: registeredUid,
-            displayName: String(msg.peer.displayName || 'User').slice(0, 64),
-            bio: String(msg.peer.bio || '').slice(0, 300),
+            displayName: sanitizeSafeText(String(msg.peer.displayName || 'User'), 64),
+            bio: sanitizeSafeText(String(msg.peer.bio || ''), 300),
             avatarUrl: String(msg.peer.avatarUrl || '').slice(0, 200000),
-            streakCount: Number(msg.peer.streakCount) || 1,
-            participationPoints: Number(msg.peer.participationPoints) || 0,
-            privacyVisibility: msg.peer.privacyVisibility || 'everyone',
+            streakCount: Math.max(1, Number(msg.peer.streakCount) || 1),
+            participationPoints: Math.max(0, Number(msg.peer.participationPoints) || 0),
+            privacyVisibility:
+              msg.peer.privacyVisibility === 'connections_only' ||
+              msg.peer.privacyVisibility === 'ghost'
+                ? msg.peer.privacyVisibility
+                : 'everyone',
             currentMode: msg.peer.currentMode || 'hub',
-            activeStudyRoomCode: msg.peer.activeStudyRoomCode || 'STUDY-GLOBAL',
+            activeStudyRoomCode: sanitizeSafeText(
+              String(msg.peer.activeStudyRoomCode || 'STUDY-GLOBAL'),
+              24
+            ),
             activeGameId: msg.peer.activeGameId || null,
             connectedAt: clients.get(registeredUid)?.peer.connectedAt || Date.now(),
           };
@@ -255,7 +403,10 @@ async function startServer() {
         if (msg.type === 'peer:update_privacy') {
           const entry = clients.get(registeredUid);
           if (entry) {
-            entry.peer.privacyVisibility = msg.privacyVisibility || 'everyone';
+            entry.peer.privacyVisibility =
+              msg.privacyVisibility === 'connections_only' || msg.privacyVisibility === 'ghost'
+                ? msg.privacyVisibility
+                : 'everyone';
             broadcastPresence();
           }
           return;
@@ -267,7 +418,10 @@ async function startServer() {
             entry.peer.currentMode = msg.currentMode || 'hub';
             entry.peer.activeGameId = msg.activeGameId || null;
             if (msg.activeStudyRoomCode) {
-              entry.peer.activeStudyRoomCode = String(msg.activeStudyRoomCode);
+              entry.peer.activeStudyRoomCode = sanitizeSafeText(
+                String(msg.activeStudyRoomCode),
+                24
+              );
             }
             broadcastPresence();
           }
@@ -275,37 +429,85 @@ async function startServer() {
         }
 
         if (msg.type === 'request:notify' && msg.toUid) {
-          sendToUid(String(msg.toUid), {
+          const targetUid = String(msg.toUid).replace(/[^a-zA-Z0-9_-]/g, '');
+          if (!targetUid || targetUid === registeredUid) return;
+          const noteText = String(msg.note || '');
+          if (!detectSecurityThreat(noteText).safe) return;
+
+          sendToUid(targetUid, {
             type: 'request:incoming',
             fromUid: registeredUid,
-            fromName: msg.fromName,
-            note: msg.note,
+            fromName: sanitizeSafeText(String(msg.fromName || 'User'), 64),
+            note: sanitizeSafeText(noteText, 200),
             timestamp: Date.now(),
           });
           return;
         }
 
+        if (msg.type === 'request:decision' && msg.partnerUid) {
+          const partnerUid = String(msg.partnerUid).replace(/[^a-zA-Z0-9_-]/g, '');
+          if (!partnerUid || partnerUid === registeredUid) return;
+          const decision = msg.decision === 'accepted' ? 'accepted' : 'declined';
+          const pairKey = makeConnectionPairKey(registeredUid, partnerUid);
+          if (decision === 'accepted') {
+            acceptedPairKeys.add(pairKey);
+          } else {
+            acceptedPairKeys.delete(pairKey);
+          }
+          sendToUid(partnerUid, {
+            type: 'request:decision',
+            fromUid: registeredUid,
+            decision,
+            timestamp: Date.now(),
+          });
+          return;
+        }
+
+        // Strict Invite-First Chat Authorization on Server
         if (msg.type === 'chat:direct' && msg.toUid) {
+          const targetUid = String(msg.toUid).replace(/[^a-zA-Z0-9_-]/g, '');
+          if (!targetUid || targetUid === registeredUid) return;
+          const pairKey = makeConnectionPairKey(registeredUid, targetUid);
+          if (!acceptedPairKeys.has(pairKey)) {
+            ws.send(
+              JSON.stringify({
+                type: 'server:security_notice',
+                reason:
+                  'Blocked direct message: connection invite must be accepted by both users first.',
+              })
+            );
+            return;
+          }
+          const rawText = String(msg.text || '');
+          if (!detectSecurityThreat(rawText).safe) return;
+
           const payload = {
             type: 'chat:direct',
             id: String(msg.id || `${Date.now()}-${registeredUid}`),
             senderUid: registeredUid,
-            senderName: String(msg.senderName || 'User'),
-            receiverUid: String(msg.toUid),
-            text: String(msg.text || '').slice(0, 1000),
+            senderName: sanitizeSafeText(String(msg.senderName || 'User'), 64),
+            receiverUid: targetUid,
+            text: sanitizeSafeText(rawText, 1000),
             timestamp: Date.now(),
           };
-          sendToUid(String(msg.toUid), payload);
+          sendToUid(targetUid, payload);
           sendToUid(registeredUid, payload);
           return;
         }
 
+        // Strict Invite-First WebRTC Signaling Authorization on Server
         if (msg.type === 'webrtc:signal' && msg.toUid) {
-          sendToUid(String(msg.toUid), {
+          const targetUid = String(msg.toUid).replace(/[^a-zA-Z0-9_-]/g, '');
+          if (!targetUid || targetUid === registeredUid) return;
+          const pairKey = makeConnectionPairKey(registeredUid, targetUid);
+          if (!acceptedPairKeys.has(pairKey)) {
+            return;
+          }
+          sendToUid(targetUid, {
             type: 'webrtc:signal',
             fromUid: registeredUid,
-            fromName: msg.fromName,
-            callType: msg.callType || 'video',
+            fromName: sanitizeSafeText(String(msg.fromName || 'User'), 64),
+            callType: msg.callType === 'audio' ? 'audio' : 'video',
             signalData: msg.signalData,
           });
           return;
@@ -313,15 +515,21 @@ async function startServer() {
 
         // Study Room Live Desk Join / Update / Leave with Invite Room Code
         if (msg.type === 'study:join') {
-          const roomCode = String(msg.roomCode || 'STUDY-GLOBAL').slice(0, 24);
+          const roomCode = sanitizeSafeText(String(msg.roomCode || 'STUDY-GLOBAL'), 24);
+          const subject = String(msg.subject || 'Deep Work');
+          const positiveNote = String(msg.positiveNote || 'Stay focused and keep building.');
+          if (!detectSecurityThreat(subject).safe || !detectSecurityThreat(positiveNote).safe) {
+            return;
+          }
+
           studyDesks.set(registeredUid, {
             uid: registeredUid,
-            displayName: String(msg.displayName || 'Scholar').slice(0, 64),
+            displayName: sanitizeSafeText(String(msg.displayName || 'Scholar'), 64),
             roomCode,
-            roomName: String(msg.roomName || `Study Room ${roomCode}`).slice(0, 80),
-            subject: String(msg.subject || 'Deep Work').slice(0, 100),
-            positiveNote: String(msg.positiveNote || 'Stay focused and keep building.').slice(0, 400),
-            timerMinutes: Number(msg.timerMinutes) || 25,
+            roomName: sanitizeSafeText(String(msg.roomName || `Study Room ${roomCode}`), 80),
+            subject: sanitizeSafeText(subject, 100),
+            positiveNote: sanitizeSafeText(positiveNote, 400),
+            timerMinutes: Math.min(240, Math.max(1, Number(msg.timerMinutes) || 25)),
             startedAt: Date.now(),
           });
           broadcastPresence();
@@ -335,13 +543,15 @@ async function startServer() {
         }
 
         if (msg.type === 'study:chat') {
+          const rawText = String(msg.text || '');
+          if (!detectSecurityThreat(rawText).safe) return;
           const chatMsg = JSON.stringify({
             type: 'study:chat',
             id: `${Date.now()}-${registeredUid}`,
-            roomCode: String(msg.roomCode || 'STUDY-GLOBAL'),
+            roomCode: sanitizeSafeText(String(msg.roomCode || 'STUDY-GLOBAL'), 24),
             senderUid: registeredUid,
-            senderName: String(msg.senderName || 'Scholar').slice(0, 64),
-            text: String(msg.text || '').slice(0, 500),
+            senderName: sanitizeSafeText(String(msg.senderName || 'Scholar'), 64),
+            text: sanitizeSafeText(rawText, 500),
             timestamp: Date.now(),
           });
           for (const { ws: clientWs } of clients.values()) {
@@ -355,13 +565,14 @@ async function startServer() {
         // Multiplayer Game Live Telemetry & Score Sync
         if (msg.type === 'game:update' && msg.gameId) {
           const gameId = msg.gameId as 'subway' | 'catapult' | 'blocks';
+          if (gameId !== 'subway' && gameId !== 'catapult' && gameId !== 'blocks') return;
           const key = `${gameId}:${registeredUid}`;
           liveGameState.set(key, {
             uid: registeredUid,
-            displayName: String(msg.displayName || 'Player').slice(0, 64),
+            displayName: sanitizeSafeText(String(msg.displayName || 'Player'), 64),
             gameId,
-            score: Number(msg.score) || 0,
-            laneOrState: String(msg.laneOrState || ''),
+            score: Math.max(0, Math.min(10_000_000, Number(msg.score) || 0)),
+            laneOrState: sanitizeSafeText(String(msg.laneOrState || ''), 64),
             updatedAt: Date.now(),
           });
           broadcastPresence();
@@ -373,6 +584,7 @@ async function startServer() {
     });
 
     ws.on('close', () => {
+      wsRateMap.delete(ws);
       if (registeredUid) {
         clients.delete(registeredUid);
         studyDesks.delete(registeredUid);
@@ -393,6 +605,7 @@ async function startServer() {
       onlineCount: clients.size,
       activeStudyDesks: studyDesks.size,
       activeGameSessions: liveGameState.size,
+      securityGuards: ['scrypt', 'hmac-sha256', 'rate-limiter', 'sqli-nosqli-xss-shield'],
       timestamp: new Date().toISOString(),
     });
   });
