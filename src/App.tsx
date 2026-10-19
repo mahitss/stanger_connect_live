@@ -217,7 +217,7 @@ export default function App() {
         const profileRef = doc(db, 'profiles', cleanUid);
         const privateRef = doc(db, 'privateAccounts', cleanUid);
         const todayKey = formatDateKey(new Date());
-        const userEmail = user.email || 'verified@user.app';
+        const userEmail = (user.email || 'verified@user.app').slice(0, 160);
 
         try {
           const snap = await getDoc(profileRef);
@@ -225,21 +225,30 @@ export default function App() {
             const data = snap.data();
             const { updated, incremented } = computeUpdatedStreak(
               {
-                streakCount: Number(data.streakCount) || 1,
-                lastLoginDate: String(data.lastLoginDate || ''),
-                participationPoints: Number(data.participationPoints) || 25,
+                streakCount: Math.max(1, Number(data.streakCount) || 1),
+                lastLoginDate: String(data.lastLoginDate || todayKey),
+                participationPoints: Math.max(0, Number(data.participationPoints) || 25),
               },
               todayKey,
               10
             );
+            const normalizedDisplayName = String(
+              data.displayName || user.displayName || userEmail.split('@')[0] || 'Member'
+            ).slice(0, 64);
+            const normalizedBio = String(data.bio || 'Connected on Mr. Stranger').slice(0, 300);
+            const normalizedAvatar = String(data.avatarUrl || user.photoURL || '').slice(0, 200000);
+            const normalizedVisibility: AccountIdentity['privacyVisibility'] =
+              data.privacyVisibility === 'connections_only' || data.privacyVisibility === 'ghost'
+                ? data.privacyVisibility
+                : 'everyone';
+
             const merged: AccountIdentity = {
               uid: cleanUid,
               email: userEmail,
-              displayName: String(data.displayName || user.displayName || 'Member'),
-              bio: String(data.bio || 'Connected on Mr. Stranger'),
-              avatarUrl: String(data.avatarUrl || user.photoURL || ''),
-              privacyVisibility:
-                (data.privacyVisibility as AccountIdentity['privacyVisibility']) || 'everyone',
+              displayName: normalizedDisplayName,
+              bio: normalizedBio,
+              avatarUrl: normalizedAvatar,
+              privacyVisibility: normalizedVisibility,
               readReceiptsEnabled: true,
               allowCallsFromConnectionsOnly: true,
               ...updated,
@@ -247,11 +256,23 @@ export default function App() {
             setAccountSession(merged);
             localStorage.setItem('mr_stranger_account_v2', JSON.stringify(merged));
 
-            if (incremented) {
-              await updateDoc(profileRef, {
+            const needsSchemaMigration =
+              !data.privacyVisibility ||
+              !data.createdAt ||
+              typeof data.bio !== 'string' ||
+              typeof data.avatarUrl !== 'string';
+
+            if (incremented || needsSchemaMigration) {
+              await setDoc(profileRef, {
+                uid: cleanUid,
+                displayName: normalizedDisplayName,
+                bio: normalizedBio,
+                avatarUrl: normalizedAvatar,
                 streakCount: updated.streakCount,
                 lastLoginDate: updated.lastLoginDate,
                 participationPoints: updated.participationPoints,
+                privacyVisibility: normalizedVisibility,
+                createdAt: data.createdAt || serverTimestamp(),
                 updatedAt: serverTimestamp(),
               });
             }
@@ -271,7 +292,7 @@ export default function App() {
             await setDoc(profileRef, initialProfile);
             await setDoc(privateRef, {
               uid: cleanUid,
-              email: userEmail.slice(0, 160),
+              email: userEmail,
               e2eeFingerprint: deriveE2eeFingerprint(cleanUid, userEmail),
               readReceiptsEnabled: true,
               allowCallsFromConnectionsOnly: true,
@@ -338,30 +359,40 @@ export default function App() {
       (err) => handleFirestoreError(err, OperationType.LIST, 'requests')
     );
 
-    const momentsQ = query(collection(db, 'moments'), orderBy('createdAt', 'desc'), limit(25));
+    const momentsQ = query(
+      collection(db, 'moments'),
+      where('visibility', '==', 'public'),
+      limit(25)
+    );
     const unsubMoments = onSnapshot(
       momentsQ,
       (snap) => {
-        setMoments(
-          snap.docs.map((d) => ({
+        const docs = snap.docs
+          .map((d) => ({
             id: d.id,
             authorUid: String(d.data().authorUid),
             authorName: String(d.data().authorName),
             caption: String(d.data().caption),
             photoDataUrl: String(d.data().photoDataUrl),
             visibility: (d.data().visibility as 'public' | 'connections') || 'public',
+            createdAtMs: d.data().createdAt?.toMillis?.() || 0,
           }))
-        );
+          .sort((a, b) => b.createdAtMs - a.createdAtMs);
+        setMoments(docs);
       },
       (err) => handleFirestoreError(err, OperationType.LIST, 'moments')
     );
 
-    const notesQ = query(collection(db, 'studyNotes'), orderBy('createdAt', 'desc'), limit(25));
+    const notesQ = query(
+      collection(db, 'studyNotes'),
+      where('focusMinutes', '>=', 1),
+      limit(25)
+    );
     const unsubNotes = onSnapshot(
       notesQ,
       (snap) => {
-        setStudyNotes(
-          snap.docs.map((d) => ({
+        const docs = snap.docs
+          .map((d) => ({
             id: d.id,
             authorUid: String(d.data().authorUid),
             authorName: String(d.data().authorName),
@@ -369,8 +400,10 @@ export default function App() {
             subject: String(d.data().subject),
             positiveNote: String(d.data().positiveNote),
             focusMinutes: Number(d.data().focusMinutes) || 25,
+            createdAtMs: d.data().createdAt?.toMillis?.() || 0,
           }))
-        );
+          .sort((a, b) => b.createdAtMs - a.createdAtMs);
+        setStudyNotes(docs);
       },
       (err) => handleFirestoreError(err, OperationType.LIST, 'studyNotes')
     );

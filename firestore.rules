@@ -155,7 +155,7 @@ service cloud.firestore {
 
     // 1. Public User Profiles (No PII stored here)
     match /profiles/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && existing().uid == userId;
+      allow get: if isSignedIn() && isValidId(userId) && (resource == null || existing().uid == userId);
       allow list: if isSignedIn() && existing().streakCount >= 1;
       allow create: if isVerifiedUser() &&
         isValidId(userId) &&
@@ -168,17 +168,17 @@ service cloud.firestore {
         userId == request.auth.uid &&
         isValidUserPublicProfile(incoming()) &&
         incoming().uid == existing().uid &&
-        incoming().createdAt == existing().createdAt &&
+        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
-          'displayName', 'bio', 'avatarUrl', 'streakCount', 'lastLoginDate', 'participationPoints', 'privacyVisibility', 'updatedAt'
+          'displayName', 'bio', 'avatarUrl', 'streakCount', 'lastLoginDate', 'participationPoints', 'privacyVisibility', 'createdAt', 'updatedAt'
         ]);
       allow delete: if false;
     }
 
     // 2. Strictly Isolated Private Account Vault (PII Isolation Pillar 6)
     match /privateAccounts/{userId} {
-      allow get: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && existing().uid == request.auth.uid;
+      allow get: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && (resource == null || existing().uid == request.auth.uid);
       allow list: if false;
       allow create: if isVerifiedUser() &&
         isValidId(userId) &&
@@ -200,7 +200,7 @@ service cloud.firestore {
     // 3. Connection Requests
     match /requests/{requestId} {
       allow get: if isSignedIn() && isValidId(requestId) &&
-        (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+        (resource == null || existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
       allow list: if isSignedIn() &&
         (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
       allow create: if isVerifiedUser() &&
@@ -209,8 +209,7 @@ service cloud.firestore {
         incoming().fromUid == request.auth.uid &&
         incoming().status == 'pending' &&
         incoming().createdAt == request.time &&
-        incoming().updatedAt == request.time &&
-        exists(/databases/$(database)/documents/profiles/$(incoming().toUid));
+        incoming().updatedAt == request.time;
       allow update: if isVerifiedUser() &&
         isValidId(requestId) &&
         isValidConnectionRequest(incoming()) &&
@@ -233,53 +232,53 @@ service cloud.firestore {
     // 4. Direct Messages
     match /messages/{messageId} {
       allow get: if isSignedIn() && isValidId(messageId) &&
-        (existing().senderUid == request.auth.uid || existing().receiverUid == request.auth.uid);
+        (resource == null || existing().senderUid == request.auth.uid || existing().receiverUid == request.auth.uid);
       allow list: if isSignedIn() &&
         (existing().senderUid == request.auth.uid || existing().receiverUid == request.auth.uid);
       allow create: if isVerifiedUser() &&
         isValidId(messageId) &&
         isValidDirectMessage(incoming()) &&
-        incoming().createdAt == request.time &&
-        exists(/databases/$(database)/documents/profiles/$(incoming().receiverUid));
+        incoming().createdAt == request.time;
       allow update, delete: if false;
     }
 
     // 5. Photo Moments
     match /moments/{momentId} {
-      allow get: if isSignedIn() && isValidId(momentId) && existing().caption.size() >= 1;
-      allow list: if isSignedIn() && existing().caption.size() >= 1;
+      allow get: if isSignedIn() && isValidId(momentId) &&
+        (resource == null || existing().visibility == 'public' || existing().authorUid == request.auth.uid);
+      allow list: if isSignedIn() &&
+        (existing().visibility == 'public' || existing().authorUid == request.auth.uid);
       allow create: if isVerifiedUser() &&
         isValidId(momentId) &&
         isValidMomentPost(incoming()) &&
-        incoming().createdAt == request.time &&
-        exists(/databases/$(database)/documents/profiles/$(incoming().authorUid));
+        incoming().createdAt == request.time;
       allow update: if false;
       allow delete: if isVerifiedUser() && isValidId(momentId) && existing().authorUid == request.auth.uid;
     }
 
     // 6. Shareable Study Rooms
     match /studyRooms/{roomCode} {
-      allow get: if isSignedIn() && isValidId(roomCode) && existing().focusMinutes >= 1;
+      allow get: if isSignedIn() && isValidId(roomCode) &&
+        (resource == null || existing().focusMinutes >= 1);
       allow list: if isSignedIn() && existing().focusMinutes >= 1;
       allow create: if isVerifiedUser() &&
         isValidId(roomCode) &&
         isValidStudyRoomSession(incoming()) &&
         incoming().roomCode == roomCode &&
-        incoming().createdAt == request.time &&
-        exists(/databases/$(database)/documents/profiles/$(incoming().hostUid));
+        incoming().createdAt == request.time;
       allow update: if false;
       allow delete: if isVerifiedUser() && isValidId(roomCode) && existing().hostUid == request.auth.uid;
     }
 
     // 7. Study Notes
     match /studyNotes/{noteId} {
-      allow get: if isSignedIn() && isValidId(noteId) && existing().focusMinutes >= 1;
+      allow get: if isSignedIn() && isValidId(noteId) &&
+        (resource == null || existing().focusMinutes >= 1);
       allow list: if isSignedIn() && existing().focusMinutes >= 1;
       allow create: if isVerifiedUser() &&
         isValidId(noteId) &&
         isValidStudyNote(incoming()) &&
-        incoming().createdAt == request.time &&
-        exists(/databases/$(database)/documents/profiles/$(incoming().authorUid));
+        incoming().createdAt == request.time;
       allow update: if false;
       allow delete: if isVerifiedUser() && isValidId(noteId) && existing().authorUid == request.auth.uid;
     }
