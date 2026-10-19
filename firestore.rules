@@ -1,0 +1,287 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Global Primitives
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+    function incoming() {
+      return request.resource.data;
+    }
+    function existing() {
+      return resource.data;
+    }
+    function isSignedIn() {
+      return request.auth != null;
+    }
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    // Entity Validation Helpers
+    function isValidUserPublicProfile(data) {
+      return data.keys().hasAll([
+        'uid', 'displayName', 'bio', 'avatarUrl',
+        'streakCount', 'lastLoginDate', 'participationPoints',
+        'privacyVisibility', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid', 'displayName', 'bio', 'avatarUrl',
+        'streakCount', 'lastLoginDate', 'participationPoints',
+        'privacyVisibility', 'createdAt', 'updatedAt'
+      ]) &&
+      data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.uid == request.auth.uid &&
+      data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 64 &&
+      data.bio is string && data.bio.size() <= 300 &&
+      data.avatarUrl is string && data.avatarUrl.size() <= 200000 &&
+      data.streakCount is int && data.streakCount >= 1 && data.streakCount <= 10000 &&
+      data.lastLoginDate is string && data.lastLoginDate.size() >= 8 && data.lastLoginDate.size() <= 16 &&
+      data.participationPoints is int && data.participationPoints >= 0 && data.participationPoints <= 10000000 &&
+      data.privacyVisibility is string && data.privacyVisibility.size() <= 24 &&
+      (data.privacyVisibility == 'everyone' || data.privacyVisibility == 'connections_only' || data.privacyVisibility == 'ghost') &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateAccount(data) {
+      return data.keys().hasAll([
+        'uid', 'email', 'e2eeFingerprint',
+        'readReceiptsEnabled', 'allowCallsFromConnectionsOnly', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'uid', 'email', 'e2eeFingerprint',
+        'readReceiptsEnabled', 'allowCallsFromConnectionsOnly', 'updatedAt'
+      ]) &&
+      data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.uid == request.auth.uid &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.e2eeFingerprint is string && data.e2eeFingerprint.size() >= 8 && data.e2eeFingerprint.size() <= 128 &&
+      data.readReceiptsEnabled is bool &&
+      data.allowCallsFromConnectionsOnly is bool &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidConnectionRequest(data) {
+      return data.keys().hasAll([
+        'fromUid', 'fromName', 'toUid', 'toName',
+        'status', 'note', 'createdAt', 'updatedAt'
+      ]) &&
+      data.keys().hasOnly([
+        'fromUid', 'fromName', 'toUid', 'toName',
+        'status', 'note', 'createdAt', 'updatedAt'
+      ]) &&
+      data.fromUid is string && data.fromUid.size() >= 1 && data.fromUid.size() <= 128 && data.fromUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.fromName is string && data.fromName.size() >= 1 && data.fromName.size() <= 64 &&
+      data.toUid is string && data.toUid.size() >= 1 && data.toUid.size() <= 128 && data.toUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.toName is string && data.toName.size() >= 1 && data.toName.size() <= 64 &&
+      data.fromUid != data.toUid &&
+      data.status is string && data.status.size() <= 16 && (data.status == 'pending' || data.status == 'accepted' || data.status == 'declined') &&
+      data.note is string && data.note.size() <= 200 &&
+      data.createdAt is timestamp &&
+      data.updatedAt is timestamp;
+    }
+
+    function isValidDirectMessage(data) {
+      return data.keys().hasAll([
+        'senderUid', 'senderName', 'receiverUid', 'text', 'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'senderUid', 'senderName', 'receiverUid', 'text', 'createdAt'
+      ]) &&
+      data.senderUid is string && data.senderUid.size() >= 1 && data.senderUid.size() <= 128 && data.senderUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.senderUid == request.auth.uid &&
+      data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 64 &&
+      data.receiverUid is string && data.receiverUid.size() >= 1 && data.receiverUid.size() <= 128 && data.receiverUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.text is string && data.text.size() >= 1 && data.text.size() <= 1000 &&
+      data.createdAt is timestamp;
+    }
+
+    function isValidMomentPost(data) {
+      return data.keys().hasAll([
+        'authorUid', 'authorName', 'caption', 'photoDataUrl', 'visibility', 'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'authorUid', 'authorName', 'caption', 'photoDataUrl', 'visibility', 'createdAt'
+      ]) &&
+      data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 && data.authorUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.authorUid == request.auth.uid &&
+      data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 64 &&
+      data.caption is string && data.caption.size() >= 1 && data.caption.size() <= 500 &&
+      data.photoDataUrl is string && data.photoDataUrl.size() >= 10 && data.photoDataUrl.size() <= 650000 &&
+      data.visibility is string && data.visibility.size() <= 16 && (data.visibility == 'public' || data.visibility == 'connections') &&
+      data.createdAt is timestamp;
+    }
+
+    function isValidStudyRoomSession(data) {
+      return data.keys().hasAll([
+        'roomCode', 'roomName', 'hostUid', 'hostName', 'subject', 'positiveNote', 'focusMinutes', 'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'roomCode', 'roomName', 'hostUid', 'hostName', 'subject', 'positiveNote', 'focusMinutes', 'createdAt'
+      ]) &&
+      data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 24 && data.roomCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.roomName is string && data.roomName.size() >= 1 && data.roomName.size() <= 80 &&
+      data.hostUid is string && data.hostUid.size() >= 1 && data.hostUid.size() <= 128 && data.hostUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.hostUid == request.auth.uid &&
+      data.hostName is string && data.hostName.size() >= 1 && data.hostName.size() <= 64 &&
+      data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 100 &&
+      data.positiveNote is string && data.positiveNote.size() >= 1 && data.positiveNote.size() <= 400 &&
+      data.focusMinutes is int && data.focusMinutes >= 1 && data.focusMinutes <= 240 &&
+      data.createdAt is timestamp;
+    }
+
+    function isValidStudyNote(data) {
+      return data.keys().hasAll([
+        'authorUid', 'authorName', 'roomCode', 'subject', 'positiveNote', 'focusMinutes', 'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'authorUid', 'authorName', 'roomCode', 'subject', 'positiveNote', 'focusMinutes', 'createdAt'
+      ]) &&
+      data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 && data.authorUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.authorUid == request.auth.uid &&
+      data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 64 &&
+      data.roomCode is string && data.roomCode.size() >= 4 && data.roomCode.size() <= 24 && data.roomCode.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.subject is string && data.subject.size() >= 1 && data.subject.size() <= 100 &&
+      data.positiveNote is string && data.positiveNote.size() >= 1 && data.positiveNote.size() <= 400 &&
+      data.focusMinutes is int && data.focusMinutes >= 1 && data.focusMinutes <= 240 &&
+      data.createdAt is timestamp;
+    }
+
+    // 1. Public User Profiles (No PII stored here)
+    match /profiles/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && existing().uid == userId;
+      allow list: if isSignedIn() && existing().streakCount >= 1;
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidUserPublicProfile(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidUserPublicProfile(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName', 'bio', 'avatarUrl', 'streakCount', 'lastLoginDate', 'participationPoints', 'privacyVisibility', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    // 2. Strictly Isolated Private Account Vault (PII Isolation Pillar 6)
+    match /privateAccounts/{userId} {
+      allow get: if isSignedIn() && isValidId(userId) && userId == request.auth.uid && existing().uid == request.auth.uid;
+      allow list: if false;
+      allow create: if isVerifiedUser() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidUserPrivateAccount(incoming()) &&
+        incoming().updatedAt == request.time;
+      allow update: if isVerifiedUser() &&
+        isValidId(userId) &&
+        userId == request.auth.uid &&
+        isValidUserPrivateAccount(incoming()) &&
+        incoming().uid == existing().uid &&
+        incoming().updatedAt == request.time &&
+        incoming().diff(existing()).affectedKeys().hasOnly([
+          'email', 'e2eeFingerprint', 'readReceiptsEnabled', 'allowCallsFromConnectionsOnly', 'updatedAt'
+        ]);
+      allow delete: if false;
+    }
+
+    // 3. Connection Requests
+    match /requests/{requestId} {
+      allow get: if isSignedIn() && isValidId(requestId) &&
+        (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+      allow list: if isSignedIn() &&
+        (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+      allow create: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        isValidConnectionRequest(incoming()) &&
+        incoming().fromUid == request.auth.uid &&
+        incoming().status == 'pending' &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time &&
+        exists(/databases/$(database)/documents/profiles/$(incoming().toUid));
+      allow update: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        isValidConnectionRequest(incoming()) &&
+        existing().status == 'pending' &&
+        existing().toUid == request.auth.uid &&
+        incoming().fromUid == existing().fromUid &&
+        incoming().toUid == existing().toUid &&
+        incoming().fromName == existing().fromName &&
+        incoming().toName == existing().toName &&
+        incoming().note == existing().note &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().updatedAt == request.time &&
+        (incoming().status == 'accepted' || incoming().status == 'declined') &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      allow delete: if isVerifiedUser() &&
+        isValidId(requestId) &&
+        (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+    }
+
+    // 4. Direct Messages
+    match /messages/{messageId} {
+      allow get: if isSignedIn() && isValidId(messageId) &&
+        (existing().senderUid == request.auth.uid || existing().receiverUid == request.auth.uid);
+      allow list: if isSignedIn() &&
+        (existing().senderUid == request.auth.uid || existing().receiverUid == request.auth.uid);
+      allow create: if isVerifiedUser() &&
+        isValidId(messageId) &&
+        isValidDirectMessage(incoming()) &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/profiles/$(incoming().receiverUid));
+      allow update, delete: if false;
+    }
+
+    // 5. Photo Moments
+    match /moments/{momentId} {
+      allow get: if isSignedIn() && isValidId(momentId) && existing().caption.size() >= 1;
+      allow list: if isSignedIn() && existing().caption.size() >= 1;
+      allow create: if isVerifiedUser() &&
+        isValidId(momentId) &&
+        isValidMomentPost(incoming()) &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/profiles/$(incoming().authorUid));
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(momentId) && existing().authorUid == request.auth.uid;
+    }
+
+    // 6. Shareable Study Rooms
+    match /studyRooms/{roomCode} {
+      allow get: if isSignedIn() && isValidId(roomCode) && existing().focusMinutes >= 1;
+      allow list: if isSignedIn() && existing().focusMinutes >= 1;
+      allow create: if isVerifiedUser() &&
+        isValidId(roomCode) &&
+        isValidStudyRoomSession(incoming()) &&
+        incoming().roomCode == roomCode &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/profiles/$(incoming().hostUid));
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(roomCode) && existing().hostUid == request.auth.uid;
+    }
+
+    // 7. Study Notes
+    match /studyNotes/{noteId} {
+      allow get: if isSignedIn() && isValidId(noteId) && existing().focusMinutes >= 1;
+      allow list: if isSignedIn() && existing().focusMinutes >= 1;
+      allow create: if isVerifiedUser() &&
+        isValidId(noteId) &&
+        isValidStudyNote(incoming()) &&
+        incoming().createdAt == request.time &&
+        exists(/databases/$(database)/documents/profiles/$(incoming().authorUid));
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(noteId) && existing().authorUid == request.auth.uid;
+    }
+  }
+}

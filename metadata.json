@@ -1,0 +1,11 @@
+{
+  "name": "Mr. Stranger",
+  "description": "Real-time social network with live presence, connection requests, voice & video calling, photo Moments feed, Study Room with Pomodoro & ambient soundscapes, and multiplayer Subway Runner, Angry Catapult, and Block Arena games.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

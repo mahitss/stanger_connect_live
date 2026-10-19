@@ -1,0 +1,375 @@
+{
+  "entities": {
+    "UserPublicProfile": {
+      "title": "UserPublicProfile",
+      "description": "Public profile, online status, privacy settings, and login streak of a registered Mr. Stranger user.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth or Account UID",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "displayName": {
+          "type": "string",
+          "description": "Display name of the user",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "bio": {
+          "type": "string",
+          "description": "Short personal bio",
+          "maxLength": 300
+        },
+        "avatarUrl": {
+          "type": "string",
+          "description": "Avatar image URL or data URL",
+          "maxLength": 200000
+        },
+        "streakCount": {
+          "type": "number",
+          "description": "Consecutive daily login streak count"
+        },
+        "lastLoginDate": {
+          "type": "string",
+          "description": "Last login YYYY-MM-DD date string",
+          "maxLength": 16
+        },
+        "participationPoints": {
+          "type": "number",
+          "description": "Total participation points across study, chat, and games"
+        },
+        "privacyVisibility": {
+          "type": "string",
+          "enum": ["everyone", "connections_only", "ghost"],
+          "description": "Controls who can see online status and send requests"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "bio",
+        "avatarUrl",
+        "streakCount",
+        "lastLoginDate",
+        "participationPoints",
+        "privacyVisibility",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "UserPrivateAccount": {
+      "title": "UserPrivateAccount",
+      "description": "Strictly isolated PII and account security settings accessible only by the owner.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "e2eeFingerprint": {
+          "type": "string",
+          "maxLength": 128
+        },
+        "readReceiptsEnabled": {
+          "type": "boolean"
+        },
+        "allowCallsFromConnectionsOnly": {
+          "type": "boolean"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "uid",
+        "email",
+        "e2eeFingerprint",
+        "readReceiptsEnabled",
+        "allowCallsFromConnectionsOnly",
+        "updatedAt"
+      ]
+    },
+    "ConnectionRequest": {
+      "title": "ConnectionRequest",
+      "description": "Real-time connection request sent from one online user to another.",
+      "type": "object",
+      "properties": {
+        "fromUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "fromName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "toUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "toName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "accepted", "declined"]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "fromUid",
+        "fromName",
+        "toUid",
+        "toName",
+        "status",
+        "note",
+        "createdAt",
+        "updatedAt"
+      ]
+    },
+    "DirectMessage": {
+      "title": "DirectMessage",
+      "description": "Real-time chat message between two connected users.",
+      "type": "object",
+      "properties": {
+        "senderUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "receiverUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "senderUid",
+        "senderName",
+        "receiverUid",
+        "text",
+        "createdAt"
+      ]
+    },
+    "MomentPost": {
+      "title": "MomentPost",
+      "description": "Real photo upload and moment shared by an authenticated user.",
+      "type": "object",
+      "properties": {
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "caption": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500
+        },
+        "photoDataUrl": {
+          "type": "string",
+          "maxLength": 650000
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public", "connections"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "authorUid",
+        "authorName",
+        "caption",
+        "photoDataUrl",
+        "visibility",
+        "createdAt"
+      ]
+    },
+    "StudyRoomSession": {
+      "title": "StudyRoomSession",
+      "description": "Shareable Study Room with invite code, link, timer, and positive study goal.",
+      "type": "object",
+      "properties": {
+        "roomCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "roomName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80
+        },
+        "hostUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "hostName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "positiveNote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "focusMinutes": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "roomCode",
+        "roomName",
+        "hostUid",
+        "hostName",
+        "subject",
+        "positiveNote",
+        "focusMinutes",
+        "createdAt"
+      ]
+    },
+    "StudyNote": {
+      "title": "StudyNote",
+      "description": "Positive study intention and focus session note shared in a Study Room.",
+      "type": "object",
+      "properties": {
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "roomCode": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 24
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        },
+        "positiveNote": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "focusMinutes": {
+          "type": "number"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "authorUid",
+        "authorName",
+        "roomCode",
+        "subject",
+        "positiveNote",
+        "focusMinutes",
+        "createdAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/profiles/{userId}": {
+      "schema": { "$ref": "#/entities/UserPublicProfile" },
+      "description": "Public profile, privacy visibility, and streak records for registered users."
+    },
+    "/privateAccounts/{userId}": {
+      "schema": { "$ref": "#/entities/UserPrivateAccount" },
+      "description": "Owner-only PII email and privacy/security vault."
+    },
+    "/requests/{requestId}": {
+      "schema": { "$ref": "#/entities/ConnectionRequest" },
+      "description": "Connection requests sent between users."
+    },
+    "/messages/{messageId}": {
+      "schema": { "$ref": "#/entities/DirectMessage" },
+      "description": "Real-time direct chat messages."
+    },
+    "/moments/{momentId}": {
+      "schema": { "$ref": "#/entities/MomentPost" },
+      "description": "Real user-uploaded photo moments."
+    },
+    "/studyRooms/{roomCode}": {
+      "schema": { "$ref": "#/entities/StudyRoomSession" },
+      "description": "Shareable study rooms joinable via roomCode or invite URL."
+    },
+    "/studyNotes/{noteId}": {
+      "schema": { "$ref": "#/entities/StudyNote" },
+      "description": "Positive study room notes and focus records."
+    }
+  }
+}
