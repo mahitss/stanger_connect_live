@@ -50,6 +50,7 @@ import {
   canUsersChatOrCall,
   detectSecurityThreat,
   sanitizeSafeText,
+  LeaderboardCandidate,
 } from './utils/rules';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
 import {
@@ -59,6 +60,7 @@ import {
   StudyChatMessage,
 } from './components/StudyRoomView';
 import { TalkingRoomView } from './components/TalkingRoomView';
+import { GlobalLeaderboard } from './components/GlobalLeaderboard';
 import type { OnlinePeer } from '../server';
 
 type SidebarPage =
@@ -178,6 +180,8 @@ export default function App() {
   const [messages, setMessages] = useState<DirectMessageDoc[]>([]);
   const [moments, setMoments] = useState<MomentPostDoc[]>([]);
   const [studyNotes, setStudyNotes] = useState<StudyNoteRecord[]>([]);
+  const [firestoreProfiles, setFirestoreProfiles] = useState<LeaderboardCandidate[]>([]);
+  const [serverPlatformUsers, setServerPlatformUsers] = useState<LeaderboardCandidate[]>([]);
 
   // UI Controls for Requests, Chat, and Photo Moments
   const [requestNoteMap, setRequestNoteMap] = useState<Record<string, string>>({});
@@ -447,13 +451,57 @@ export default function App() {
       (err) => handleFirestoreError(err, OperationType.LIST, 'studyNotes')
     );
 
+    const profilesQ = query(
+      collection(db, 'profiles'),
+      where('streakCount', '>=', 1),
+      limit(50)
+    );
+    const unsubProfiles = onSnapshot(
+      profilesQ,
+      (snap) => {
+        const docs: LeaderboardCandidate[] = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            uid: String(data.uid || d.id),
+            displayName: String(data.displayName || 'Verified Member'),
+            bio: String(data.bio || 'Connected on Mr. Stranger'),
+            streakCount: Math.max(1, Number(data.streakCount) || 1),
+            participationPoints: Math.max(0, Number(data.participationPoints) || 0),
+            privacyVisibility:
+              data.privacyVisibility === 'connections_only' ||
+              data.privacyVisibility === 'ghost'
+                ? data.privacyVisibility
+                : 'everyone',
+          };
+        });
+        setFirestoreProfiles(docs);
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'profiles')
+    );
+
     return () => {
       unsubSent();
       unsubRec();
       unsubMoments();
       unsubNotes();
+      unsubProfiles();
     };
   }, [authReady, authUser]);
+
+  // Fetch initial platform-wide leaderboard standings from server
+  useEffect(() => {
+    if (!currentIdentity) return;
+    fetch('/api/leaderboard')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data.users)) {
+          setServerPlatformUsers(data.users);
+        }
+      })
+      .catch(() => {
+        // ignore if offline
+      });
+  }, [currentIdentity?.uid]);
 
   // Connect to Real-Time WebSocket Server
   useEffect(() => {
@@ -490,6 +538,9 @@ export default function App() {
         const msg = JSON.parse(String(event.data));
         if (msg.type === 'server:state_sync') {
           setOnlinePeers(Array.isArray(msg.peers) ? msg.peers : []);
+          if (Array.isArray(msg.platformUsers)) {
+            setServerPlatformUsers(msg.platformUsers);
+          }
           setStudyDesks(Array.isArray(msg.studyDesks) ? msg.studyDesks : []);
           setGameScores(Array.isArray(msg.gameScores) ? msg.gameScores : []);
         } else if (msg.type === 'chat:direct') {
@@ -580,12 +631,32 @@ export default function App() {
 
   const awardParticipation = (points: number) => {
     if (!currentIdentity) return;
+    const nextPoints = currentIdentity.participationPoints + points;
     const updated: AccountIdentity = {
       ...currentIdentity,
-      participationPoints: currentIdentity.participationPoints + points,
+      participationPoints: nextPoints,
     };
     setAccountSession(updated);
     localStorage.setItem('mr_stranger_account_v2', JSON.stringify(updated));
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'peer:update_stats',
+          participationPoints: nextPoints,
+          streakCount: currentIdentity.streakCount,
+        })
+      );
+    }
+
+    if (authUser) {
+      updateDoc(doc(db, 'profiles', currentIdentity.uid), {
+        participationPoints: nextPoints,
+        updatedAt: serverTimestamp(),
+      }).catch(() => {
+        // ignore if offline
+      });
+    }
   };
 
   const persistProductivityGoal = (nextTarget: number, nextCompleted: number) => {
@@ -1226,6 +1297,11 @@ export default function App() {
       .filter((r) => r.status === 'accepted')
       .map((r) => (r.fromUid === currentIdentity.uid ? r.toUid : r.fromUid))
   );
+  const pendingPeerUids = new Set(
+    requests
+      .filter((r) => r.status === 'pending')
+      .map((r) => (r.fromUid === currentIdentity.uid ? r.toUid : r.fromUid))
+  );
   const acceptedConnections = requests
     .filter((r) => r.status === 'accepted')
     .map((r) => ({
@@ -1685,6 +1761,54 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* Global Leaderboard Component aggregating participationPoints & streakCount across the platform */}
+              <GlobalLeaderboard
+                currentUid={currentIdentity.uid}
+                firestoreProfiles={firestoreProfiles}
+                serverPlatformUsers={serverPlatformUsers}
+                onlinePeers={onlinePeers.map((p) => ({
+                  uid: p.uid,
+                  displayName: p.displayName,
+                  bio: p.bio,
+                  streakCount: p.streakCount,
+                  participationPoints: p.participationPoints,
+                  isOnline: true,
+                  currentMode: p.currentMode,
+                  privacyVisibility: p.privacyVisibility,
+                }))}
+                currentUserCandidate={{
+                  uid: currentIdentity.uid,
+                  displayName: currentIdentity.displayName,
+                  bio: currentIdentity.bio,
+                  streakCount: currentIdentity.streakCount,
+                  participationPoints: currentIdentity.participationPoints,
+                  isOnline: true,
+                  currentMode: activePage === 'signout' ? 'hub' : activePage,
+                  privacyVisibility: currentIdentity.privacyVisibility,
+                }}
+                acceptedPeerUids={acceptedPeerUids}
+                pendingPeerUids={pendingPeerUids}
+                onSendInviteFromLeaderboard={(entry) =>
+                  handleSendRequest({
+                    uid: entry.uid,
+                    displayName: entry.displayName,
+                    bio: entry.bio,
+                    avatarUrl: '',
+                    streakCount: entry.streakCount,
+                    participationPoints: entry.participationPoints,
+                    privacyVisibility: 'everyone',
+                    currentMode: 'hub',
+                    activeStudyRoomCode: 'STUDY-GLOBAL',
+                    activeGameId: null,
+                    connectedAt: Date.now(),
+                  })
+                }
+                onOpenChatWithPeer={(peerUid) => {
+                  setActiveChatPeerUid(peerUid);
+                  setActivePage('chat');
+                }}
+              />
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 {/* Live Online Users Directory (7 cols) */}

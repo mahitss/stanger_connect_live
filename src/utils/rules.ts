@@ -104,6 +104,138 @@ export function computeProductivityGoalProgress(
   };
 }
 
+// --- Global Leaderboard Aggregation & Ranking Logic ---
+export interface LeaderboardCandidate {
+  uid: string;
+  displayName: string;
+  bio?: string;
+  streakCount: number;
+  participationPoints: number;
+  isOnline?: boolean;
+  currentMode?: string;
+  privacyVisibility?: 'everyone' | 'connections_only' | 'ghost';
+}
+
+export type LeaderboardSortBy = 'combined' | 'points' | 'streak';
+
+export interface RankedLeaderboardEntry {
+  rank: number;
+  uid: string;
+  displayName: string;
+  bio: string;
+  streakCount: number;
+  participationPoints: number;
+  compositeScore: number;
+  isOnline: boolean;
+  currentMode: string;
+}
+
+export function computeLeaderboardCompositeScore(
+  participationPoints: number,
+  streakCount: number
+): number {
+  const safePoints = Math.max(0, Math.round(Number(participationPoints) || 0));
+  const safeStreak = Math.max(1, Math.round(Number(streakCount) || 1));
+  return safePoints + safeStreak * 25;
+}
+
+export function aggregateGlobalLeaderboard(
+  sources: LeaderboardCandidate[][],
+  sortBy: LeaderboardSortBy = 'combined',
+  limitCount = 25
+): RankedLeaderboardEntry[] {
+  const mergedByUid = new Map<string, LeaderboardCandidate>();
+
+  for (const list of sources) {
+    if (!Array.isArray(list)) continue;
+    for (const raw of list) {
+      if (!raw || !raw.uid) continue;
+      const uid = String(raw.uid).trim();
+      if (!uid) continue;
+
+      const existing = mergedByUid.get(uid);
+      const visibility = raw.privacyVisibility || existing?.privacyVisibility || 'everyone';
+
+      const streakCount = Math.max(
+        1,
+        Math.round(Number(raw.streakCount) || 1),
+        existing ? Math.round(Number(existing.streakCount) || 1) : 1
+      );
+      const participationPoints = Math.max(
+        0,
+        Math.round(Number(raw.participationPoints) || 0),
+        existing ? Math.round(Number(existing.participationPoints) || 0) : 0
+      );
+
+      mergedByUid.set(uid, {
+        uid,
+        displayName:
+          sanitizeSafeText(raw.displayName || existing?.displayName || 'Verified Member', 64) ||
+          'Verified Member',
+        bio: sanitizeSafeText(
+          raw.bio || existing?.bio || 'Active member on Mr. Stranger',
+          300
+        ),
+        streakCount,
+        participationPoints,
+        isOnline: Boolean(raw.isOnline || existing?.isOnline),
+        currentMode: raw.currentMode || existing?.currentMode || 'hub',
+        privacyVisibility: visibility,
+      });
+    }
+  }
+
+  const visibleEntries = Array.from(mergedByUid.values()).filter(
+    (entry) => entry.privacyVisibility !== 'ghost'
+  );
+
+  visibleEntries.sort((a, b) => {
+    const scoreA = computeLeaderboardCompositeScore(a.participationPoints, a.streakCount);
+    const scoreB = computeLeaderboardCompositeScore(b.participationPoints, b.streakCount);
+
+    if (sortBy === 'points') {
+      if (b.participationPoints !== a.participationPoints) {
+        return b.participationPoints - a.participationPoints;
+      }
+      if (b.streakCount !== a.streakCount) {
+        return b.streakCount - a.streakCount;
+      }
+    } else if (sortBy === 'streak') {
+      if (b.streakCount !== a.streakCount) {
+        return b.streakCount - a.streakCount;
+      }
+      if (b.participationPoints !== a.participationPoints) {
+        return b.participationPoints - a.participationPoints;
+      }
+    } else {
+      if (scoreB !== scoreA) {
+        return scoreB - scoreA;
+      }
+      if (b.participationPoints !== a.participationPoints) {
+        return b.participationPoints - a.participationPoints;
+      }
+      if (b.streakCount !== a.streakCount) {
+        return b.streakCount - a.streakCount;
+      }
+    }
+    return a.displayName.localeCompare(b.displayName);
+  });
+
+  const safeLimit = Math.max(1, Math.min(100, Math.round(limitCount)));
+  return visibleEntries.slice(0, safeLimit).map((item, idx) => ({
+    rank: idx + 1,
+    uid: item.uid,
+    displayName: item.displayName,
+    bio: item.bio || 'Active member on Mr. Stranger',
+    streakCount: item.streakCount,
+    participationPoints: item.participationPoints,
+    compositeScore: computeLeaderboardCompositeScore(item.participationPoints, item.streakCount),
+    isOnline: Boolean(item.isOnline),
+    currentMode: item.currentMode || 'hub',
+  }));
+}
+
+
 // --- Enterprise Security: SQL / NoSQL Injection, XSS & Prototype Pollution Guard ---
 const SQL_INJECTION_PATTERNS: RegExp[] = [
   /('|\b)(OR|AND)\s+['"]?\w+['"]?\s*=\s*['"]?\w+/i,

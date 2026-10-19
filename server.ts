@@ -190,15 +190,65 @@ async function startServer() {
   const acceptedPairKeys = new Set<string>();
   const wsRateMap = new Map<WebSocket, number[]>();
 
+  function buildPlatformUsersList() {
+    const byUid = new Map<
+      string,
+      {
+        uid: string;
+        displayName: string;
+        bio: string;
+        streakCount: number;
+        participationPoints: number;
+        isOnline: boolean;
+        currentMode: string;
+        privacyVisibility: 'everyone' | 'connections_only' | 'ghost';
+      }
+    >();
+
+    for (const acct of accountsByEmail.values()) {
+      byUid.set(acct.uid, {
+        uid: acct.uid,
+        displayName: acct.displayName,
+        bio: acct.bio,
+        streakCount: acct.streakCount,
+        participationPoints: acct.participationPoints,
+        isOnline: clients.has(acct.uid),
+        currentMode: clients.get(acct.uid)?.peer.currentMode || 'hub',
+        privacyVisibility: acct.privacyVisibility,
+      });
+    }
+
+    for (const { peer } of clients.values()) {
+      const prev = byUid.get(peer.uid);
+      byUid.set(peer.uid, {
+        uid: peer.uid,
+        displayName: peer.displayName || prev?.displayName || 'Verified Member',
+        bio: peer.bio || prev?.bio || 'Active member on Mr. Stranger',
+        streakCount: Math.max(peer.streakCount, prev?.streakCount || 1),
+        participationPoints: Math.max(
+          peer.participationPoints,
+          prev?.participationPoints || 0
+        ),
+        isOnline: true,
+        currentMode: peer.currentMode || 'hub',
+        privacyVisibility: peer.privacyVisibility,
+      });
+    }
+
+    return Array.from(byUid.values()).filter((u) => u.privacyVisibility !== 'ghost');
+  }
+
   function broadcastPresence() {
     const peers = Array.from(clients.values())
       .map((c) => c.peer)
       .filter((p) => p.privacyVisibility !== 'ghost');
     const desks = Array.from(studyDesks.values());
     const scores = Array.from(liveGameState.values());
+    const platformUsers = buildPlatformUsersList();
     const payload = JSON.stringify({
       type: 'server:state_sync',
       peers,
+      platformUsers,
       studyDesks: desks,
       gameScores: scores,
       serverTimestamp: Date.now(),
@@ -216,6 +266,13 @@ async function startServer() {
       target.ws.send(JSON.stringify(message));
     }
   }
+
+  app.get('/api/leaderboard', (_req, res) => {
+    res.json({
+      users: buildPlatformUsersList(),
+      timestamp: Date.now(),
+    });
+  });
 
   // Real Account Registration & Sign-In Endpoints (Email + Password + Account Profile)
   app.post('/api/auth/register', (req, res) => {
@@ -407,8 +464,31 @@ async function startServer() {
               msg.privacyVisibility === 'connections_only' || msg.privacyVisibility === 'ghost'
                 ? msg.privacyVisibility
                 : 'everyone';
+            for (const acct of accountsByEmail.values()) {
+              if (acct.uid === registeredUid) {
+                acct.privacyVisibility = entry.peer.privacyVisibility;
+              }
+            }
             broadcastPresence();
           }
+          return;
+        }
+
+        if (msg.type === 'peer:update_stats') {
+          const entry = clients.get(registeredUid);
+          const nextPoints = Math.max(0, Math.min(10_000_000, Math.round(Number(msg.participationPoints) || 0)));
+          const nextStreak = Math.max(1, Math.min(10_000, Math.round(Number(msg.streakCount) || 1)));
+          if (entry) {
+            entry.peer.participationPoints = Math.max(entry.peer.participationPoints, nextPoints);
+            entry.peer.streakCount = Math.max(entry.peer.streakCount, nextStreak);
+          }
+          for (const acct of accountsByEmail.values()) {
+            if (acct.uid === registeredUid) {
+              acct.participationPoints = Math.max(acct.participationPoints, nextPoints);
+              acct.streakCount = Math.max(acct.streakCount, nextStreak);
+            }
+          }
+          broadcastPresence();
           return;
         }
 

@@ -19,7 +19,81 @@ import {
   sanitizeSafeText,
   checkSlidingWindowRateLimit,
   canUsersChatOrCall,
+  aggregateGlobalLeaderboard,
+  computeLeaderboardCompositeScore,
 } from './rules.ts';
+
+test('Global Leaderboard aggregates across sources, deduplicates by uid, filters ghost users, and sorts by combined, points, or streak', () => {
+  const firestoreProfiles = [
+    {
+      uid: 'usr_alpha',
+      displayName: 'Alpha Scholar',
+      streakCount: 5,
+      participationPoints: 200,
+      privacyVisibility: 'everyone' as const,
+    },
+    {
+      uid: 'usr_beta',
+      displayName: 'Beta Builder',
+      streakCount: 12,
+      participationPoints: 140,
+      privacyVisibility: 'everyone' as const,
+    },
+    {
+      uid: 'usr_ghost',
+      displayName: 'Hidden Ghost',
+      streakCount: 99,
+      participationPoints: 9999,
+      privacyVisibility: 'ghost' as const,
+    },
+  ];
+
+  const liveOnlinePeers = [
+    {
+      uid: 'usr_alpha',
+      displayName: 'Alpha Scholar',
+      streakCount: 5,
+      participationPoints: 260, // earned 60 more points in real time
+      isOnline: true,
+      currentMode: 'study',
+      privacyVisibility: 'everyone' as const,
+    },
+    {
+      uid: 'usr_gamma',
+      displayName: 'Gamma Gamer',
+      streakCount: 2,
+      participationPoints: 310,
+      isOnline: true,
+      currentMode: 'game_subway',
+      privacyVisibility: 'everyone' as const,
+    },
+  ];
+
+  assert.equal(computeLeaderboardCompositeScore(260, 5), 385);
+
+  // 1. Combined sort: usr_beta (140 + 12*25 = 440), usr_alpha (260 + 5*25 = 385), usr_gamma (310 + 2*25 = 360)
+  const combined = aggregateGlobalLeaderboard([firestoreProfiles, liveOnlinePeers], 'combined');
+  assert.equal(combined.length, 3); // ghost filtered out, usr_alpha deduplicated
+  assert.equal(combined[0].uid, 'usr_beta');
+  assert.equal(combined[0].rank, 1);
+  assert.equal(combined[0].compositeScore, 440);
+  assert.equal(combined[1].uid, 'usr_alpha');
+  assert.equal(combined[1].participationPoints, 260);
+  assert.equal(combined[1].isOnline, true);
+
+  // 2. Points sort: usr_gamma (310), usr_alpha (260), usr_beta (140)
+  const byPoints = aggregateGlobalLeaderboard([firestoreProfiles, liveOnlinePeers], 'points');
+  assert.equal(byPoints[0].uid, 'usr_gamma');
+  assert.equal(byPoints[1].uid, 'usr_alpha');
+  assert.equal(byPoints[2].uid, 'usr_beta');
+
+  // 3. Streak sort: usr_beta (12d), usr_alpha (5d), usr_gamma (2d)
+  const byStreak = aggregateGlobalLeaderboard([firestoreProfiles, liveOnlinePeers], 'streak');
+  assert.equal(byStreak[0].uid, 'usr_beta');
+  assert.equal(byStreak[0].streakCount, 12);
+  assert.equal(byStreak[1].uid, 'usr_alpha');
+  assert.equal(byStreak[2].uid, 'usr_gamma');
+});
 
 test('Daily Productivity Goal computes percentage, remaining minutes, and completion state', () => {
   const half = computeProductivityGoalProgress(120, 60);
