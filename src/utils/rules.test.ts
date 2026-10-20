@@ -37,7 +37,65 @@ import {
   canUserCommentOnMoment,
   validateAndSanitizeMomentComment,
   groupMomentCommentsByMomentId,
+  normalizeStudyTopicName,
+  buildWeeklyProductivityDistribution,
 } from './rules.ts';
+
+test('Weekly Productivity Distribution aggregates focus sessions by Study Room topic, reconciles weekly focus total, and updates live when new sessions are logged', () => {
+  assert.equal(normalizeStudyTopicName('   '), 'Deep Work & Problem Solving');
+  assert.equal(
+    normalizeStudyTopicName('  Distributed Systems & Consensus  '),
+    'Distributed Systems & Consensus'
+  );
+
+  // 1. Baseline 7-day breakdown reconciles with totalWeeklyFocusMinutes
+  const baseline = buildWeeklyProductivityDistribution({
+    todayDateKey: '2026-10-20',
+    totalWeeklyFocusMinutes: 500,
+    storedSessions: [],
+    studyNotes: [],
+  });
+  assert.equal(baseline.topics.length, 5);
+  assert.equal(baseline.totalFocusMinutes, 500);
+  assert.equal(baseline.topTopic, 'Distributed Systems & Consensus');
+  assert.ok(baseline.topTopicMinutes > 0);
+  assert.ok(baseline.topTopicSharePercent > 0);
+
+  // 2. Logging explicit sessions for a topic boosts that topic's focusMinutes, sessionsCount, and rank
+  const updated = buildWeeklyProductivityDistribution({
+    todayDateKey: '2026-10-20',
+    totalWeeklyFocusMinutes: 550,
+    storedSessions: [
+      {
+        id: 'sess_1',
+        topic: 'Rust & Compiler Engineering',
+        roomCode: 'STUDY-RUST',
+        focusMinutes: 240,
+        dateKey: '2026-10-20',
+        createdAtMs: 1000,
+        authorUid: 'usr_aarav',
+      },
+      {
+        id: 'sess_2',
+        topic: 'Rust & Compiler Engineering',
+        roomCode: 'STUDY-RUST',
+        focusMinutes: 60,
+        dateKey: '2026-10-19',
+        createdAtMs: 2000,
+        authorUid: 'usr_aarav',
+      },
+    ],
+    currentUid: 'usr_aarav',
+  });
+
+  assert.equal(updated.topTopic, 'Rust & Compiler Engineering');
+  assert.ok(updated.topTopicMinutes >= 300);
+  const rustTopic = updated.topics.find(
+    (t) => t.topic === 'Rust & Compiler Engineering'
+  );
+  assert.ok(rustTopic);
+  assert.ok(rustTopic.sessionsCount >= 2);
+});
 
 test('Photo Moment comment rules enforce connection permissions, sanitize text, block injections, and sort chronologically', () => {
   // 1. Author can always comment on their own moment

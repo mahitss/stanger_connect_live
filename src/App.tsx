@@ -67,6 +67,9 @@ import {
   canUserCommentOnMoment,
   validateAndSanitizeMomentComment,
   groupMomentCommentsByMomentId,
+  TopicFocusSessionRecord,
+  buildWeeklyProductivityDistribution,
+  normalizeStudyTopicName,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -79,6 +82,7 @@ import {
 import { TalkingRoomView } from './components/TalkingRoomView';
 import { GlobalLeaderboard } from './components/GlobalLeaderboard';
 import { WeeklyActivityOverview } from './components/WeeklyActivityOverview';
+import { WeeklyProductivityDistribution } from './components/WeeklyProductivityDistribution';
 import type { OnlinePeer } from '../server';
 
 type SidebarPage =
@@ -282,6 +286,18 @@ export default function App() {
       // ignore
     }
     return {};
+  });
+  const [topicFocusSessions, setTopicFocusSessions] = useState<TopicFocusSessionRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_topic_sessions_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
   });
   const [todayPointsEarned, setTodayPointsEarned] = useState<number>(() => {
     try {
@@ -1027,6 +1043,35 @@ export default function App() {
 
   const handleLogFocusMinutes = (minutesToAdd: number) => {
     const added = Math.max(1, Math.round(minutesToAdd));
+    persistProductivityGoal(dailyTargetMinutes, dailyCompletedMinutes + added);
+    awardParticipation(Math.max(5, Math.round(added / 2)));
+  };
+
+  const handleLogTopicFocusSession = (
+    rawTopic: string,
+    rawRoomCode: string,
+    minutesToAdd: number
+  ) => {
+    const added = Math.max(1, Math.round(minutesToAdd));
+    const cleanTopic = normalizeStudyTopicName(rawTopic);
+    const cleanRoomCode = sanitizeSafeText(
+      String(rawRoomCode || activeStudyRoomCode || 'STUDY-GLOBAL').toUpperCase(),
+      24
+    );
+    const newSession: TopicFocusSessionRecord = {
+      id: `tsess_${Date.now()}_${currentIdentity?.uid || 'local'}`,
+      topic: cleanTopic,
+      roomCode: cleanRoomCode,
+      focusMinutes: added,
+      dateKey: todayDateStr,
+      createdAtMs: Date.now(),
+      authorUid: currentIdentity?.uid,
+    };
+    setTopicFocusSessions((prev) => {
+      const next = [newSession, ...prev];
+      localStorage.setItem('mr_stranger_topic_sessions_v1', JSON.stringify(next));
+      return next;
+    });
     persistProductivityGoal(dailyTargetMinutes, dailyCompletedMinutes + added);
     awardParticipation(Math.max(5, Math.round(added / 2)));
   };
@@ -1866,6 +1911,16 @@ export default function App() {
       studyDesks
     );
 
+  const weeklyTopicDistribution = buildWeeklyProductivityDistribution({
+    todayDateKey: todayDateStr,
+    totalWeeklyFocusMinutes: weeklyActivitySummary.totalFocusMinutes,
+    storedSessions: topicFocusSessions,
+    studyNotes,
+    activeDeskSubject: myFocusStatus.deskSubject || undefined,
+    activeRoomCode: activeStudyRoomCode,
+    currentUid: currentIdentity.uid,
+  });
+
   const handleToggleQuickFocusDesk = () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     const hasMyDesk = studyDesks.some((d) => d.uid === currentIdentity.uid);
@@ -2355,6 +2410,16 @@ export default function App() {
                 summary={weeklyActivitySummary}
                 dailyTargetMinutes={dailyTargetMinutes}
                 onLogQuickFocus={handleLogFocusMinutes}
+              />
+
+              {/* Weekly Productivity Distribution (Focus Session Breakdown by Study Room Topic via Recharts) */}
+              <WeeklyProductivityDistribution
+                distribution={weeklyTopicDistribution}
+                onLogTopicFocusSession={handleLogTopicFocusSession}
+                onOpenStudyRoomWithTopic={(roomCode) => {
+                  setActiveStudyRoomCode(roomCode);
+                  setActivePage('study');
+                }}
               />
 
               {/* Global Leaderboard Component aggregating participationPoints & streakCount across the platform */}

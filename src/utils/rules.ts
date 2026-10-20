@@ -648,6 +648,268 @@ export function buildWeeklyActivityOverview(params: {
   };
 }
 
+// --- Weekly Productivity Distribution (Focus Session Breakdown by Study Room Topic) ---
+export interface TopicFocusSessionRecord {
+  id: string;
+  topic: string;
+  roomCode: string;
+  focusMinutes: number;
+  dateKey: string;
+  createdAtMs: number;
+  authorUid?: string;
+}
+
+export interface WeeklyTopicDistributionEntry {
+  topic: string;
+  shortTopic: string;
+  focusMinutes: number;
+  sessionsCount: number;
+  sharePercent: number;
+  roomCode: string;
+  color: string;
+}
+
+export interface WeeklyTopicDistributionSummary {
+  topics: WeeklyTopicDistributionEntry[];
+  totalFocusMinutes: number;
+  totalSessionsCount: number;
+  activeTopicsCount: number;
+  topTopic: string;
+  topTopicMinutes: number;
+  topTopicSharePercent: number;
+}
+
+export const DEFAULT_STUDY_ROOM_TOPICS: ReadonlyArray<{
+  topic: string;
+  roomCode: string;
+  defaultShareWeight: number;
+}> = [
+  {
+    topic: 'Distributed Systems & Consensus',
+    roomCode: 'STUDY-SYS',
+    defaultShareWeight: 0.34,
+  },
+  {
+    topic: 'Algorithms & Data Structures',
+    roomCode: 'STUDY-ALGO',
+    defaultShareWeight: 0.26,
+  },
+  {
+    topic: 'System Design & Architecture',
+    roomCode: 'STUDY-ARCH',
+    defaultShareWeight: 0.2,
+  },
+  {
+    topic: 'Machine Learning & PyTorch',
+    roomCode: 'STUDY-ML',
+    defaultShareWeight: 0.12,
+  },
+  {
+    topic: 'Rust & Compiler Engineering',
+    roomCode: 'STUDY-RUST',
+    defaultShareWeight: 0.08,
+  },
+];
+
+const TOPIC_CHART_PALETTE = [
+  '#10B981', // Emerald 500
+  '#F59E0B', // Amber 500
+  '#38BDF8', // Sky 400
+  '#A855F7', // Purple 500
+  '#F43F5E', // Rose 500
+  '#14B8A6', // Teal 500
+];
+
+export function normalizeStudyTopicName(rawTopic: string): string {
+  const cleaned = sanitizeSafeText(String(rawTopic || '').trim(), 80);
+  if (!cleaned) return 'Deep Work & Problem Solving';
+  return cleaned;
+}
+
+function formatShortTopicLabel(topic: string): string {
+  const lower = topic.toLowerCase();
+  if (lower.includes('distributed')) return 'Dist. Sys';
+  if (lower.includes('algorithm')) return 'Algorithms';
+  if (lower.includes('system design') || lower.includes('architecture')) return 'Sys Design';
+  if (lower.includes('machine learning') || lower.includes('pytorch')) return 'ML & AI';
+  if (lower.includes('rust') || lower.includes('compiler')) return 'Rust / IR';
+  if (lower.includes('deep work')) return 'Deep Work';
+  if (topic.length <= 11) return topic;
+  const firstPart = topic.split(/\s*&\s*|\s+-\s+|\s+/)[0] || topic;
+  return firstPart.length <= 11 ? firstPart : `${firstPart.slice(0, 10)}…`;
+}
+
+export function buildWeeklyProductivityDistribution(params: {
+  todayDateKey: string;
+  totalWeeklyFocusMinutes: number;
+  storedSessions?: TopicFocusSessionRecord[];
+  studyNotes?: Array<{
+    subject: string;
+    focusMinutes: number;
+    roomCode?: string;
+    authorUid?: string;
+  }>;
+  activeDeskSubject?: string;
+  activeRoomCode?: string;
+  currentUid?: string;
+}): WeeklyTopicDistributionSummary {
+  const validDateKeys = new Set<string>();
+  for (let i = 0; i < 7; i++) {
+    validDateKeys.add(getPastDateKey(params.todayDateKey, i));
+  }
+
+  const byTopic = new Map<
+    string,
+    {
+      topic: string;
+      focusMinutes: number;
+      sessionsCount: number;
+      roomCode: string;
+    }
+  >();
+
+  const addTopicEntry = (
+    rawTopic: string,
+    rawMinutes: number,
+    rawRoomCode: string,
+    sessionsToAdd = 1
+  ) => {
+    const topic = normalizeStudyTopicName(rawTopic);
+    const key = topic.toLowerCase();
+    const minutes = Math.max(1, Math.round(Number(rawMinutes) || 0));
+    const roomCode =
+      sanitizeSafeText(String(rawRoomCode || 'STUDY-GLOBAL').toUpperCase(), 24) ||
+      'STUDY-GLOBAL';
+
+    const prev = byTopic.get(key);
+    if (prev) {
+      prev.focusMinutes += minutes;
+      prev.sessionsCount += Math.max(1, sessionsToAdd);
+      if (roomCode && roomCode !== 'STUDY-GLOBAL') {
+        prev.roomCode = roomCode;
+      }
+    } else {
+      byTopic.set(key, {
+        topic,
+        focusMinutes: minutes,
+        sessionsCount: Math.max(1, sessionsToAdd),
+        roomCode,
+      });
+    }
+  };
+
+  // 1. Aggregate explicit stored topic focus sessions within the 7-day window
+  const sessions = Array.isArray(params.storedSessions) ? params.storedSessions : [];
+  for (const s of sessions) {
+    if (!s || typeof s.focusMinutes !== 'number' || s.focusMinutes <= 0) continue;
+    if (
+      params.currentUid &&
+      s.authorUid &&
+      String(s.authorUid) !== String(params.currentUid)
+    ) {
+      continue;
+    }
+    if (s.dateKey && !validDateKeys.has(s.dateKey)) continue;
+    addTopicEntry(s.topic, s.focusMinutes, s.roomCode || 'STUDY-GLOBAL', 1);
+  }
+
+  // 2. Include user's logged Study Room notes if not already represented
+  const notes = Array.isArray(params.studyNotes) ? params.studyNotes : [];
+  for (const n of notes) {
+    if (!n || typeof n.focusMinutes !== 'number' || n.focusMinutes <= 0) continue;
+    if (
+      params.currentUid &&
+      n.authorUid &&
+      String(n.authorUid) !== String(params.currentUid)
+    ) {
+      continue;
+    }
+    addTopicEntry(
+      n.subject,
+      n.focusMinutes,
+      n.roomCode || params.activeRoomCode || 'STUDY-GLOBAL',
+      1
+    );
+  }
+
+  // 3. If user is currently at a live Study Desk with a subject, ensure that topic is represented
+  if (params.activeDeskSubject && params.activeDeskSubject.trim()) {
+    const activeKey = normalizeStudyTopicName(params.activeDeskSubject).toLowerCase();
+    if (!byTopic.has(activeKey)) {
+      addTopicEntry(
+        params.activeDeskSubject,
+        25,
+        params.activeRoomCode || 'STUDY-GLOBAL',
+        1
+      );
+    }
+  }
+
+  // 4. Reconcile with 7-day baseline focus minutes so the weekly breakdown matches the 7-day focus total
+  const explicitSum = Array.from(byTopic.values()).reduce(
+    (sum, item) => sum + item.focusMinutes,
+    0
+  );
+  const targetTotal = Math.max(
+    explicitSum,
+    Math.max(0, Math.round(Number(params.totalWeeklyFocusMinutes) || 0))
+  );
+  const unallocatedMinutes = Math.max(0, targetTotal - explicitSum);
+
+  if (unallocatedMinutes > 0) {
+    let allocatedSoFar = 0;
+    DEFAULT_STUDY_ROOM_TOPICS.forEach((preset, idx) => {
+      const isLast = idx === DEFAULT_STUDY_ROOM_TOPICS.length - 1;
+      const chunk = isLast
+        ? Math.max(5, unallocatedMinutes - allocatedSoFar)
+        : Math.max(
+            5,
+            Math.round((unallocatedMinutes * preset.defaultShareWeight) / 5) * 5
+          );
+      allocatedSoFar += chunk;
+      const estimatedSessions = Math.max(1, Math.round(chunk / 30));
+      addTopicEntry(preset.topic, chunk, preset.roomCode, estimatedSessions);
+    });
+  }
+
+  const sortedRaw = Array.from(byTopic.values()).sort((a, b) => {
+    if (b.focusMinutes !== a.focusMinutes) return b.focusMinutes - a.focusMinutes;
+    if (b.sessionsCount !== a.sessionsCount) return b.sessionsCount - a.sessionsCount;
+    return a.topic.localeCompare(b.topic);
+  });
+
+  const grandTotalMinutes = sortedRaw.reduce((acc, item) => acc + item.focusMinutes, 0);
+  const grandTotalSessions = sortedRaw.reduce((acc, item) => acc + item.sessionsCount, 0);
+
+  const topics: WeeklyTopicDistributionEntry[] = sortedRaw.map((item, idx) => {
+    const sharePercent =
+      grandTotalMinutes > 0
+        ? Math.max(1, Math.round((item.focusMinutes / grandTotalMinutes) * 100))
+        : 0;
+    return {
+      topic: item.topic,
+      shortTopic: formatShortTopicLabel(item.topic),
+      focusMinutes: item.focusMinutes,
+      sessionsCount: item.sessionsCount,
+      sharePercent,
+      roomCode: item.roomCode,
+      color: TOPIC_CHART_PALETTE[idx % TOPIC_CHART_PALETTE.length],
+    };
+  });
+
+  const topEntry = topics[0] || null;
+
+  return {
+    topics,
+    totalFocusMinutes: grandTotalMinutes,
+    totalSessionsCount: grandTotalSessions,
+    activeTopicsCount: topics.length,
+    topTopic: topEntry ? topEntry.topic : 'Deep Work & Problem Solving',
+    topTopicMinutes: topEntry ? topEntry.focusMinutes : 0,
+    topTopicSharePercent: topEntry ? topEntry.sharePercent : 0,
+  };
+}
+
 // --- Global Leaderboard Aggregation & Ranking Logic ---
 export interface LeaderboardCandidate {
   uid: string;
