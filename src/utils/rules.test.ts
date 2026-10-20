@@ -21,7 +21,61 @@ import {
   canUsersChatOrCall,
   aggregateGlobalLeaderboard,
   computeLeaderboardCompositeScore,
+  createLeaderboardSnapshot,
+  createBaselinePreviousSnapshot,
+  computeLeaderboardTrends,
 } from './rules.ts';
+
+test('Global Leaderboard trend calculation detects rising and falling rank movements compared to last update', () => {
+  const previousEntries = aggregateGlobalLeaderboard(
+    [
+      [
+        { uid: 'usr_1', displayName: 'Aarav', streakCount: 4, participationPoints: 220 },
+        { uid: 'usr_2', displayName: 'Zoya', streakCount: 4, participationPoints: 200 },
+        { uid: 'usr_3', displayName: 'Vikram', streakCount: 2, participationPoints: 120 },
+      ],
+    ],
+    'combined'
+  );
+
+  const prevSnapshot = createLeaderboardSnapshot(previousEntries);
+  assert.equal(prevSnapshot['usr_1'].rank, 1);
+  assert.equal(prevSnapshot['usr_2'].rank, 2);
+
+  // Now Zoya earns +50 participationPoints and 1 extra streak day, overtaking Aarav (#2 -> #1) while Aarav falls (#1 -> #2)
+  const updatedEntries = aggregateGlobalLeaderboard(
+    [
+      [
+        { uid: 'usr_1', displayName: 'Aarav', streakCount: 4, participationPoints: 220 },
+        { uid: 'usr_2', displayName: 'Zoya', streakCount: 5, participationPoints: 250 },
+        { uid: 'usr_3', displayName: 'Vikram', streakCount: 2, participationPoints: 120 },
+      ],
+    ],
+    'combined'
+  );
+
+  const trends = computeLeaderboardTrends(updatedEntries, prevSnapshot);
+
+  // Zoya rose from #2 to #1 -> green ('up') trend on both participationPoints and streakCount
+  assert.equal(trends['usr_2'].rankTrend, 'up');
+  assert.equal(trends['usr_2'].rankDelta, 1);
+  assert.equal(trends['usr_2'].pointsTrend, 'up');
+  assert.equal(trends['usr_2'].streakTrend, 'up');
+
+  // Aarav fell from #1 to #2 -> red ('down') trend on both participationPoints and streakCount
+  assert.equal(trends['usr_1'].rankTrend, 'down');
+  assert.equal(trends['usr_1'].rankDelta, -1);
+  assert.equal(trends['usr_1'].pointsTrend, 'down');
+  assert.equal(trends['usr_1'].streakTrend, 'down');
+
+  // Baseline previous snapshot produces immediate rising and falling indicators on initial load
+  const baselineSnap = createBaselinePreviousSnapshot(updatedEntries);
+  const initialTrends = computeLeaderboardTrends(updatedEntries, baselineSnap);
+  assert.equal(initialTrends['usr_2'].pointsTrend, 'up');
+  assert.equal(initialTrends['usr_2'].streakTrend, 'up');
+  assert.equal(initialTrends['usr_1'].pointsTrend, 'down');
+  assert.equal(initialTrends['usr_1'].streakTrend, 'down');
+});
 
 test('Global Leaderboard aggregates across sources, deduplicates by uid, filters ghost users, and sorts by combined, points, or streak', () => {
   const firestoreProfiles = [

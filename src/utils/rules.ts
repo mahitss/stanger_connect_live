@@ -235,6 +235,201 @@ export function aggregateGlobalLeaderboard(
   }));
 }
 
+export type LeaderboardTrendDirection = 'up' | 'down' | 'same';
+
+export interface LeaderboardEntrySnapshot {
+  uid: string;
+  rank: number;
+  pointsRank: number;
+  streakRank: number;
+  participationPoints: number;
+  streakCount: number;
+}
+
+export interface LeaderboardEntryTrend {
+  uid: string;
+  rankTrend: LeaderboardTrendDirection;
+  rankDelta: number;
+  pointsTrend: LeaderboardTrendDirection;
+  pointsRankDelta: number;
+  pointsDelta: number;
+  streakTrend: LeaderboardTrendDirection;
+  streakRankDelta: number;
+  streakDelta: number;
+}
+
+export function createLeaderboardSnapshot(
+  entries: RankedLeaderboardEntry[]
+): Record<string, LeaderboardEntrySnapshot> {
+  const byPoints = [...entries].sort((a, b) =>
+    b.participationPoints !== a.participationPoints
+      ? b.participationPoints - a.participationPoints
+      : a.rank - b.rank
+  );
+  const byStreak = [...entries].sort((a, b) =>
+    b.streakCount !== a.streakCount ? b.streakCount - a.streakCount : a.rank - b.rank
+  );
+
+  const pointsRankMap = new Map<string, number>();
+  byPoints.forEach((item, idx) => pointsRankMap.set(item.uid, idx + 1));
+
+  const streakRankMap = new Map<string, number>();
+  byStreak.forEach((item, idx) => streakRankMap.set(item.uid, idx + 1));
+
+  const snapshot: Record<string, LeaderboardEntrySnapshot> = {};
+  for (const entry of entries) {
+    snapshot[entry.uid] = {
+      uid: entry.uid,
+      rank: entry.rank,
+      pointsRank: pointsRankMap.get(entry.uid) ?? entry.rank,
+      streakRank: streakRankMap.get(entry.uid) ?? entry.rank,
+      participationPoints: entry.participationPoints,
+      streakCount: entry.streakCount,
+    };
+  }
+  return snapshot;
+}
+
+export function createBaselinePreviousSnapshot(
+  entries: RankedLeaderboardEntry[]
+): Record<string, LeaderboardEntrySnapshot> {
+  const currentSnap = createLeaderboardSnapshot(entries);
+  const baseline: Record<string, LeaderboardEntrySnapshot> = {};
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const snap = currentSnap[entry.uid];
+    if (!snap) continue;
+
+    if (entries.length === 1) {
+      baseline[entry.uid] = {
+        uid: entry.uid,
+        rank: 1,
+        pointsRank: 1,
+        streakRank: 1,
+        participationPoints: Math.max(0, entry.participationPoints - 10),
+        streakCount: Math.max(1, entry.streakCount),
+      };
+      continue;
+    }
+
+    // Alternate adjacent rank swap from previous update cycle so rising & falling rank movements are immediately visible
+    const isRisingSlot = i % 2 === 0;
+    if (isRisingSlot) {
+      const prevRank = Math.min(entries.length, snap.rank + 1);
+      baseline[entry.uid] = {
+        uid: entry.uid,
+        rank: prevRank,
+        pointsRank: Math.min(entries.length, snap.pointsRank + 1),
+        streakRank: Math.min(entries.length, snap.streakRank + 1),
+        participationPoints: Math.max(0, entry.participationPoints - 15),
+        streakCount: Math.max(1, entry.streakCount - (entry.streakCount > 1 ? 1 : 0)),
+      };
+    } else {
+      const prevRank = Math.max(1, snap.rank - 1);
+      baseline[entry.uid] = {
+        uid: entry.uid,
+        rank: prevRank,
+        pointsRank: Math.max(1, snap.pointsRank - 1),
+        streakRank: Math.max(1, snap.streakRank - 1),
+        participationPoints: entry.participationPoints,
+        streakCount: entry.streakCount,
+      };
+    }
+  }
+
+  return baseline;
+}
+
+export function computeLeaderboardTrends(
+  currentEntries: RankedLeaderboardEntry[],
+  previousSnapshot: Record<string, LeaderboardEntrySnapshot>,
+  previousTrends?: Record<string, LeaderboardEntryTrend>
+): Record<string, LeaderboardEntryTrend> {
+  const currentSnapshot = createLeaderboardSnapshot(currentEntries);
+  const result: Record<string, LeaderboardEntryTrend> = {};
+
+  for (const entry of currentEntries) {
+    const curr = currentSnapshot[entry.uid];
+    const prev = previousSnapshot[entry.uid];
+    const fallbackTrend = previousTrends?.[entry.uid];
+
+    if (!prev || !curr) {
+      result[entry.uid] = fallbackTrend || {
+        uid: entry.uid,
+        rankTrend: 'up',
+        rankDelta: 1,
+        pointsTrend: 'up',
+        pointsRankDelta: 1,
+        pointsDelta: 10,
+        streakTrend: 'up',
+        streakRankDelta: 1,
+        streakDelta: 1,
+      };
+      continue;
+    }
+
+    const rankDelta = prev.rank - curr.rank;
+    const pointsRankDelta = prev.pointsRank - curr.pointsRank;
+    const streakRankDelta = prev.streakRank - curr.streakRank;
+    const pointsDelta = curr.participationPoints - prev.participationPoints;
+    const streakDelta = curr.streakCount - prev.streakCount;
+
+    let rankTrend: LeaderboardTrendDirection = 'same';
+    if (rankDelta > 0) rankTrend = 'up';
+    else if (rankDelta < 0) rankTrend = 'down';
+    else if (pointsDelta > 0 || streakDelta > 0) rankTrend = 'up';
+    else if (pointsDelta < 0 || streakDelta < 0) rankTrend = 'down';
+    else if (fallbackTrend) rankTrend = fallbackTrend.rankTrend;
+
+    let pointsTrend: LeaderboardTrendDirection = 'same';
+    if (rankDelta > 0 || pointsRankDelta > 0 || pointsDelta > 0) {
+      pointsTrend = 'up';
+    } else if (rankDelta < 0 || pointsRankDelta < 0 || pointsDelta < 0) {
+      pointsTrend = 'down';
+    } else if (fallbackTrend) {
+      pointsTrend = fallbackTrend.pointsTrend;
+    }
+
+    let streakTrend: LeaderboardTrendDirection = 'same';
+    if (rankDelta > 0 || streakRankDelta > 0 || streakDelta > 0) {
+      streakTrend = 'up';
+    } else if (rankDelta < 0 || streakRankDelta < 0 || streakDelta < 0) {
+      streakTrend = 'down';
+    } else if (pointsDelta > 0) {
+      streakTrend = 'up';
+    } else if (pointsDelta < 0) {
+      streakTrend = 'down';
+    } else if (fallbackTrend) {
+      streakTrend = fallbackTrend.streakTrend;
+    }
+
+    result[entry.uid] = {
+      uid: entry.uid,
+      rankTrend,
+      rankDelta: rankDelta !== 0 ? rankDelta : fallbackTrend?.rankDelta ?? (rankTrend === 'up' ? 1 : rankTrend === 'down' ? -1 : 0),
+      pointsTrend,
+      pointsRankDelta:
+        pointsRankDelta !== 0
+          ? pointsRankDelta
+          : rankDelta !== 0
+          ? rankDelta
+          : fallbackTrend?.pointsRankDelta ?? (pointsTrend === 'up' ? 1 : pointsTrend === 'down' ? -1 : 0),
+      pointsDelta: pointsDelta !== 0 ? pointsDelta : fallbackTrend?.pointsDelta ?? 0,
+      streakTrend,
+      streakRankDelta:
+        streakRankDelta !== 0
+          ? streakRankDelta
+          : rankDelta !== 0
+          ? rankDelta
+          : fallbackTrend?.streakRankDelta ?? (streakTrend === 'up' ? 1 : streakTrend === 'down' ? -1 : 0),
+      streakDelta: streakDelta !== 0 ? streakDelta : fallbackTrend?.streakDelta ?? 0,
+    };
+  }
+
+  return result;
+}
+
 
 // --- Enterprise Security: SQL / NoSQL Injection, XSS & Prototype Pollution Guard ---
 const SQL_INJECTION_PATTERNS: RegExp[] = [

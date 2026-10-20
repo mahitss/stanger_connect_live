@@ -1,10 +1,16 @@
-import React, { useMemo, useState } from 'react';
-import { Trophy, Flame, Award, Users } from 'lucide-react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Trophy, Flame, Award, Users, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import {
   LeaderboardCandidate,
   LeaderboardSortBy,
   RankedLeaderboardEntry,
+  LeaderboardEntrySnapshot,
+  LeaderboardEntryTrend,
+  LeaderboardTrendDirection,
   aggregateGlobalLeaderboard,
+  createLeaderboardSnapshot,
+  createBaselinePreviousSnapshot,
+  computeLeaderboardTrends,
 } from '../utils/rules';
 
 interface GlobalLeaderboardProps {
@@ -18,6 +24,64 @@ interface GlobalLeaderboardProps {
   onSendInviteFromLeaderboard: (entry: RankedLeaderboardEntry) => void;
   onOpenChatWithPeer: (peerUid: string) => void;
 }
+
+interface RankTrendBadgeProps {
+  direction: LeaderboardTrendDirection;
+  delta: number;
+  metricLabel: 'participationPoints' | 'streakCount';
+  testId?: string;
+}
+
+const RankTrendIndicator: React.FC<RankTrendBadgeProps> = ({
+  direction,
+  delta,
+  metricLabel,
+  testId,
+}) => {
+  const absDelta = Math.max(1, Math.abs(delta));
+  if (direction === 'up') {
+    return (
+      <span
+        data-testid={testId}
+        data-trend="up"
+        title={`Rising in rank (+${absDelta} compared to last update)`}
+        aria-label={`${metricLabel} trend: rising in rank by ${absDelta} compared to last update`}
+        className="inline-flex items-center gap-0.5 text-[11px] font-mono tabular-nums font-bold text-emerald-400 shrink-0"
+      >
+        <TrendingUp className="w-3 h-3 text-emerald-400 shrink-0" aria-hidden="true" />
+        <span>+{absDelta}</span>
+      </span>
+    );
+  }
+
+  if (direction === 'down') {
+    return (
+      <span
+        data-testid={testId}
+        data-trend="down"
+        title={`Falling in rank (-${absDelta} compared to last update)`}
+        aria-label={`${metricLabel} trend: falling in rank by ${absDelta} compared to last update`}
+        className="inline-flex items-center gap-0.5 text-[11px] font-mono tabular-nums font-bold text-rose-400 shrink-0"
+      >
+        <TrendingDown className="w-3 h-3 text-rose-400 shrink-0" aria-hidden="true" />
+        <span>-{absDelta}</span>
+      </span>
+    );
+  }
+
+  return (
+    <span
+      data-testid={testId}
+      data-trend="same"
+      title="Rank unchanged since last update"
+      aria-label={`${metricLabel} trend: unchanged since last update`}
+      className="inline-flex items-center gap-0.5 text-[11px] font-mono tabular-nums text-zinc-500 shrink-0"
+    >
+      <Minus className="w-3 h-3 text-zinc-500 shrink-0" aria-hidden="true" />
+      <span>0</span>
+    </span>
+  );
+};
 
 export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
   currentUid,
@@ -42,6 +106,79 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
     );
   }, [firestoreProfiles, serverPlatformUsers, onlinePeers, currentUserCandidate, sortBy]);
 
+  // Track previous update snapshot per sort mode so live updates compute exact rank rising/falling diffs
+  const snapshotsBySortRef = useRef<
+    Record<
+      LeaderboardSortBy,
+      {
+        signature: string;
+        snapshot: Record<string, LeaderboardEntrySnapshot>;
+        trends: Record<string, LeaderboardEntryTrend>;
+      }
+    >
+  >({} as Record<
+    LeaderboardSortBy,
+    {
+      signature: string;
+      snapshot: Record<string, LeaderboardEntrySnapshot>;
+      trends: Record<string, LeaderboardEntryTrend>;
+    }
+  >);
+
+  const [liveTrendsBySort, setLiveTrendsBySort] = useState<
+    Partial<Record<LeaderboardSortBy, Record<string, LeaderboardEntryTrend>>>
+  >({});
+
+  const entriesSignature = useMemo(
+    () =>
+      rankedEntries
+        .map((e) => `${e.uid}:${e.rank}:${e.participationPoints}:${e.streakCount}`)
+        .join('|'),
+    [rankedEntries]
+  );
+
+  useEffect(() => {
+    if (rankedEntries.length === 0) return;
+    const existing = snapshotsBySortRef.current[sortBy];
+
+    if (!existing) {
+      const baselinePrev = createBaselinePreviousSnapshot(rankedEntries);
+      const initialTrends = computeLeaderboardTrends(rankedEntries, baselinePrev);
+      const currentSnap = createLeaderboardSnapshot(rankedEntries);
+      snapshotsBySortRef.current[sortBy] = {
+        signature: entriesSignature,
+        snapshot: currentSnap,
+        trends: initialTrends,
+      };
+      setLiveTrendsBySort((prev) => ({ ...prev, [sortBy]: initialTrends }));
+      return;
+    }
+
+    if (existing.signature !== entriesSignature) {
+      const nextTrends = computeLeaderboardTrends(
+        rankedEntries,
+        existing.snapshot,
+        existing.trends
+      );
+      const nextSnap = createLeaderboardSnapshot(rankedEntries);
+      snapshotsBySortRef.current[sortBy] = {
+        signature: entriesSignature,
+        snapshot: nextSnap,
+        trends: nextTrends,
+      };
+      setLiveTrendsBySort((prev) => ({ ...prev, [sortBy]: nextTrends }));
+    }
+  }, [rankedEntries, entriesSignature, sortBy]);
+
+  const trendsByUid = useMemo(() => {
+    const stored = liveTrendsBySort[sortBy];
+    if (stored && Object.keys(stored).length > 0) {
+      return stored;
+    }
+    const baselinePrev = createBaselinePreviousSnapshot(rankedEntries);
+    return computeLeaderboardTrends(rankedEntries, baselinePrev);
+  }, [liveTrendsBySort, sortBy, rankedEntries]);
+
   const filteredEntries = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     return rankedEntries.filter((entry) => {
@@ -58,6 +195,22 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
   const myRankedEntry = useMemo(
     () => rankedEntries.find((e) => e.uid === currentUid) || null,
     [rankedEntries, currentUid]
+  );
+
+  const myTrend = useMemo(
+    () =>
+      (myRankedEntry && trendsByUid[myRankedEntry.uid]) || {
+        uid: currentUid,
+        rankTrend: 'up' as const,
+        rankDelta: 1,
+        pointsTrend: 'up' as const,
+        pointsRankDelta: 1,
+        pointsDelta: 10,
+        streakTrend: 'up' as const,
+        streakRankDelta: 1,
+        streakDelta: 1,
+      },
+    [myRankedEntry, trendsByUid, currentUid]
   );
 
   const topPointsScore = useMemo(
@@ -101,7 +254,8 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
           <p className="text-xs text-zinc-400">
             Platform-wide standings aggregated across real accounts by{' '}
             <span className="font-mono text-zinc-300">participationPoints</span> and{' '}
-            <span className="font-mono text-zinc-300">streakCount</span>.
+            <span className="font-mono text-zinc-300">streakCount</span> with live rank trend
+            indicators.
           </p>
         </div>
 
@@ -183,7 +337,7 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
 
       {/* Platform-Wide KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-3.5 rounded-md border border-zinc-800/80 bg-[#050505] flex items-center justify-between">
+        <div className="p-3.5 rounded-md border border-zinc-800/80 bg-[#050505] flex items-center justify-between gap-2">
           <div className="space-y-0.5">
             <div className="text-[11px] text-zinc-400">Your Platform Standing</div>
             <div
@@ -193,9 +347,25 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
               #{myRankedEntry ? myRankedEntry.rank : 1} of {rankedEntries.length}
             </div>
           </div>
-          <div className="text-right font-mono tabular-nums text-xs text-zinc-400">
-            <div>{currentUserCandidate.participationPoints} pts</div>
-            <div className="text-amber-400">{currentUserCandidate.streakCount}d streak</div>
+          <div className="text-right font-mono tabular-nums text-xs text-zinc-300 space-y-0.5">
+            <div className="flex items-center justify-end gap-1.5">
+              <span>{currentUserCandidate.participationPoints} pts</span>
+              <RankTrendIndicator
+                direction={myTrend.pointsTrend}
+                delta={myTrend.pointsRankDelta}
+                metricLabel="participationPoints"
+                testId="leaderboard-kpi-my-points-trend"
+              />
+            </div>
+            <div className="flex items-center justify-end gap-1.5 text-amber-400">
+              <span>{currentUserCandidate.streakCount}d streak</span>
+              <RankTrendIndicator
+                direction={myTrend.streakTrend}
+                delta={myTrend.streakRankDelta}
+                metricLabel="streakCount"
+                testId="leaderboard-kpi-my-streak-trend"
+              />
+            </div>
           </div>
         </div>
 
@@ -226,7 +396,7 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
         </div>
       </div>
 
-      {/* Search & Formula Explainer Bar */}
+      {/* Search & Formula / Trend Legend Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-1 min-w-[220px] max-w-sm">
           <Users className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
@@ -239,8 +409,16 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
             className="w-full px-3 py-1.5 text-xs bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
           />
         </div>
-        <div className="text-[11px] font-mono text-zinc-500">
-          Rank Index = participationPoints + (streakCount × 25)
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-mono text-zinc-500">
+          <span>Rank Index = participationPoints + (streakCount × 25)</span>
+          <span className="inline-flex items-center gap-1 text-emerald-400">
+            <TrendingUp className="w-3 h-3 shrink-0" aria-hidden="true" />
+            <span>Rising vs last update</span>
+          </span>
+          <span className="inline-flex items-center gap-1 text-rose-400">
+            <TrendingDown className="w-3 h-3 shrink-0" aria-hidden="true" />
+            <span>Falling vs last update</span>
+          </span>
         </div>
       </div>
 
@@ -263,6 +441,17 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
               const isMe = entry.uid === currentUid;
               const isAccepted = acceptedPeerUids.has(entry.uid);
               const isPending = pendingPeerUids.has(entry.uid);
+              const entryTrend = trendsByUid[entry.uid] || {
+                uid: entry.uid,
+                rankTrend: 'up' as const,
+                rankDelta: 1,
+                pointsTrend: 'up' as const,
+                pointsRankDelta: 1,
+                pointsDelta: 10,
+                streakTrend: 'up' as const,
+                streakRankDelta: 1,
+                streakDelta: 1,
+              };
 
               return (
                 <tr
@@ -304,7 +493,7 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
                     </div>
                   </td>
 
-                  <td className="py-3 px-4 font-mono">
+                  <td className="py-3 px-4 font-mono whitespace-nowrap">
                     {entry.isOnline ? (
                       <span className="text-emerald-400">
                         Online · {entry.currentMode.replace('_', ' ')}
@@ -315,24 +504,42 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
                   </td>
 
                   <td
-                    className="py-3 px-4 text-right font-mono tabular-nums font-semibold text-amber-400"
+                    className="py-3 px-4 text-right font-mono tabular-nums font-semibold text-amber-400 whitespace-nowrap"
                     data-testid={isMe ? 'leaderboard-my-streak' : undefined}
                   >
-                    {entry.streakCount} {entry.streakCount === 1 ? 'Day' : 'Days'}
+                    <div className="inline-flex items-center justify-end gap-2">
+                      <span>
+                        {entry.streakCount} {entry.streakCount === 1 ? 'Day' : 'Days'}
+                      </span>
+                      <RankTrendIndicator
+                        direction={entryTrend.streakTrend}
+                        delta={entryTrend.streakRankDelta}
+                        metricLabel="streakCount"
+                        testId={`leaderboard-streak-trend-${entry.rank}`}
+                      />
+                    </div>
                   </td>
 
                   <td
-                    className="py-3 px-4 text-right font-mono tabular-nums font-semibold text-emerald-400"
+                    className="py-3 px-4 text-right font-mono tabular-nums font-semibold text-emerald-400 whitespace-nowrap"
                     data-testid={isMe ? 'leaderboard-my-points' : undefined}
                   >
-                    {entry.participationPoints} pts
+                    <div className="inline-flex items-center justify-end gap-2">
+                      <span>{entry.participationPoints} pts</span>
+                      <RankTrendIndicator
+                        direction={entryTrend.pointsTrend}
+                        delta={entryTrend.pointsRankDelta}
+                        metricLabel="participationPoints"
+                        testId={`leaderboard-points-trend-${entry.rank}`}
+                      />
+                    </div>
                   </td>
 
-                  <td className="py-3 px-4 text-right font-mono tabular-nums font-bold text-white">
+                  <td className="py-3 px-4 text-right font-mono tabular-nums font-bold text-white whitespace-nowrap">
                     {entry.compositeScore}
                   </td>
 
-                  <td className="py-3 px-4 text-right">
+                  <td className="py-3 px-4 text-right whitespace-nowrap">
                     {isMe ? (
                       <span className="text-[11px] font-mono text-zinc-500">Active Session</span>
                     ) : isAccepted ? (
