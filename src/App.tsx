@@ -70,6 +70,7 @@ import {
   TopicFocusSessionRecord,
   buildWeeklyProductivityDistribution,
   normalizeStudyTopicName,
+  APP_LOGO_URL,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -1663,9 +1664,17 @@ export default function App() {
     return (
       <div className="min-h-screen bg-[#050505] text-zinc-100 flex flex-col justify-between p-6 md:p-12">
         <div className="max-w-6xl w-full mx-auto flex items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
-          <span className="text-xl font-bold tracking-tight text-white font-display whitespace-nowrap shrink-0">
-            Mr. Stranger
-          </span>
+          <div className="flex items-center gap-3 shrink-0">
+            <img
+              src={APP_LOGO_URL}
+              alt="Mr. Stranger Website Logo"
+              data-testid="website-header-logo"
+              className="w-10 h-10 rounded-xl object-cover border border-zinc-700/80 shadow-md shrink-0"
+            />
+            <span className="text-xl font-bold tracking-tight text-white font-display whitespace-nowrap shrink-0">
+              Mr. Stranger
+            </span>
+          </div>
           <span className="text-xs text-zinc-400 font-mono truncate">
             Enterprise Privacy · Real-Time Presence, Study Rooms & Multiplayer Arcade
           </span>
@@ -1673,6 +1682,23 @@ export default function App() {
 
         <main className="max-w-6xl w-full mx-auto my-auto py-10 grid grid-cols-1 lg:grid-cols-12 gap-12 items-stretch">
           <div className="lg:col-span-7 flex flex-col justify-center space-y-6">
+            <div className="inline-flex items-center gap-3.5 p-2.5 pr-4 rounded-xl bg-[#0A0A0C] border border-zinc-800/80 w-fit">
+              <img
+                src={APP_LOGO_URL}
+                alt="Mr. Stranger Official Emblem"
+                data-testid="website-hero-logo"
+                className="w-14 h-14 rounded-xl object-cover border border-zinc-700/80 shrink-0"
+              />
+              <div className="space-y-0.5">
+                <div className="text-xs font-bold text-white tracking-wide">
+                  Mr. Stranger · Official App & Website
+                </div>
+                <div className="text-[11px] font-mono text-emerald-400">
+                  Verified Social Presence · Study Sanctuary · Arcade
+                </div>
+              </div>
+            </div>
+
             <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
               Real people online. Private rooms, live calls, study sessions & multiplayer games.
             </h1>
@@ -1845,8 +1871,15 @@ export default function App() {
           </div>
         </main>
 
-        <footer className="max-w-6xl w-full mx-auto border-t border-zinc-900 pt-4 flex items-center justify-between text-xs text-zinc-500">
-          <span>Mr. Stranger · Enterprise Real-Time Social Workspace</span>
+        <footer className="max-w-6xl w-full mx-auto border-t border-zinc-900 pt-4 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-500">
+          <span className="inline-flex items-center gap-2">
+            <img
+              src={APP_LOGO_URL}
+              alt="Mr. Stranger"
+              className="w-5 h-5 rounded-md object-cover border border-zinc-800 shrink-0"
+            />
+            <span>Mr. Stranger · Enterprise Real-Time Social Workspace</span>
+          </span>
           <span>Available for everyone · Zero Fake Data</span>
         </footer>
       </div>
@@ -1958,9 +1991,16 @@ export default function App() {
             <button
               type="button"
               onClick={() => setActivePage('hub')}
-              className="text-lg font-bold tracking-tight text-white font-display whitespace-nowrap shrink-0"
+              data-testid="app-sidebar-brand-btn"
+              className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-white font-display whitespace-nowrap shrink-0"
             >
-              Mr. Stranger
+              <img
+                src={APP_LOGO_URL}
+                alt="Mr. Stranger App Logo"
+                data-testid="app-sidebar-logo"
+                className="w-8 h-8 rounded-lg object-cover border border-zinc-700/80 shadow-sm shrink-0"
+              />
+              <span>Mr. Stranger</span>
             </button>
             <div
               className="flex items-center gap-1 text-xs font-mono font-semibold text-amber-400 tabular-nums"
@@ -2166,6 +2206,12 @@ export default function App() {
         {/* Top Workspace Header (Follows SaaS Top Bar Contract: Breadcrumb left, Streak & Primary Action right) */}
         <header className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-zinc-800/80 bg-[#050505]">
           <div className="flex items-center gap-2 text-xs text-zinc-400 truncate">
+            <img
+              src={APP_LOGO_URL}
+              alt="Mr. Stranger"
+              data-testid="workspace-topbar-logo"
+              className="w-5 h-5 rounded object-cover border border-zinc-800 shrink-0"
+            />
             <span className="font-semibold text-zinc-300">Workspace</span>
             <span aria-hidden="true">/</span>
             <span className="text-white font-semibold capitalize">
@@ -2177,7 +2223,7 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 shrink-0 text-xs font-mono tabular-nums">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-mono tabular-nums">
             <button
               type="button"
               onClick={handleToggleUiSoundEffects}
@@ -2202,12 +2248,10 @@ export default function App() {
               )}
               <span>{uiSoundPrefs.enabled ? 'Sound Alerts: On' : 'Sound Alerts: Muted'}</span>
             </button>
-            <span aria-hidden="true" className="text-zinc-700">·</span>
-            <span className="text-zinc-300">
+            <span className="text-zinc-300 whitespace-nowrap">
               Streak: <strong className="text-amber-400">{currentIdentity.streakCount} Days</strong>
             </span>
-            <span aria-hidden="true" className="text-zinc-700">·</span>
-            <span className="text-zinc-300">
+            <span className="text-zinc-300 whitespace-nowrap">
               Score: <strong className="text-emerald-400">{currentIdentity.participationPoints} pts</strong>
             </span>
             <button

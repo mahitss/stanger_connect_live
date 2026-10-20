@@ -11,6 +11,9 @@
  * 9. Privacy visibility filtering & password strength validation
  */
 
+export const APP_LOGO_URL = '/assets/aistudio/image_18838782.png';
+export const APP_BRAND_NAME = 'Mr. Stranger';
+
 export type AmbientPresetId =
   | 'off'
   | 'rainfall'

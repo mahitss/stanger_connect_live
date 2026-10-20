@@ -39,7 +39,14 @@ import {
   groupMomentCommentsByMomentId,
   normalizeStudyTopicName,
   buildWeeklyProductivityDistribution,
+  APP_LOGO_URL,
+  APP_BRAND_NAME,
 } from './rules.ts';
+
+test('App and website logo asset constant points to uploaded Mr. Stranger logo', () => {
+  assert.equal(APP_LOGO_URL, '/assets/aistudio/image_18838782.png');
+  assert.equal(APP_BRAND_NAME, 'Mr. Stranger');
+});
 
 test('Weekly Productivity Distribution aggregates focus sessions by Study Room topic, reconciles weekly focus total, and updates live when new sessions are logged', () => {
   assert.equal(normalizeStudyTopicName('   '), 'Deep Work & Problem Solving');
