@@ -41,7 +41,71 @@ import {
   buildWeeklyProductivityDistribution,
   APP_LOGO_URL,
   APP_BRAND_NAME,
+  ONLINE_MOOD_PRESETS,
+  normalizeAndValidatePeerMood,
+  getOnlinePeerMoodMeta,
+  summarizeOnlineDirectoryMoods,
+  filterOnlinePeersByDirectoryCriteria,
 } from './rules.ts';
+
+test('Online Directory Mood indicator validates presets, custom moods, security guards, summaries, and filters', () => {
+  // 1. Presets include Deep Work, Brainstorming, Quick Questions
+  const presetLabels = ONLINE_MOOD_PRESETS.map((p) => p.label);
+  assert.ok(presetLabels.includes('Deep Work'));
+  assert.ok(presetLabels.includes('Brainstorming'));
+  assert.ok(presetLabels.includes('Quick Questions'));
+
+  // 2. Canonicalizes preset case & validates custom mood
+  const deepWorkCheck = normalizeAndValidatePeerMood('  deep work  ');
+  assert.equal(deepWorkCheck.valid, true);
+  assert.equal(deepWorkCheck.mood, 'Deep Work');
+
+  const customCheck = normalizeAndValidatePeerMood('Reviewing PRs');
+  assert.equal(customCheck.valid, true);
+  assert.equal(customCheck.mood, 'Reviewing PRs');
+
+  const emptyCheck = normalizeAndValidatePeerMood('   ');
+  assert.equal(emptyCheck.valid, true);
+  assert.equal(emptyCheck.mood, null);
+
+  // 3. Blocks overly long or malicious mood inputs
+  assert.equal(normalizeAndValidatePeerMood('x'.repeat(37)).valid, false);
+  assert.equal(normalizeAndValidatePeerMood('<script>alert(1)</script>').valid, false);
+
+  // 4. Mood metadata lookup & directory summary
+  const metaBrainstorm = getOnlinePeerMoodMeta('Brainstorming');
+  assert.equal(metaBrainstorm.hasMood, true);
+  assert.equal(metaBrainstorm.label, 'Brainstorming');
+  assert.equal(metaBrainstorm.tone, 'amber');
+  assert.equal(metaBrainstorm.isPreset, true);
+
+  const peers = [
+    { uid: 'usr_1', currentMode: 'study', mood: 'Deep Work' },
+    { uid: 'usr_2', currentMode: 'hub', mood: 'Brainstorming' },
+    { uid: 'usr_3', currentMode: 'hub', mood: 'Quick Questions' },
+    { uid: 'usr_4', currentMode: 'hub', mood: null },
+  ];
+
+  const summary = summarizeOnlineDirectoryMoods(peers);
+  assert.equal(summary.activeMoodCount, 3);
+  assert.equal(summary.countsByMood['Deep Work'], 1);
+  assert.equal(summary.countsByMood['Brainstorming'], 1);
+  assert.equal(summary.countsByMood['Quick Questions'], 1);
+
+  // 5. Filtering by mood and focus criteria
+  const brainstormPeers = filterOnlinePeersByDirectoryCriteria(peers, [], {
+    moodFilter: 'Brainstorming',
+  });
+  assert.equal(brainstormPeers.length, 1);
+  assert.equal(brainstormPeers[0].uid, 'usr_2');
+
+  const focusAndDeepWork = filterOnlinePeersByDirectoryCriteria(peers, [], {
+    onlyInFocus: true,
+    moodFilter: 'Deep Work',
+  });
+  assert.equal(focusAndDeepWork.length, 1);
+  assert.equal(focusAndDeepWork[0].uid, 'usr_1');
+});
 
 test('App and website logo asset constant points to uploaded Mr. Stranger logo', () => {
   assert.equal(APP_LOGO_URL, '/assets/aistudio/image_18838782.png');

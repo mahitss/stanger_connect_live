@@ -329,6 +329,191 @@ export function filterOnlinePeersByFocus<T extends OnlinePeerFocusInput>(
   return peers.filter((peer) => getOnlinePeerFocusStatus(peer, studyDesks).isInFocus);
 }
 
+// --- Online Directory 'Mood' Indicator Logic (Real-Time Peer Status) ---
+export type OnlineMoodTone = 'emerald' | 'amber' | 'sky' | 'violet' | 'zinc';
+
+export interface OnlinePeerMoodOption {
+  id: string;
+  label: string;
+  description: string;
+  tone: OnlineMoodTone;
+}
+
+export const ONLINE_MOOD_PRESETS: readonly OnlinePeerMoodOption[] = [
+  {
+    id: 'deep_work',
+    label: 'Deep Work',
+    description: 'Heads-down execution — minimal interruptions',
+    tone: 'emerald',
+  },
+  {
+    id: 'brainstorming',
+    label: 'Brainstorming',
+    description: 'Open to creative ideas & architecture discussions',
+    tone: 'amber',
+  },
+  {
+    id: 'quick_questions',
+    label: 'Quick Questions',
+    description: 'Available for fast unblocking & short pings',
+    tone: 'sky',
+  },
+  {
+    id: 'pair_programming',
+    label: 'Pair Programming',
+    description: 'Looking to collaborate on code or problem solving',
+    tone: 'violet',
+  },
+  {
+    id: 'coffee_break',
+    label: 'Coffee Break',
+    description: 'Recharging — open to casual conversation',
+    tone: 'zinc',
+  },
+] as const;
+
+export const MAX_PEER_MOOD_LENGTH = 36;
+
+export function normalizeAndValidatePeerMood(rawMood: unknown): {
+  valid: boolean;
+  mood: string | null;
+  error: string;
+} {
+  if (rawMood === null || rawMood === undefined) {
+    return { valid: true, mood: null, error: '' };
+  }
+  const str = String(rawMood).trim();
+  if (!str) {
+    return { valid: true, mood: null, error: '' };
+  }
+  if (str.length > MAX_PEER_MOOD_LENGTH) {
+    return {
+      valid: false,
+      mood: null,
+      error: `Mood indicator must be ${MAX_PEER_MOOD_LENGTH} characters or fewer.`,
+    };
+  }
+  const threat = detectSecurityThreat(str);
+  if (!threat.safe) {
+    return {
+      valid: false,
+      mood: null,
+      error: threat.reason,
+    };
+  }
+  const sanitized = sanitizeSafeText(str, MAX_PEER_MOOD_LENGTH);
+  if (!sanitized) {
+    return { valid: true, mood: null, error: '' };
+  }
+
+  // Canonicalize case if it matches a built-in preset
+  const matchingPreset = ONLINE_MOOD_PRESETS.find(
+    (p) => p.label.toLowerCase() === sanitized.toLowerCase() || p.id === sanitized.toLowerCase()
+  );
+  return {
+    valid: true,
+    mood: matchingPreset ? matchingPreset.label : sanitized,
+    error: '',
+  };
+}
+
+export interface OnlinePeerMoodMeta {
+  hasMood: boolean;
+  label: string | null;
+  description: string;
+  tone: OnlineMoodTone;
+  isPreset: boolean;
+}
+
+export function getOnlinePeerMoodMeta(rawMood?: string | null): OnlinePeerMoodMeta {
+  const check = normalizeAndValidatePeerMood(rawMood);
+  if (!check.valid || !check.mood) {
+    return {
+      hasMood: false,
+      label: null,
+      description: 'No active mood set',
+      tone: 'zinc',
+      isPreset: false,
+    };
+  }
+
+  const preset = ONLINE_MOOD_PRESETS.find(
+    (p) => p.label.toLowerCase() === check.mood!.toLowerCase()
+  );
+  if (preset) {
+    return {
+      hasMood: true,
+      label: preset.label,
+      description: preset.description,
+      tone: preset.tone,
+      isPreset: true,
+    };
+  }
+
+  return {
+    hasMood: true,
+    label: check.mood,
+    description: 'Custom status mood shared with online peers',
+    tone: 'sky',
+    isPreset: false,
+  };
+}
+
+export function summarizeOnlineDirectoryMoods(
+  peers: Array<{ uid: string; mood?: string | null }>
+): {
+  activeMoodCount: number;
+  countsByMood: Record<string, number>;
+  byUid: Record<string, OnlinePeerMoodMeta>;
+} {
+  const countsByMood: Record<string, number> = {};
+  const byUid: Record<string, OnlinePeerMoodMeta> = {};
+  let activeMoodCount = 0;
+
+  for (const peer of peers) {
+    const cleanUid = String(peer?.uid || '').trim();
+    if (!cleanUid) continue;
+    const meta = getOnlinePeerMoodMeta(peer.mood);
+    byUid[cleanUid] = meta;
+    if (meta.hasMood && meta.label) {
+      activeMoodCount += 1;
+      countsByMood[meta.label] = (countsByMood[meta.label] || 0) + 1;
+    }
+  }
+
+  return {
+    activeMoodCount,
+    countsByMood,
+    byUid,
+  };
+}
+
+export function filterOnlinePeersByDirectoryCriteria<
+  T extends OnlinePeerFocusInput & { mood?: string | null }
+>(
+  peers: T[],
+  studyDesks: StudyDeskSummary[] = [],
+  options: {
+    onlyInFocus?: boolean;
+    moodFilter?: string | null;
+  } = {}
+): T[] {
+  const { onlyInFocus = false, moodFilter = null } = options;
+  const normalizedMoodFilter = moodFilter ? String(moodFilter).trim().toLowerCase() : '';
+
+  return peers.filter((peer) => {
+    if (onlyInFocus && !getOnlinePeerFocusStatus(peer, studyDesks).isInFocus) {
+      return false;
+    }
+    if (normalizedMoodFilter && normalizedMoodFilter !== 'all') {
+      const peerMood = getOnlinePeerMoodMeta(peer.mood);
+      if (!peerMood.hasMood || !peerMood.label) return false;
+      if (peerMood.label.toLowerCase() !== normalizedMoodFilter) return false;
+    }
+    return true;
+  });
+}
+
 // --- Photo Moment Comments & Connection Discussion Logic ---
 export interface MomentCommentRecord {
   id: string;

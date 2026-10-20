@@ -63,6 +63,11 @@ import {
   getOnlinePeerFocusStatus,
   summarizeOnlineDirectoryFocus,
   filterOnlinePeersByFocus,
+  ONLINE_MOOD_PRESETS,
+  normalizeAndValidatePeerMood,
+  getOnlinePeerMoodMeta,
+  summarizeOnlineDirectoryMoods,
+  filterOnlinePeersByDirectoryCriteria,
   MomentCommentRecord,
   canUserCommentOnMoment,
   validateAndSanitizeMomentComment,
@@ -317,6 +322,25 @@ export default function App() {
   });
   const [securityNotice, setSecurityNotice] = useState<string>('');
   const [showOnlyInFocusPeers, setShowOnlyInFocusPeers] = useState<boolean>(false);
+  const [directoryMoodFilter, setDirectoryMoodFilter] = useState<string>('all');
+  const [userMood, setUserMood] = useState<string | null>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_user_mood_v1');
+      if (saved !== null) {
+        const parsed = normalizeAndValidatePeerMood(saved);
+        return parsed.valid ? parsed.mood : 'Deep Work';
+      }
+    } catch {
+      // ignore
+    }
+    return 'Deep Work';
+  });
+  const userMoodRef = useRef<string | null>(userMood);
+  useEffect(() => {
+    userMoodRef.current = userMood;
+  }, [userMood]);
+  const [customMoodInput, setCustomMoodInput] = useState<string>('');
+  const [moodInputError, setMoodInputError] = useState<string>('');
 
   // Subtle UI Sound Effect Preferences (Incoming Messages & Connection Requests, with Background Boost)
   const [uiSoundPrefs, setUiSoundPrefs] = useState<UiSoundEffectPreferences>(() => {
@@ -717,6 +741,7 @@ export default function App() {
             currentMode: activePage === 'signout' ? 'hub' : activePage,
             activeStudyRoomCode,
             activeGameId: null,
+            mood: userMoodRef.current,
           },
         })
       );
@@ -1928,10 +1953,14 @@ export default function App() {
   const commentsByMomentId = groupMomentCommentsByMomentId(momentComments);
 
   const directoryFocusSummary = summarizeOnlineDirectoryFocus(onlinePeers, studyDesks);
-  const displayedOnlinePeers = filterOnlinePeersByFocus(
+  const directoryMoodSummary = summarizeOnlineDirectoryMoods(onlinePeers);
+  const displayedOnlinePeers = filterOnlinePeersByDirectoryCriteria(
     onlinePeers,
     studyDesks,
-    showOnlyInFocusPeers
+    {
+      onlyInFocus: showOnlyInFocusPeers,
+      moodFilter: directoryMoodFilter === 'all' ? null : directoryMoodFilter,
+    }
   );
   const myFocusStatus =
     directoryFocusSummary.byUid[currentIdentity.uid] ||
@@ -1943,6 +1972,7 @@ export default function App() {
       },
       studyDesks
     );
+  const myMoodMeta = getOnlinePeerMoodMeta(userMood);
 
   const weeklyTopicDistribution = buildWeeklyProductivityDistribution({
     todayDateKey: todayDateStr,
@@ -1953,6 +1983,50 @@ export default function App() {
     activeRoomCode: activeStudyRoomCode,
     currentUid: currentIdentity.uid,
   });
+
+  const handleUpdateUserMood = (rawNextMood: string | null) => {
+    const check = normalizeAndValidatePeerMood(rawNextMood);
+    if (!check.valid) {
+      setMoodInputError(check.error);
+      return;
+    }
+    setMoodInputError('');
+    setUserMood(check.mood);
+    userMoodRef.current = check.mood;
+    try {
+      localStorage.setItem('mr_stranger_user_mood_v1', check.mood || '');
+    } catch {
+      // ignore storage errors
+    }
+
+    setOnlinePeers((prev) =>
+      prev.map((p) => (p.uid === currentIdentity.uid ? { ...p, mood: check.mood } : p))
+    );
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'peer:update_mood',
+          mood: check.mood,
+        })
+      );
+    }
+  };
+
+  const handleCustomMoodSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!customMoodInput.trim()) {
+      setMoodInputError('Enter a custom mood or choose one of the presets above.');
+      return;
+    }
+    const check = normalizeAndValidatePeerMood(customMoodInput);
+    if (!check.valid) {
+      setMoodInputError(check.error);
+      return;
+    }
+    handleUpdateUserMood(check.mood);
+    setCustomMoodInput('');
+  };
 
   const handleToggleQuickFocusDesk = () => {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -2520,7 +2594,7 @@ export default function App() {
                   className="lg:col-span-7 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4"
                   data-testid="hub-online-directory"
                 >
-                  <div className="border-b border-zinc-800/80 pb-3 space-y-3">
+                  <div className="border-b border-zinc-800/80 pb-4 space-y-3.5">
                     <div className="space-y-1">
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex flex-wrap items-center gap-2">
@@ -2542,47 +2616,179 @@ export default function App() {
                             />
                             <span>{directoryFocusSummary.inFocusCount} In Focus</span>
                           </span>
+                          <span aria-hidden="true" className="text-zinc-600">·</span>
+                          <span
+                            className="text-xs font-mono text-sky-400 tabular-nums"
+                            data-testid="online-directory-mood-count"
+                          >
+                            {directoryMoodSummary.activeMoodCount} Sharing Mood
+                          </span>
                         </div>
                         <span className="text-xs font-mono text-emerald-400 shrink-0">
                           {wsConnected ? 'Live Sync' : 'Reconnecting'}
                         </span>
                       </div>
                       <p className="text-xs text-zinc-400">
-                        See who is currently productive in a Study Room with the live In Focus indicator, or send a connection request.
+                        Set your live Mood indicator (e.g., Deep Work, Brainstorming, Quick Questions) and see who is currently productive in a Study Room.
                       </p>
                     </div>
 
-                    {/* Interactive Focus Filter & Quick Study Desk Status Bar */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                    {/* Interactive Mood Indicator Setter Bar */}
+                    <div
+                      className="p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2.5"
+                      data-testid="online-directory-mood-setter"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-2 text-xs min-w-0">
+                            <span className="font-semibold text-zinc-200">Your Mood Indicator:</span>
+                            <span
+                              data-testid="current-user-active-mood"
+                              className={`font-mono font-semibold ${
+                                !myMoodMeta.hasMood
+                                  ? 'text-zinc-500'
+                                  : myMoodMeta.tone === 'emerald'
+                                  ? 'text-emerald-400'
+                                  : myMoodMeta.tone === 'amber'
+                                  ? 'text-amber-400'
+                                  : myMoodMeta.tone === 'violet'
+                                  ? 'text-violet-400'
+                                  : myMoodMeta.tone === 'sky'
+                                  ? 'text-sky-400'
+                                  : 'text-zinc-300'
+                              }`}
+                            >
+                              {myMoodMeta.hasMood ? myMoodMeta.label : 'None Set'}
+                            </span>
+                          </div>
+                          {myMoodMeta.hasMood && (
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateUserMood(null)}
+                              data-testid="clear-user-mood-btn"
+                              className="text-xs font-mono text-zinc-400 hover:text-white underline underline-offset-2 whitespace-nowrap shrink-0"
+                            >
+                              Clear Mood
+                            </button>
+                          )}
+                        </div>
+                        {myMoodMeta.hasMood && (
+                          <p className="text-[11px] text-zinc-400">
+                            {myMoodMeta.description}
+                          </p>
+                        )}
+                      </div>
+
                       <div
-                        className="flex items-center gap-1 p-1 bg-[#050505] border border-zinc-800 rounded-md"
+                        className="flex flex-wrap items-center gap-1.5"
                         role="group"
-                        aria-label="Filter online directory by Study Room focus status"
+                        aria-label="Select your live Mood indicator"
                       >
+                        {ONLINE_MOOD_PRESETS.map((preset) => {
+                          const isSelected =
+                            myMoodMeta.hasMood &&
+                            myMoodMeta.label?.toLowerCase() === preset.label.toLowerCase();
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => handleUpdateUserMood(preset.label)}
+                              aria-pressed={isSelected}
+                              data-testid={`mood-preset-${preset.id}`}
+                              title={preset.description}
+                              className={`px-2.5 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
+                                isSelected
+                                  ? 'bg-white text-black border-white'
+                                  : 'bg-[#0A0A0C] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                              }`}
+                            >
+                              {preset.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      <form
+                        onSubmit={handleCustomMoodSubmit}
+                        className="flex flex-wrap items-center gap-2 pt-0.5"
+                      >
+                        <input
+                          type="text"
+                          value={customMoodInput}
+                          onChange={(e) => {
+                            setCustomMoodInput(e.target.value);
+                            if (moodInputError) setMoodInputError('');
+                          }}
+                          maxLength={36}
+                          placeholder="Or set a custom mood (e.g., Reviewing PRs)..."
+                          aria-label="Custom mood indicator"
+                          data-testid="custom-mood-input"
+                          className="flex-1 min-w-[180px] px-2.5 py-1 text-xs bg-[#0A0A0C] border border-zinc-800 rounded text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+                        />
                         <button
-                          type="button"
-                          onClick={() => setShowOnlyInFocusPeers(false)}
-                          data-testid="online-directory-filter-all"
-                          className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
-                            !showOnlyInFocusPeers
-                              ? 'bg-white text-black'
-                              : 'text-zinc-400 hover:text-white'
-                          }`}
+                          type="submit"
+                          data-testid="set-custom-mood-btn"
+                          className="px-3 py-1 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded whitespace-nowrap shrink-0"
                         >
-                          All Online ({onlinePeers.length})
+                          Set Custom Mood
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setShowOnlyInFocusPeers(true)}
-                          data-testid="online-directory-filter-focus"
-                          className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
-                            showOnlyInFocusPeers
-                              ? 'bg-white text-black'
-                              : 'text-zinc-400 hover:text-white'
-                          }`}
+                      </form>
+                      {moodInputError && (
+                        <p className="text-xs text-rose-400" data-testid="mood-input-error">
+                          {moodInputError}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Interactive Focus Filter, Mood Filter & Quick Study Desk Status Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div
+                          className="flex items-center gap-1 p-1 bg-[#050505] border border-zinc-800 rounded-md"
+                          role="group"
+                          aria-label="Filter online directory by Study Room focus status"
                         >
-                          In Focus ({directoryFocusSummary.inFocusCount})
-                        </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowOnlyInFocusPeers(false)}
+                            data-testid="online-directory-filter-all"
+                            className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                              !showOnlyInFocusPeers
+                                ? 'bg-white text-black'
+                                : 'text-zinc-400 hover:text-white'
+                            }`}
+                          >
+                            All Online ({onlinePeers.length})
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setShowOnlyInFocusPeers(true)}
+                            data-testid="online-directory-filter-focus"
+                            className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                              showOnlyInFocusPeers
+                                ? 'bg-white text-black'
+                                : 'text-zinc-400 hover:text-white'
+                            }`}
+                          >
+                            In Focus ({directoryFocusSummary.inFocusCount})
+                          </button>
+                        </div>
+
+                        <select
+                          aria-label="Filter online peers by Mood indicator"
+                          data-testid="online-directory-mood-filter"
+                          value={directoryMoodFilter}
+                          onChange={(e) => setDirectoryMoodFilter(e.target.value)}
+                          className="px-2.5 py-1.5 text-xs font-semibold bg-[#050505] border border-zinc-800 rounded-md text-zinc-200 focus:outline-none focus:border-zinc-500"
+                        >
+                          <option value="all">All Moods ({onlinePeers.length})</option>
+                          {ONLINE_MOOD_PRESETS.map((preset) => (
+                            <option key={preset.id} value={preset.label}>
+                              Mood: {preset.label} (
+                              {directoryMoodSummary.countsByMood[preset.label] || 0})
+                            </option>
+                          ))}
+                        </select>
                       </div>
 
                       <button
@@ -2612,6 +2818,9 @@ export default function App() {
                       const focusStatus =
                         directoryFocusSummary.byUid[peer.uid] ||
                         getOnlinePeerFocusStatus(peer, studyDesks);
+                      const peerMoodMeta =
+                        directoryMoodSummary.byUid[peer.uid] ||
+                        getOnlinePeerMoodMeta(isMe ? peer.mood ?? userMood : peer.mood);
                       const existingReq = requests.find(
                         (r) =>
                           (r.fromUid === currentIdentity.uid && r.toUid === peer.uid) ||
@@ -2626,33 +2835,51 @@ export default function App() {
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="space-y-1 min-w-0 flex-1">
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                                 <span className="text-sm font-bold text-white truncate">
                                   {peer.displayName} {isMe ? '(You — Online)' : ''}
                                 </span>
 
                                 {focusStatus.isInFocus && (
-                                  <>
-                                    <span aria-hidden="true" className="text-zinc-600">·</span>
+                                  <span
+                                    data-testid="online-peer-in-focus-indicator"
+                                    data-peer-uid={peer.uid}
+                                    title={`Currently productive in Study Room (${focusStatus.statusDetail})`}
+                                    className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-emerald-400 whitespace-nowrap shrink-0"
+                                  >
                                     <span
-                                      data-testid="online-peer-in-focus-indicator"
-                                      data-peer-uid={peer.uid}
-                                      title={`Currently productive in Study Room (${focusStatus.statusDetail})`}
-                                      className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-emerald-400 whitespace-nowrap shrink-0"
-                                    >
-                                      <span
-                                        aria-hidden="true"
-                                        className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"
-                                      />
-                                      <BookOpen className="w-3 h-3 shrink-0" />
-                                      <span>In Focus</span>
-                                    </span>
-                                  </>
+                                      aria-hidden="true"
+                                      className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"
+                                    />
+                                    <BookOpen className="w-3 h-3 shrink-0" />
+                                    <span>In Focus</span>
+                                  </span>
                                 )}
 
-                                <span aria-hidden="true" className="text-zinc-600">·</span>
-                                <span className="text-xs text-zinc-400 font-mono capitalize">
-                                  {peer.currentMode.replace('_', ' ')}
+                                {peerMoodMeta.hasMood && peerMoodMeta.label && (
+                                  <span
+                                    data-testid="online-peer-mood-indicator"
+                                    data-peer-uid={peer.uid}
+                                    data-peer-mood={peerMoodMeta.label}
+                                    title={peerMoodMeta.description}
+                                    className={`inline-flex items-center gap-1 text-xs font-mono font-semibold whitespace-nowrap shrink-0 ${
+                                      peerMoodMeta.tone === 'emerald'
+                                        ? 'text-emerald-400'
+                                        : peerMoodMeta.tone === 'amber'
+                                        ? 'text-amber-400'
+                                        : peerMoodMeta.tone === 'violet'
+                                        ? 'text-violet-400'
+                                        : peerMoodMeta.tone === 'sky'
+                                        ? 'text-sky-400'
+                                        : 'text-zinc-300'
+                                    }`}
+                                  >
+                                    <span>Mood: {peerMoodMeta.label}</span>
+                                  </span>
+                                )}
+
+                                <span className="text-xs text-zinc-400 font-mono capitalize whitespace-nowrap">
+                                  Mode: {peer.currentMode.replace('_', ' ')}
                                 </span>
                               </div>
 
@@ -2742,23 +2969,39 @@ export default function App() {
                       );
                     })}
 
-                    {showOnlyInFocusPeers && displayedOnlinePeers.length === 0 && (
-                      <div
-                        className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs text-zinc-400 flex items-center justify-between gap-3"
-                        data-testid="online-directory-empty-focus"
-                      >
-                        <span>
-                          No online users are currently in a Study Room. Start a Focus Desk to let others see you are productive!
-                        </span>
-                        <button
-                          type="button"
-                          onClick={handleToggleQuickFocusDesk}
-                          className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                    {(showOnlyInFocusPeers || directoryMoodFilter !== 'all') &&
+                      displayedOnlinePeers.length === 0 && (
+                        <div
+                          className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs text-zinc-400 flex flex-wrap items-center justify-between gap-3"
+                          data-testid="online-directory-empty-focus"
                         >
-                          Set Status: In Focus
-                        </button>
-                      </div>
-                    )}
+                          <span>
+                            {directoryMoodFilter !== 'all'
+                              ? `No online users currently have their Mood set to "${directoryMoodFilter}".`
+                              : 'No online users are currently in a Study Room. Start a Focus Desk to let others see you are productive!'}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            {directoryMoodFilter !== 'all' && (
+                              <button
+                                type="button"
+                                onClick={() => setDirectoryMoodFilter('all')}
+                                className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded whitespace-nowrap shrink-0"
+                              >
+                                Show All Moods
+                              </button>
+                            )}
+                            {showOnlyInFocusPeers && (
+                              <button
+                                type="button"
+                                onClick={handleToggleQuickFocusDesk}
+                                className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                              >
+                                Set Status: In Focus
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
 
                     {otherOnlinePeers.length === 0 && (
                       <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs text-zinc-400">

@@ -9,6 +9,7 @@ import {
   detectSecurityThreat,
   sanitizeSafeText,
   checkSlidingWindowRateLimit,
+  normalizeAndValidatePeerMood,
 } from './src/utils/rules.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -34,6 +35,7 @@ export interface OnlinePeer {
     | 'privacy';
   activeStudyRoomCode: string | null;
   activeGameId: string | null;
+  mood?: string | null;
   connectedAt: number;
 }
 
@@ -457,6 +459,9 @@ async function startServer() {
           const cleanUid = String(msg.peer.uid).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
           if (!cleanUid) return;
           registeredUid = cleanUid;
+          const moodCheck = normalizeAndValidatePeerMood(
+            msg.peer.mood ?? clients.get(registeredUid)?.peer.mood ?? null
+          );
           const peer: OnlinePeer = {
             uid: registeredUid,
             displayName: sanitizeSafeText(String(msg.peer.displayName || 'User'), 64),
@@ -475,6 +480,7 @@ async function startServer() {
               24
             ),
             activeGameId: msg.peer.activeGameId || null,
+            mood: moodCheck.valid ? moodCheck.mood : null,
             connectedAt: clients.get(registeredUid)?.peer.connectedAt || Date.now(),
           };
           clients.set(registeredUid, { ws, peer });
@@ -483,6 +489,25 @@ async function startServer() {
         }
 
         if (!registeredUid) return;
+
+        if (msg.type === 'peer:update_mood') {
+          const entry = clients.get(registeredUid);
+          if (entry) {
+            const moodCheck = normalizeAndValidatePeerMood(msg.mood);
+            if (!moodCheck.valid) {
+              ws.send(
+                JSON.stringify({
+                  type: 'server:security_notice',
+                  reason: moodCheck.error,
+                })
+              );
+              return;
+            }
+            entry.peer.mood = moodCheck.mood;
+            broadcastPresence();
+          }
+          return;
+        }
 
         if (msg.type === 'peer:update_privacy') {
           const entry = clients.get(registeredUid);
@@ -529,6 +554,12 @@ async function startServer() {
                 String(msg.activeStudyRoomCode),
                 24
               );
+            }
+            if (msg.mood !== undefined) {
+              const moodCheck = normalizeAndValidatePeerMood(msg.mood);
+              if (moodCheck.valid) {
+                entry.peer.mood = moodCheck.mood;
+              }
             }
             broadcastPresence();
           }
