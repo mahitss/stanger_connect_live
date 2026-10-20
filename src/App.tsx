@@ -51,6 +51,8 @@ import {
   detectSecurityThreat,
   sanitizeSafeText,
   LeaderboardCandidate,
+  buildWeeklyActivityOverview,
+  StoredDailyActivityRecord,
 } from './utils/rules';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
 import {
@@ -61,6 +63,7 @@ import {
 } from './components/StudyRoomView';
 import { TalkingRoomView } from './components/TalkingRoomView';
 import { GlobalLeaderboard } from './components/GlobalLeaderboard';
+import { WeeklyActivityOverview } from './components/WeeklyActivityOverview';
 import type { OnlinePeer } from '../server';
 
 type SidebarPage =
@@ -226,6 +229,35 @@ export default function App() {
   const [targetInputMinutes, setTargetInputMinutes] = useState<string>(() =>
     String(dailyTargetMinutes)
   );
+  const [weeklyActivityHistory, setWeeklyActivityHistory] = useState<
+    Record<string, StoredDailyActivityRecord>
+  >(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_weekly_activity_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+  const [todayPointsEarned, setTodayPointsEarned] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_weekly_activity_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const todayRec = parsed?.[formatDateKey(new Date())];
+        if (todayRec && typeof todayRec.pointsEarned === 'number') {
+          return Math.max(25, Math.round(todayRec.pointsEarned));
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 25;
+  });
   const [securityNotice, setSecurityNotice] = useState<string>('');
 
   const currentIdentity: AccountIdentity | null = authUser
@@ -631,13 +663,32 @@ export default function App() {
 
   const awardParticipation = (points: number) => {
     if (!currentIdentity) return;
-    const nextPoints = currentIdentity.participationPoints + points;
+    const safeAdded = Math.max(0, Math.round(Number(points) || 0));
+    const nextPoints = currentIdentity.participationPoints + safeAdded;
     const updated: AccountIdentity = {
       ...currentIdentity,
       participationPoints: nextPoints,
     };
     setAccountSession(updated);
     localStorage.setItem('mr_stranger_account_v2', JSON.stringify(updated));
+
+    setTodayPointsEarned((prevTodayPts) => {
+      const nextTodayPts = prevTodayPts + safeAdded;
+      setWeeklyActivityHistory((prevHist) => {
+        const existingToday = prevHist[todayDateStr];
+        const nextHist: Record<string, StoredDailyActivityRecord> = {
+          ...prevHist,
+          [todayDateStr]: {
+            focusMinutes: existingToday?.focusMinutes ?? dailyCompletedMinutes,
+            pointsEarned: nextTodayPts,
+            targetMinutes: dailyTargetMinutes,
+          },
+        };
+        localStorage.setItem('mr_stranger_weekly_activity_v1', JSON.stringify(nextHist));
+        return nextHist;
+      });
+      return nextTodayPts;
+    });
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(
@@ -673,6 +724,19 @@ export default function App() {
         completedMinutes: safeCompleted,
       })
     );
+    setWeeklyActivityHistory((prevHist) => {
+      const existingToday = prevHist[todayDateStr];
+      const nextHist: Record<string, StoredDailyActivityRecord> = {
+        ...prevHist,
+        [todayDateStr]: {
+          focusMinutes: safeCompleted,
+          pointsEarned: existingToday?.pointsEarned ?? todayPointsEarned,
+          targetMinutes: clampedTarget,
+        },
+      };
+      localStorage.setItem('mr_stranger_weekly_activity_v1', JSON.stringify(nextHist));
+      return nextHist;
+    });
   };
 
   const handleSetDailyProductivityTarget = (e: React.FormEvent) => {
@@ -1317,6 +1381,14 @@ export default function App() {
     dailyTargetMinutes,
     dailyCompletedMinutes
   );
+  const weeklyActivitySummary = buildWeeklyActivityOverview({
+    todayDateKey: todayDateStr,
+    todayFocusMinutes: dailyCompletedMinutes,
+    dailyTargetMinutes,
+    todayPointsEarned,
+    streakCount: currentIdentity.streakCount,
+    storedHistory: weeklyActivityHistory,
+  });
   const filteredMoments = moments.filter((m) => {
     if (momentFilter === 'public') return m.visibility === 'public';
     if (momentFilter === 'connections') return m.visibility === 'connections';
@@ -1761,6 +1833,13 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* Weekly Activity Overview (Last 7 Days Daily Productivity & Points Earned via Recharts) */}
+              <WeeklyActivityOverview
+                summary={weeklyActivitySummary}
+                dailyTargetMinutes={dailyTargetMinutes}
+                onLogQuickFocus={handleLogFocusMinutes}
+              />
 
               {/* Global Leaderboard Component aggregating participationPoints & streakCount across the platform */}
               <GlobalLeaderboard

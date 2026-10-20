@@ -25,7 +25,58 @@ import {
   createBaselinePreviousSnapshot,
   computeLeaderboardTrends,
   getTopContributorBadge,
+  getPastDateKey,
+  buildWeeklyActivityOverview,
 } from './rules.ts';
+
+test('Weekly Activity Overview builds 7-day chronological productivity and points series and reflects live updates for today', () => {
+  assert.equal(getPastDateKey('2026-10-20', 0), '2026-10-20');
+  assert.equal(getPastDateKey('2026-10-20', 6), '2026-10-14');
+
+  const storedHistory = {
+    '2026-10-18': { focusMinutes: 135, pointsEarned: 90, targetMinutes: 120 },
+    '2026-10-19': { focusMinutes: 95, pointsEarned: 60, targetMinutes: 120 },
+  };
+
+  const initialSummary = buildWeeklyActivityOverview({
+    todayDateKey: '2026-10-20',
+    todayFocusMinutes: 55,
+    dailyTargetMinutes: 120,
+    todayPointsEarned: 40,
+    streakCount: 4,
+    storedHistory,
+  });
+
+  assert.equal(initialSummary.days.length, 7);
+  assert.equal(initialSummary.days[0].dateKey, '2026-10-14');
+  assert.equal(initialSummary.days[4].dateKey, '2026-10-18');
+  assert.equal(initialSummary.days[4].focusMinutes, 135);
+  assert.equal(initialSummary.days[4].pointsEarned, 90);
+  assert.equal(initialSummary.days[4].goalReached, true);
+
+  const todayEntry = initialSummary.days[6];
+  assert.equal(todayEntry.dateKey, '2026-10-20');
+  assert.equal(todayEntry.isToday, true);
+  assert.equal(todayEntry.focusMinutes, 55);
+  assert.equal(todayEntry.pointsEarned, 40);
+  assert.equal(todayEntry.goalReached, false);
+
+  // Simulate logging +70m focus and +35 points today -> reaches 125m (goal reached!) and 75 pts
+  const updatedSummary = buildWeeklyActivityOverview({
+    todayDateKey: '2026-10-20',
+    todayFocusMinutes: 125,
+    dailyTargetMinutes: 120,
+    todayPointsEarned: 75,
+    streakCount: 4,
+    storedHistory,
+  });
+
+  assert.equal(updatedSummary.days[6].focusMinutes, 125);
+  assert.equal(updatedSummary.days[6].pointsEarned, 75);
+  assert.equal(updatedSummary.days[6].goalReached, true);
+  assert.equal(updatedSummary.totalFocusMinutes, initialSummary.totalFocusMinutes + 70);
+  assert.equal(updatedSummary.totalPointsEarned, initialSummary.totalPointsEarned + 35);
+});
 
 test('Top Contributor badge is assigned strictly to the top 3 users on the Global Leaderboard', () => {
   const entries = aggregateGlobalLeaderboard(
