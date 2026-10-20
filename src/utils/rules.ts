@@ -73,6 +73,152 @@ export function toggleAmbientSoundscape(
   return current === clicked ? 'off' : clicked;
 }
 
+// --- Subtle UI Sound Effect Toggle for Incoming Messages & Connection Requests ---
+export type UiSoundAlertEvent = 'incoming_message' | 'connection_request';
+
+export interface UiSoundEffectPreferences {
+  enabled: boolean;
+  incomingMessages: boolean;
+  connectionRequests: boolean;
+  backgroundBoost: boolean;
+  volumePercent: number;
+}
+
+export interface UiSoundChimeSpec {
+  eventType: UiSoundAlertEvent;
+  label: string;
+  frequenciesHz: [number, number];
+  noteNames: string;
+  durationMs: number;
+  gainScalar: number;
+}
+
+export const DEFAULT_UI_SOUND_PREFERENCES: UiSoundEffectPreferences = {
+  enabled: true,
+  incomingMessages: true,
+  connectionRequests: true,
+  backgroundBoost: true,
+  volumePercent: 65,
+};
+
+export function clampSoundVolumePercent(rawVolume: number): number {
+  if (!Number.isFinite(rawVolume)) return 65;
+  return Math.min(100, Math.max(10, Math.round(rawVolume)));
+}
+
+export function toggleUiSoundEffects(
+  current: UiSoundEffectPreferences,
+  explicitEnabled?: boolean
+): UiSoundEffectPreferences {
+  const nextEnabled =
+    typeof explicitEnabled === 'boolean' ? explicitEnabled : !current.enabled;
+  return {
+    ...current,
+    enabled: nextEnabled,
+    volumePercent: clampSoundVolumePercent(current.volumePercent),
+  };
+}
+
+export function getUiSoundChimeSpec(
+  eventType: UiSoundAlertEvent,
+  isAppInBackground = false,
+  volumePercent = 65
+): UiSoundChimeSpec {
+  const safeVolume = clampSoundVolumePercent(volumePercent);
+  const baseGain = (safeVolume / 100) * 0.14;
+  const gainScalar = Number(
+    (isAppInBackground ? Math.min(0.22, baseGain * 1.25) : baseGain).toFixed(4)
+  );
+
+  if (eventType === 'connection_request') {
+    return {
+      eventType: 'connection_request',
+      label: 'Connection Request Chime',
+      frequenciesHz: [440, 659.25],
+      noteNames: 'A4 → E5 Warm Interval',
+      durationMs: isAppInBackground ? 360 : 280,
+      gainScalar,
+    };
+  }
+
+  return {
+    eventType: 'incoming_message',
+    label: 'Incoming Message Chime',
+    frequenciesHz: [528, 792],
+    noteNames: 'C5 → G5 Soft Fifth',
+    durationMs: isAppInBackground ? 300 : 220,
+    gainScalar,
+  };
+}
+
+export function shouldPlayUiNotificationSound(params: {
+  preferences: UiSoundEffectPreferences;
+  eventType: UiSoundAlertEvent;
+  senderUid: string;
+  currentUid: string;
+  isAppInBackground?: boolean;
+}): {
+  shouldPlay: boolean;
+  reason: string;
+  chime: UiSoundChimeSpec | null;
+} {
+  const { preferences, eventType, senderUid, currentUid, isAppInBackground = false } = params;
+  const cleanSender = String(senderUid || '').trim();
+  const cleanCurrent = String(currentUid || '').trim();
+
+  if (!cleanSender || !cleanCurrent) {
+    return {
+      shouldPlay: false,
+      reason: 'Missing sender or recipient identity.',
+      chime: null,
+    };
+  }
+
+  if (cleanSender === cleanCurrent) {
+    return {
+      shouldPlay: false,
+      reason: 'Self-originated events do not trigger incoming notification chimes.',
+      chime: null,
+    };
+  }
+
+  if (!preferences.enabled) {
+    return {
+      shouldPlay: false,
+      reason: 'UI sound effects are muted.',
+      chime: null,
+    };
+  }
+
+  if (eventType === 'incoming_message' && !preferences.incomingMessages) {
+    return {
+      shouldPlay: false,
+      reason: 'Incoming message sound alerts are disabled.',
+      chime: null,
+    };
+  }
+
+  if (eventType === 'connection_request' && !preferences.connectionRequests) {
+    return {
+      shouldPlay: false,
+      reason: 'Connection request sound alerts are disabled.',
+      chime: null,
+    };
+  }
+
+  const boostActive = Boolean(isAppInBackground && preferences.backgroundBoost);
+  const chime = getUiSoundChimeSpec(eventType, boostActive, preferences.volumePercent);
+
+  return {
+    shouldPlay: true,
+    reason: isAppInBackground
+      ? 'Background tab alert chime triggered.'
+      : 'Foreground subtle UI chime triggered.',
+    chime,
+  };
+}
+
+
 // --- Daily Productivity Goal Pure Math ---
 export interface DailyProductivityProgress {
   targetMinutes: number;

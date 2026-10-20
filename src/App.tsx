@@ -30,6 +30,8 @@ import {
   LogOut,
   Flame,
   Lock,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import {
   auth,
@@ -53,7 +55,13 @@ import {
   LeaderboardCandidate,
   buildWeeklyActivityOverview,
   StoredDailyActivityRecord,
+  UiSoundEffectPreferences,
+  UiSoundAlertEvent,
+  DEFAULT_UI_SOUND_PREFERENCES,
+  toggleUiSoundEffects,
+  shouldPlayUiNotificationSound,
 } from './utils/rules';
+import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
 import {
   StudyRoomView,
@@ -260,6 +268,44 @@ export default function App() {
   });
   const [securityNotice, setSecurityNotice] = useState<string>('');
 
+  // Subtle UI Sound Effect Preferences (Incoming Messages & Connection Requests, with Background Boost)
+  const [uiSoundPrefs, setUiSoundPrefs] = useState<UiSoundEffectPreferences>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_ui_sound_prefs_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            enabled: typeof parsed.enabled === 'boolean' ? parsed.enabled : true,
+            incomingMessages:
+              typeof parsed.incomingMessages === 'boolean' ? parsed.incomingMessages : true,
+            connectionRequests:
+              typeof parsed.connectionRequests === 'boolean'
+                ? parsed.connectionRequests
+                : true,
+            backgroundBoost:
+              typeof parsed.backgroundBoost === 'boolean' ? parsed.backgroundBoost : true,
+            volumePercent:
+              typeof parsed.volumePercent === 'number' ? parsed.volumePercent : 65,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_UI_SOUND_PREFERENCES;
+  });
+  const uiSoundPrefsRef = useRef<UiSoundEffectPreferences>(uiSoundPrefs);
+  useEffect(() => {
+    uiSoundPrefsRef.current = uiSoundPrefs;
+  }, [uiSoundPrefs]);
+
+  const [lastSoundFeedback, setLastSoundFeedback] = useState<string>(
+    'Background & live chimes active (Messages & Requests)'
+  );
+  const seenIncomingRequestIdsRef = useRef<Set<string>>(new Set());
+  const initialRequestsLoadedRef = useRef<boolean>(false);
+
   const currentIdentity: AccountIdentity | null = authUser
     ? {
         uid: authUser.uid.replace(/[^a-zA-Z0-9_-]/g, '_'),
@@ -426,6 +472,33 @@ export default function App() {
           id: d.id,
           ...(d.data() as Omit<ConnectionRequestDoc, 'id'>),
         }));
+        if (initialRequestsLoadedRef.current) {
+          for (const item of items) {
+            if (
+              item.status === 'pending' &&
+              !seenIncomingRequestIdsRef.current.has(item.id)
+            ) {
+              const isBg =
+                typeof document !== 'undefined' &&
+                (document.hidden || !document.hasFocus());
+              const check = shouldPlayUiNotificationSound({
+                preferences: uiSoundPrefsRef.current,
+                eventType: 'connection_request',
+                senderUid: item.fromUid,
+                currentUid: cleanUid,
+                isAppInBackground: isBg,
+              });
+              if (check.shouldPlay && check.chime) {
+                playSubtleUiChime(check.chime);
+                setLastSoundFeedback(
+                  `Chime played: Connection Request from ${item.fromName} (${check.chime.noteNames})`
+                );
+              }
+            }
+          }
+        }
+        items.forEach((i) => seenIncomingRequestIdsRef.current.add(i.id));
+        initialRequestsLoadedRef.current = true;
         setRequests((prev) => {
           const others = prev.filter((r) => r.toUid !== cleanUid);
           return [...others, ...items];
@@ -578,6 +651,22 @@ export default function App() {
         } else if (msg.type === 'chat:direct') {
           setMessages((prev) => {
             if (prev.some((m) => m.id === msg.id)) return prev;
+            const isBg =
+              typeof document !== 'undefined' &&
+              (document.hidden || !document.hasFocus());
+            const soundDecision = shouldPlayUiNotificationSound({
+              preferences: uiSoundPrefsRef.current,
+              eventType: 'incoming_message',
+              senderUid: msg.senderUid,
+              currentUid: currentIdentity.uid,
+              isAppInBackground: isBg,
+            });
+            if (soundDecision.shouldPlay && soundDecision.chime) {
+              playSubtleUiChime(soundDecision.chime);
+              setLastSoundFeedback(
+                `Chime played: Incoming Message from ${msg.senderName} (${soundDecision.chime.noteNames})`
+              );
+            }
             return [
               ...prev,
               {
@@ -593,6 +682,22 @@ export default function App() {
         } else if (msg.type === 'study:chat') {
           setStudyChat((prev) => {
             if (prev.some((m) => m.id === msg.id)) return prev;
+            const isBg =
+              typeof document !== 'undefined' &&
+              (document.hidden || !document.hasFocus());
+            const soundDecision = shouldPlayUiNotificationSound({
+              preferences: uiSoundPrefsRef.current,
+              eventType: 'incoming_message',
+              senderUid: msg.senderUid,
+              currentUid: currentIdentity.uid,
+              isAppInBackground: isBg,
+            });
+            if (soundDecision.shouldPlay && soundDecision.chime) {
+              playSubtleUiChime(soundDecision.chime);
+              setLastSoundFeedback(
+                `Chime played: Study Room Message from ${msg.senderName} (${soundDecision.chime.noteNames})`
+              );
+            }
             return [...prev, msg];
           });
         } else if (msg.type === 'webrtc:signal') {
@@ -606,6 +711,23 @@ export default function App() {
           setRequests((prev) => {
             const reqId = `req_${msg.fromUid}_${currentIdentity.uid}`;
             if (prev.some((r) => r.id === reqId)) return prev;
+            seenIncomingRequestIdsRef.current.add(reqId);
+            const isBg =
+              typeof document !== 'undefined' &&
+              (document.hidden || !document.hasFocus());
+            const soundDecision = shouldPlayUiNotificationSound({
+              preferences: uiSoundPrefsRef.current,
+              eventType: 'connection_request',
+              senderUid: msg.fromUid,
+              currentUid: currentIdentity.uid,
+              isAppInBackground: isBg,
+            });
+            if (soundDecision.shouldPlay && soundDecision.chime) {
+              playSubtleUiChime(soundDecision.chime);
+              setLastSoundFeedback(
+                `Chime played: Connection Request from ${msg.fromName} (${soundDecision.chime.noteNames})`
+              );
+            }
             return [
               ...prev,
               {
@@ -750,6 +872,31 @@ export default function App() {
     const added = Math.max(1, Math.round(minutesToAdd));
     persistProductivityGoal(dailyTargetMinutes, dailyCompletedMinutes + added);
     awardParticipation(Math.max(5, Math.round(added / 2)));
+  };
+
+  const persistUiSoundPreferences = (nextPrefs: UiSoundEffectPreferences) => {
+    setUiSoundPrefs(nextPrefs);
+    localStorage.setItem('mr_stranger_ui_sound_prefs_v1', JSON.stringify(nextPrefs));
+  };
+
+  const handleToggleUiSoundEffects = () => {
+    const nextPrefs = toggleUiSoundEffects(uiSoundPrefs);
+    persistUiSoundPreferences(nextPrefs);
+    if (nextPrefs.enabled) {
+      const spec = previewUiSoundEffect('incoming_message', nextPrefs.volumePercent);
+      setLastSoundFeedback(`Sound alerts active · ${spec.noteNames}`);
+    } else {
+      setLastSoundFeedback('Sound alerts muted for messages & requests');
+    }
+  };
+
+  const handlePreviewUiChime = (eventType: UiSoundAlertEvent) => {
+    if (!uiSoundPrefs.enabled) {
+      const enabledPrefs = toggleUiSoundEffects(uiSoundPrefs, true);
+      persistUiSoundPreferences(enabledPrefs);
+    }
+    const spec = previewUiSoundEffect(eventType, uiSoundPrefs.volumePercent);
+    setLastSoundFeedback(`Previewed: ${spec.noteNames}`);
   };
 
   const handleUpdatePrivacy = async (
@@ -1632,6 +1779,31 @@ export default function App() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3 shrink-0 text-xs font-mono tabular-nums">
+            <button
+              type="button"
+              onClick={handleToggleUiSoundEffects}
+              aria-pressed={uiSoundPrefs.enabled}
+              aria-label={
+                uiSoundPrefs.enabled
+                  ? 'Mute UI sound effects for incoming messages and connection requests'
+                  : 'Unmute UI sound effects for incoming messages and connection requests'
+              }
+              data-testid="header-ui-sound-toggle"
+              title="Toggle subtle UI sound effects for incoming messages and connection requests (including when app is in background)"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 ${
+                uiSoundPrefs.enabled
+                  ? 'bg-[#0A0A0C] border-zinc-700 text-zinc-100 hover:border-zinc-500'
+                  : 'bg-[#050505] border-zinc-800/80 text-zinc-500 hover:text-zinc-300'
+              }`}
+            >
+              {uiSoundPrefs.enabled ? (
+                <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              ) : (
+                <VolumeX className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+              )}
+              <span>{uiSoundPrefs.enabled ? 'Sound Alerts: On' : 'Sound Alerts: Muted'}</span>
+            </button>
+            <span aria-hidden="true" className="text-zinc-700">·</span>
             <span className="text-zinc-300">
               Streak: <strong className="text-amber-400">{currentIdentity.streakCount} Days</strong>
             </span>
@@ -1993,13 +2165,68 @@ export default function App() {
 
                 {/* Connection Requests Box (5 cols) */}
                 <div className="lg:col-span-5 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
-                  <div className="border-b border-zinc-800/80 pb-3">
-                    <h2 className="text-lg font-bold text-white">
-                      Connection Requests ({requests.length})
-                    </h2>
-                    <p className="text-xs text-zinc-400">
-                      Accept incoming requests to unlock Chat Mode and Talking Mode.
-                    </p>
+                  <div className="border-b border-zinc-800/80 pb-3 space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <h2 className="text-lg font-bold text-white">
+                          Connection Requests ({requests.length})
+                        </h2>
+                        <button
+                          type="button"
+                          onClick={handleToggleUiSoundEffects}
+                          aria-pressed={uiSoundPrefs.enabled}
+                          data-testid="hub-ui-sound-toggle"
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                            uiSoundPrefs.enabled
+                              ? 'bg-[#050505] border-zinc-700 text-emerald-400 hover:border-zinc-500'
+                              : 'bg-[#050505] border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                          }`}
+                        >
+                          {uiSoundPrefs.enabled ? (
+                            <Volume2 className="w-3.5 h-3.5 shrink-0" />
+                          ) : (
+                            <VolumeX className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          <span>{uiSoundPrefs.enabled ? 'Chime: On' : 'Chime: Muted'}</span>
+                        </button>
+                      </div>
+                      <p className="text-xs text-zinc-400">
+                        Accept incoming requests to unlock Chat Mode and Talking Mode.
+                      </p>
+                    </div>
+
+                    {/* Subtle UI Sound Effect Bar for Background & Live Feedback */}
+                    <div
+                      className="p-2.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2 text-[11px]"
+                      data-testid="hub-sound-feedback-panel"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className="text-zinc-300 font-mono"
+                          data-testid="ui-sound-feedback-status"
+                        >
+                          {lastSoundFeedback}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewUiChime('incoming_message')}
+                          data-testid="preview-message-chime-btn"
+                          className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-medium whitespace-nowrap"
+                        >
+                          Test Message Chime
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handlePreviewUiChime('connection_request')}
+                          data-testid="preview-request-chime-btn"
+                          className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-medium whitespace-nowrap"
+                        >
+                          Test Request Chime
+                        </button>
+                      </div>
+                    </div>
                   </div>
 
                   {requests.length === 0 ? (
@@ -2068,9 +2295,33 @@ export default function App() {
                     Strict invite-first messaging: send a connection invite first; once accepted, real-time encrypted chat unlocks. No random chats.
                   </p>
                 </div>
-                <span className="text-xs font-mono text-zinc-400">
-                  Fingerprint: {e2eeFingerprint}
-                </span>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={handleToggleUiSoundEffects}
+                    aria-pressed={uiSoundPrefs.enabled}
+                    data-testid="chat-ui-sound-toggle"
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                      uiSoundPrefs.enabled
+                        ? 'bg-[#0A0A0C] border-zinc-700 text-emerald-400 hover:border-zinc-500'
+                        : 'bg-[#050505] border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                    }`}
+                  >
+                    {uiSoundPrefs.enabled ? (
+                      <Volume2 className="w-3.5 h-3.5 shrink-0" />
+                    ) : (
+                      <VolumeX className="w-3.5 h-3.5 shrink-0" />
+                    )}
+                    <span>
+                      {uiSoundPrefs.enabled
+                        ? 'Incoming Message Chime: On'
+                        : 'Incoming Message Chime: Muted'}
+                    </span>
+                  </button>
+                  <span className="text-xs font-mono text-zinc-400">
+                    Fingerprint: {e2eeFingerprint}
+                  </span>
+                </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
@@ -2726,6 +2977,98 @@ export default function App() {
                           e.target.checked,
                           currentIdentity.allowCallsFromConnectionsOnly
                         )
+                      }
+                      className="accent-white w-4 h-4"
+                    />
+                  </label>
+                </div>
+
+                {/* UI Sound Effects & Background Notification Feedback Preferences */}
+                <div className="pt-4 border-t border-zinc-800/80 space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <h2 className="text-base font-bold text-white">
+                        Subtle UI Sound Effects & Background Feedback
+                      </h2>
+                      <p className="text-xs text-zinc-400">
+                        Configure acoustic chimes for incoming messages and connection requests when the workspace is in the background.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleToggleUiSoundEffects}
+                      aria-pressed={uiSoundPrefs.enabled}
+                      className={`px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                        uiSoundPrefs.enabled
+                          ? 'bg-white text-black border-white'
+                          : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:text-white'
+                      }`}
+                    >
+                      {uiSoundPrefs.enabled ? 'Sound Alerts: Enabled' : 'Sound Alerts: Muted'}
+                    </button>
+                  </div>
+
+                  <label className="flex items-center justify-between p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 cursor-pointer">
+                    <div>
+                      <div className="text-xs font-semibold text-white">
+                        Incoming Message Chime (C5 → G5 Soft Fifth)
+                      </div>
+                      <div className="text-[11px] text-zinc-400">
+                        Plays a subtle harmonic chime when an accepted connection sends a message
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={uiSoundPrefs.incomingMessages}
+                      onChange={(e) =>
+                        persistUiSoundPreferences({
+                          ...uiSoundPrefs,
+                          incomingMessages: e.target.checked,
+                        })
+                      }
+                      className="accent-white w-4 h-4"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 cursor-pointer">
+                    <div>
+                      <div className="text-xs font-semibold text-white">
+                        Connection Request Chime (A4 → E5 Warm Interval)
+                      </div>
+                      <div className="text-[11px] text-zinc-400">
+                        Plays a warm two-note chime when another online member sends a connection invite
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={uiSoundPrefs.connectionRequests}
+                      onChange={(e) =>
+                        persistUiSoundPreferences({
+                          ...uiSoundPrefs,
+                          connectionRequests: e.target.checked,
+                        })
+                      }
+                      className="accent-white w-4 h-4"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 cursor-pointer">
+                    <div>
+                      <div className="text-xs font-semibold text-white">
+                        Background Tab Acoustic Boost
+                      </div>
+                      <div className="text-[11px] text-zinc-400">
+                        Slightly extends chime sustain and clarity when the app tab is unfocused or in the background
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={uiSoundPrefs.backgroundBoost}
+                      onChange={(e) =>
+                        persistUiSoundPreferences({
+                          ...uiSoundPrefs,
+                          backgroundBoost: e.target.checked,
+                        })
                       }
                       className="accent-white w-4 h-4"
                     />

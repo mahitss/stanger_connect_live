@@ -27,7 +27,72 @@ import {
   getTopContributorBadge,
   getPastDateKey,
   buildWeeklyActivityOverview,
+  DEFAULT_UI_SOUND_PREFERENCES,
+  toggleUiSoundEffects,
+  getUiSoundChimeSpec,
+  shouldPlayUiNotificationSound,
 } from './rules.ts';
+
+test('UI Sound Effect toggle and notification sound evaluation handles incoming messages, connection requests, mute state, and background boost', () => {
+  // Default preferences start enabled for both incoming messages and connection requests
+  assert.equal(DEFAULT_UI_SOUND_PREFERENCES.enabled, true);
+  assert.equal(DEFAULT_UI_SOUND_PREFERENCES.incomingMessages, true);
+  assert.equal(DEFAULT_UI_SOUND_PREFERENCES.connectionRequests, true);
+
+  // Toggling flips enabled state cleanly
+  const muted = toggleUiSoundEffects(DEFAULT_UI_SOUND_PREFERENCES);
+  assert.equal(muted.enabled, false);
+  const unmuted = toggleUiSoundEffects(muted);
+  assert.equal(unmuted.enabled, true);
+
+  // Incoming message from another user triggers soft fifth chime (528Hz -> 792Hz)
+  const msgEval = shouldPlayUiNotificationSound({
+    preferences: DEFAULT_UI_SOUND_PREFERENCES,
+    eventType: 'incoming_message',
+    senderUid: 'usr_peer_2',
+    currentUid: 'usr_me_1',
+    isAppInBackground: false,
+  });
+  assert.equal(msgEval.shouldPlay, true);
+  assert.ok(msgEval.chime);
+  assert.deepEqual(msgEval.chime.frequenciesHz, [528, 792]);
+
+  // Incoming connection request from another user in background triggers boosted warm interval chime (440Hz -> 659.25Hz)
+  const reqBgEval = shouldPlayUiNotificationSound({
+    preferences: DEFAULT_UI_SOUND_PREFERENCES,
+    eventType: 'connection_request',
+    senderUid: 'usr_peer_3',
+    currentUid: 'usr_me_1',
+    isAppInBackground: true,
+  });
+  assert.equal(reqBgEval.shouldPlay, true);
+  assert.ok(reqBgEval.chime);
+  assert.deepEqual(reqBgEval.chime.frequenciesHz, [440, 659.25]);
+  const fgSpec = getUiSoundChimeSpec('connection_request', false, 65);
+  assert.ok(reqBgEval.chime.gainScalar > fgSpec.gainScalar);
+  assert.ok(reqBgEval.chime.durationMs > fgSpec.durationMs);
+
+  // Self-sent message or request never plays incoming chime
+  const selfEval = shouldPlayUiNotificationSound({
+    preferences: DEFAULT_UI_SOUND_PREFERENCES,
+    eventType: 'incoming_message',
+    senderUid: 'usr_me_1',
+    currentUid: 'usr_me_1',
+    isAppInBackground: true,
+  });
+  assert.equal(selfEval.shouldPlay, false);
+  assert.equal(selfEval.chime, null);
+
+  // When muted, neither incoming messages nor connection requests play sound
+  const mutedMsgEval = shouldPlayUiNotificationSound({
+    preferences: muted,
+    eventType: 'incoming_message',
+    senderUid: 'usr_peer_2',
+    currentUid: 'usr_me_1',
+    isAppInBackground: true,
+  });
+  assert.equal(mutedMsgEval.shouldPlay, false);
+});
 
 test('Weekly Activity Overview builds 7-day chronological productivity and points series and reflects live updates for today', () => {
   assert.equal(getPastDateKey('2026-10-20', 0), '2026-10-20');
