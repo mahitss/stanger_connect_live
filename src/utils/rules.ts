@@ -514,6 +514,186 @@ export function filterOnlinePeersByDirectoryCriteria<
   });
 }
 
+// --- 24-Hour Popular Peer Moods Summary & Chart Logic ---
+export const MOOD_POPULARITY_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+export interface PeerMoodHistoryEvent {
+  id: string;
+  uid: string;
+  displayName?: string;
+  mood: string;
+  timestampMs: number;
+}
+
+export interface PopularMoodStat {
+  rank: number;
+  mood: string;
+  description: string;
+  tone: OnlineMoodTone;
+  usageCount24h: number;
+  activePeersNow: number;
+  uniquePeers24h: number;
+  sharePercent: number;
+  isTopMood: boolean;
+}
+
+export interface MoodPopularity24hSummary {
+  items: PopularMoodStat[];
+  topMood: string | null;
+  topMoodTone: OnlineMoodTone;
+  topMoodCount: number;
+  topMoodSharePercent: number;
+  totalEvents24h: number;
+  uniqueActivePeers24h: number;
+  windowHours: 24;
+}
+
+export function buildPopularMoodsLast24Hours(params: {
+  onlinePeers: Array<{ uid: string; displayName?: string; mood?: string | null }>;
+  moodEvents?: PeerMoodHistoryEvent[];
+  nowMs?: number;
+}): MoodPopularity24hSummary {
+  const nowMs = typeof params.nowMs === 'number' && params.nowMs > 0 ? params.nowMs : Date.now();
+  const cutoffMs = nowMs - MOOD_POPULARITY_WINDOW_MS;
+
+  const statsMap = new Map<
+    string,
+    {
+      mood: string;
+      description: string;
+      tone: OnlineMoodTone;
+      usageCount24h: number;
+      activePeersNowSet: Set<string>;
+      uniquePeers24hSet: Set<string>;
+      presetOrder: number;
+    }
+  >();
+
+  // Initialize with built-in mood presets so the chart always has a clean structure
+  ONLINE_MOOD_PRESETS.forEach((preset, idx) => {
+    statsMap.set(preset.label.toLowerCase(), {
+      mood: preset.label,
+      description: preset.description,
+      tone: preset.tone,
+      usageCount24h: 0,
+      activePeersNowSet: new Set<string>(),
+      uniquePeers24hSet: new Set<string>(),
+      presetOrder: idx,
+    });
+  });
+
+  const allUniquePeers24h = new Set<string>();
+  const seenEventIds = new Set<string>();
+  const peersWithLoggedCurrentMood = new Set<string>();
+
+  const events = Array.isArray(params.moodEvents) ? params.moodEvents : [];
+  for (const ev of events) {
+    if (!ev || typeof ev.timestampMs !== 'number') continue;
+    if (ev.timestampMs < cutoffMs || ev.timestampMs > nowMs + 60_000) continue;
+    const cleanUid = String(ev.uid || '').trim();
+    if (!cleanUid) continue;
+    const evId = String(ev.id || `${cleanUid}_${ev.mood}_${ev.timestampMs}`);
+    if (seenEventIds.has(evId)) continue;
+    seenEventIds.add(evId);
+
+    const meta = getOnlinePeerMoodMeta(ev.mood);
+    if (!meta.hasMood || !meta.label) continue;
+
+    const key = meta.label.toLowerCase();
+    let entry = statsMap.get(key);
+    if (!entry) {
+      entry = {
+        mood: meta.label,
+        description: meta.description,
+        tone: meta.tone,
+        usageCount24h: 0,
+        activePeersNowSet: new Set<string>(),
+        uniquePeers24hSet: new Set<string>(),
+        presetOrder: 99,
+      };
+      statsMap.set(key, entry);
+    }
+
+    entry.usageCount24h += 1;
+    entry.uniquePeers24hSet.add(cleanUid);
+    allUniquePeers24h.add(cleanUid);
+    peersWithLoggedCurrentMood.add(`${cleanUid}::${key}`);
+  }
+
+  // Reconcile with currently online peers so live active moods are always reflected
+  const onlinePeers = Array.isArray(params.onlinePeers) ? params.onlinePeers : [];
+  for (const peer of onlinePeers) {
+    const cleanUid = String(peer?.uid || '').trim();
+    if (!cleanUid) continue;
+    const meta = getOnlinePeerMoodMeta(peer.mood);
+    if (!meta.hasMood || !meta.label) continue;
+
+    const key = meta.label.toLowerCase();
+    let entry = statsMap.get(key);
+    if (!entry) {
+      entry = {
+        mood: meta.label,
+        description: meta.description,
+        tone: meta.tone,
+        usageCount24h: 0,
+        activePeersNowSet: new Set<string>(),
+        uniquePeers24hSet: new Set<string>(),
+        presetOrder: 99,
+      };
+      statsMap.set(key, entry);
+    }
+
+    entry.activePeersNowSet.add(cleanUid);
+    entry.uniquePeers24hSet.add(cleanUid);
+    allUniquePeers24h.add(cleanUid);
+
+    if (!peersWithLoggedCurrentMood.has(`${cleanUid}::${key}`)) {
+      entry.usageCount24h += 1;
+      peersWithLoggedCurrentMood.add(`${cleanUid}::${key}`);
+    }
+  }
+
+  const rawEntries = Array.from(statsMap.values());
+  const totalEvents24h = rawEntries.reduce((acc, item) => acc + item.usageCount24h, 0);
+
+  rawEntries.sort((a, b) => {
+    if (b.usageCount24h !== a.usageCount24h) return b.usageCount24h - a.usageCount24h;
+    if (b.activePeersNowSet.size !== a.activePeersNowSet.size) {
+      return b.activePeersNowSet.size - a.activePeersNowSet.size;
+    }
+    return a.presetOrder - b.presetOrder;
+  });
+
+  const items: PopularMoodStat[] = rawEntries.map((entry, idx) => {
+    const sharePercent =
+      totalEvents24h > 0 ? Math.round((entry.usageCount24h / totalEvents24h) * 100) : 0;
+    return {
+      rank: idx + 1,
+      mood: entry.mood,
+      description: entry.description,
+      tone: entry.tone,
+      usageCount24h: entry.usageCount24h,
+      activePeersNow: entry.activePeersNowSet.size,
+      uniquePeers24h: entry.uniquePeers24hSet.size,
+      sharePercent,
+      isTopMood: idx === 0 && entry.usageCount24h > 0,
+    };
+  });
+
+  const topItem = items[0] && items[0].usageCount24h > 0 ? items[0] : null;
+
+  return {
+    items,
+    topMood: topItem ? topItem.mood : null,
+    topMoodTone: topItem ? topItem.tone : 'zinc',
+    topMoodCount: topItem ? topItem.usageCount24h : 0,
+    topMoodSharePercent: topItem ? topItem.sharePercent : 0,
+    totalEvents24h,
+    uniqueActivePeers24h: allUniquePeers24h.size,
+    windowHours: 24,
+  };
+}
+
 // --- Photo Moment Comments & Connection Discussion Logic ---
 export interface MomentCommentRecord {
   id: string;

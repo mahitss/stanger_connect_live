@@ -46,7 +46,70 @@ import {
   getOnlinePeerMoodMeta,
   summarizeOnlineDirectoryMoods,
   filterOnlinePeersByDirectoryCriteria,
+  MOOD_POPULARITY_WINDOW_MS,
+  buildPopularMoodsLast24Hours,
 } from './rules.ts';
+
+test('Online Directory 24-hour popular moods summary ranks moods, filters out stale >24h events, and reconciles live online peers', () => {
+  const nowMs = 1_760_000_000_000;
+  const recentMs = nowMs - 2 * 60 * 60 * 1000; // 2 hours ago
+  const expiredMs = nowMs - (MOOD_POPULARITY_WINDOW_MS + 60_000); // > 24h ago
+
+  const summary = buildPopularMoodsLast24Hours({
+    nowMs,
+    onlinePeers: [
+      { uid: 'usr_aarav', displayName: 'Aarav', mood: 'Deep Work' },
+      { uid: 'usr_maya', displayName: 'Maya', mood: 'Brainstorming' },
+      { uid: 'usr_rohan', displayName: 'Rohan', mood: 'Brainstorming' },
+    ],
+    moodEvents: [
+      {
+        id: 'ev_1',
+        uid: 'usr_maya',
+        mood: 'Brainstorming',
+        timestampMs: recentMs,
+      },
+      {
+        id: 'ev_2',
+        uid: 'usr_rohan',
+        mood: 'Brainstorming',
+        timestampMs: recentMs + 1000,
+      },
+      {
+        id: 'ev_3',
+        uid: 'usr_priya',
+        mood: 'Brainstorming',
+        timestampMs: recentMs + 2000,
+      },
+      {
+        id: 'ev_4',
+        uid: 'usr_aarav',
+        mood: 'Quick Questions',
+        timestampMs: recentMs + 3000,
+      },
+      {
+        id: 'ev_expired',
+        uid: 'usr_old',
+        mood: 'Coffee Break',
+        timestampMs: expiredMs,
+      },
+    ],
+  });
+
+  assert.equal(summary.windowHours, 24);
+  assert.equal(summary.topMood, 'Brainstorming');
+  assert.equal(summary.topMoodCount, 3);
+  assert.equal(summary.uniqueActivePeers24h, 4); // Aarav, Maya, Rohan, Priya
+  assert.equal(summary.items[0].mood, 'Brainstorming');
+  assert.equal(summary.items[0].activePeersNow, 2); // Maya & Rohan currently online with Brainstorming
+  assert.equal(summary.items[0].uniquePeers24h, 3); // Maya, Rohan, Priya
+  assert.equal(summary.items[0].isTopMood, true);
+
+  // Expired event (>24h ago) for Coffee Break is excluded
+  const coffeeItem = summary.items.find((i) => i.mood === 'Coffee Break');
+  assert.ok(coffeeItem);
+  assert.equal(coffeeItem.usageCount24h, 0);
+});
 
 test('Online Directory Mood indicator validates presets, custom moods, security guards, summaries, and filters', () => {
   // 1. Presets include Deep Work, Brainstorming, Quick Questions

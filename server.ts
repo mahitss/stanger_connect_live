@@ -10,6 +10,8 @@ import {
   sanitizeSafeText,
   checkSlidingWindowRateLimit,
   normalizeAndValidatePeerMood,
+  MOOD_POPULARITY_WINDOW_MS,
+  PeerMoodHistoryEvent,
 } from './src/utils/rules.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -216,6 +218,44 @@ async function startServer() {
       createdAtMs: number;
     }
   >();
+  const liveMoodEvents = new Map<string, PeerMoodHistoryEvent>();
+  const lastRecordedMoodByUid = new Map<string, string>();
+
+  function pruneExpiredMoodEvents(nowMs = Date.now()) {
+    const cutoff = nowMs - MOOD_POPULARITY_WINDOW_MS;
+    for (const [id, ev] of liveMoodEvents.entries()) {
+      if (ev.timestampMs < cutoff) {
+        liveMoodEvents.delete(id);
+      }
+    }
+  }
+
+  function recordPeerMoodEvent(uid: string, displayName: string, rawMood: string | null | undefined) {
+    const nowMs = Date.now();
+    pruneExpiredMoodEvents(nowMs);
+    const check = normalizeAndValidatePeerMood(rawMood);
+    if (!check.valid || !check.mood) {
+      lastRecordedMoodByUid.delete(uid);
+      return;
+    }
+    const prevMood = lastRecordedMoodByUid.get(uid);
+    if (prevMood && prevMood.toLowerCase() === check.mood.toLowerCase()) {
+      return;
+    }
+    lastRecordedMoodByUid.set(uid, check.mood);
+    const id = `mood_${uid}_${nowMs}_${Math.random().toString(36).slice(2, 7)}`;
+    liveMoodEvents.set(id, {
+      id,
+      uid,
+      displayName: sanitizeSafeText(displayName || 'Member', 64),
+      mood: check.mood,
+      timestampMs: nowMs,
+    });
+    if (liveMoodEvents.size > 500) {
+      const oldestKey = liveMoodEvents.keys().next().value;
+      if (oldestKey) liveMoodEvents.delete(oldestKey);
+    }
+  }
 
   function buildPlatformUsersList() {
     const byUid = new Map<
@@ -266,6 +306,7 @@ async function startServer() {
   }
 
   function broadcastPresence() {
+    pruneExpiredMoodEvents();
     const peers = Array.from(clients.values())
       .map((c) => c.peer)
       .filter((p) => p.privacyVisibility !== 'ghost');
@@ -280,6 +321,7 @@ async function startServer() {
       gameScores: scores,
       moments: Array.from(liveMoments.values()),
       momentComments: Array.from(liveMomentComments.values()),
+      moodEvents: Array.from(liveMoodEvents.values()),
       serverTimestamp: Date.now(),
     });
     for (const { ws } of clients.values()) {
@@ -484,6 +526,9 @@ async function startServer() {
             connectedAt: clients.get(registeredUid)?.peer.connectedAt || Date.now(),
           };
           clients.set(registeredUid, { ws, peer });
+          if (peer.mood) {
+            recordPeerMoodEvent(peer.uid, peer.displayName, peer.mood);
+          }
           broadcastPresence();
           return;
         }
@@ -504,6 +549,7 @@ async function startServer() {
               return;
             }
             entry.peer.mood = moodCheck.mood;
+            recordPeerMoodEvent(entry.peer.uid, entry.peer.displayName, moodCheck.mood);
             broadcastPresence();
           }
           return;

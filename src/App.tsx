@@ -68,6 +68,8 @@ import {
   getOnlinePeerMoodMeta,
   summarizeOnlineDirectoryMoods,
   filterOnlinePeersByDirectoryCriteria,
+  PeerMoodHistoryEvent,
+  buildPopularMoodsLast24Hours,
   MomentCommentRecord,
   canUserCommentOnMoment,
   validateAndSanitizeMomentComment,
@@ -89,6 +91,7 @@ import { TalkingRoomView } from './components/TalkingRoomView';
 import { GlobalLeaderboard } from './components/GlobalLeaderboard';
 import { WeeklyActivityOverview } from './components/WeeklyActivityOverview';
 import { WeeklyProductivityDistribution } from './components/WeeklyProductivityDistribution';
+import { PopularMoods24hSummary } from './components/PopularMoods24hSummary';
 import type { OnlinePeer } from '../server';
 
 type SidebarPage =
@@ -341,6 +344,18 @@ export default function App() {
   }, [userMood]);
   const [customMoodInput, setCustomMoodInput] = useState<string>('');
   const [moodInputError, setMoodInputError] = useState<string>('');
+  const [moodEvents, setMoodEvents] = useState<PeerMoodHistoryEvent[]>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_mood_events_24h_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
 
   // Subtle UI Sound Effect Preferences (Incoming Messages & Connection Requests, with Background Boost)
   const [uiSoundPrefs, setUiSoundPrefs] = useState<UiSoundEffectPreferences>(() => {
@@ -800,6 +815,32 @@ export default function App() {
               }
               const next = Array.from(mergedMap.values());
               localStorage.setItem('mr_stranger_moment_comments_v1', JSON.stringify(next));
+              return next;
+            });
+          }
+          if (Array.isArray(msg.moodEvents)) {
+            setMoodEvents((prev) => {
+              const mergedMap = new Map<string, PeerMoodHistoryEvent>();
+              prev.forEach((ev) => {
+                if (ev && ev.id) mergedMap.set(ev.id, ev);
+              });
+              for (const raw of msg.moodEvents) {
+                if (raw && raw.id && raw.uid && raw.mood) {
+                  mergedMap.set(String(raw.id), {
+                    id: String(raw.id),
+                    uid: String(raw.uid),
+                    displayName: String(raw.displayName || 'Member'),
+                    mood: String(raw.mood),
+                    timestampMs: Number(raw.timestampMs) || Date.now(),
+                  });
+                }
+              }
+              const next = Array.from(mergedMap.values()).slice(-300);
+              try {
+                localStorage.setItem('mr_stranger_mood_events_24h_v1', JSON.stringify(next));
+              } catch {
+                // ignore
+              }
               return next;
             });
           }
@@ -1954,6 +1995,10 @@ export default function App() {
 
   const directoryFocusSummary = summarizeOnlineDirectoryFocus(onlinePeers, studyDesks);
   const directoryMoodSummary = summarizeOnlineDirectoryMoods(onlinePeers);
+  const popularMoods24h = buildPopularMoodsLast24Hours({
+    onlinePeers,
+    moodEvents,
+  });
   const displayedOnlinePeers = filterOnlinePeersByDirectoryCriteria(
     onlinePeers,
     studyDesks,
@@ -2010,6 +2055,24 @@ export default function App() {
           mood: check.mood,
         })
       );
+    } else if (check.mood) {
+      const nowMs = Date.now();
+      const localEv: PeerMoodHistoryEvent = {
+        id: `local_${currentIdentity.uid}_${nowMs}`,
+        uid: currentIdentity.uid,
+        displayName: currentIdentity.displayName,
+        mood: check.mood,
+        timestampMs: nowMs,
+      };
+      setMoodEvents((prev) => {
+        const next = [...prev, localEv].slice(-300);
+        try {
+          localStorage.setItem('mr_stranger_mood_events_24h_v1', JSON.stringify(next));
+        } catch {
+          // ignore
+        }
+        return next;
+      });
     }
   };
 
@@ -2739,6 +2802,13 @@ export default function App() {
                         </p>
                       )}
                     </div>
+
+                    {/* 24-Hour Popular Peer Moods Chart & Summary Section */}
+                    <PopularMoods24hSummary
+                      summary={popularMoods24h}
+                      activeMoodFilter={directoryMoodFilter}
+                      onSelectMoodFilter={setDirectoryMoodFilter}
+                    />
 
                     {/* Interactive Focus Filter, Mood Filter & Quick Study Desk Status Bar */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
