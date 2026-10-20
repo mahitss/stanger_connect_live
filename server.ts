@@ -602,6 +602,11 @@ async function startServer() {
             return;
           }
 
+          const entry = clients.get(registeredUid);
+          if (entry) {
+            entry.peer.activeStudyRoomCode = roomCode;
+          }
+
           studyDesks.set(registeredUid, {
             uid: registeredUid,
             displayName: sanitizeSafeText(String(msg.displayName || 'Scholar'), 64),

@@ -60,6 +60,9 @@ import {
   DEFAULT_UI_SOUND_PREFERENCES,
   toggleUiSoundEffects,
   shouldPlayUiNotificationSound,
+  getOnlinePeerFocusStatus,
+  summarizeOnlineDirectoryFocus,
+  filterOnlinePeersByFocus,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -267,6 +270,7 @@ export default function App() {
     return 25;
   });
   const [securityNotice, setSecurityNotice] = useState<string>('');
+  const [showOnlyInFocusPeers, setShowOnlyInFocusPeers] = useState<boolean>(false);
 
   // Subtle UI Sound Effect Preferences (Incoming Messages & Connection Requests, with Background Boost)
   const [uiSoundPrefs, setUiSoundPrefs] = useState<UiSoundEffectPreferences>(() => {
@@ -1543,6 +1547,44 @@ export default function App() {
     return true;
   });
 
+  const directoryFocusSummary = summarizeOnlineDirectoryFocus(onlinePeers, studyDesks);
+  const displayedOnlinePeers = filterOnlinePeersByFocus(
+    onlinePeers,
+    studyDesks,
+    showOnlyInFocusPeers
+  );
+  const myFocusStatus =
+    directoryFocusSummary.byUid[currentIdentity.uid] ||
+    getOnlinePeerFocusStatus(
+      {
+        uid: currentIdentity.uid,
+        currentMode: activePage === 'signout' ? 'hub' : activePage,
+        activeStudyRoomCode,
+      },
+      studyDesks
+    );
+
+  const handleToggleQuickFocusDesk = () => {
+    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+    const hasMyDesk = studyDesks.some((d) => d.uid === currentIdentity.uid);
+    if (hasMyDesk) {
+      wsRef.current.send(JSON.stringify({ type: 'study:leave' }));
+    } else {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'study:join',
+          roomCode: activeStudyRoomCode,
+          roomName: `Study Room ${activeStudyRoomCode}`,
+          displayName: currentIdentity.displayName,
+          subject: 'Deep Work & Problem Solving',
+          positiveNote: 'Focused in Study Room — join me for a Pomodoro block!',
+          timerMinutes: 25,
+        })
+      );
+      awardParticipation(15);
+    }
+  };
+
   // ==========================================================================
   // MNC-LEVEL WORKSPACE CANVAS: CARBON MATTE BLACK SIDEBAR + VIEWPORT
   // ==========================================================================
@@ -2063,24 +2105,102 @@ export default function App() {
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 {/* Live Online Users Directory (7 cols) */}
-                <div className="lg:col-span-7 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
-                  <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
-                    <div>
-                      <h1 className="text-lg font-bold text-white">
-                        Real People Online Now ({onlinePeers.length})
-                      </h1>
+                <div
+                  className="lg:col-span-7 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4"
+                  data-testid="hub-online-directory"
+                >
+                  <div className="border-b border-zinc-800/80 pb-3 space-y-3">
+                    <div className="space-y-1">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <h1 className="text-lg font-bold text-white">
+                            Real People Online Now ({onlinePeers.length})
+                          </h1>
+                          <span aria-hidden="true" className="text-zinc-600">·</span>
+                          <span
+                            className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-emerald-400 tabular-nums"
+                            data-testid="online-directory-in-focus-count"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`w-2 h-2 rounded-full ${
+                                directoryFocusSummary.inFocusCount > 0
+                                  ? 'bg-emerald-400 animate-pulse'
+                                  : 'bg-zinc-600'
+                              }`}
+                            />
+                            <span>{directoryFocusSummary.inFocusCount} In Focus</span>
+                          </span>
+                        </div>
+                        <span className="text-xs font-mono text-emerald-400 shrink-0">
+                          {wsConnected ? 'Live Sync' : 'Reconnecting'}
+                        </span>
+                      </div>
                       <p className="text-xs text-zinc-400">
-                        Send a connection request to anyone online. Once accepted, chat and voice/video calls unlock immediately.
+                        See who is currently productive in a Study Room with the live In Focus indicator, or send a connection request.
                       </p>
                     </div>
-                    <span className="text-xs font-mono text-emerald-400">
-                      {wsConnected ? 'Live Sync' : 'Reconnecting'}
-                    </span>
+
+                    {/* Interactive Focus Filter & Quick Study Desk Status Bar */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <div
+                        className="flex items-center gap-1 p-1 bg-[#050505] border border-zinc-800 rounded-md"
+                        role="group"
+                        aria-label="Filter online directory by Study Room focus status"
+                      >
+                        <button
+                          type="button"
+                          onClick={() => setShowOnlyInFocusPeers(false)}
+                          data-testid="online-directory-filter-all"
+                          className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                            !showOnlyInFocusPeers
+                              ? 'bg-white text-black'
+                              : 'text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          All Online ({onlinePeers.length})
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowOnlyInFocusPeers(true)}
+                          data-testid="online-directory-filter-focus"
+                          className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                            showOnlyInFocusPeers
+                              ? 'bg-white text-black'
+                              : 'text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          In Focus ({directoryFocusSummary.inFocusCount})
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleToggleQuickFocusDesk}
+                        aria-pressed={myFocusStatus.isInFocus}
+                        data-testid="hub-quick-focus-desk-toggle"
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                          myFocusStatus.isInFocus
+                            ? 'bg-[#050505] border-emerald-500/50 text-emerald-400 hover:border-emerald-400'
+                            : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-200'
+                        }`}
+                      >
+                        <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          {myFocusStatus.isInFocus
+                            ? 'Leave Focus Desk'
+                            : 'Set Status: In Focus'}
+                        </span>
+                      </button>
+                    </div>
                   </div>
 
                   <div className="space-y-3">
-                    {onlinePeers.map((peer) => {
+                    {displayedOnlinePeers.map((peer) => {
                       const isMe = peer.uid === currentIdentity.uid;
+                      const focusStatus =
+                        directoryFocusSummary.byUid[peer.uid] ||
+                        getOnlinePeerFocusStatus(peer, studyDesks);
                       const existingReq = requests.find(
                         (r) =>
                           (r.fromUid === currentIdentity.uid && r.toUid === peer.uid) ||
@@ -2090,70 +2210,144 @@ export default function App() {
                       return (
                         <div
                           key={peer.uid}
-                          className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
+                          data-testid={`online-directory-peer-row-${peer.uid}`}
+                          className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3"
                         >
-                          <div className="space-y-1 min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-bold text-white truncate">
-                                {peer.displayName} {isMe ? '(You — Online)' : ''}
-                              </span>
-                              <span aria-hidden="true" className="text-zinc-600">·</span>
-                              <span className="text-xs text-emerald-400 font-mono capitalize">
-                                {peer.currentMode.replace('_', ' ')}
-                              </span>
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="space-y-1 min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="text-sm font-bold text-white truncate">
+                                  {peer.displayName} {isMe ? '(You — Online)' : ''}
+                                </span>
+
+                                {focusStatus.isInFocus && (
+                                  <>
+                                    <span aria-hidden="true" className="text-zinc-600">·</span>
+                                    <span
+                                      data-testid="online-peer-in-focus-indicator"
+                                      data-peer-uid={peer.uid}
+                                      title={`Currently productive in Study Room (${focusStatus.statusDetail})`}
+                                      className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-emerald-400 whitespace-nowrap shrink-0"
+                                    >
+                                      <span
+                                        aria-hidden="true"
+                                        className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"
+                                      />
+                                      <BookOpen className="w-3 h-3 shrink-0" />
+                                      <span>In Focus</span>
+                                    </span>
+                                  </>
+                                )}
+
+                                <span aria-hidden="true" className="text-zinc-600">·</span>
+                                <span className="text-xs text-zinc-400 font-mono capitalize">
+                                  {peer.currentMode.replace('_', ' ')}
+                                </span>
+                              </div>
+
+                              <p className="text-xs text-zinc-400 truncate">{peer.bio}</p>
                             </div>
-                            <p className="text-xs text-zinc-400 truncate">{peer.bio}</p>
-                            <div className="text-xs text-zinc-500 font-mono tabular-nums">
-                              Streak: {peer.streakCount}d · Participation: {peer.participationPoints} pts
-                            </div>
+
+                            {focusStatus.isInFocus && focusStatus.roomCode && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (focusStatus.roomCode) {
+                                    setActiveStudyRoomCode(focusStatus.roomCode);
+                                  }
+                                  setActivePage('study');
+                                }}
+                                data-testid={`join-study-room-btn-${peer.uid}`}
+                                className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-emerald-400 border border-zinc-800 rounded whitespace-nowrap shrink-0"
+                              >
+                                {isMe ? 'Open Study Room' : 'Study Together'}
+                              </button>
+                            )}
                           </div>
 
-                          {!isMe && (
-                            <div className="flex items-center gap-2 shrink-0">
-                              {!existingReq ? (
+                          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-900">
+                            <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500 font-mono tabular-nums">
+                              <span>Streak: {peer.streakCount}d</span>
+                              <span aria-hidden="true">·</span>
+                              <span>Participation: {peer.participationPoints} pts</span>
+                              {focusStatus.isInFocus && focusStatus.statusDetail && (
                                 <>
-                                  <input
-                                    type="text"
-                                    value={requestNoteMap[peer.uid] || ''}
-                                    onChange={(e) =>
-                                      setRequestNoteMap((prev) => ({
-                                        ...prev,
-                                        [peer.uid]: e.target.value,
-                                      }))
-                                    }
-                                    placeholder="Add a note..."
-                                    aria-label={`Request note for ${peer.displayName}`}
-                                    className="px-2.5 py-1.5 text-xs bg-[#0A0A0C] border border-zinc-800 rounded text-white placeholder:text-zinc-600 w-32"
-                                  />
-                                  <button
-                                    type="button"
-                                    onClick={() => handleSendRequest(peer)}
-                                    className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                                  <span aria-hidden="true">·</span>
+                                  <span
+                                    className="text-emerald-400/90"
+                                    data-testid="online-peer-focus-room-detail"
                                   >
-                                    Send Request
-                                  </button>
+                                    Room: {focusStatus.statusDetail}
+                                  </span>
                                 </>
-                              ) : existingReq.status === 'accepted' ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setActiveChatPeerUid(peer.uid);
-                                    setActivePage('chat');
-                                  }}
-                                  className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
-                                >
-                                  Message Now
-                                </button>
-                              ) : (
-                                <span className="text-xs text-amber-400 font-mono">
-                                  Request {existingReq.status}
-                                </span>
                               )}
                             </div>
-                          )}
+
+                            {!isMe && (
+                              <div className="flex items-center gap-2 shrink-0">
+                                {!existingReq ? (
+                                  <>
+                                    <input
+                                      type="text"
+                                      value={requestNoteMap[peer.uid] || ''}
+                                      onChange={(e) =>
+                                        setRequestNoteMap((prev) => ({
+                                          ...prev,
+                                          [peer.uid]: e.target.value,
+                                        }))
+                                      }
+                                      placeholder="Add a note..."
+                                      aria-label={`Request note for ${peer.displayName}`}
+                                      className="px-2.5 py-1 text-xs bg-[#0A0A0C] border border-zinc-800 rounded text-white placeholder:text-zinc-600 w-32"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleSendRequest(peer)}
+                                      className="px-3 py-1 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                                    >
+                                      Send Request
+                                    </button>
+                                  </>
+                                ) : existingReq.status === 'accepted' ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveChatPeerUid(peer.uid);
+                                      setActivePage('chat');
+                                    }}
+                                    className="px-3 py-1 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                                  >
+                                    Message Now
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-amber-400 font-mono">
+                                    Request {existingReq.status}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
+
+                    {showOnlyInFocusPeers && displayedOnlinePeers.length === 0 && (
+                      <div
+                        className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs text-zinc-400 flex items-center justify-between gap-3"
+                        data-testid="online-directory-empty-focus"
+                      >
+                        <span>
+                          No online users are currently in a Study Room. Start a Focus Desk to let others see you are productive!
+                        </span>
+                        <button
+                          type="button"
+                          onClick={handleToggleQuickFocusDesk}
+                          className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                        >
+                          Set Status: In Focus
+                        </button>
+                      </div>
+                    )}
 
                     {otherOnlinePeers.length === 0 && (
                       <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs text-zinc-400">

@@ -218,6 +218,113 @@ export function shouldPlayUiNotificationSound(params: {
   };
 }
 
+// --- Online Directory 'In Focus' Indicator Logic (Study Room Presence) ---
+export interface StudyDeskSummary {
+  uid: string;
+  roomCode: string;
+  roomName?: string;
+  subject?: string;
+  timerMinutes?: number;
+}
+
+export interface OnlinePeerFocusInput {
+  uid: string;
+  currentMode: string;
+  activeStudyRoomCode?: string | null;
+}
+
+export interface OnlinePeerFocusStatus {
+  isInFocus: boolean;
+  indicatorLabel: 'In Focus' | null;
+  roomCode: string | null;
+  subject: string | null;
+  timerMinutes: number | null;
+  statusDetail: string;
+}
+
+export function getOnlinePeerFocusStatus(
+  peer: OnlinePeerFocusInput,
+  studyDesks: StudyDeskSummary[] = []
+): OnlinePeerFocusStatus {
+  const cleanUid = String(peer?.uid || '').trim();
+  const matchingDesk = studyDesks.find((desk) => String(desk.uid || '').trim() === cleanUid);
+  const isStudyMode = String(peer?.currentMode || '').trim().toLowerCase() === 'study';
+  const isInFocus = Boolean(isStudyMode || matchingDesk);
+
+  if (!isInFocus) {
+    return {
+      isInFocus: false,
+      indicatorLabel: null,
+      roomCode: null,
+      subject: null,
+      timerMinutes: null,
+      statusDetail: '',
+    };
+  }
+
+  const rawRoomCode =
+    matchingDesk?.roomCode || peer.activeStudyRoomCode || 'STUDY-GLOBAL';
+  const roomCode = normalizeStudyRoomCode(rawRoomCode) || 'STUDY-GLOBAL';
+  const subject = matchingDesk?.subject?.trim() || null;
+  const timerMinutes =
+    typeof matchingDesk?.timerMinutes === 'number' && matchingDesk.timerMinutes > 0
+      ? Math.round(matchingDesk.timerMinutes)
+      : null;
+
+  const detailParts: string[] = [roomCode];
+  if (subject) {
+    detailParts.push(subject);
+  }
+  if (timerMinutes) {
+    detailParts.push(`${timerMinutes}m`);
+  }
+
+  return {
+    isInFocus: true,
+    indicatorLabel: 'In Focus',
+    roomCode,
+    subject,
+    timerMinutes,
+    statusDetail: detailParts.join(' · '),
+  };
+}
+
+export function summarizeOnlineDirectoryFocus(
+  peers: OnlinePeerFocusInput[],
+  studyDesks: StudyDeskSummary[] = []
+): {
+  totalOnline: number;
+  inFocusCount: number;
+  byUid: Record<string, OnlinePeerFocusStatus>;
+} {
+  const byUid: Record<string, OnlinePeerFocusStatus> = {};
+  let inFocusCount = 0;
+
+  for (const peer of peers) {
+    const cleanUid = String(peer?.uid || '').trim();
+    if (!cleanUid) continue;
+    const status = getOnlinePeerFocusStatus(peer, studyDesks);
+    byUid[cleanUid] = status;
+    if (status.isInFocus) {
+      inFocusCount += 1;
+    }
+  }
+
+  return {
+    totalOnline: peers.length,
+    inFocusCount,
+    byUid,
+  };
+}
+
+export function filterOnlinePeersByFocus<T extends OnlinePeerFocusInput>(
+  peers: T[],
+  studyDesks: StudyDeskSummary[] = [],
+  onlyInFocus = false
+): T[] {
+  if (!onlyInFocus) return peers;
+  return peers.filter((peer) => getOnlinePeerFocusStatus(peer, studyDesks).isInFocus);
+}
 
 // --- Daily Productivity Goal Pure Math ---
 export interface DailyProductivityProgress {

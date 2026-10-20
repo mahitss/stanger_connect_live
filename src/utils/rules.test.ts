@@ -31,7 +31,66 @@ import {
   toggleUiSoundEffects,
   getUiSoundChimeSpec,
   shouldPlayUiNotificationSound,
+  getOnlinePeerFocusStatus,
+  summarizeOnlineDirectoryFocus,
+  filterOnlinePeersByFocus,
 } from './rules.ts';
+
+test('Online Directory In Focus indicator identifies users in Study Room mode or occupying an active Study Desk', () => {
+  const peers = [
+    { uid: 'usr_hub', currentMode: 'hub', activeStudyRoomCode: 'STUDY-GLOBAL' },
+    { uid: 'usr_study_mode', currentMode: 'study', activeStudyRoomCode: 'STUDY-ALGO99' },
+    { uid: 'usr_desk_claimed', currentMode: 'hub', activeStudyRoomCode: 'STUDY-MATH10' },
+    { uid: 'usr_chat_mode', currentMode: 'chat', activeStudyRoomCode: 'STUDY-GLOBAL' },
+  ];
+
+  const studyDesks = [
+    {
+      uid: 'usr_desk_claimed',
+      roomCode: 'STUDY-MATH10',
+      subject: 'Linear Algebra',
+      timerMinutes: 50,
+    },
+  ];
+
+  // Peer in hub without a desk is not In Focus
+  const hubStatus = getOnlinePeerFocusStatus(peers[0], studyDesks);
+  assert.equal(hubStatus.isInFocus, false);
+  assert.equal(hubStatus.indicatorLabel, null);
+
+  // Peer in Study Room mode is In Focus
+  const studyModeStatus = getOnlinePeerFocusStatus(peers[1], studyDesks);
+  assert.equal(studyModeStatus.isInFocus, true);
+  assert.equal(studyModeStatus.indicatorLabel, 'In Focus');
+  assert.equal(studyModeStatus.roomCode, 'STUDY-ALGO99');
+  assert.equal(studyModeStatus.statusDetail, 'STUDY-ALGO99');
+
+  // Peer with an active Study Desk is In Focus even while viewing the Hub
+  const deskStatus = getOnlinePeerFocusStatus(peers[2], studyDesks);
+  assert.equal(deskStatus.isInFocus, true);
+  assert.equal(deskStatus.indicatorLabel, 'In Focus');
+  assert.equal(deskStatus.roomCode, 'STUDY-MATH10');
+  assert.equal(deskStatus.subject, 'Linear Algebra');
+  assert.equal(deskStatus.timerMinutes, 50);
+  assert.equal(deskStatus.statusDetail, 'STUDY-MATH10 · Linear Algebra · 50m');
+
+  // Summary aggregates total online and in-focus counts accurately
+  const summary = summarizeOnlineDirectoryFocus(peers, studyDesks);
+  assert.equal(summary.totalOnline, 4);
+  assert.equal(summary.inFocusCount, 2);
+  assert.equal(summary.byUid['usr_study_mode'].isInFocus, true);
+  assert.equal(summary.byUid['usr_desk_claimed'].isInFocus, true);
+  assert.equal(summary.byUid['usr_hub'].isInFocus, false);
+
+  // Filter returns all peers when onlyInFocus is false, and only productive peers when true
+  assert.equal(filterOnlinePeersByFocus(peers, studyDesks, false).length, 4);
+  const focusedPeers = filterOnlinePeersByFocus(peers, studyDesks, true);
+  assert.equal(focusedPeers.length, 2);
+  assert.deepEqual(
+    focusedPeers.map((p) => p.uid),
+    ['usr_study_mode', 'usr_desk_claimed']
+  );
+});
 
 test('UI Sound Effect toggle and notification sound evaluation handles incoming messages, connection requests, mute state, and background boost', () => {
   // Default preferences start enabled for both incoming messages and connection requests
