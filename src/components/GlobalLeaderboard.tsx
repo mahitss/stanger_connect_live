@@ -1,5 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Trophy, Flame, Award, Users, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import {
+  Trophy,
+  Flame,
+  Award,
+  Users,
+  TrendingUp,
+  TrendingDown,
+  Minus,
+  PartyPopper,
+} from 'lucide-react';
 import {
   LeaderboardCandidate,
   LeaderboardSortBy,
@@ -11,6 +20,7 @@ import {
   createLeaderboardSnapshot,
   createBaselinePreviousSnapshot,
   computeLeaderboardTrends,
+  getTopContributorBadge,
 } from '../utils/rules';
 
 interface GlobalLeaderboardProps {
@@ -24,6 +34,53 @@ interface GlobalLeaderboardProps {
   onSendInviteFromLeaderboard: (entry: RankedLeaderboardEntry) => void;
   onOpenChatWithPeer: (peerUid: string) => void;
 }
+
+interface TopContributorBadgeProps {
+  rank: number;
+  testId?: string;
+  iconTestId?: string;
+}
+
+const TopContributorBadge: React.FC<TopContributorBadgeProps> = ({
+  rank,
+  testId,
+  iconTestId,
+}) => {
+  const badge = getTopContributorBadge(rank);
+  if (!badge.isTopContributor || !badge.label) return null;
+
+  const tierStyles =
+    badge.rank === 1
+      ? 'border-amber-500/40 bg-amber-500/10 text-amber-300'
+      : badge.rank === 2
+      ? 'border-zinc-400/40 bg-zinc-400/10 text-zinc-200'
+      : 'border-amber-700/50 bg-amber-700/15 text-amber-400';
+
+  const iconColor =
+    badge.rank === 1
+      ? 'text-amber-400'
+      : badge.rank === 2
+      ? 'text-zinc-300'
+      : 'text-amber-500';
+
+  return (
+    <span
+      data-testid={testId || `top-contributor-badge-${rank}`}
+      data-rank={rank}
+      data-tier={badge.tierName}
+      title={`${badge.label} · #${rank} ${badge.tierName}`}
+      aria-label={`${badge.label} (#${rank} ${badge.tierName})`}
+      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono font-semibold tracking-tight whitespace-nowrap shrink-0 ${tierStyles}`}
+    >
+      <PartyPopper
+        data-testid={iconTestId || `top-contributor-icon-${rank}`}
+        className={`w-3 h-3 shrink-0 ${iconColor}`}
+        aria-hidden="true"
+      />
+      <span>{badge.label}</span>
+    </span>
+  );
+};
 
 interface RankTrendBadgeProps {
   direction: LeaderboardTrendDirection;
@@ -338,17 +395,26 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
       {/* Platform-Wide KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="p-3.5 rounded-md border border-zinc-800/80 bg-[#050505] flex items-center justify-between gap-2">
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             <div className="text-[11px] text-zinc-400">Your Platform Standing</div>
-            <div
-              className="text-base font-bold font-mono tabular-nums text-white"
-              data-testid="leaderboard-your-rank"
-            >
-              #{myRankedEntry ? myRankedEntry.rank : 1} of {rankedEntries.length}
+            <div className="flex flex-wrap items-center gap-2">
+              <div
+                className="text-base font-bold font-mono tabular-nums text-white"
+                data-testid="leaderboard-your-rank"
+              >
+                #{myRankedEntry ? myRankedEntry.rank : 1} of {rankedEntries.length}
+              </div>
+              {myRankedEntry && myRankedEntry.isTopContributor && (
+                <TopContributorBadge
+                  rank={myRankedEntry.rank}
+                  testId="leaderboard-kpi-top-contributor-badge"
+                  iconTestId="leaderboard-kpi-top-contributor-icon"
+                />
+              )}
             </div>
           </div>
-          <div className="text-right font-mono tabular-nums text-xs text-zinc-300 space-y-0.5">
-            <div className="flex items-center justify-end gap-1.5">
+          <div className="text-right font-mono tabular-nums text-xs text-zinc-300 space-y-0.5 shrink-0">
+            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
               <span>{currentUserCandidate.participationPoints} pts</span>
               <RankTrendIndicator
                 direction={myTrend.pointsTrend}
@@ -357,7 +423,7 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
                 testId="leaderboard-kpi-my-points-trend"
               />
             </div>
-            <div className="flex items-center justify-end gap-1.5 text-amber-400">
+            <div className="flex items-center justify-end gap-1.5 text-amber-400 whitespace-nowrap">
               <span>{currentUserCandidate.streakCount}d streak</span>
               <RankTrendIndicator
                 direction={myTrend.streakTrend}
@@ -411,6 +477,10 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] font-mono text-zinc-500">
           <span>Rank Index = participationPoints + (streakCount × 25)</span>
+          <span className="inline-flex items-center gap-1 text-amber-300">
+            <PartyPopper className="w-3 h-3 text-amber-400 shrink-0" aria-hidden="true" />
+            <span>Top 3: Top Contributor</span>
+          </span>
           <span className="inline-flex items-center gap-1 text-emerald-400">
             <TrendingUp className="w-3 h-3 shrink-0" aria-hidden="true" />
             <span>Rising vs last update</span>
@@ -480,15 +550,24 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
                   </td>
 
                   <td className="py-3 px-4">
-                    <div className="font-bold text-white truncate max-w-[200px]">
-                      {entry.displayName}{' '}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="font-bold text-white truncate max-w-[180px]">
+                        {entry.displayName}
+                      </span>
                       {isMe && (
-                        <span className="text-[11px] font-mono font-normal text-emerald-400">
+                        <span className="text-[11px] font-mono font-normal text-emerald-400 shrink-0">
                           (You)
                         </span>
                       )}
+                      {entry.isTopContributor && (
+                        <TopContributorBadge
+                          rank={entry.rank}
+                          testId={`top-contributor-badge-${entry.rank}`}
+                          iconTestId={`top-contributor-icon-${entry.rank}`}
+                        />
+                      )}
                     </div>
-                    <div className="text-[11px] text-zinc-500 truncate max-w-[240px]">
+                    <div className="text-[11px] text-zinc-500 truncate max-w-[260px] mt-0.5">
                       {entry.bio}
                     </div>
                   </td>

@@ -118,6 +118,47 @@ export interface LeaderboardCandidate {
 
 export type LeaderboardSortBy = 'combined' | 'points' | 'streak';
 
+export interface TopContributorBadgeInfo {
+  isTopContributor: boolean;
+  rank: 1 | 2 | 3 | null;
+  label: 'Top Contributor' | null;
+  tierName: 'Gold Podium' | 'Silver Podium' | 'Bronze Podium' | null;
+}
+
+export function getTopContributorBadge(rank: number): TopContributorBadgeInfo {
+  const safeRank = Math.round(Number(rank) || 0);
+  if (safeRank === 1) {
+    return {
+      isTopContributor: true,
+      rank: 1,
+      label: 'Top Contributor',
+      tierName: 'Gold Podium',
+    };
+  }
+  if (safeRank === 2) {
+    return {
+      isTopContributor: true,
+      rank: 2,
+      label: 'Top Contributor',
+      tierName: 'Silver Podium',
+    };
+  }
+  if (safeRank === 3) {
+    return {
+      isTopContributor: true,
+      rank: 3,
+      label: 'Top Contributor',
+      tierName: 'Bronze Podium',
+    };
+  }
+  return {
+    isTopContributor: false,
+    rank: null,
+    label: null,
+    tierName: null,
+  };
+}
+
 export interface RankedLeaderboardEntry {
   rank: number;
   uid: string;
@@ -128,6 +169,7 @@ export interface RankedLeaderboardEntry {
   compositeScore: number;
   isOnline: boolean;
   currentMode: string;
+  isTopContributor: boolean;
 }
 
 export function computeLeaderboardCompositeScore(
@@ -222,17 +264,21 @@ export function aggregateGlobalLeaderboard(
   });
 
   const safeLimit = Math.max(1, Math.min(100, Math.round(limitCount)));
-  return visibleEntries.slice(0, safeLimit).map((item, idx) => ({
-    rank: idx + 1,
-    uid: item.uid,
-    displayName: item.displayName,
-    bio: item.bio || 'Active member on Mr. Stranger',
-    streakCount: item.streakCount,
-    participationPoints: item.participationPoints,
-    compositeScore: computeLeaderboardCompositeScore(item.participationPoints, item.streakCount),
-    isOnline: Boolean(item.isOnline),
-    currentMode: item.currentMode || 'hub',
-  }));
+  return visibleEntries.slice(0, safeLimit).map((item, idx) => {
+    const rank = idx + 1;
+    return {
+      rank,
+      uid: item.uid,
+      displayName: item.displayName,
+      bio: item.bio || 'Active member on Mr. Stranger',
+      streakCount: item.streakCount,
+      participationPoints: item.participationPoints,
+      compositeScore: computeLeaderboardCompositeScore(item.participationPoints, item.streakCount),
+      isOnline: Boolean(item.isOnline),
+      currentMode: item.currentMode || 'hub',
+      isTopContributor: rank <= 3,
+    };
+  });
 }
 
 export type LeaderboardTrendDirection = 'up' | 'down' | 'same';

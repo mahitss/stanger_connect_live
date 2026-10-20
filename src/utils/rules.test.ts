@@ -24,7 +24,55 @@ import {
   createLeaderboardSnapshot,
   createBaselinePreviousSnapshot,
   computeLeaderboardTrends,
+  getTopContributorBadge,
 } from './rules.ts';
+
+test('Top Contributor badge is assigned strictly to the top 3 users on the Global Leaderboard', () => {
+  const entries = aggregateGlobalLeaderboard(
+    [
+      [
+        { uid: 'usr_1', displayName: 'Aarav', streakCount: 8, participationPoints: 400 },
+        { uid: 'usr_2', displayName: 'Zoya', streakCount: 6, participationPoints: 340 },
+        { uid: 'usr_3', displayName: 'Kabir', streakCount: 5, participationPoints: 260 },
+        { uid: 'usr_4', displayName: 'Meera', streakCount: 3, participationPoints: 180 },
+        { uid: 'usr_5', displayName: 'Rohan', streakCount: 1, participationPoints: 90 },
+      ],
+    ],
+    'combined'
+  );
+
+  assert.equal(entries.length, 5);
+  assert.equal(entries[0].rank, 1);
+  assert.equal(entries[0].isTopContributor, true);
+  assert.equal(entries[1].rank, 2);
+  assert.equal(entries[1].isTopContributor, true);
+  assert.equal(entries[2].rank, 3);
+  assert.equal(entries[2].isTopContributor, true);
+  assert.equal(entries[3].rank, 4);
+  assert.equal(entries[3].isTopContributor, false);
+  assert.equal(entries[4].rank, 5);
+  assert.equal(entries[4].isTopContributor, false);
+
+  const badge1 = getTopContributorBadge(1);
+  assert.equal(badge1.isTopContributor, true);
+  assert.equal(badge1.label, 'Top Contributor');
+  assert.equal(badge1.tierName, 'Gold Podium');
+
+  const badge2 = getTopContributorBadge(2);
+  assert.equal(badge2.isTopContributor, true);
+  assert.equal(badge2.label, 'Top Contributor');
+  assert.equal(badge2.tierName, 'Silver Podium');
+
+  const badge3 = getTopContributorBadge(3);
+  assert.equal(badge3.isTopContributor, true);
+  assert.equal(badge3.label, 'Top Contributor');
+  assert.equal(badge3.tierName, 'Bronze Podium');
+
+  const badge4 = getTopContributorBadge(4);
+  assert.equal(badge4.isTopContributor, false);
+  assert.equal(badge4.label, null);
+  assert.equal(badge4.tierName, null);
+});
 
 test('Global Leaderboard trend calculation detects rising and falling rank movements compared to last update', () => {
   const previousEntries = aggregateGlobalLeaderboard(
