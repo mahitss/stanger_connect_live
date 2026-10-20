@@ -326,6 +326,145 @@ export function filterOnlinePeersByFocus<T extends OnlinePeerFocusInput>(
   return peers.filter((peer) => getOnlinePeerFocusStatus(peer, studyDesks).isInFocus);
 }
 
+// --- Photo Moment Comments & Connection Discussion Logic ---
+export interface MomentCommentRecord {
+  id: string;
+  momentId: string;
+  momentAuthorUid: string;
+  authorUid: string;
+  authorName: string;
+  text: string;
+  visibility: 'public' | 'connections';
+  createdAtMs: number;
+}
+
+export function canUserCommentOnMoment(params: {
+  momentAuthorUid: string;
+  momentVisibility: 'public' | 'connections';
+  currentUid: string;
+  acceptedPeerUids: Iterable<string>;
+}): {
+  allowed: boolean;
+  authorRelation: 'author' | 'connection' | 'member';
+  reason: string;
+} {
+  const cleanCurrent = String(params.currentUid || '').trim();
+  const cleanAuthor = String(params.momentAuthorUid || '').trim();
+
+  if (!cleanCurrent || !cleanAuthor) {
+    return {
+      allowed: false,
+      authorRelation: 'member',
+      reason: 'Sign in with a verified account to comment on photo moments.',
+    };
+  }
+
+  if (cleanCurrent === cleanAuthor) {
+    return {
+      allowed: true,
+      authorRelation: 'author',
+      reason: '',
+    };
+  }
+
+  const acceptedSet = new Set<string>();
+  for (const uid of params.acceptedPeerUids) {
+    acceptedSet.add(String(uid || '').trim());
+  }
+
+  if (acceptedSet.has(cleanAuthor)) {
+    return {
+      allowed: true,
+      authorRelation: 'connection',
+      reason: '',
+    };
+  }
+
+  if (params.momentVisibility === 'connections') {
+    return {
+      allowed: false,
+      authorRelation: 'member',
+      reason:
+        'Only accepted connections can comment on this connections-only photo moment.',
+    };
+  }
+
+  return {
+    allowed: true,
+    authorRelation: 'member',
+    reason: '',
+  };
+}
+
+export function validateAndSanitizeMomentComment(rawText: string): {
+  valid: boolean;
+  sanitizedText: string;
+  error: string;
+} {
+  const trimmed = String(rawText || '').trim();
+  if (!trimmed) {
+    return {
+      valid: false,
+      sanitizedText: '',
+      error: 'Please write a comment before posting.',
+    };
+  }
+  if (trimmed.length > 400) {
+    return {
+      valid: false,
+      sanitizedText: '',
+      error: 'Comments must be 400 characters or fewer.',
+    };
+  }
+  const threat = detectSecurityThreat(trimmed);
+  if (!threat.safe) {
+    return {
+      valid: false,
+      sanitizedText: '',
+      error: threat.reason,
+    };
+  }
+  const sanitizedText = sanitizeSafeText(trimmed, 400);
+  if (!sanitizedText) {
+    return {
+      valid: false,
+      sanitizedText: '',
+      error: 'Please enter valid text for your comment.',
+    };
+  }
+  return {
+    valid: true,
+    sanitizedText,
+    error: '',
+  };
+}
+
+export function groupMomentCommentsByMomentId(
+  comments: MomentCommentRecord[]
+): Record<string, MomentCommentRecord[]> {
+  const dedupedById = new Map<string, MomentCommentRecord>();
+  for (const item of comments) {
+    const cleanId = String(item?.id || '').trim();
+    const cleanMomentId = String(item?.momentId || '').trim();
+    if (!cleanId || !cleanMomentId) continue;
+    dedupedById.set(cleanId, item);
+  }
+
+  const grouped: Record<string, MomentCommentRecord[]> = {};
+  const sorted = Array.from(dedupedById.values()).sort(
+    (a, b) => a.createdAtMs - b.createdAtMs
+  );
+
+  for (const item of sorted) {
+    if (!grouped[item.momentId]) {
+      grouped[item.momentId] = [];
+    }
+    grouped[item.momentId].push(item);
+  }
+
+  return grouped;
+}
+
 // --- Daily Productivity Goal Pure Math ---
 export interface DailyProductivityProgress {
   targetMinutes: number;

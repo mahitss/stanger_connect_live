@@ -30,4 +30,8 @@ test('Dirty Dozen Security Invariants in firestore.rules', () => {
   assert.ok(rulesText.includes("id.matches('^[a-zA-Z0-9_\\\\-]+$')"));
   // 12. Study note focusMinutes integer bounds
   assert.ok(rulesText.includes('data.focusMinutes is int && data.focusMinutes >= 1 && data.focusMinutes <= 240'));
+  // 13. MomentComment validation & access control
+  assert.ok(rulesText.includes('function isValidMomentComment(data)'));
+  assert.ok(rulesText.includes('match /momentComments/{commentId}'));
+  assert.ok(rulesText.includes('data.text is string && data.text.size() >= 1 && data.text.size() <= 400'));
 });

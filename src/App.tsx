@@ -63,6 +63,10 @@ import {
   getOnlinePeerFocusStatus,
   summarizeOnlineDirectoryFocus,
   filterOnlinePeersByFocus,
+  MomentCommentRecord,
+  canUserCommentOnMoment,
+  validateAndSanitizeMomentComment,
+  groupMomentCommentsByMomentId,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -192,7 +196,30 @@ export default function App() {
   // Firestore & Real-Time Synchronized Collections
   const [requests, setRequests] = useState<ConnectionRequestDoc[]>([]);
   const [messages, setMessages] = useState<DirectMessageDoc[]>([]);
-  const [moments, setMoments] = useState<MomentPostDoc[]>([]);
+  const [moments, setMoments] = useState<MomentPostDoc[]>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_moments_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+  const [momentComments, setMomentComments] = useState<MomentCommentRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_moment_comments_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const [studyNotes, setStudyNotes] = useState<StudyNoteRecord[]>([]);
   const [firestoreProfiles, setFirestoreProfiles] = useState<LeaderboardCandidate[]>([]);
   const [serverPlatformUsers, setServerPlatformUsers] = useState<LeaderboardCandidate[]>([]);
@@ -208,6 +235,8 @@ export default function App() {
   const [momentVisibility, setMomentVisibility] = useState<'public' | 'connections'>('public');
   const [momentError, setMomentError] = useState('');
   const [momentFilter, setMomentFilter] = useState<'all' | 'public' | 'connections' | 'mine'>('all');
+  const [momentCommentInputs, setMomentCommentInputs] = useState<Record<string, string>>({});
+  const [momentCommentErrors, setMomentCommentErrors] = useState<Record<string, string>>({});
 
   // Daily Productivity Goal State (Target Focus Time & Completed Minutes for Today)
   const todayDateStr = formatDateKey(new Date());
@@ -588,12 +617,46 @@ export default function App() {
       (err) => handleFirestoreError(err, OperationType.LIST, 'profiles')
     );
 
+    const commentsQ = query(
+      collection(db, 'momentComments'),
+      where('visibility', '==', 'public'),
+      limit(100)
+    );
+    const unsubComments = onSnapshot(
+      commentsQ,
+      (snap) => {
+        const docs: MomentCommentRecord[] = snap.docs.map((d) => {
+          const data = d.data();
+          return {
+            id: d.id,
+            momentId: String(data.momentId || ''),
+            momentAuthorUid: String(data.momentAuthorUid || ''),
+            authorUid: String(data.authorUid || ''),
+            authorName: String(data.authorName || 'Member'),
+            text: String(data.text || ''),
+            visibility: (data.visibility as 'public' | 'connections') || 'public',
+            createdAtMs: data.createdAt?.toMillis?.() || Date.now(),
+          };
+        });
+        setMomentComments((prev) => {
+          const mergedMap = new Map<string, MomentCommentRecord>();
+          prev.forEach((c) => mergedMap.set(c.id, c));
+          docs.forEach((c) => mergedMap.set(c.id, c));
+          const next = Array.from(mergedMap.values());
+          localStorage.setItem('mr_stranger_moment_comments_v1', JSON.stringify(next));
+          return next;
+        });
+      },
+      (err) => handleFirestoreError(err, OperationType.LIST, 'momentComments')
+    );
+
     return () => {
       unsubSent();
       unsubRec();
       unsubMoments();
       unsubNotes();
       unsubProfiles();
+      unsubComments();
     };
   }, [authReady, authUser]);
 
@@ -652,6 +715,96 @@ export default function App() {
           }
           setStudyDesks(Array.isArray(msg.studyDesks) ? msg.studyDesks : []);
           setGameScores(Array.isArray(msg.gameScores) ? msg.gameScores : []);
+          if (Array.isArray(msg.moments)) {
+            setMoments((prev) => {
+              const mergedMap = new Map<string, MomentPostDoc>();
+              for (const raw of msg.moments) {
+                if (raw && raw.id && raw.photoDataUrl) {
+                  mergedMap.set(String(raw.id), {
+                    id: String(raw.id),
+                    authorUid: String(raw.authorUid || ''),
+                    authorName: String(raw.authorName || 'Member'),
+                    caption: String(raw.caption || ''),
+                    photoDataUrl: String(raw.photoDataUrl),
+                    visibility: raw.visibility === 'connections' ? 'connections' : 'public',
+                  });
+                }
+              }
+              prev.forEach((m) => {
+                if (!mergedMap.has(m.id)) mergedMap.set(m.id, m);
+              });
+              const next = Array.from(mergedMap.values());
+              localStorage.setItem('mr_stranger_moments_v1', JSON.stringify(next));
+              return next;
+            });
+          }
+          if (Array.isArray(msg.momentComments)) {
+            setMomentComments((prev) => {
+              const mergedMap = new Map<string, MomentCommentRecord>();
+              prev.forEach((c) => mergedMap.set(c.id, c));
+              for (const raw of msg.momentComments) {
+                if (raw && raw.id && raw.momentId) {
+                  mergedMap.set(String(raw.id), {
+                    id: String(raw.id),
+                    momentId: String(raw.momentId),
+                    momentAuthorUid: String(raw.momentAuthorUid || ''),
+                    authorUid: String(raw.authorUid || ''),
+                    authorName: String(raw.authorName || 'Member'),
+                    text: String(raw.text || ''),
+                    visibility: raw.visibility === 'connections' ? 'connections' : 'public',
+                    createdAtMs: Number(raw.createdAtMs) || Date.now(),
+                  });
+                }
+              }
+              const next = Array.from(mergedMap.values());
+              localStorage.setItem('mr_stranger_moment_comments_v1', JSON.stringify(next));
+              return next;
+            });
+          }
+        } else if (msg.type === 'moment:publish' && msg.moment) {
+          const incomingMoment: MomentPostDoc = {
+            id: String(msg.moment.id),
+            authorUid: String(msg.moment.authorUid || ''),
+            authorName: String(msg.moment.authorName || 'Member'),
+            caption: String(msg.moment.caption || ''),
+            photoDataUrl: String(msg.moment.photoDataUrl || ''),
+            visibility: msg.moment.visibility === 'connections' ? 'connections' : 'public',
+          };
+          setMoments((prev) => {
+            if (prev.some((m) => m.id === incomingMoment.id)) return prev;
+            const next = [incomingMoment, ...prev];
+            localStorage.setItem('mr_stranger_moments_v1', JSON.stringify(next));
+            return next;
+          });
+        } else if (msg.type === 'moment:delete' && msg.momentId) {
+          setMoments((prev) => {
+            const next = prev.filter((m) => m.id !== String(msg.momentId));
+            localStorage.setItem('mr_stranger_moments_v1', JSON.stringify(next));
+            return next;
+          });
+        } else if (msg.type === 'moment:comment' && msg.comment) {
+          const incomingComment: MomentCommentRecord = {
+            id: String(msg.comment.id),
+            momentId: String(msg.comment.momentId),
+            momentAuthorUid: String(msg.comment.momentAuthorUid || ''),
+            authorUid: String(msg.comment.authorUid || ''),
+            authorName: String(msg.comment.authorName || 'Member'),
+            text: String(msg.comment.text || ''),
+            visibility: msg.comment.visibility === 'connections' ? 'connections' : 'public',
+            createdAtMs: Number(msg.comment.createdAtMs) || Date.now(),
+          };
+          setMomentComments((prev) => {
+            if (prev.some((c) => c.id === incomingComment.id)) return prev;
+            const next = [...prev, incomingComment];
+            localStorage.setItem('mr_stranger_moment_comments_v1', JSON.stringify(next));
+            return next;
+          });
+        } else if (msg.type === 'moment:comment_delete' && msg.commentId) {
+          setMomentComments((prev) => {
+            const next = prev.filter((c) => c.id !== String(msg.commentId));
+            localStorage.setItem('mr_stranger_moment_comments_v1', JSON.stringify(next));
+            return next;
+          });
         } else if (msg.type === 'chat:direct') {
           setMessages((prev) => {
             if (prev.some((m) => m.id === msg.id)) return prev;
@@ -1278,10 +1431,26 @@ export default function App() {
       visibility: momentVisibility,
     };
 
-    setMoments((prev) => [newPost, ...prev]);
+    setMoments((prev) => {
+      const next = [newPost, ...prev];
+      localStorage.setItem('mr_stranger_moments_v1', JSON.stringify(next));
+      return next;
+    });
     setMomentCaption('');
     setMomentPhotoDataUrl('');
     awardParticipation(15);
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'moment:publish',
+          moment: {
+            ...newPost,
+            createdAtMs: Date.now(),
+          },
+        })
+      );
+    }
 
     if (authUser) {
       try {
@@ -1300,12 +1469,144 @@ export default function App() {
   };
 
   const handleDeleteMoment = async (id: string) => {
-    setMoments((prev) => prev.filter((m) => m.id !== id));
+    setMoments((prev) => {
+      const next = prev.filter((m) => m.id !== id);
+      localStorage.setItem('mr_stranger_moments_v1', JSON.stringify(next));
+      return next;
+    });
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'moment:delete',
+          momentId: id,
+        })
+      );
+    }
     if (authUser) {
       try {
         await deleteDoc(doc(db, 'moments', id));
       } catch (err) {
         handleFirestoreError(err, OperationType.DELETE, `moments/${id}`);
+      }
+    }
+  };
+
+  const handleAddMomentComment = async (e: React.FormEvent, momentItem: MomentPostDoc) => {
+    e.preventDefault();
+    if (!currentIdentity) return;
+
+    const acceptedSet = new Set(
+      requests
+        .filter((r) => r.status === 'accepted')
+        .map((r) => (r.fromUid === currentIdentity.uid ? r.toUid : r.fromUid))
+    );
+
+    const permission = canUserCommentOnMoment({
+      momentAuthorUid: momentItem.authorUid,
+      momentVisibility: momentItem.visibility,
+      currentUid: currentIdentity.uid,
+      acceptedPeerUids: acceptedSet,
+    });
+
+    if (!permission.allowed) {
+      setMomentCommentErrors((prev) => ({
+        ...prev,
+        [momentItem.id]: permission.reason,
+      }));
+      return;
+    }
+
+    const rawText = momentCommentInputs[momentItem.id] || '';
+    const check = validateAndSanitizeMomentComment(rawText);
+    if (!check.valid) {
+      setMomentCommentErrors((prev) => ({
+        ...prev,
+        [momentItem.id]: check.error,
+      }));
+      return;
+    }
+
+    setMomentCommentErrors((prev) => ({
+      ...prev,
+      [momentItem.id]: '',
+    }));
+
+    const commentId = `cmt_${Date.now()}_${currentIdentity.uid}`;
+    const newComment: MomentCommentRecord = {
+      id: commentId,
+      momentId: momentItem.id,
+      momentAuthorUid: momentItem.authorUid,
+      authorUid: currentIdentity.uid,
+      authorName: currentIdentity.displayName,
+      text: check.sanitizedText,
+      visibility: momentItem.visibility,
+      createdAtMs: Date.now(),
+    };
+
+    setMomentComments((prev) => {
+      const next = [...prev, newComment];
+      localStorage.setItem('mr_stranger_moment_comments_v1', JSON.stringify(next));
+      return next;
+    });
+    setMomentCommentInputs((prev) => ({
+      ...prev,
+      [momentItem.id]: '',
+    }));
+    awardParticipation(5);
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'moment:comment',
+          id: newComment.id,
+          momentId: newComment.momentId,
+          momentAuthorUid: newComment.momentAuthorUid,
+          authorName: newComment.authorName,
+          text: newComment.text,
+          visibility: newComment.visibility,
+          createdAtMs: newComment.createdAtMs,
+        })
+      );
+    }
+
+    if (authUser) {
+      try {
+        await setDoc(doc(db, 'momentComments', commentId), {
+          momentId: newComment.momentId,
+          momentAuthorUid: newComment.momentAuthorUid,
+          authorUid: newComment.authorUid,
+          authorName: newComment.authorName,
+          text: newComment.text,
+          visibility: newComment.visibility,
+          createdAt: serverTimestamp(),
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, `momentComments/${commentId}`);
+      }
+    }
+  };
+
+  const handleDeleteMomentComment = async (commentId: string) => {
+    setMomentComments((prev) => {
+      const next = prev.filter((c) => c.id !== commentId);
+      localStorage.setItem('mr_stranger_moment_comments_v1', JSON.stringify(next));
+      return next;
+    });
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'moment:comment_delete',
+          commentId,
+        })
+      );
+    }
+
+    if (authUser) {
+      try {
+        await deleteDoc(doc(db, 'momentComments', commentId));
+      } catch (err) {
+        handleFirestoreError(err, OperationType.DELETE, `momentComments/${commentId}`);
       }
     }
   };
@@ -1546,6 +1847,7 @@ export default function App() {
     if (momentFilter === 'mine') return m.authorUid === currentIdentity.uid;
     return true;
   });
+  const commentsByMomentId = groupMomentCommentsByMomentId(momentComments);
 
   const directoryFocusSummary = summarizeOnlineDirectoryFocus(onlinePeers, studyDesks);
   const displayedOnlinePeers = filterOnlinePeersByFocus(
@@ -3007,38 +3309,221 @@ export default function App() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {filteredMoments.map((item) => (
-                        <article
-                          key={item.id}
-                          className="rounded-lg border border-zinc-800/80 bg-[#0A0A0C] overflow-hidden"
-                        >
-                          <img
-                            src={item.photoDataUrl}
-                            alt={item.caption}
-                            referrerPolicy="no-referrer"
-                            className="w-full max-h-80 object-cover bg-[#050505]"
-                          />
-                          <div className="p-5 flex items-start justify-between gap-4">
-                            <div className="space-y-1">
-                              <div className="text-xs text-zinc-400">
-                                <span className="font-semibold text-white">{item.authorName}</span>
-                                <span aria-hidden="true"> · </span>
-                                <span className="capitalize">{item.visibility} Moment</span>
+                      {filteredMoments.map((item) => {
+                        const itemComments = commentsByMomentId[item.id] || [];
+                        const commentGate = canUserCommentOnMoment({
+                          momentAuthorUid: item.authorUid,
+                          momentVisibility: item.visibility,
+                          currentUid: currentIdentity.uid,
+                          acceptedPeerUids,
+                        });
+                        const itemCommentError = momentCommentErrors[item.id] || '';
+
+                        return (
+                          <article
+                            key={item.id}
+                            data-testid={`moment-card-${item.id}`}
+                            className="rounded-lg border border-zinc-800/80 bg-[#0A0A0C] overflow-hidden"
+                          >
+                            <img
+                              src={item.photoDataUrl}
+                              alt={item.caption}
+                              referrerPolicy="no-referrer"
+                              className="w-full max-h-80 object-cover bg-[#050505]"
+                            />
+                            <div className="p-5 flex items-start justify-between gap-4">
+                              <div className="space-y-1">
+                                <div className="text-xs text-zinc-400">
+                                  <span className="font-semibold text-white">{item.authorName}</span>
+                                  <span aria-hidden="true"> · </span>
+                                  <span className="capitalize">{item.visibility} Moment</span>
+                                  <span aria-hidden="true"> · </span>
+                                  <span className="font-mono text-emerald-400">
+                                    {itemComments.length}{' '}
+                                    {itemComments.length === 1 ? 'Comment' : 'Comments'}
+                                  </span>
+                                </div>
+                                <p className="text-sm text-zinc-100">{item.caption}</p>
                               </div>
-                              <p className="text-sm text-zinc-100">{item.caption}</p>
+                              {item.authorUid === currentIdentity.uid && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteMoment(item.id)}
+                                  className="px-3 py-1 text-xs text-rose-400 hover:text-rose-300 bg-[#050505] border border-zinc-800 rounded whitespace-nowrap shrink-0"
+                                >
+                                  Delete
+                                </button>
+                              )}
                             </div>
-                            {item.authorUid === currentIdentity.uid && (
-                              <button
-                                type="button"
-                                onClick={() => handleDeleteMoment(item.id)}
-                                className="px-3 py-1 text-xs text-rose-400 hover:text-rose-300 bg-[#050505] border border-zinc-800 rounded whitespace-nowrap shrink-0"
-                              >
-                                Delete
-                              </button>
-                            )}
-                          </div>
-                        </article>
-                      ))}
+
+                            {/* Photo Moment Comment & Connection Discussion Section */}
+                            <div
+                              data-testid="moment-comments-section"
+                              data-moment-id={item.id}
+                              className="border-t border-zinc-800/80 bg-[#050505]/70 p-5 space-y-4"
+                            >
+                              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                    <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                    <h3
+                                      className="font-bold text-white"
+                                      data-testid={`moment-comment-count-${item.id}`}
+                                    >
+                                      Discussion ({itemComments.length}{' '}
+                                      {itemComments.length === 1 ? 'Comment' : 'Comments'})
+                                    </h3>
+                                  </span>
+                                  <span aria-hidden="true" className="text-zinc-600">·</span>
+                                  <span className="text-zinc-400 font-mono whitespace-nowrap">
+                                    {item.visibility === 'connections'
+                                      ? 'Accepted Connections Only'
+                                      : 'Connections & Verified Feed'}
+                                  </span>
+                                </div>
+                                <span className="text-[11px] font-mono text-zinc-500 whitespace-nowrap">
+                                  +5 pts per comment
+                                </span>
+                              </div>
+
+                              {itemComments.length === 0 ? (
+                                commentGate.allowed ? (
+                                  <p
+                                    className="text-xs text-zinc-400 py-1"
+                                    data-testid={`moment-comments-empty-${item.id}`}
+                                  >
+                                    No comments yet. Share a thought below to discuss this photo with{' '}
+                                    {item.authorUid === currentIdentity.uid
+                                      ? 'your connections'
+                                      : item.authorName}
+                                    .
+                                  </p>
+                                ) : null
+                              ) : (
+                                <div
+                                  className="space-y-2.5"
+                                  data-testid={`moment-comments-list-${item.id}`}
+                                >
+                                  {itemComments.map((cmt) => {
+                                    const isCommentAuthor = cmt.authorUid === currentIdentity.uid;
+                                    const isMomentOwner = item.authorUid === currentIdentity.uid;
+                                    const relationLabel =
+                                      cmt.authorUid === item.authorUid
+                                        ? 'Author'
+                                        : acceptedPeerUids.has(cmt.authorUid)
+                                        ? 'Connected'
+                                        : isCommentAuthor
+                                        ? 'You'
+                                        : 'Member';
+
+                                    return (
+                                      <div
+                                        key={cmt.id}
+                                        data-testid="moment-comment-item"
+                                        data-comment-id={cmt.id}
+                                        className="p-3 rounded-md bg-[#0A0A0C] border border-zinc-800/80 space-y-1.5"
+                                      >
+                                        <div className="flex items-center justify-between gap-2 text-xs">
+                                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                            <span className="font-semibold text-white truncate">
+                                              {cmt.authorName}
+                                            </span>
+                                            <span aria-hidden="true" className="text-zinc-600">·</span>
+                                            <span className="text-[11px] font-mono text-emerald-400">
+                                              {relationLabel}
+                                            </span>
+                                            <span aria-hidden="true" className="text-zinc-600">·</span>
+                                            <span className="text-[11px] font-mono text-zinc-500 tabular-nums">
+                                              {new Date(cmt.createdAtMs).toLocaleTimeString([], {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                              })}
+                                            </span>
+                                          </div>
+
+                                          {(isCommentAuthor || isMomentOwner) && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleDeleteMomentComment(cmt.id)}
+                                              aria-label={`Delete comment by ${cmt.authorName}`}
+                                              data-testid={`delete-moment-comment-${cmt.id}`}
+                                              className="text-[11px] text-zinc-500 hover:text-rose-400 font-mono transition-colors shrink-0"
+                                            >
+                                              Delete
+                                            </button>
+                                          )}
+                                        </div>
+                                        <p className="text-xs text-zinc-200 leading-relaxed break-words">
+                                          {cmt.text}
+                                        </p>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {commentGate.allowed ? (
+                                <form
+                                  onSubmit={(e) => handleAddMomentComment(e, item)}
+                                  className="space-y-2 pt-1"
+                                  data-testid={`moment-comment-form-${item.id}`}
+                                >
+                                  {itemCommentError && (
+                                    <p
+                                      className="text-xs text-rose-400"
+                                      data-testid={`moment-comment-error-${item.id}`}
+                                    >
+                                      {itemCommentError}
+                                    </p>
+                                  )}
+                                  <div className="flex flex-col sm:flex-row gap-2">
+                                    <input
+                                      type="text"
+                                      maxLength={400}
+                                      value={momentCommentInputs[item.id] || ''}
+                                      onChange={(e) =>
+                                        setMomentCommentInputs((prev) => ({
+                                          ...prev,
+                                          [item.id]: e.target.value,
+                                        }))
+                                      }
+                                      placeholder={`Write a comment to discuss ${
+                                        item.authorUid === currentIdentity.uid
+                                          ? 'your'
+                                          : `${item.authorName}'s`
+                                      } photo...`}
+                                      aria-label={`Comment on ${item.authorName}'s photo moment`}
+                                      data-testid="moment-comment-input"
+                                      className="flex-1 px-3.5 py-2 text-xs bg-[#0A0A0C] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+                                    />
+                                    <button
+                                      type="submit"
+                                      data-testid="moment-comment-submit"
+                                      className="px-4 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
+                                    >
+                                      Post Comment
+                                    </button>
+                                  </div>
+                                </form>
+                              ) : (
+                                <div
+                                  className="p-3 rounded-md bg-[#0A0A0C] border border-zinc-800/80 text-xs text-zinc-400 flex flex-wrap items-center justify-between gap-2"
+                                  data-testid={`moment-comment-locked-${item.id}`}
+                                >
+                                  <span>{commentGate.reason}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => setActivePage('hub')}
+                                    className="px-3 py-1 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded whitespace-nowrap shrink-0"
+                                  >
+                                    Connect in Directory
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </article>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

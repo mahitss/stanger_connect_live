@@ -340,6 +340,55 @@
         "focusMinutes",
         "createdAt"
       ]
+    },
+    "MomentComment": {
+      "title": "MomentComment",
+      "description": "Comment posted by a connection or member on a photo Moment to discuss the photo.",
+      "type": "object",
+      "properties": {
+        "momentId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "momentAuthorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "authorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public", "connections"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "momentId",
+        "momentAuthorUid",
+        "authorUid",
+        "authorName",
+        "text",
+        "visibility",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -362,6 +411,10 @@
     "/moments/{momentId}": {
       "schema": { "$ref": "#/entities/MomentPost" },
       "description": "Real user-uploaded photo moments."
+    },
+    "/momentComments/{commentId}": {
+      "schema": { "$ref": "#/entities/MomentComment" },
+      "description": "Discussion comments posted on photo moments."
     },
     "/studyRooms/{roomCode}": {
       "schema": { "$ref": "#/entities/StudyRoomSession" },

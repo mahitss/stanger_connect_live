@@ -34,7 +34,97 @@ import {
   getOnlinePeerFocusStatus,
   summarizeOnlineDirectoryFocus,
   filterOnlinePeersByFocus,
+  canUserCommentOnMoment,
+  validateAndSanitizeMomentComment,
+  groupMomentCommentsByMomentId,
 } from './rules.ts';
+
+test('Photo Moment comment rules enforce connection permissions, sanitize text, block injections, and sort chronologically', () => {
+  // 1. Author can always comment on their own moment
+  const authorCheck = canUserCommentOnMoment({
+    momentAuthorUid: 'usr_maya',
+    momentVisibility: 'connections',
+    currentUid: 'usr_maya',
+    acceptedPeerUids: [],
+  });
+  assert.equal(authorCheck.allowed, true);
+  assert.equal(authorCheck.authorRelation, 'author');
+
+  // 2. Accepted connection can comment on connections-only moment
+  const connCheck = canUserCommentOnMoment({
+    momentAuthorUid: 'usr_maya',
+    momentVisibility: 'connections',
+    currentUid: 'usr_aarav',
+    acceptedPeerUids: ['usr_maya'],
+  });
+  assert.equal(connCheck.allowed, true);
+  assert.equal(connCheck.authorRelation, 'connection');
+
+  // 3. Non-connected user cannot comment on connections-only moment
+  const nonConnPrivateCheck = canUserCommentOnMoment({
+    momentAuthorUid: 'usr_maya',
+    momentVisibility: 'connections',
+    currentUid: 'usr_stranger',
+    acceptedPeerUids: [],
+  });
+  assert.equal(nonConnPrivateCheck.allowed, false);
+  assert.ok(nonConnPrivateCheck.reason.includes('accepted connections'));
+
+  // 4. Non-connected member CAN comment on a public moment
+  const publicMemberCheck = canUserCommentOnMoment({
+    momentAuthorUid: 'usr_maya',
+    momentVisibility: 'public',
+    currentUid: 'usr_stranger',
+    acceptedPeerUids: [],
+  });
+  assert.equal(publicMemberCheck.allowed, true);
+  assert.equal(publicMemberCheck.authorRelation, 'member');
+
+  // 5. Validation & XSS/SQLi sanitization
+  assert.equal(validateAndSanitizeMomentComment('   ').valid, false);
+  assert.equal(validateAndSanitizeMomentComment('a'.repeat(401)).valid, false);
+  assert.equal(validateAndSanitizeMomentComment('<script>alert(1)</script>').valid, false);
+  const validComment = validateAndSanitizeMomentComment('Great distributed systems notes!');
+  assert.equal(validComment.valid, true);
+  assert.equal(validComment.sanitizedText, 'Great distributed systems notes!');
+
+  // 6. Grouping and chronological sorting
+  const grouped = groupMomentCommentsByMomentId([
+    {
+      id: 'c_2',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_maya',
+      authorUid: 'usr_maya',
+      authorName: 'Maya Lin',
+      text: 'Thanks Aarav! Let us review Raft section 5 next.',
+      visibility: 'public',
+      createdAtMs: 2000,
+    },
+    {
+      id: 'c_1',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_maya',
+      authorUid: 'usr_aarav',
+      authorName: 'Aarav Mehta',
+      text: 'Awesome whiteboard diagram!',
+      visibility: 'public',
+      createdAtMs: 1000,
+    },
+    {
+      id: 'c_1', // duplicate ID should be deduplicated
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_maya',
+      authorUid: 'usr_aarav',
+      authorName: 'Aarav Mehta',
+      text: 'Awesome whiteboard diagram!',
+      visibility: 'public',
+      createdAtMs: 1000,
+    },
+  ]);
+  assert.equal(grouped['m_1'].length, 2);
+  assert.equal(grouped['m_1'][0].id, 'c_1');
+  assert.equal(grouped['m_1'][1].id, 'c_2');
+});
 
 test('Online Directory In Focus indicator identifies users in Study Room mode or occupying an active Study Desk', () => {
   const peers = [

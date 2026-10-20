@@ -153,6 +153,23 @@ service cloud.firestore {
       data.createdAt is timestamp;
     }
 
+    function isValidMomentComment(data) {
+      return data.keys().hasAll([
+        'momentId', 'momentAuthorUid', 'authorUid', 'authorName', 'text', 'visibility', 'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'momentId', 'momentAuthorUid', 'authorUid', 'authorName', 'text', 'visibility', 'createdAt'
+      ]) &&
+      data.momentId is string && data.momentId.size() >= 1 && data.momentId.size() <= 128 && data.momentId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.momentAuthorUid is string && data.momentAuthorUid.size() >= 1 && data.momentAuthorUid.size() <= 128 && data.momentAuthorUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 && data.authorUid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.authorUid == request.auth.uid &&
+      data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 64 &&
+      data.text is string && data.text.size() >= 1 && data.text.size() <= 400 &&
+      data.visibility is string && data.visibility.size() <= 16 && (data.visibility == 'public' || data.visibility == 'connections') &&
+      data.createdAt is timestamp;
+    }
+
     // 1. Public User Profiles (No PII stored here)
     match /profiles/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (resource == null || existing().uid == userId);
@@ -256,7 +273,22 @@ service cloud.firestore {
       allow delete: if isVerifiedUser() && isValidId(momentId) && existing().authorUid == request.auth.uid;
     }
 
-    // 6. Shareable Study Rooms
+    // 6. Photo Moment Comments
+    match /momentComments/{commentId} {
+      allow get: if isSignedIn() && isValidId(commentId) &&
+        (resource == null || existing().visibility == 'public' || existing().authorUid == request.auth.uid || existing().momentAuthorUid == request.auth.uid);
+      allow list: if isSignedIn() &&
+        (existing().visibility == 'public' || existing().authorUid == request.auth.uid || existing().momentAuthorUid == request.auth.uid);
+      allow create: if isVerifiedUser() &&
+        isValidId(commentId) &&
+        isValidMomentComment(incoming()) &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser() && isValidId(commentId) &&
+        (existing().authorUid == request.auth.uid || existing().momentAuthorUid == request.auth.uid);
+    }
+
+    // 7. Shareable Study Rooms
     match /studyRooms/{roomCode} {
       allow get: if isSignedIn() && isValidId(roomCode) &&
         (resource == null || existing().focusMinutes >= 1);
@@ -270,7 +302,7 @@ service cloud.firestore {
       allow delete: if isVerifiedUser() && isValidId(roomCode) && existing().hostUid == request.auth.uid;
     }
 
-    // 7. Study Notes
+    // 8. Study Notes
     match /studyNotes/{noteId} {
       allow get: if isSignedIn() && isValidId(noteId) &&
         (resource == null || existing().focusMinutes >= 1);

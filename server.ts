@@ -189,6 +189,31 @@ async function startServer() {
   const liveGameState = new Map<string, GameScoreEntry>();
   const acceptedPairKeys = new Set<string>();
   const wsRateMap = new Map<WebSocket, number[]>();
+  const liveMoments = new Map<
+    string,
+    {
+      id: string;
+      authorUid: string;
+      authorName: string;
+      caption: string;
+      photoDataUrl: string;
+      visibility: 'public' | 'connections';
+      createdAtMs: number;
+    }
+  >();
+  const liveMomentComments = new Map<
+    string,
+    {
+      id: string;
+      momentId: string;
+      momentAuthorUid: string;
+      authorUid: string;
+      authorName: string;
+      text: string;
+      visibility: 'public' | 'connections';
+      createdAtMs: number;
+    }
+  >();
 
   function buildPlatformUsersList() {
     const byUid = new Map<
@@ -251,6 +276,8 @@ async function startServer() {
       platformUsers,
       studyDesks: desks,
       gameScores: scores,
+      moments: Array.from(liveMoments.values()),
+      momentComments: Array.from(liveMomentComments.values()),
       serverTimestamp: Date.now(),
     });
     for (const { ws } of clients.values()) {
@@ -642,6 +669,140 @@ async function startServer() {
           for (const { ws: clientWs } of clients.values()) {
             if (clientWs.readyState === WebSocket.OPEN) {
               clientWs.send(chatMsg);
+            }
+          }
+          return;
+        }
+
+        // Photo Moment Publish, Delete, Comment & Discussion Sync
+        if (msg.type === 'moment:publish' && msg.moment) {
+          const rawMoment = msg.moment;
+          const momentId = String(rawMoment.id || `moment_${Date.now()}_${registeredUid}`)
+            .replace(/[^a-zA-Z0-9_-]/g, '')
+            .slice(0, 128);
+          const rawCaption = String(rawMoment.caption || '');
+          const photoDataUrl = String(rawMoment.photoDataUrl || '');
+          if (
+            !momentId ||
+            !rawCaption.trim() ||
+            !detectSecurityThreat(rawCaption).safe ||
+            !photoDataUrl.startsWith('data:image/') ||
+            photoDataUrl.length > 750000
+          ) {
+            return;
+          }
+          const visibility: 'public' | 'connections' =
+            rawMoment.visibility === 'connections' ? 'connections' : 'public';
+          const momentRecord = {
+            id: momentId,
+            authorUid: registeredUid,
+            authorName: sanitizeSafeText(String(rawMoment.authorName || 'Member'), 64),
+            caption: sanitizeSafeText(rawCaption, 500),
+            photoDataUrl,
+            visibility,
+            createdAtMs: Number(rawMoment.createdAtMs) || Date.now(),
+          };
+          liveMoments.set(momentId, momentRecord);
+          const pubFrame = JSON.stringify({
+            type: 'moment:publish',
+            moment: momentRecord,
+          });
+          for (const { ws: clientWs } of clients.values()) {
+            if (clientWs.readyState === WebSocket.OPEN) {
+              clientWs.send(pubFrame);
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'moment:delete' && msg.momentId) {
+          const momentId = String(msg.momentId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
+          const existing = liveMoments.get(momentId);
+          if (!existing || existing.authorUid === registeredUid) {
+            liveMoments.delete(momentId);
+            const delFrame = JSON.stringify({
+              type: 'moment:delete',
+              momentId,
+            });
+            for (const { ws: clientWs } of clients.values()) {
+              if (clientWs.readyState === WebSocket.OPEN) {
+                clientWs.send(delFrame);
+              }
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'moment:comment' && msg.momentId) {
+          const momentId = String(msg.momentId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
+          const momentAuthorUid = String(msg.momentAuthorUid || registeredUid)
+            .replace(/[^a-zA-Z0-9_-]/g, '')
+            .slice(0, 128);
+          const rawText = String(msg.text || '');
+          if (!momentId || !rawText.trim() || !detectSecurityThreat(rawText).safe) {
+            return;
+          }
+          const visibility: 'public' | 'connections' =
+            msg.visibility === 'connections' ? 'connections' : 'public';
+
+          if (visibility === 'connections' && registeredUid !== momentAuthorUid) {
+            const pairKey = makeConnectionPairKey(registeredUid, momentAuthorUid);
+            if (!acceptedPairKeys.has(pairKey)) {
+              ws.send(
+                JSON.stringify({
+                  type: 'server:security_notice',
+                  reason:
+                    'Only accepted connections can comment on a connections-only photo moment.',
+                })
+              );
+              return;
+            }
+          }
+
+          const commentId = String(msg.id || `cmt_${Date.now()}_${registeredUid}`)
+            .replace(/[^a-zA-Z0-9_-]/g, '')
+            .slice(0, 128);
+
+          const commentRecord = {
+            id: commentId,
+            momentId,
+            momentAuthorUid,
+            authorUid: registeredUid,
+            authorName: sanitizeSafeText(String(msg.authorName || 'Member'), 64),
+            text: sanitizeSafeText(rawText, 400),
+            visibility,
+            createdAtMs: Number(msg.createdAtMs) || Date.now(),
+          };
+
+          liveMomentComments.set(commentId, commentRecord);
+          const commentFrame = JSON.stringify({
+            type: 'moment:comment',
+            comment: commentRecord,
+          });
+          for (const { ws: clientWs } of clients.values()) {
+            if (clientWs.readyState === WebSocket.OPEN) {
+              clientWs.send(commentFrame);
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'moment:comment_delete' && msg.commentId) {
+          const commentId = String(msg.commentId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
+          const existing = liveMomentComments.get(commentId);
+          if (
+            existing &&
+            (existing.authorUid === registeredUid || existing.momentAuthorUid === registeredUid)
+          ) {
+            liveMomentComments.delete(commentId);
+            const delFrame = JSON.stringify({
+              type: 'moment:comment_delete',
+              commentId,
+            });
+            for (const { ws: clientWs } of clients.values()) {
+              if (clientWs.readyState === WebSocket.OPEN) {
+                clientWs.send(delFrame);
+              }
             }
           }
           return;
