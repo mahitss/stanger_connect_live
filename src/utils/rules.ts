@@ -1049,6 +1049,67 @@ export function buildPersonalMoodHistoryCsv(params: {
   };
 }
 
+export function buildMoodHistory24hCsv(params: {
+  summary: MoodPopularity24hSummary;
+  nowMs?: number;
+}): {
+  csvContent: string;
+  filename: string;
+  rowCount: number;
+} {
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0
+      ? params.nowMs
+      : Date.now();
+  const exportedAtIso = new Date(nowMs).toISOString();
+  const dateKey = exportedAtIso.slice(0, 10);
+
+  const bucketLabels = params.summary.trendBuckets.map(
+    (b) => `Bucket ${b.label}`
+  );
+  const headers = [
+    'Rank',
+    'Mood',
+    'Category Description',
+    '24h Check-Ins',
+    'Live Active Peers',
+    'Unique Peers (24h)',
+    'Share (%)',
+    'Top 24h Mood',
+    ...bucketLabels,
+    'Exported At (ISO)',
+  ];
+
+  const rows = params.summary.items.map((item) => {
+    const bucketValues = params.summary.trendBuckets.map((b) =>
+      String(b.valuesByMood[item.mood] ?? 0)
+    );
+    return [
+      item.rank,
+      item.mood,
+      item.description,
+      item.usageCount24h,
+      item.activePeersNow,
+      item.uniquePeers24h,
+      item.sharePercent,
+      item.isTopMood ? 'Yes' : 'No',
+      ...bucketValues,
+      exportedAtIso,
+    ]
+      .map(escapeCsvCell)
+      .join(',');
+  });
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const filename = `mood-history-24h-${dateKey}.csv`;
+
+  return {
+    csvContent,
+    filename,
+    rowCount: params.summary.items.length,
+  };
+}
+
 // --- Photo Moment Comments & Connection Discussion Logic ---
 export interface MomentCommentRecord {
   id: string;

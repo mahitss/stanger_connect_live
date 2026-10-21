@@ -55,6 +55,7 @@ import {
   escapeCsvCell,
   buildPersonalMoodHistoryLast24Hours,
   buildPersonalMoodHistoryCsv,
+  buildMoodHistory24hCsv,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -247,6 +248,19 @@ test('Online Directory 24-hour popular moods summary ranks moods, filters out st
   hidden = toggleMoodTrendLineVisibility(hidden, 'deep work');
   assert.equal(isMoodTrendLineVisible(hidden, 'Deep Work'), true);
   assert.equal(getVisibleTop3Moods(summary.top3Moods, hidden).length, 3);
+
+  // Full 24-hour mood history CSV export
+  const summaryCsv = buildMoodHistory24hCsv({ summary, nowMs });
+  assert.match(summaryCsv.filename, /^mood-history-24h-\d{4}-\d{2}-\d{2}\.csv$/);
+  assert.equal(summaryCsv.rowCount, summary.items.length);
+  const csvRows = summaryCsv.csvContent.split('\n');
+  assert.equal(csvRows.length, summary.items.length + 1);
+  assert.ok(
+    csvRows[0].startsWith(
+      'Rank,Mood,Category Description,24h Check-Ins,Live Active Peers,Unique Peers (24h),Share (%),Top 24h Mood,Bucket -24h'
+    )
+  );
+  assert.ok(csvRows[1].startsWith('1,Brainstorming,'));
 });
 
 test('Online Directory Mood indicator validates presets, custom moods, security guards, summaries, and filters', () => {

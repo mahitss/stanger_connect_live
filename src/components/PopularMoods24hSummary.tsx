@@ -8,6 +8,7 @@ import {
   getVisibleTop3Moods,
   formatMoodTrendPointTooltip,
   buildPersonalMoodHistoryCsv,
+  buildMoodHistory24hCsv,
 } from '../utils/rules';
 
 interface PopularMoods24hSummaryProps {
@@ -98,6 +99,33 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     moodEvents,
   });
 
+  const triggerCsvFileDownload = (csvContent: string, filename: string) => {
+    const blob = new Blob(['\uFEFF' + csvContent], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
+  const handleDownload24hMoodCsv = () => {
+    const exportPayload = buildMoodHistory24hCsv({
+      summary,
+      nowMs: Date.now(),
+    });
+    triggerCsvFileDownload(exportPayload.csvContent, exportPayload.filename);
+    setLastExportNotice(
+      `Downloaded ${exportPayload.filename} (${exportPayload.rowCount} ${
+        exportPayload.rowCount === 1 ? 'mood' : 'moods'
+      })`
+    );
+  };
+
   const handleExportPersonalMoodCsv = () => {
     const exportPayload = buildPersonalMoodHistoryCsv({
       currentUid,
@@ -106,19 +134,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
       moodEvents,
       nowMs: Date.now(),
     });
-
-    const blob = new Blob(['\uFEFF' + exportPayload.csvContent], {
-      type: 'text/csv;charset=utf-8;',
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', exportPayload.filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-
+    triggerCsvFileDownload(exportPayload.csvContent, exportPayload.filename);
     setLastExportNotice(
       `Exported ${exportPayload.filename} (${exportPayload.rowCount} ${
         exportPayload.rowCount === 1 ? 'entry' : 'entries'
@@ -259,15 +275,15 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
           </p>
         </div>
 
-        {/* Personal 24-Hour Mood History CSV Export Row */}
+        {/* 24-Hour Mood History & Personal Log CSV Export Row */}
         <div
-          className="pt-2 border-t border-zinc-800/60 space-y-1"
+          className="pt-2 border-t border-zinc-800/60 space-y-1.5"
           data-testid="personal-mood-csv-export-bar"
         >
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] font-mono text-zinc-400 tabular-nums">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] font-mono text-zinc-400 tabular-nums">
               <span>
-                My 24h Mood Log:{' '}
+                My 24h Log:{' '}
                 <strong
                   className="text-zinc-200 font-semibold"
                   data-testid="personal-mood-24h-count"
@@ -278,23 +294,31 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
               </span>
               {personalCsvPreview.entries[0] && (
                 <span className="text-zinc-400">
-                  Latest:{' '}
-                  <span className="text-zinc-200 font-semibold">
-                    {personalCsvPreview.entries[0].mood}
-                  </span>
+                  ({personalCsvPreview.entries[0].mood})
                 </span>
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={handleExportPersonalMoodCsv}
-              data-testid="export-personal-mood-csv-btn"
-              aria-label="Export my personal mood history from the last 24 hours as a CSV file"
-              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700 hover:border-zinc-500 text-[11px] font-mono font-semibold transition-colors whitespace-nowrap shrink-0"
-            >
-              Export My 24h CSV
-            </button>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <button
+                type="button"
+                onClick={handleDownload24hMoodCsv}
+                data-testid="download-24h-mood-history-csv-btn"
+                aria-label="Download 24-hour mood history data as a CSV file"
+                className="px-2 py-0.5 rounded bg-white hover:bg-zinc-200 text-black text-[11px] font-mono font-semibold transition-colors whitespace-nowrap shrink-0"
+              >
+                Download 24h CSV
+              </button>
+              <button
+                type="button"
+                onClick={handleExportPersonalMoodCsv}
+                data-testid="export-personal-mood-csv-btn"
+                aria-label="Export my personal mood history from the last 24 hours as a CSV file"
+                className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700 hover:border-zinc-500 text-[11px] font-mono font-semibold transition-colors whitespace-nowrap shrink-0"
+              >
+                Export My 24h CSV
+              </button>
+            </div>
           </div>
 
           {lastExportNotice && (
