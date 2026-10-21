@@ -54,6 +54,7 @@ import {
   MOOD_TREND_RANGE_OPTIONS,
   filterMoodTrendByRangeHours,
   computeMoodTrendPeakMarkers,
+  buildMostPopularMoodPeakAnnotation,
   isMoodTrendPeakBucket,
   formatMoodTrendPointTooltip,
   escapeCsvCell,
@@ -307,10 +308,36 @@ test('Online Directory 24-hour popular moods summary ranks moods, filters out st
   // Rank #1 Brainstorming reaches its 24h peak of 7 at bucket index 5 ('-4h', 2h ago check-ins + baseline)
   assert.equal(peaks24[0].mood, 'Brainstorming');
   assert.equal(peaks24[0].hasPeak, true);
+  assert.equal(peaks24[0].isMostPopularMood, true);
   assert.equal(peaks24[0].peakCount, 7);
   assert.deepEqual(peaks24[0].peakBucketIndices, [5]);
   assert.equal(peaks24[0].primaryPeakBucketIndex, 5);
   assert.equal(peaks24[0].primaryPeakBucketLabel, '-4h');
+  assert.equal(peaks24[0].annotationTitle, 'Most Popular: Brainstorming');
+  assert.equal(
+    peaks24[0].annotationLabel,
+    'Most Popular: Brainstorming · Peak 7 (-4h)'
+  );
+  assert.match(
+    peaks24[0].annotationSubtext,
+    /^Peak 7 @ -4h \(\d{2}:\d{2}–\d{2}:\d{2} UTC\)$/
+  );
+  assert.match(
+    peaks24[0].annotationContextSentence,
+    /^Most popular mood: Brainstorming reached its peak of 7 check-ins at -4h \(\d{2}:\d{2}–\d{2}:\d{2} UTC\)$/
+  );
+  assert.equal(peaks24[1].isMostPopularMood, false);
+  assert.equal(peaks24[1].annotationTitle, 'Deep Work');
+  assert.ok(peaks24[1].annotationLabel.startsWith('Deep Work · Peak '));
+
+  const primaryPopularAnnotation = buildMostPopularMoodPeakAnnotation(
+    peaks24,
+    []
+  );
+  assert.ok(primaryPopularAnnotation);
+  assert.equal(primaryPopularAnnotation.mood, 'Brainstorming');
+  assert.equal(primaryPopularAnnotation.isMostPopularMood, true);
+
   assert.match(peaks24[0].primaryPeakClockUtc, /^\d{2}:\d{2}–\d{2}:\d{2} UTC$/);
   assert.equal(isMoodTrendPeakBucket(peaks24, 0, 5), true);
   assert.equal(isMoodTrendPeakBucket(peaks24, 0, 0), false);

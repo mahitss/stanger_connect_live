@@ -9,6 +9,7 @@ import {
   toggleMoodTrendLineVisibility,
   getVisibleTop3Moods,
   computeMoodTrendPeakMarkers,
+  buildMostPopularMoodPeakAnnotation,
   isMoodTrendPeakBucket,
   formatMoodTrendPointTooltip,
   filterMoodTrendByRangeHours,
@@ -176,13 +177,17 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     trendBuckets[safeSelectedBucketIdx] ||
     trendBuckets[trendBuckets.length - 1];
   const visibleTop3Moods = getVisibleTop3Moods(top3Moods, hiddenTrendMoods);
+  const mostPopularPeakAnnotation = buildMostPopularMoodPeakAnnotation(
+    trendPeaks,
+    hiddenTrendMoods
+  );
 
-  // SVG Line Chart geometry (padTop=26 gives room for dynamic peak markers & callouts)
+  // SVG Line Chart geometry (padTop=38 gives a clean top band for the 2-line #1 Most Popular annotation)
   const svgW = 520;
-  const svgH = 194;
+  const svgH = 208;
   const padLeft = 58;
   const padRight = 20;
-  const padTop = 26;
+  const padTop = 38;
   const padBottom = 46;
   const plotW = svgW - padLeft - padRight;
   const plotH = svgH - padTop - padBottom;
@@ -497,6 +502,43 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
               );
             })}
           </div>
+
+          {/* Automated Text Annotation Context Banner for the Most Popular Mood */}
+          {mostPopularPeakAnnotation && (
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-zinc-800/60 text-[11px] font-mono tabular-nums"
+              data-testid="popular-mood-most-popular-annotation-banner"
+            >
+              <span
+                className="text-zinc-300"
+                data-testid="popular-mood-most-popular-annotation-text"
+              >
+                {mostPopularPeakAnnotation.annotationContextSentence}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const targetIdx = Math.max(
+                    0,
+                    top3Moods.findIndex(
+                      (m) => m.mood === mostPopularPeakAnnotation.mood
+                    )
+                  );
+                  setSelectedBucketIdx(
+                    mostPopularPeakAnnotation.primaryPeakBucketIndex
+                  );
+                  setHoveredPoint({
+                    rankIdx: targetIdx,
+                    bucketIdx: mostPopularPeakAnnotation.primaryPeakBucketIndex,
+                  });
+                }}
+                data-testid="popular-mood-focus-most-popular-peak-btn"
+                className="text-[10px] font-mono text-sky-400 hover:text-white underline underline-offset-2 whitespace-nowrap shrink-0"
+              >
+                Inspect Peak Point
+              </button>
+            </div>
+          )}
         </div>
 
         {/* SVG Line Chart with Clear Axis Labels & Data Point Markers */}
@@ -742,7 +784,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
               });
             })}
 
-            {/* Dynamic Primary Peak Callout Badges on the Line Chart */}
+            {/* Automated On-Chart Text Annotations Identifying Each Specific Mood Type at Its Peak Time */}
             {!activeTooltipData &&
               visibleRenderIndices.map((rankIdx) => {
                 const moodStat = top3Moods[rankIdx];
@@ -759,9 +801,19 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                 const strokeColor = lineColors[rankIdx] || '#34d399';
                 const cx = getBucketX(bIdx);
                 const cy = getValueY(peakInfo.peakCount);
-                const badgeText = `#${rankIdx + 1} Peak ${peakInfo.peakCount} (${peakInfo.primaryPeakBucketLabel})`;
-                const badgeW = Math.max(82, badgeText.length * 5.6 + 10);
-                const badgeH = 15;
+                const isTopMood = peakInfo.isMostPopularMood;
+
+                const line1Text = isTopMood
+                  ? `#1 ${peakInfo.annotationTitle}`
+                  : `${peakInfo.mood} · Peak ${peakInfo.peakCount} (${peakInfo.primaryPeakBucketLabel})`;
+                const line2Text = isTopMood ? peakInfo.annotationSubtext : '';
+
+                const maxChars = Math.max(line1Text.length, line2Text.length);
+                const badgeW = Math.max(
+                  isTopMood ? 162 : 114,
+                  Math.round(maxChars * 5.4 + 14)
+                );
+                const badgeH = isTopMood ? 25 : 16;
                 const badgeX = Math.max(
                   padLeft + 2,
                   Math.min(
@@ -769,21 +821,27 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                     Number((cx - badgeW / 2).toFixed(1))
                   )
                 );
+
                 // Offset vertically if another higher-ranked visible mood shares the exact same (bIdx, peakCount)
-                const samePointCount = visibleRenderIndices.filter((otherIdx) => {
-                  if (otherIdx >= rankIdx) return false;
-                  const otherPeak = trendPeaks[otherIdx];
-                  return (
-                    otherPeak?.hasPeak &&
-                    otherPeak.primaryPeakBucketIndex === bIdx &&
-                    otherPeak.peakCount === peakInfo.peakCount
-                  );
-                }).length;
-                const rawAboveY = cy - badgeH - 9 - samePointCount * 16;
-                const badgeY =
-                  rawAboveY >= 2
-                    ? Number(rawAboveY.toFixed(1))
-                    : Number((cy + 10 + samePointCount * 16).toFixed(1));
+                const samePointCount = visibleRenderIndices.filter(
+                  (otherIdx) => {
+                    if (otherIdx >= rankIdx) return false;
+                    const otherPeak = trendPeaks[otherIdx];
+                    return (
+                      otherPeak?.hasPeak &&
+                      otherPeak.primaryPeakBucketIndex === bIdx &&
+                      otherPeak.peakCount === peakInfo.peakCount
+                    );
+                  }
+                ).length;
+
+                const rawAboveY = cy - badgeH - 7 - samePointCount * 18;
+                const placeAbove = rawAboveY >= 2;
+                const badgeY = placeAbove
+                  ? Number(rawAboveY.toFixed(1))
+                  : Number((cy + 10 + samePointCount * 18).toFixed(1));
+                const connectorY1 = placeAbove ? badgeY + badgeH : badgeY;
+                const connectorY2 = placeAbove ? cy - 5.5 : cy + 5.5;
 
                 return (
                   <g
@@ -795,26 +853,49 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                     }}
                     className="cursor-pointer"
                   >
+                    <line
+                      x1={cx}
+                      y1={connectorY1}
+                      x2={cx}
+                      y2={connectorY2}
+                      stroke={strokeColor}
+                      strokeOpacity="0.65"
+                      strokeDasharray="1.5 1.5"
+                      strokeWidth="1"
+                    />
                     <rect
                       x={badgeX}
                       y={badgeY}
                       width={badgeW}
                       height={badgeH}
-                      rx="3"
+                      rx="3.5"
                       fill="#050505"
-                      fillOpacity="0.92"
+                      fillOpacity="0.94"
                       stroke={strokeColor}
-                      strokeWidth="1"
+                      strokeWidth={isTopMood ? '1.3' : '1'}
                     />
                     <text
                       x={Number((badgeX + badgeW / 2).toFixed(1))}
-                      y={Number((badgeY + 10.5).toFixed(1))}
+                      y={Number((badgeY + (isTopMood ? 10.5 : 11)).toFixed(1))}
                       textAnchor="middle"
-                      fill={strokeColor}
+                      fill={isTopMood ? '#ffffff' : strokeColor}
+                      data-testid={`popular-mood-trend-annotation-title-${rankIdx + 1}`}
                       className="font-mono text-[9.5px] font-bold tabular-nums"
                     >
-                      {badgeText}
+                      {line1Text}
                     </text>
+                    {isTopMood && line2Text && (
+                      <text
+                        x={Number((badgeX + badgeW / 2).toFixed(1))}
+                        y={Number((badgeY + 21.5).toFixed(1))}
+                        textAnchor="middle"
+                        fill={strokeColor}
+                        data-testid={`popular-mood-trend-annotation-detail-${rankIdx + 1}`}
+                        className="font-mono text-[8.8px] font-semibold tabular-nums"
+                      >
+                        {line2Text}
+                      </text>
+                    )}
                   </g>
                 );
               })}

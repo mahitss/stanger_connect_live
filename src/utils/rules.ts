@@ -903,6 +903,11 @@ export interface MoodTrendPeakInfo {
   primaryPeakTimestampLabel: string;
   primaryPeakClockUtc: string;
   hasPeak: boolean;
+  isMostPopularMood: boolean;
+  annotationTitle: string;
+  annotationLabel: string;
+  annotationSubtext: string;
+  annotationContextSentence: string;
 }
 
 export function computeMoodTrendPeakMarkers(params: {
@@ -914,7 +919,8 @@ export function computeMoodTrendPeakMarkers(params: {
     : [];
   const buckets = Array.isArray(params.trendBuckets) ? params.trendBuckets : [];
 
-  return moods.map((moodStat) => {
+  return moods.map((moodStat, idx) => {
+    const isMostPopularMood = moodStat.rank === 1 || idx === 0;
     let peakCount = 0;
     for (const b of buckets) {
       const rawVal = b.valuesByMood?.[moodStat.mood] ?? 0;
@@ -937,6 +943,13 @@ export function computeMoodTrendPeakMarkers(params: {
         primaryPeakTimestampLabel: '',
         primaryPeakClockUtc: '',
         hasPeak: false,
+        isMostPopularMood,
+        annotationTitle: isMostPopularMood
+          ? `Most Popular: ${moodStat.mood}`
+          : moodStat.mood,
+        annotationLabel: `${moodStat.mood} · No activity`,
+        annotationSubtext: '0 check-ins in selected window',
+        annotationContextSentence: `${moodStat.mood} recorded 0 check-ins in this window`,
       };
     }
 
@@ -966,6 +979,13 @@ export function computeMoodTrendPeakMarkers(params: {
         primaryPeakTimestampLabel: '',
         primaryPeakClockUtc: '',
         hasPeak: false,
+        isMostPopularMood,
+        annotationTitle: isMostPopularMood
+          ? `Most Popular: ${moodStat.mood}`
+          : moodStat.mood,
+        annotationLabel: `${moodStat.mood} · No activity`,
+        annotationSubtext: '0 check-ins in selected window',
+        annotationContextSentence: `${moodStat.mood} recorded 0 check-ins in this window`,
       };
     }
 
@@ -984,6 +1004,17 @@ export function computeMoodTrendPeakMarkers(params: {
 
     const primaryPeakClockUtc = `${startClock}–${endClock} UTC`;
     const primaryPeakTimestampLabel = `${datePart} ${startClock}–${endClock} UTC (${primaryBucket.label})`;
+    const checkInUnit = peakCount === 1 ? 'check-in' : 'check-ins';
+    const annotationTitle = isMostPopularMood
+      ? `Most Popular: ${moodStat.mood}`
+      : moodStat.mood;
+    const annotationLabel = isMostPopularMood
+      ? `Most Popular: ${moodStat.mood} · Peak ${peakCount} (${primaryBucket.label})`
+      : `${moodStat.mood} · Peak ${peakCount} (${primaryBucket.label})`;
+    const annotationSubtext = `Peak ${peakCount} @ ${primaryBucket.label} (${primaryPeakClockUtc})`;
+    const annotationContextSentence = isMostPopularMood
+      ? `Most popular mood: ${moodStat.mood} reached its peak of ${peakCount} ${checkInUnit} at ${primaryBucket.label} (${primaryPeakClockUtc})`
+      : `${moodStat.mood} (#${moodStat.rank}) reached its peak of ${peakCount} ${checkInUnit} at ${primaryBucket.label} (${primaryPeakClockUtc})`;
 
     return {
       rank: moodStat.rank,
@@ -997,8 +1028,28 @@ export function computeMoodTrendPeakMarkers(params: {
       primaryPeakTimestampLabel,
       primaryPeakClockUtc,
       hasPeak: true,
+      isMostPopularMood,
+      annotationTitle,
+      annotationLabel,
+      annotationSubtext,
+      annotationContextSentence,
     };
   });
+}
+
+export function buildMostPopularMoodPeakAnnotation(
+  peakInfos: MoodTrendPeakInfo[],
+  hiddenMoods: string[] = []
+): MoodTrendPeakInfo | null {
+  if (!Array.isArray(peakInfos) || peakInfos.length === 0) return null;
+  const visiblePeaks = peakInfos.filter(
+    (p) => p.hasPeak && isMoodTrendLineVisible(hiddenMoods, p.mood)
+  );
+  if (visiblePeaks.length > 0) {
+    return visiblePeaks[0];
+  }
+  const anyPeak = peakInfos.find((p) => p.hasPeak);
+  return anyPeak || null;
 }
 
 export function isMoodTrendPeakBucket(
