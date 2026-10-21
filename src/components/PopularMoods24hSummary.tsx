@@ -2,15 +2,21 @@ import React, { useState } from 'react';
 import {
   MoodPopularity24hSummary,
   OnlineMoodTone,
+  PeerMoodHistoryEvent,
   isMoodTrendLineVisible,
   toggleMoodTrendLineVisibility,
   getVisibleTop3Moods,
+  buildPersonalMoodHistoryCsv,
 } from '../utils/rules';
 
 interface PopularMoods24hSummaryProps {
   summary: MoodPopularity24hSummary;
   activeMoodFilter: string;
   onSelectMoodFilter: (mood: string) => void;
+  currentUid?: string;
+  currentDisplayName?: string;
+  currentMood?: string | null;
+  moodEvents?: PeerMoodHistoryEvent[];
 }
 
 function getToneClasses(tone: OnlineMoodTone): {
@@ -64,6 +70,10 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
   summary,
   activeMoodFilter,
   onSelectMoodFilter,
+  currentUid = '',
+  currentDisplayName = 'Member',
+  currentMood = null,
+  moodEvents = [],
 }) => {
   const displayedItems = summary.items.slice(0, 6);
   const top3Moods = summary.top3Moods.slice(0, 3);
@@ -74,6 +84,42 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     Math.max(0, trendBuckets.length - 1)
   );
   const [hiddenTrendMoods, setHiddenTrendMoods] = useState<string[]>([]);
+  const [lastExportNotice, setLastExportNotice] = useState<string>('');
+
+  const personalCsvPreview = buildPersonalMoodHistoryCsv({
+    currentUid,
+    currentDisplayName,
+    currentMood,
+    moodEvents,
+  });
+
+  const handleExportPersonalMoodCsv = () => {
+    const exportPayload = buildPersonalMoodHistoryCsv({
+      currentUid,
+      currentDisplayName,
+      currentMood,
+      moodEvents,
+      nowMs: Date.now(),
+    });
+
+    const blob = new Blob(['\uFEFF' + exportPayload.csvContent], {
+      type: 'text/csv;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', exportPayload.filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    setLastExportNotice(
+      `Exported ${exportPayload.filename} (${exportPayload.rowCount} ${
+        exportPayload.rowCount === 1 ? 'entry' : 'entries'
+      })`
+    );
+  };
 
   const activeBucket =
     trendBuckets[selectedBucketIdx] || trendBuckets[trendBuckets.length - 1];
@@ -130,62 +176,112 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
       className="p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3.5"
       data-testid="online-directory-popular-moods-24h"
     >
-      <div className="border-b border-zinc-800/70 pb-2.5 space-y-1">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-200">
-              Popular Peer Moods (Last 24h)
-            </h2>
-            {summary.topMood && (
-              <span
-                data-testid="popular-moods-24h-top"
-                className={`inline-flex items-center gap-1.5 text-xs font-mono font-semibold ${topToneClasses.text}`}
-              >
+      <div className="border-b border-zinc-800/70 pb-2.5 space-y-2">
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-zinc-200">
+                Popular Peer Moods (Last 24h)
+              </h2>
+              {summary.topMood && (
                 <span
-                  aria-hidden="true"
-                  className={`w-1.5 h-1.5 rounded-full ${topToneClasses.dot}`}
-                />
-                <span>
-                  #1 {summary.topMood} ({summary.topMoodSharePercent}%)
+                  data-testid="popular-moods-24h-top"
+                  className={`inline-flex items-center gap-1.5 text-xs font-mono font-semibold ${topToneClasses.text}`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`w-1.5 h-1.5 rounded-full ${topToneClasses.dot}`}
+                  />
+                  <span>
+                    #1 {summary.topMood} ({summary.topMoodSharePercent}%)
+                  </span>
                 </span>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-zinc-400 tabular-nums shrink-0">
+              <span data-testid="popular-moods-24h-total">
+                {summary.totalEvents24h}{' '}
+                {summary.totalEvents24h === 1 ? 'check-in' : 'check-ins'}
               </span>
-            )}
+              <span aria-hidden="true" className="text-zinc-700">
+                ·
+              </span>
+              <span data-testid="popular-moods-24h-peers">
+                {summary.uniqueActivePeers24h}{' '}
+                {summary.uniqueActivePeers24h === 1
+                  ? 'active peer'
+                  : 'active peers'}
+              </span>
+              {activeMoodFilter !== 'all' && (
+                <>
+                  <span aria-hidden="true" className="text-zinc-700">
+                    ·
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => onSelectMoodFilter('all')}
+                    data-testid="popular-moods-24h-reset-filter"
+                    className="text-sky-400 hover:text-white underline underline-offset-2"
+                  >
+                    Show All
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+          <p className="text-[11px] text-zinc-400">
+            Most popular moods used by active peers over the last 24 hours. Click a mood bar to filter peers, or click legend items below to toggle trend lines.
+          </p>
+        </div>
+
+        {/* Personal 24-Hour Mood History CSV Export Row */}
+        <div
+          className="pt-2 border-t border-zinc-800/60 space-y-1"
+          data-testid="personal-mood-csv-export-bar"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[11px] font-mono text-zinc-400 tabular-nums">
+              <span>
+                My 24h Mood Log:{' '}
+                <strong
+                  className="text-zinc-200 font-semibold"
+                  data-testid="personal-mood-24h-count"
+                >
+                  {personalCsvPreview.rowCount}{' '}
+                  {personalCsvPreview.rowCount === 1 ? 'entry' : 'entries'}
+                </strong>
+              </span>
+              {personalCsvPreview.entries[0] && (
+                <span className="text-zinc-400">
+                  Latest:{' '}
+                  <span className="text-zinc-200 font-semibold">
+                    {personalCsvPreview.entries[0].mood}
+                  </span>
+                </span>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={handleExportPersonalMoodCsv}
+              data-testid="export-personal-mood-csv-btn"
+              aria-label="Export my personal mood history from the last 24 hours as a CSV file"
+              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700 hover:border-zinc-500 text-[11px] font-mono font-semibold transition-colors whitespace-nowrap shrink-0"
+            >
+              Export My 24h CSV
+            </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-zinc-400 tabular-nums shrink-0">
-            <span data-testid="popular-moods-24h-total">
-              {summary.totalEvents24h}{' '}
-              {summary.totalEvents24h === 1 ? 'check-in' : 'check-ins'}
-            </span>
-            <span aria-hidden="true" className="text-zinc-700">
-              ·
-            </span>
-            <span data-testid="popular-moods-24h-peers">
-              {summary.uniqueActivePeers24h}{' '}
-              {summary.uniqueActivePeers24h === 1
-                ? 'active peer'
-                : 'active peers'}
-            </span>
-            {activeMoodFilter !== 'all' && (
-              <>
-                <span aria-hidden="true" className="text-zinc-700">
-                  ·
-                </span>
-                <button
-                  type="button"
-                  onClick={() => onSelectMoodFilter('all')}
-                  data-testid="popular-moods-24h-reset-filter"
-                  className="text-sky-400 hover:text-white underline underline-offset-2"
-                >
-                  Show All
-                </button>
-              </>
-            )}
-          </div>
+          {lastExportNotice && (
+            <div
+              className="text-[11px] font-mono text-emerald-400 font-semibold"
+              data-testid="export-personal-mood-csv-status"
+            >
+              {lastExportNotice}
+            </div>
+          )}
         </div>
-        <p className="text-[11px] text-zinc-400">
-          Most popular moods used by active peers over the last 24 hours. Click a mood bar to filter peers, or click legend items below to toggle trend lines.
-        </p>
       </div>
 
       {/* Top 3 Moods 24-Hour Fluctuation Line Chart */}

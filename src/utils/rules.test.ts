@@ -51,7 +51,81 @@ import {
   isMoodTrendLineVisible,
   toggleMoodTrendLineVisibility,
   getVisibleTop3Moods,
+  escapeCsvCell,
+  buildPersonalMoodHistoryLast24Hours,
+  buildPersonalMoodHistoryCsv,
 } from './rules.ts';
+
+test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
+  const nowMs = 1_760_000_000_000;
+  const twoHoursAgo = nowMs - 2 * 60 * 60 * 1000;
+  const fiveHoursAgo = nowMs - 5 * 60 * 60 * 1000;
+  const expiredMs = nowMs - (MOOD_POPULARITY_WINDOW_MS + 120_000);
+
+  const csvExport = buildPersonalMoodHistoryCsv({
+    currentUid: 'usr_aarav',
+    currentDisplayName: 'Aarav Mehta',
+    currentMood: 'Deep Work',
+    nowMs,
+    moodEvents: [
+      {
+        id: 'ev_aarav_1',
+        uid: 'usr_aarav',
+        displayName: 'Aarav Mehta',
+        mood: 'Brainstorming',
+        timestampMs: twoHoursAgo,
+      },
+      {
+        id: 'ev_aarav_2',
+        uid: 'usr_aarav',
+        displayName: 'Aarav Mehta',
+        mood: 'Quick Questions',
+        timestampMs: fiveHoursAgo,
+      },
+      {
+        id: 'ev_other_peer',
+        uid: 'usr_maya',
+        displayName: 'Maya Lin',
+        mood: 'Pair Programming',
+        timestampMs: twoHoursAgo,
+      },
+      {
+        id: 'ev_aarav_expired',
+        uid: 'usr_aarav',
+        displayName: 'Aarav Mehta',
+        mood: 'Coffee Break',
+        timestampMs: expiredMs,
+      },
+    ],
+  });
+
+  // Includes current live mood ('Deep Work') + 2 recent check-ins ('Brainstorming', 'Quick Questions'),
+  // and excludes Maya's event and Aarav's expired >24h Coffee Break event
+  assert.equal(csvExport.rowCount, 3);
+  assert.deepEqual(
+    csvExport.entries.map((e) => e.mood),
+    ['Deep Work', 'Brainstorming', 'Quick Questions']
+  );
+  assert.equal(csvExport.entries[0].source, 'live-status');
+  assert.equal(csvExport.entries[1].source, 'check-in');
+  assert.equal(csvExport.entries[1].relativeTimeLabel, '2h ago');
+  assert.match(csvExport.filename, /^my-mood-history-24h-\d{4}-\d{2}-\d{2}\.csv$/);
+
+  const lines = csvExport.csvContent.split('\n');
+  assert.equal(lines.length, 4); // 1 header + 3 data rows
+  assert.equal(
+    lines[0],
+    'Timestamp (ISO),Relative Time,User ID,Display Name,Mood,Category Description,Source'
+  );
+  assert.ok(lines[1].includes('usr_aarav,Aarav Mehta,Deep Work'));
+  assert.ok(lines[2].includes('usr_aarav,Aarav Mehta,Brainstorming'));
+  assert.ok(!csvExport.csvContent.includes('usr_maya'));
+  assert.ok(!csvExport.csvContent.includes('Coffee Break'));
+
+  // Verify CSV escaping & formula injection protection
+  assert.equal(escapeCsvCell('Reviewing, "PRs"'), '"Reviewing, ""PRs"""');
+  assert.equal(escapeCsvCell('=CMD()'), "'=CMD()");
+});
 
 test('Online Directory 24-hour popular moods summary ranks moods, filters out stale >24h events, and reconciles live online peers', () => {
   const nowMs = 1_760_000_000_000;

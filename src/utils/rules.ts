@@ -822,6 +822,182 @@ export function getVisibleTop3Moods(
   return top3Moods.filter((m) => isMoodTrendLineVisible(hiddenMoods, m.mood));
 }
 
+export interface PersonalMoodHistoryEntry {
+  id: string;
+  uid: string;
+  displayName: string;
+  mood: string;
+  description: string;
+  tone: OnlineMoodTone;
+  timestampMs: number;
+  isoTimestamp: string;
+  relativeTimeLabel: string;
+  source: 'check-in' | 'live-status';
+}
+
+function formatRelativeTime24h(timestampMs: number, nowMs: number): string {
+  const diffMs = Math.max(0, nowMs - timestampMs);
+  if (diffMs < 60_000) return 'Just now';
+  if (diffMs < 3600_000) {
+    return `${Math.max(1, Math.floor(diffMs / 60_000))}m ago`;
+  }
+  return `${Math.max(1, Math.floor(diffMs / 3600_000))}h ago`;
+}
+
+export function escapeCsvCell(value: string | number | null | undefined): string {
+  let str = String(value ?? '');
+  const trimmed = str.trimStart();
+  if (
+    trimmed.startsWith('=') ||
+    trimmed.startsWith('+') ||
+    trimmed.startsWith('-') ||
+    trimmed.startsWith('@')
+  ) {
+    str = `'${str}`;
+  }
+  if (
+    str.includes(',') ||
+    str.includes('"') ||
+    str.includes('\n') ||
+    str.includes('\r')
+  ) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+export function buildPersonalMoodHistoryLast24Hours(params: {
+  currentUid: string;
+  currentDisplayName?: string;
+  currentMood?: string | null;
+  moodEvents?: PeerMoodHistoryEvent[];
+  nowMs?: number;
+}): PersonalMoodHistoryEntry[] {
+  const cleanUid = String(params.currentUid || '').trim();
+  if (!cleanUid) return [];
+
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0
+      ? params.nowMs
+      : Date.now();
+  const cutoffMs = nowMs - MOOD_POPULARITY_WINDOW_MS;
+  const fallbackName = String(params.currentDisplayName || 'Member').trim() || 'Member';
+
+  const seenIds = new Set<string>();
+  const rawEntries: PersonalMoodHistoryEntry[] = [];
+  const events = Array.isArray(params.moodEvents) ? params.moodEvents : [];
+
+  for (const ev of events) {
+    if (!ev || typeof ev.timestampMs !== 'number') continue;
+    if (String(ev.uid || '').trim() !== cleanUid) continue;
+    if (ev.timestampMs < cutoffMs || ev.timestampMs > nowMs + 60_000) continue;
+
+    const evId = String(ev.id || `${cleanUid}_${ev.mood}_${ev.timestampMs}`);
+    if (seenIds.has(evId)) continue;
+    seenIds.add(evId);
+
+    const meta = getOnlinePeerMoodMeta(ev.mood);
+    if (!meta.hasMood || !meta.label) continue;
+
+    rawEntries.push({
+      id: evId,
+      uid: cleanUid,
+      displayName: String(ev.displayName || fallbackName).trim() || fallbackName,
+      mood: meta.label,
+      description: meta.description,
+      tone: meta.tone,
+      timestampMs: ev.timestampMs,
+      isoTimestamp: new Date(ev.timestampMs).toISOString(),
+      relativeTimeLabel: formatRelativeTime24h(ev.timestampMs, nowMs),
+      source: 'check-in',
+    });
+  }
+
+  rawEntries.sort((a, b) => b.timestampMs - a.timestampMs);
+
+  // Reconcile current active mood if not already logged as the user's most recent check-in
+  const liveMeta = getOnlinePeerMoodMeta(params.currentMood);
+  if (liveMeta.hasMood && liveMeta.label) {
+    const mostRecent = rawEntries[0];
+    const alreadyMatchesLatest =
+      mostRecent &&
+      mostRecent.mood.toLowerCase() === liveMeta.label.toLowerCase();
+    if (!alreadyMatchesLatest) {
+      rawEntries.unshift({
+        id: `live_${cleanUid}_${nowMs}`,
+        uid: cleanUid,
+        displayName: fallbackName,
+        mood: liveMeta.label,
+        description: liveMeta.description,
+        tone: liveMeta.tone,
+        timestampMs: nowMs,
+        isoTimestamp: new Date(nowMs).toISOString(),
+        relativeTimeLabel: 'Just now',
+        source: 'live-status',
+      });
+    }
+  }
+
+  return rawEntries;
+}
+
+export function buildPersonalMoodHistoryCsv(params: {
+  currentUid: string;
+  currentDisplayName?: string;
+  currentMood?: string | null;
+  moodEvents?: PeerMoodHistoryEvent[];
+  nowMs?: number;
+}): {
+  csvContent: string;
+  filename: string;
+  rowCount: number;
+  entries: PersonalMoodHistoryEntry[];
+} {
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0
+      ? params.nowMs
+      : Date.now();
+  const entries = buildPersonalMoodHistoryLast24Hours({
+    ...params,
+    nowMs,
+  });
+
+  const headers = [
+    'Timestamp (ISO)',
+    'Relative Time',
+    'User ID',
+    'Display Name',
+    'Mood',
+    'Category Description',
+    'Source',
+  ];
+
+  const rows = entries.map((entry) =>
+    [
+      entry.isoTimestamp,
+      entry.relativeTimeLabel,
+      entry.uid,
+      entry.displayName,
+      entry.mood,
+      entry.description,
+      entry.source,
+    ]
+      .map(escapeCsvCell)
+      .join(',')
+  );
+
+  const csvContent = [headers.join(','), ...rows].join('\n');
+  const dateKey = new Date(nowMs).toISOString().slice(0, 10);
+  const filename = `my-mood-history-24h-${dateKey}.csv`;
+
+  return {
+    csvContent,
+    filename,
+    rowCount: entries.length,
+    entries,
+  };
+}
+
 // --- Photo Moment Comments & Connection Discussion Logic ---
 export interface MomentCommentRecord {
   id: string;

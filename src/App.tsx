@@ -2808,6 +2808,10 @@ export default function App() {
                       summary={popularMoods24h}
                       activeMoodFilter={directoryMoodFilter}
                       onSelectMoodFilter={setDirectoryMoodFilter}
+                      currentUid={currentIdentity.uid}
+                      currentDisplayName={currentIdentity.displayName}
+                      currentMood={userMood}
+                      moodEvents={moodEvents}
                     />
 
                     {/* Interactive Focus Filter, Mood Filter & Quick Study Desk Status Bar */}
