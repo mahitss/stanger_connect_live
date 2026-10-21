@@ -8,6 +8,8 @@ import {
   isMoodTrendLineVisible,
   toggleMoodTrendLineVisibility,
   getVisibleTop3Moods,
+  computeMoodTrendPeakMarkers,
+  isMoodTrendPeakBucket,
   formatMoodTrendPointTooltip,
   filterMoodTrendByRangeHours,
   buildPersonalMoodHistoryCsv,
@@ -91,6 +93,10 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     rangeHours: trendRangeHours,
   });
   const trendBuckets = filteredTrend.buckets;
+  const trendPeaks = computeMoodTrendPeakMarkers({
+    top3Moods,
+    trendBuckets,
+  });
 
   const [selectedBucketIdx, setSelectedBucketIdx] = useState<number>(
     Math.max(0, summary.trendBuckets.length - 1)
@@ -171,12 +177,12 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     trendBuckets[trendBuckets.length - 1];
   const visibleTop3Moods = getVisibleTop3Moods(top3Moods, hiddenTrendMoods);
 
-  // SVG Line Chart geometry
+  // SVG Line Chart geometry (padTop=26 gives room for dynamic peak markers & callouts)
   const svgW = 520;
-  const svgH = 184;
+  const svgH = 194;
   const padLeft = 58;
   const padRight = 20;
-  const padTop = 18;
+  const padTop = 26;
   const padBottom = 46;
   const plotW = svgW - padLeft - padRight;
   const plotH = svgH - padTop - padBottom;
@@ -233,6 +239,11 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
       ? formatMoodTrendPointTooltip({
           moodStat: hoveredMoodStat,
           bucket: hoveredBucket,
+          isPeak: isMoodTrendPeakBucket(
+            trendPeaks,
+            hoveredPoint.rankIdx,
+            hoveredPoint.bucketIdx
+          ),
         })
       : null;
 
@@ -618,22 +629,28 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
               );
             })}
 
-            {/* Small Data Point Markers for Each Visible Mood Across All Selected Time Buckets */}
+            {/* Small Data Point & Dynamic Peak Markers for Each Visible Mood Across All Selected Time Buckets */}
             {visibleRenderIndices.map((rankIdx) => {
               const moodStat = top3Moods[rankIdx];
               if (!moodStat) return null;
               const strokeColor = lineColors[rankIdx];
+              const peakInfo = trendPeaks[rankIdx];
               return trendBuckets.map((b, bIdx) => {
                 const val = b.valuesByMood[moodStat.mood] ?? 0;
                 const cx = getBucketX(bIdx);
                 const cy = getValueY(val);
                 const isSelected = bIdx === safeSelectedBucketIdx;
+                const isPeak = isMoodTrendPeakBucket(trendPeaks, rankIdx, bIdx);
+                const isPrimaryPeak =
+                  Boolean(peakInfo?.hasPeak) &&
+                  peakInfo?.primaryPeakBucketIndex === bIdx;
                 const isHovered =
                   hoveredPoint?.rankIdx === rankIdx &&
                   hoveredPoint?.bucketIdx === bIdx;
                 const ptTooltip = formatMoodTrendPointTooltip({
                   moodStat,
                   bucket: b,
+                  isPeak,
                 });
                 const handleActivatePoint = () =>
                   setHoveredPoint({ rankIdx, bucketIdx: bIdx });
@@ -658,11 +675,25 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                     onBlur={handleDeactivatePoint}
                     className="cursor-pointer"
                   >
+                    {isPeak && (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={isPrimaryPeak ? 8.2 : 7.2}
+                        fill="none"
+                        stroke={strokeColor}
+                        strokeOpacity={isPrimaryPeak ? '0.8' : '0.55'}
+                        strokeDasharray="2.5 2"
+                        strokeWidth={isPrimaryPeak ? '1.6' : '1.3'}
+                        pointerEvents="none"
+                        data-testid={`popular-mood-trend-peak-marker-${rankIdx + 1}-${bIdx}`}
+                      />
+                    )}
                     {isHovered && (
                       <circle
                         cx={cx}
                         cy={cy}
-                        r={7.5}
+                        r={9.5}
                         fill="none"
                         stroke={strokeColor}
                         strokeOpacity="0.45"
@@ -673,28 +704,128 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                     <circle
                       cx={cx}
                       cy={cy}
-                      r={isHovered ? 5.2 : isSelected ? 4.8 : 3.6}
+                      r={
+                        isHovered
+                          ? 5.4
+                          : isPeak
+                          ? 4.9
+                          : isSelected
+                          ? 4.6
+                          : 3.6
+                      }
                       fill="#050505"
                       stroke={strokeColor}
-                      strokeWidth={isHovered ? '2.6' : isSelected ? '2.4' : '1.9'}
+                      strokeWidth={
+                        isHovered
+                          ? '2.6'
+                          : isPeak
+                          ? '2.4'
+                          : isSelected
+                          ? '2.2'
+                          : '1.9'
+                      }
                       onMouseEnter={handleActivatePoint}
                       onMouseLeave={handleDeactivatePoint}
                       data-testid={`popular-mood-trend-marker-${rankIdx + 1}-${bIdx}`}
                     >
-                      <title>{`#${ptTooltip.rank} ${ptTooltip.mood} · ${ptTooltip.countLabel} · ${ptTooltip.timestampLabel}`}</title>
+                      <title>{`#${ptTooltip.rank} ${ptTooltip.mood}${ptTooltip.isPeak ? ' (PEAK)' : ''} · ${ptTooltip.countLabel} · ${ptTooltip.timestampLabel}`}</title>
                     </circle>
+                    {isPeak && (
+                      <polygon
+                        points={`${cx},${cy - 2.4} ${cx + 2.4},${cy} ${cx},${cy + 2.4} ${cx - 2.4},${cy}`}
+                        fill={strokeColor}
+                        pointerEvents="none"
+                      />
+                    )}
                   </g>
                 );
               });
             })}
 
-            {/* Floating Hover Tooltip Showing Exact Mood Count & Timestamp */}
+            {/* Dynamic Primary Peak Callout Badges on the Line Chart */}
+            {!activeTooltipData &&
+              visibleRenderIndices.map((rankIdx) => {
+                const moodStat = top3Moods[rankIdx];
+                const peakInfo = trendPeaks[rankIdx];
+                if (
+                  !moodStat ||
+                  !peakInfo ||
+                  !peakInfo.hasPeak ||
+                  peakInfo.primaryPeakBucketIndex < 0
+                ) {
+                  return null;
+                }
+                const bIdx = peakInfo.primaryPeakBucketIndex;
+                const strokeColor = lineColors[rankIdx] || '#34d399';
+                const cx = getBucketX(bIdx);
+                const cy = getValueY(peakInfo.peakCount);
+                const badgeText = `#${rankIdx + 1} Peak ${peakInfo.peakCount} (${peakInfo.primaryPeakBucketLabel})`;
+                const badgeW = Math.max(82, badgeText.length * 5.6 + 10);
+                const badgeH = 15;
+                const badgeX = Math.max(
+                  padLeft + 2,
+                  Math.min(
+                    svgW - padRight - badgeW - 2,
+                    Number((cx - badgeW / 2).toFixed(1))
+                  )
+                );
+                // Offset vertically if another higher-ranked visible mood shares the exact same (bIdx, peakCount)
+                const samePointCount = visibleRenderIndices.filter((otherIdx) => {
+                  if (otherIdx >= rankIdx) return false;
+                  const otherPeak = trendPeaks[otherIdx];
+                  return (
+                    otherPeak?.hasPeak &&
+                    otherPeak.primaryPeakBucketIndex === bIdx &&
+                    otherPeak.peakCount === peakInfo.peakCount
+                  );
+                }).length;
+                const rawAboveY = cy - badgeH - 9 - samePointCount * 16;
+                const badgeY =
+                  rawAboveY >= 2
+                    ? Number(rawAboveY.toFixed(1))
+                    : Number((cy + 10 + samePointCount * 16).toFixed(1));
+
+                return (
+                  <g
+                    key={`peak-badge-${moodStat.mood}`}
+                    data-testid={`popular-mood-trend-peak-badge-${rankIdx + 1}`}
+                    onClick={() => {
+                      setSelectedBucketIdx(bIdx);
+                      setHoveredPoint({ rankIdx, bucketIdx: bIdx });
+                    }}
+                    className="cursor-pointer"
+                  >
+                    <rect
+                      x={badgeX}
+                      y={badgeY}
+                      width={badgeW}
+                      height={badgeH}
+                      rx="3"
+                      fill="#050505"
+                      fillOpacity="0.92"
+                      stroke={strokeColor}
+                      strokeWidth="1"
+                    />
+                    <text
+                      x={Number((badgeX + badgeW / 2).toFixed(1))}
+                      y={Number((badgeY + 10.5).toFixed(1))}
+                      textAnchor="middle"
+                      fill={strokeColor}
+                      className="font-mono text-[9.5px] font-bold tabular-nums"
+                    >
+                      {badgeText}
+                    </text>
+                  </g>
+                );
+              })}
+
+            {/* Floating Hover Tooltip Showing Exact Mood Count, Peak Status & Timestamp */}
             {activeTooltipData && hoveredPoint && (() => {
               const hoveredStroke =
                 lineColors[hoveredPoint.rankIdx] || '#34d399';
               const hoveredCx = getBucketX(hoveredPoint.bucketIdx);
               const hoveredCy = getValueY(activeTooltipData.exactCount);
-              const tooltipW = 264;
+              const tooltipW = 280;
               const tooltipH = 44;
               const tooltipX = Math.max(
                 padLeft + 2,
@@ -736,6 +867,14 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                     className="fill-white font-mono text-[10.5px] font-bold"
                   >
                     {`#${activeTooltipData.rank} ${activeTooltipData.mood}`}
+                    {activeTooltipData.isPeak && (
+                      <tspan
+                        data-testid="popular-mood-trend-tooltip-peak"
+                        className="fill-amber-400 font-bold"
+                      >
+                        {' · PEAK'}
+                      </tspan>
+                    )}
                   </text>
                   <text
                     x={tooltipX + tooltipW - 10}
@@ -760,6 +899,82 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
           </svg>
         </div>
 
+        {/* Dynamic Peak Popularity Times Summary Strip */}
+        <div
+          className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-zinc-800/70 text-[11px] font-mono tabular-nums"
+          data-testid="popular-mood-trend-peaks-strip"
+        >
+          <span className="text-zinc-500">
+            Peak Popularity ({trendRangeHours}h):
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            {trendPeaks.map((peakInfo, idx) => {
+              const toneCls = getToneClasses(peakInfo.tone);
+              const isVisible = isMoodTrendLineVisible(
+                hiddenTrendMoods,
+                peakInfo.mood
+              );
+              const isPeakHighlighted =
+                hoveredPoint?.rankIdx === idx &&
+                hoveredPoint?.bucketIdx === peakInfo.primaryPeakBucketIndex;
+              if (!peakInfo.hasPeak) {
+                return (
+                  <span
+                    key={peakInfo.mood}
+                    data-testid={`popular-mood-peak-none-${idx + 1}`}
+                    className="text-[10px] text-zinc-600"
+                  >
+                    #{idx + 1} {peakInfo.mood}: 0 peak
+                  </span>
+                );
+              }
+              return (
+                <button
+                  key={peakInfo.mood}
+                  type="button"
+                  onClick={() => {
+                    if (!isVisible) {
+                      setHiddenTrendMoods((prev) =>
+                        toggleMoodTrendLineVisibility(prev, peakInfo.mood)
+                      );
+                    }
+                    setSelectedBucketIdx(peakInfo.primaryPeakBucketIndex);
+                    setHoveredPoint({
+                      rankIdx: idx,
+                      bucketIdx: peakInfo.primaryPeakBucketIndex,
+                    });
+                  }}
+                  aria-label={`Highlight ${peakInfo.mood} peak of ${peakInfo.peakCount} at ${peakInfo.primaryPeakBucketLabel} (${peakInfo.primaryPeakClockUtc})`}
+                  data-testid={`popular-mood-peak-jump-${idx + 1}`}
+                  className={`inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-2 py-0.5 rounded border text-left text-[10px] font-mono tabular-nums max-w-full ${
+                    isPeakHighlighted
+                      ? 'bg-zinc-900 text-white border-zinc-500'
+                      : isVisible
+                      ? 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                      : 'bg-[#050505]/50 text-zinc-500 border-zinc-800/60 line-through'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                      isVisible ? toneCls.dot : 'bg-zinc-700'
+                    }`}
+                  />
+                  <span className="font-semibold text-zinc-200">
+                    {peakInfo.mood}
+                  </span>
+                  <span className="text-emerald-400 font-bold">
+                    Peak {peakInfo.peakCount}
+                  </span>
+                  <span className="text-zinc-400">
+                    @ {peakInfo.primaryPeakBucketLabel} ({peakInfo.primaryPeakClockUtc})
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* Interactive Time-Window Inspector & Bucket Selector */}
         {activeBucket && (
           <div
@@ -774,7 +989,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                   type="button"
                   onClick={() => setSelectedBucketIdx(bIdx)}
                   data-testid={`popular-mood-bucket-btn-${b.label}`}
-                  className={`px-1.5 py-0.5 rounded text-[10px] transition-colors whitespace-nowrap shrink-0 ${
+                  className={`px-1.5 py-0.5 rounded text-[10px] whitespace-nowrap shrink-0 ${
                     bIdx === safeSelectedBucketIdx
                       ? 'bg-white text-black font-bold'
                       : 'text-zinc-400 hover:text-white'

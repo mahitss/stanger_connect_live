@@ -891,6 +891,126 @@ export function filterMoodTrendByRangeHours(params: {
   };
 }
 
+export interface MoodTrendPeakInfo {
+  rank: number;
+  mood: string;
+  tone: OnlineMoodTone;
+  peakCount: number;
+  peakBucketIndices: number[];
+  primaryPeakBucketIndex: number;
+  primaryPeakBucketLabel: string;
+  primaryPeakWindowLabel: string;
+  primaryPeakTimestampLabel: string;
+  primaryPeakClockUtc: string;
+  hasPeak: boolean;
+}
+
+export function computeMoodTrendPeakMarkers(params: {
+  top3Moods: PopularMoodStat[];
+  trendBuckets: MoodTrendBucketPoint[];
+}): MoodTrendPeakInfo[] {
+  const moods = Array.isArray(params.top3Moods)
+    ? params.top3Moods.slice(0, 3)
+    : [];
+  const buckets = Array.isArray(params.trendBuckets) ? params.trendBuckets : [];
+
+  return moods.map((moodStat) => {
+    let peakCount = 0;
+    for (const b of buckets) {
+      const rawVal = b.valuesByMood?.[moodStat.mood] ?? 0;
+      const val = Math.max(0, Math.round(Number(rawVal) || 0));
+      if (val > peakCount) {
+        peakCount = val;
+      }
+    }
+
+    if (peakCount <= 0 || buckets.length === 0) {
+      return {
+        rank: moodStat.rank,
+        mood: moodStat.mood,
+        tone: moodStat.tone,
+        peakCount: 0,
+        peakBucketIndices: [],
+        primaryPeakBucketIndex: -1,
+        primaryPeakBucketLabel: '',
+        primaryPeakWindowLabel: '',
+        primaryPeakTimestampLabel: '',
+        primaryPeakClockUtc: '',
+        hasPeak: false,
+      };
+    }
+
+    const peakBucketIndices: number[] = [];
+    buckets.forEach((b, bIdx) => {
+      const rawVal = b.valuesByMood?.[moodStat.mood] ?? 0;
+      const val = Math.max(0, Math.round(Number(rawVal) || 0));
+      if (val === peakCount) {
+        peakBucketIndices.push(bIdx);
+      }
+    });
+
+    const primaryPeakBucketIndex =
+      peakBucketIndices[peakBucketIndices.length - 1] ?? -1;
+    const primaryBucket = buckets[primaryPeakBucketIndex];
+
+    if (!primaryBucket) {
+      return {
+        rank: moodStat.rank,
+        mood: moodStat.mood,
+        tone: moodStat.tone,
+        peakCount,
+        peakBucketIndices,
+        primaryPeakBucketIndex: -1,
+        primaryPeakBucketLabel: '',
+        primaryPeakWindowLabel: '',
+        primaryPeakTimestampLabel: '',
+        primaryPeakClockUtc: '',
+        hasPeak: false,
+      };
+    }
+
+    const startMs = Number(primaryBucket.startMs) || Date.now();
+    const rawEndMs = Number(primaryBucket.endMs) || startMs;
+    const displayEndMs =
+      primaryBucket.label === 'Now'
+        ? Math.max(startMs, rawEndMs - 60_000)
+        : rawEndMs;
+
+    const startIso = new Date(startMs).toISOString();
+    const endIso = new Date(displayEndMs).toISOString();
+    const datePart = endIso.slice(0, 10);
+    const startClock = startIso.slice(11, 16);
+    const endClock = endIso.slice(11, 16);
+
+    const primaryPeakClockUtc = `${startClock}–${endClock} UTC`;
+    const primaryPeakTimestampLabel = `${datePart} ${startClock}–${endClock} UTC (${primaryBucket.label})`;
+
+    return {
+      rank: moodStat.rank,
+      mood: moodStat.mood,
+      tone: moodStat.tone,
+      peakCount,
+      peakBucketIndices,
+      primaryPeakBucketIndex,
+      primaryPeakBucketLabel: primaryBucket.label,
+      primaryPeakWindowLabel: primaryBucket.windowLabel,
+      primaryPeakTimestampLabel,
+      primaryPeakClockUtc,
+      hasPeak: true,
+    };
+  });
+}
+
+export function isMoodTrendPeakBucket(
+  peakInfos: MoodTrendPeakInfo[],
+  rankIdx: number,
+  bucketIdx: number
+): boolean {
+  const info = peakInfos[rankIdx];
+  if (!info || !info.hasPeak) return false;
+  return info.peakBucketIndices.includes(bucketIdx);
+}
+
 export interface MoodTrendPointTooltipData {
   rank: number;
   mood: string;
@@ -902,13 +1022,16 @@ export interface MoodTrendPointTooltipData {
   countLabel: string;
   timestampLabel: string;
   isoTimestamp: string;
+  isPeak: boolean;
+  peakBadgeLabel: string;
 }
 
 export function formatMoodTrendPointTooltip(params: {
   moodStat: PopularMoodStat;
   bucket: MoodTrendBucketPoint;
+  isPeak?: boolean;
 }): MoodTrendPointTooltipData {
-  const { moodStat, bucket } = params;
+  const { moodStat, bucket, isPeak = false } = params;
   const rawVal = bucket.valuesByMood?.[moodStat.mood] ?? 0;
   const exactCount = Math.max(0, Math.round(Number(rawVal) || 0));
   const countLabel = `${exactCount} ${
@@ -927,6 +1050,7 @@ export function formatMoodTrendPointTooltip(params: {
   const endClock = endIso.slice(11, 16);
 
   const timestampLabel = `${datePart} ${startClock}–${endClock} UTC (${bucket.label})`;
+  const peakFlag = Boolean(isPeak && exactCount > 0);
 
   return {
     rank: moodStat.rank,
@@ -939,6 +1063,8 @@ export function formatMoodTrendPointTooltip(params: {
     countLabel,
     timestampLabel,
     isoTimestamp: endIso,
+    isPeak: peakFlag,
+    peakBadgeLabel: peakFlag ? 'PEAK' : '',
   };
 }
 

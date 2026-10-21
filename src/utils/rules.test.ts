@@ -53,6 +53,8 @@ import {
   getVisibleTop3Moods,
   MOOD_TREND_RANGE_OPTIONS,
   filterMoodTrendByRangeHours,
+  computeMoodTrendPeakMarkers,
+  isMoodTrendPeakBucket,
   formatMoodTrendPointTooltip,
   escapeCsvCell,
   buildPersonalMoodHistoryLast24Hours,
@@ -295,6 +297,32 @@ test('Online Directory 24-hour popular moods summary ranks moods, filters out st
     range6.buckets.map((b) => b.label),
     ['-6h', '-4h', 'Now']
   );
+
+  // Dynamic peak popularity markers across the 24-hour period
+  const peaks24 = computeMoodTrendPeakMarkers({
+    top3Moods: summary.top3Moods,
+    trendBuckets: summary.trendBuckets,
+  });
+  assert.equal(peaks24.length, 3);
+  // Rank #1 Brainstorming reaches its 24h peak of 7 at bucket index 5 ('-4h', 2h ago check-ins + baseline)
+  assert.equal(peaks24[0].mood, 'Brainstorming');
+  assert.equal(peaks24[0].hasPeak, true);
+  assert.equal(peaks24[0].peakCount, 7);
+  assert.deepEqual(peaks24[0].peakBucketIndices, [5]);
+  assert.equal(peaks24[0].primaryPeakBucketIndex, 5);
+  assert.equal(peaks24[0].primaryPeakBucketLabel, '-4h');
+  assert.match(peaks24[0].primaryPeakClockUtc, /^\d{2}:\d{2}–\d{2}:\d{2} UTC$/);
+  assert.equal(isMoodTrendPeakBucket(peaks24, 0, 5), true);
+  assert.equal(isMoodTrendPeakBucket(peaks24, 0, 0), false);
+
+  // Tooltip reflects peak status when isPeak is true
+  const peakTooltip = formatMoodTrendPointTooltip({
+    moodStat: summary.top3Moods[0],
+    bucket: summary.trendBuckets[5],
+    isPeak: isMoodTrendPeakBucket(peaks24, 0, 5),
+  });
+  assert.equal(peakTooltip.isPeak, true);
+  assert.equal(peakTooltip.peakBadgeLabel, 'PEAK');
 });
 
 test('Online Directory Mood indicator validates presets, custom moods, security guards, summaries, and filters', () => {
