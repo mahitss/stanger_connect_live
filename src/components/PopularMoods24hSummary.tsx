@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import {
   MoodPopularity24hSummary,
   OnlineMoodTone,
+  isMoodTrendLineVisible,
+  toggleMoodTrendLineVisibility,
+  getVisibleTop3Moods,
 } from '../utils/rules';
 
 interface PopularMoods24hSummaryProps {
@@ -70,8 +73,11 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
   const [selectedBucketIdx, setSelectedBucketIdx] = useState<number>(
     Math.max(0, trendBuckets.length - 1)
   );
+  const [hiddenTrendMoods, setHiddenTrendMoods] = useState<string[]>([]);
+
   const activeBucket =
     trendBuckets[selectedBucketIdx] || trendBuckets[trendBuckets.length - 1];
+  const visibleTop3Moods = getVisibleTop3Moods(top3Moods, hiddenTrendMoods);
 
   // SVG Line Chart geometry
   const svgW = 520;
@@ -114,6 +120,10 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
   const renderOrderIndices = top3Moods
     .map((_, idx) => idx)
     .reverse();
+  const visibleRenderIndices = renderOrderIndices.filter((rankIdx) => {
+    const m = top3Moods[rankIdx];
+    return m ? isMoodTrendLineVisible(hiddenTrendMoods, m.mood) : false;
+  });
 
   return (
     <div
@@ -174,7 +184,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
           </div>
         </div>
         <p className="text-[11px] text-zinc-400">
-          Most popular moods used by active peers over the last 24 hours. Click a mood bar or legend item to filter peers.
+          Most popular moods used by active peers over the last 24 hours. Click a mood bar to filter peers, or click legend items below to toggle trend lines.
         </p>
       </div>
 
@@ -183,48 +193,88 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
         className="p-3 rounded bg-[#0A0A0C] border border-zinc-800/80 space-y-2.5"
         data-testid="popular-moods-24h-line-chart"
       >
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="space-y-2">
           <div className="space-y-0.5">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">
-              Top 3 Moods · 24h Fluctuation Trend
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">
+                Top 3 Moods · 24h Fluctuation Trend
+              </div>
+
+              <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400 tabular-nums shrink-0">
+                <span data-testid="popular-mood-trend-visible-count">
+                  {visibleTop3Moods.length}/{top3Moods.length} lines visible
+                </span>
+                {hiddenTrendMoods.length > 0 && (
+                  <>
+                    <span aria-hidden="true" className="text-zinc-700">
+                      ·
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setHiddenTrendMoods([])}
+                      data-testid="popular-mood-trend-show-all"
+                      className="text-sky-400 hover:text-white underline underline-offset-2 whitespace-nowrap shrink-0"
+                    >
+                      Show All Lines
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
             <div className="text-[11px] text-zinc-500">
-              4-hour interval check-in & active peer trend lines with data point markers
+              Click any legend item to toggle its trend line on or off for a cleaner view
             </div>
           </div>
 
-          {/* Interactive Top 3 Legend */}
+          {/* Clickable Legend to Toggle Visibility of Individual Mood Trend Lines */}
           <div
             className="flex flex-wrap items-center gap-1.5"
             role="group"
-            aria-label="Filter by top 3 popular moods in trend chart"
+            aria-label="Toggle visibility of top 3 mood trend lines"
           >
             {top3Moods.map((m, idx) => {
               const toneCls = getToneClasses(m.tone);
-              const isSelected =
-                activeMoodFilter !== 'all' &&
-                activeMoodFilter.toLowerCase() === m.mood.toLowerCase();
+              const isVisible = isMoodTrendLineVisible(
+                hiddenTrendMoods,
+                m.mood
+              );
               return (
                 <button
                   key={m.mood}
                   type="button"
                   onClick={() =>
-                    onSelectMoodFilter(isSelected ? 'all' : m.mood)
+                    setHiddenTrendMoods((prev) =>
+                      toggleMoodTrendLineVisibility(prev, m.mood)
+                    )
                   }
-                  aria-pressed={isSelected}
+                  aria-pressed={isVisible}
                   data-testid={`popular-mood-trend-legend-${idx + 1}`}
+                  title={
+                    isVisible
+                      ? `Hide ${m.mood} trend line`
+                      : `Show ${m.mood} trend line`
+                  }
                   className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-mono transition-colors whitespace-nowrap shrink-0 ${
-                    isSelected
-                      ? 'bg-zinc-800 text-white border-zinc-500'
-                      : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                    isVisible
+                      ? 'bg-[#050505] text-zinc-200 border-zinc-700 hover:border-zinc-500'
+                      : 'bg-[#050505]/60 text-zinc-500 border-zinc-800/70 hover:border-zinc-700 hover:text-zinc-300'
                   }`}
                 >
                   <span
                     aria-hidden="true"
-                    className={`w-2 h-2 rounded-full ${toneCls.dot}`}
+                    className={`w-2 h-2 rounded-full transition-opacity ${
+                      isVisible ? toneCls.dot : 'bg-zinc-700 opacity-50'
+                    }`}
                   />
-                  <span>
+                  <span className={isVisible ? 'font-semibold' : 'line-through'}>
                     #{idx + 1} {m.mood}
+                  </span>
+                  <span
+                    className={`text-[10px] ${
+                      isVisible ? 'text-emerald-400' : 'text-zinc-600'
+                    }`}
+                  >
+                    {isVisible ? 'On' : 'Off'}
                   </span>
                 </button>
               );
@@ -323,8 +373,21 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
               {summary.xAxisLabel}
             </text>
 
-            {/* Top 3 Moods Polylines (drawn #3 -> #2 -> #1 so #1 is in foreground) */}
-            {renderOrderIndices.map((rankIdx) => {
+            {/* Empty Prompt if All 3 Trend Lines Are Toggled Off */}
+            {visibleRenderIndices.length === 0 && (
+              <text
+                x={padLeft + plotW / 2}
+                y={padTop + plotH / 2}
+                textAnchor="middle"
+                data-testid="popular-mood-trend-all-hidden-msg"
+                className="fill-zinc-400 font-mono text-[11px]"
+              >
+                All trend lines hidden — click a legend item or Show All Lines
+              </text>
+            )}
+
+            {/* Visible Top 3 Moods Polylines (drawn #3 -> #2 -> #1 so #1 is in foreground) */}
+            {visibleRenderIndices.map((rankIdx) => {
               const moodStat = top3Moods[rankIdx];
               if (!moodStat) return null;
               const strokeColor = lineColors[rankIdx];
@@ -349,8 +412,8 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
               );
             })}
 
-            {/* Small Data Point Markers for Each Mood Across All 24h Time Buckets */}
-            {renderOrderIndices.map((rankIdx) => {
+            {/* Small Data Point Markers for Each Visible Mood Across All 24h Time Buckets */}
+            {visibleRenderIndices.map((rankIdx) => {
               const moodStat = top3Moods[rankIdx];
               if (!moodStat) return null;
               const strokeColor = lineColors[rankIdx];
@@ -413,15 +476,23 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
               {top3Moods.map((m, idx) => {
                 const toneCls = getToneClasses(m.tone);
                 const val = activeBucket.valuesByMood[m.mood] ?? 0;
+                const isVisible = isMoodTrendLineVisible(
+                  hiddenTrendMoods,
+                  m.mood
+                );
                 return (
                   <span
                     key={m.mood}
                     data-testid={`popular-mood-bucket-val-${idx + 1}`}
-                    className="inline-flex items-center gap-1"
+                    className={`inline-flex items-center gap-1 ${
+                      isVisible ? '' : 'opacity-45 line-through'
+                    }`}
                   >
                     <span
                       aria-hidden="true"
-                      className={`w-1.5 h-1.5 rounded-full ${toneCls.dot}`}
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        isVisible ? toneCls.dot : 'bg-zinc-600'
+                      }`}
                     />
                     <span className="text-zinc-400">{m.mood}:</span>
                     <strong className="text-white">{val}</strong>

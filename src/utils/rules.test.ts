@@ -48,6 +48,9 @@ import {
   filterOnlinePeersByDirectoryCriteria,
   MOOD_POPULARITY_WINDOW_MS,
   buildPopularMoodsLast24Hours,
+  isMoodTrendLineVisible,
+  toggleMoodTrendLineVisibility,
+  getVisibleTop3Moods,
 } from './rules.ts';
 
 test('Online Directory 24-hour popular moods summary ranks moods, filters out stale >24h events, and reconciles live online peers', () => {
@@ -129,6 +132,25 @@ test('Online Directory 24-hour popular moods summary ranks moods, filters out st
   assert.equal(summary.trendBuckets[6].rank2Value, 1);
   assert.equal(summary.trendBuckets[6].rank3Value, 1);
   assert.ok(summary.trendMaxValue >= 4);
+
+  // Clickable legend visibility toggling for individual mood trend lines
+  let hidden: string[] = [];
+  assert.equal(isMoodTrendLineVisible(hidden, 'Deep Work'), true);
+  hidden = toggleMoodTrendLineVisibility(hidden, 'Deep Work');
+  assert.equal(isMoodTrendLineVisible(hidden, 'Deep Work'), false);
+  assert.equal(isMoodTrendLineVisible(hidden, 'Brainstorming'), true);
+
+  const visibleMoods = getVisibleTop3Moods(summary.top3Moods, hidden);
+  assert.equal(visibleMoods.length, 2);
+  assert.deepEqual(
+    visibleMoods.map((m) => m.mood),
+    ['Brainstorming', 'Quick Questions']
+  );
+
+  // Toggling again restores visibility
+  hidden = toggleMoodTrendLineVisibility(hidden, 'deep work');
+  assert.equal(isMoodTrendLineVisible(hidden, 'Deep Work'), true);
+  assert.equal(getVisibleTop3Moods(summary.top3Moods, hidden).length, 3);
 });
 
 test('Online Directory Mood indicator validates presets, custom moods, security guards, summaries, and filters', () => {

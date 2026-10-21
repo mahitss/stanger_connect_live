@@ -789,6 +789,39 @@ export function buildPopularMoodsLast24Hours(params: {
   };
 }
 
+export function isMoodTrendLineVisible(
+  hiddenMoods: string[],
+  moodLabel: string
+): boolean {
+  const target = String(moodLabel || '').trim().toLowerCase();
+  if (!target) return false;
+  if (!Array.isArray(hiddenMoods) || hiddenMoods.length === 0) return true;
+  return !hiddenMoods.some((m) => String(m || '').trim().toLowerCase() === target);
+}
+
+export function toggleMoodTrendLineVisibility(
+  hiddenMoods: string[],
+  moodLabel: string
+): string[] {
+  const cleanLabel = String(moodLabel || '').trim();
+  if (!cleanLabel) return Array.isArray(hiddenMoods) ? [...hiddenMoods] : [];
+  const target = cleanLabel.toLowerCase();
+  const current = Array.isArray(hiddenMoods) ? hiddenMoods : [];
+  const exists = current.some((m) => String(m || '').trim().toLowerCase() === target);
+  if (exists) {
+    return current.filter((m) => String(m || '').trim().toLowerCase() !== target);
+  }
+  return [...current, cleanLabel];
+}
+
+export function getVisibleTop3Moods(
+  top3Moods: PopularMoodStat[],
+  hiddenMoods: string[]
+): PopularMoodStat[] {
+  if (!Array.isArray(top3Moods)) return [];
+  return top3Moods.filter((m) => isMoodTrendLineVisible(hiddenMoods, m.mood));
+}
+
 // --- Photo Moment Comments & Connection Discussion Logic ---
 export interface MomentCommentRecord {
   id: string;
