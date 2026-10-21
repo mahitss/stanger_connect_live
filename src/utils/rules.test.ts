@@ -51,6 +51,8 @@ import {
   isMoodTrendLineVisible,
   toggleMoodTrendLineVisibility,
   getVisibleTop3Moods,
+  MOOD_TREND_RANGE_OPTIONS,
+  filterMoodTrendByRangeHours,
   formatMoodTrendPointTooltip,
   escapeCsvCell,
   buildPersonalMoodHistoryLast24Hours,
@@ -261,6 +263,38 @@ test('Online Directory 24-hour popular moods summary ranks moods, filters out st
     )
   );
   assert.ok(csvRows[1].startsWith('1,Brainstorming,'));
+
+  // 6h, 12h, and 24h date-range filter for the line chart
+  assert.deepEqual(MOOD_TREND_RANGE_OPTIONS, [6, 12, 24]);
+  const range24 = filterMoodTrendByRangeHours({
+    trendBuckets: summary.trendBuckets,
+    rangeHours: 24,
+  });
+  assert.equal(range24.xAxisLabel, 'Time (Last 24 Hours)');
+  assert.deepEqual(
+    range24.buckets.map((b) => b.label),
+    ['-24h', '-20h', '-16h', '-12h', '-8h', '-4h', 'Now']
+  );
+
+  const range12 = filterMoodTrendByRangeHours({
+    trendBuckets: summary.trendBuckets,
+    rangeHours: 12,
+  });
+  assert.equal(range12.xAxisLabel, 'Time (Last 12 Hours)');
+  assert.deepEqual(
+    range12.buckets.map((b) => b.label),
+    ['-12h', '-8h', '-4h', 'Now']
+  );
+
+  const range6 = filterMoodTrendByRangeHours({
+    trendBuckets: summary.trendBuckets,
+    rangeHours: 6,
+  });
+  assert.equal(range6.xAxisLabel, 'Time (Last 6 Hours)');
+  assert.deepEqual(
+    range6.buckets.map((b) => b.label),
+    ['-6h', '-4h', 'Now']
+  );
 });
 
 test('Online Directory Mood indicator validates presets, custom moods, security guards, summaries, and filters', () => {

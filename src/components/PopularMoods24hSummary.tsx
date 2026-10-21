@@ -1,12 +1,15 @@
 import React, { useState } from 'react';
 import {
   MoodPopularity24hSummary,
+  MoodTrendRangeHours,
+  MOOD_TREND_RANGE_OPTIONS,
   OnlineMoodTone,
   PeerMoodHistoryEvent,
   isMoodTrendLineVisible,
   toggleMoodTrendLineVisibility,
   getVisibleTop3Moods,
   formatMoodTrendPointTooltip,
+  filterMoodTrendByRangeHours,
   buildPersonalMoodHistoryCsv,
   buildMoodHistory24hCsv,
 } from '../utils/rules';
@@ -79,11 +82,18 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
 }) => {
   const displayedItems = summary.items.slice(0, 6);
   const top3Moods = summary.top3Moods.slice(0, 3);
-  const trendBuckets = summary.trendBuckets;
   const topToneClasses = getToneClasses(summary.topMoodTone);
 
+  const [trendRangeHours, setTrendRangeHours] =
+    useState<MoodTrendRangeHours>(24);
+  const filteredTrend = filterMoodTrendByRangeHours({
+    trendBuckets: summary.trendBuckets,
+    rangeHours: trendRangeHours,
+  });
+  const trendBuckets = filteredTrend.buckets;
+
   const [selectedBucketIdx, setSelectedBucketIdx] = useState<number>(
-    Math.max(0, trendBuckets.length - 1)
+    Math.max(0, summary.trendBuckets.length - 1)
   );
   const [hiddenTrendMoods, setHiddenTrendMoods] = useState<string[]>([]);
   const [hoveredPoint, setHoveredPoint] = useState<{
@@ -91,6 +101,16 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     bucketIdx: number;
   } | null>(null);
   const [lastExportNotice, setLastExportNotice] = useState<string>('');
+
+  const handleSelectTrendRange = (nextRange: MoodTrendRangeHours) => {
+    const nextFiltered = filterMoodTrendByRangeHours({
+      trendBuckets: summary.trendBuckets,
+      rangeHours: nextRange,
+    });
+    setTrendRangeHours(nextRange);
+    setSelectedBucketIdx(Math.max(0, nextFiltered.buckets.length - 1));
+    setHoveredPoint(null);
+  };
 
   const personalCsvPreview = buildPersonalMoodHistoryCsv({
     currentUid,
@@ -142,8 +162,13 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     );
   };
 
+  const safeSelectedBucketIdx =
+    selectedBucketIdx >= 0 && selectedBucketIdx < trendBuckets.length
+      ? selectedBucketIdx
+      : Math.max(0, trendBuckets.length - 1);
   const activeBucket =
-    trendBuckets[selectedBucketIdx] || trendBuckets[trendBuckets.length - 1];
+    trendBuckets[safeSelectedBucketIdx] ||
+    trendBuckets[trendBuckets.length - 1];
   const visibleTop3Moods = getVisibleTop3Moods(top3Moods, hiddenTrendMoods);
 
   // SVG Line Chart geometry
@@ -155,7 +180,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
   const padBottom = 46;
   const plotW = svgW - padLeft - padRight;
   const plotH = svgH - padTop - padBottom;
-  const maxVal = Math.max(4, summary.trendMaxValue);
+  const maxVal = Math.max(4, filteredTrend.trendMaxValue);
   const midVal = Math.round(maxVal / 2);
 
   const getBucketX = (idx: number) => {
@@ -332,41 +357,78 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
         </div>
       </div>
 
-      {/* Top 3 Moods 24-Hour Fluctuation Line Chart */}
+      {/* Top 3 Moods Fluctuation Line Chart with 6h / 12h / 24h Date-Range Filter */}
       <div
         className="p-3 rounded bg-[#0A0A0C] border border-zinc-800/80 space-y-2.5"
         data-testid="popular-moods-24h-line-chart"
       >
         <div className="space-y-2">
-          <div className="space-y-0.5">
+          <div className="space-y-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">
-                Top 3 Moods · 24h Fluctuation Trend
+              <div
+                className="text-[11px] font-bold uppercase tracking-wider text-zinc-300"
+                data-testid="popular-mood-trend-chart-title"
+              >
+                Top 3 Moods · {trendRangeHours}h Fluctuation Trend
               </div>
 
-              <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400 tabular-nums shrink-0">
-                <span data-testid="popular-mood-trend-visible-count">
-                  {visibleTop3Moods.length}/{top3Moods.length} lines visible
-                </span>
-                {hiddenTrendMoods.length > 0 && (
-                  <>
-                    <span aria-hidden="true" className="text-zinc-700">
-                      ·
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setHiddenTrendMoods([])}
-                      data-testid="popular-mood-trend-show-all"
-                      className="text-sky-400 hover:text-white underline underline-offset-2 whitespace-nowrap shrink-0"
-                    >
-                      Show All Lines
-                    </button>
-                  </>
-                )}
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-zinc-400 tabular-nums">
+                {/* Date-Range Filter: 6h / 12h / 24h */}
+                <div
+                  className="inline-flex items-center gap-1 p-0.5 rounded bg-[#050505] border border-zinc-800"
+                  role="group"
+                  aria-label="Filter mood trend chart date range"
+                  data-testid="popular-mood-trend-range-filter"
+                >
+                  <span className="px-1.5 text-[10px] font-mono uppercase tracking-wider text-zinc-500">
+                    Range
+                  </span>
+                  {MOOD_TREND_RANGE_OPTIONS.map((rangeOpt) => {
+                    const isActive = trendRangeHours === rangeOpt;
+                    return (
+                      <button
+                        key={rangeOpt}
+                        type="button"
+                        onClick={() => handleSelectTrendRange(rangeOpt)}
+                        aria-pressed={isActive}
+                        aria-label={`View mood trends over the last ${rangeOpt} hours`}
+                        data-testid={`popular-mood-trend-range-${rangeOpt}h`}
+                        className={`px-2 py-0.5 rounded text-[11px] font-mono tabular-nums whitespace-nowrap shrink-0 ${
+                          isActive
+                            ? 'bg-white text-black font-bold'
+                            : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                        }`}
+                      >
+                        {rangeOpt}h
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 tabular-nums">
+                  <span data-testid="popular-mood-trend-visible-count">
+                    {visibleTop3Moods.length}/{top3Moods.length} lines visible
+                  </span>
+                  {hiddenTrendMoods.length > 0 && (
+                    <>
+                      <span aria-hidden="true" className="text-zinc-700">
+                        ·
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setHiddenTrendMoods([])}
+                        data-testid="popular-mood-trend-show-all"
+                        className="text-sky-400 hover:text-white underline underline-offset-2 whitespace-nowrap shrink-0"
+                      >
+                        Show All Lines
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
             <div className="text-[11px] text-zinc-500">
-              Click any legend item to toggle its trend line on or off for a cleaner view
+              Switch between 6h, 12h, or 24h windows or click any legend item to toggle its trend line
             </div>
           </div>
 
@@ -431,7 +493,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
           <svg
             viewBox={`0 0 ${svgW} ${svgH}`}
             role="img"
-            aria-label="Line chart showing 24-hour fluctuation of the top 3 most popular moods with labeled axes and data point markers"
+            aria-label={`Line chart showing ${trendRangeHours}-hour fluctuation of the top 3 most popular moods with labeled axes and data point markers`}
             className="w-full h-auto block select-none"
           >
             {/* Y-Axis Title Label */}
@@ -480,7 +542,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
             {/* Vertical Time Bucket Guides & X-Axis Labels */}
             {trendBuckets.map((bucket, bIdx) => {
               const x = getBucketX(bIdx);
-              const isSelected = bIdx === selectedBucketIdx;
+              const isSelected = bIdx === safeSelectedBucketIdx;
               return (
                 <g key={bucket.label}>
                   <line
@@ -514,7 +576,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
               data-testid="popular-moods-24h-xaxis-label"
               className="fill-zinc-300 font-mono text-[11px] font-semibold"
             >
-              {summary.xAxisLabel}
+              {filteredTrend.xAxisLabel}
             </text>
 
             {/* Empty Prompt if All 3 Trend Lines Are Toggled Off */}
@@ -556,7 +618,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
               );
             })}
 
-            {/* Small Data Point Markers for Each Visible Mood Across All 24h Time Buckets */}
+            {/* Small Data Point Markers for Each Visible Mood Across All Selected Time Buckets */}
             {visibleRenderIndices.map((rankIdx) => {
               const moodStat = top3Moods[rankIdx];
               if (!moodStat) return null;
@@ -565,7 +627,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                 const val = b.valuesByMood[moodStat.mood] ?? 0;
                 const cx = getBucketX(bIdx);
                 const cy = getValueY(val);
-                const isSelected = bIdx === selectedBucketIdx;
+                const isSelected = bIdx === safeSelectedBucketIdx;
                 const isHovered =
                   hoveredPoint?.rankIdx === rankIdx &&
                   hoveredPoint?.bucketIdx === bIdx;
@@ -713,7 +775,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                   onClick={() => setSelectedBucketIdx(bIdx)}
                   data-testid={`popular-mood-bucket-btn-${b.label}`}
                   className={`px-1.5 py-0.5 rounded text-[10px] transition-colors whitespace-nowrap shrink-0 ${
-                    bIdx === selectedBucketIdx
+                    bIdx === safeSelectedBucketIdx
                       ? 'bg-white text-black font-bold'
                       : 'text-zinc-400 hover:text-white'
                   }`}

@@ -822,6 +822,75 @@ export function getVisibleTop3Moods(
   return top3Moods.filter((m) => isMoodTrendLineVisible(hiddenMoods, m.mood));
 }
 
+export type MoodTrendRangeHours = 6 | 12 | 24;
+
+export const MOOD_TREND_RANGE_OPTIONS: readonly MoodTrendRangeHours[] = [
+  6,
+  12,
+  24,
+];
+
+export function filterMoodTrendByRangeHours(params: {
+  trendBuckets: MoodTrendBucketPoint[];
+  rangeHours: MoodTrendRangeHours;
+}): {
+  rangeHours: MoodTrendRangeHours;
+  buckets: MoodTrendBucketPoint[];
+  xAxisLabel: string;
+  trendMaxValue: number;
+} {
+  const validRange: MoodTrendRangeHours =
+    params.rangeHours === 6 || params.rangeHours === 12 ? params.rangeHours : 24;
+  const source = Array.isArray(params.trendBuckets) ? params.trendBuckets : [];
+  const hourMs = 60 * 60 * 1000;
+
+  let sliced: MoodTrendBucketPoint[];
+  if (validRange === 6) {
+    sliced = source.slice(-3).map((b, idx) => {
+      if (idx === 0 && b.label === '-8h') {
+        return {
+          ...b,
+          bucketIndex: 0,
+          label: '-6h',
+          windowLabel: '6h–4h ago',
+          startMs: b.endMs - 2 * hourMs,
+        };
+      }
+      return {
+        ...b,
+        bucketIndex: idx,
+      };
+    });
+  } else if (validRange === 12) {
+    sliced = source.slice(-4).map((b, idx) => ({
+      ...b,
+      bucketIndex: idx,
+    }));
+  } else {
+    sliced = source.map((b, idx) => ({
+      ...b,
+      bucketIndex: idx,
+    }));
+  }
+
+  let maxVal = 4;
+  for (const b of sliced) {
+    for (const v of Object.values(b.valuesByMood || {})) {
+      if (typeof v === 'number' && v > maxVal) {
+        maxVal = v;
+      }
+    }
+  }
+  const trendMaxValue = Math.max(4, Math.ceil(maxVal / 2) * 2);
+
+  return {
+    rangeHours: validRange,
+    buckets: sliced,
+    xAxisLabel: `Time (Last ${validRange} Hours)`,
+    trendMaxValue,
+  };
+}
+
 export interface MoodTrendPointTooltipData {
   rank: number;
   mood: string;
