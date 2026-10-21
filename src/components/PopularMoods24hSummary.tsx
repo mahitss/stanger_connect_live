@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   MoodPopularity24hSummary,
   OnlineMoodTone,
@@ -14,6 +14,7 @@ function getToneClasses(tone: OnlineMoodTone): {
   dot: string;
   fill: string;
   text: string;
+  strokeHex: string;
 } {
   switch (tone) {
     case 'emerald':
@@ -21,33 +22,40 @@ function getToneClasses(tone: OnlineMoodTone): {
         dot: 'bg-emerald-400',
         fill: 'fill-emerald-400',
         text: 'text-emerald-400',
+        strokeHex: '#34d399',
       };
     case 'amber':
       return {
         dot: 'bg-amber-400',
         fill: 'fill-amber-400',
         text: 'text-amber-400',
+        strokeHex: '#fbbf24',
       };
     case 'violet':
       return {
         dot: 'bg-violet-400',
         fill: 'fill-violet-400',
         text: 'text-violet-400',
+        strokeHex: '#a78bfa',
       };
     case 'sky':
       return {
         dot: 'bg-sky-400',
         fill: 'fill-sky-400',
         text: 'text-sky-400',
+        strokeHex: '#38bdf8',
       };
     default:
       return {
         dot: 'bg-zinc-400',
         fill: 'fill-zinc-400',
         text: 'text-zinc-300',
+        strokeHex: '#a1a1aa',
       };
   }
 }
+
+const FALLBACK_LINE_HEX = ['#fbbf24', '#34d399', '#38bdf8'];
 
 export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
   summary,
@@ -55,11 +63,61 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
   onSelectMoodFilter,
 }) => {
   const displayedItems = summary.items.slice(0, 6);
+  const top3Moods = summary.top3Moods.slice(0, 3);
+  const trendBuckets = summary.trendBuckets;
   const topToneClasses = getToneClasses(summary.topMoodTone);
+
+  const [selectedBucketIdx, setSelectedBucketIdx] = useState<number>(
+    Math.max(0, trendBuckets.length - 1)
+  );
+  const activeBucket =
+    trendBuckets[selectedBucketIdx] || trendBuckets[trendBuckets.length - 1];
+
+  // SVG Line Chart geometry
+  const svgW = 520;
+  const svgH = 184;
+  const padLeft = 58;
+  const padRight = 20;
+  const padTop = 18;
+  const padBottom = 46;
+  const plotW = svgW - padLeft - padRight;
+  const plotH = svgH - padTop - padBottom;
+  const maxVal = Math.max(4, summary.trendMaxValue);
+  const midVal = Math.round(maxVal / 2);
+
+  const getBucketX = (idx: number) => {
+    if (trendBuckets.length <= 1) return padLeft + plotW / 2;
+    return Number(
+      (padLeft + (idx / (trendBuckets.length - 1)) * plotW).toFixed(1)
+    );
+  };
+
+  const getValueY = (val: number) => {
+    const clamped = Math.max(0, Math.min(maxVal, val));
+    return Number((padTop + plotH - (clamped / maxVal) * plotH).toFixed(1));
+  };
+
+  // Ensure the 3 lines always have distinct stroke colors even if two moods share a tone
+  const usedStrokes = new Set<string>();
+  const lineColors = top3Moods.map((m, idx) => {
+    const preferred = getToneClasses(m.tone).strokeHex;
+    if (!usedStrokes.has(preferred)) {
+      usedStrokes.add(preferred);
+      return preferred;
+    }
+    const fallback = FALLBACK_LINE_HEX[idx] || '#a78bfa';
+    usedStrokes.add(fallback);
+    return fallback;
+  });
+
+  // Render order: Rank #3 -> Rank #2 -> Rank #1 so #1 is always in the foreground
+  const renderOrderIndices = top3Moods
+    .map((_, idx) => idx)
+    .reverse();
 
   return (
     <div
-      className="p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3"
+      className="p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3.5"
       data-testid="online-directory-popular-moods-24h"
     >
       <div className="border-b border-zinc-800/70 pb-2.5 space-y-1">
@@ -86,14 +144,17 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
 
           <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-zinc-400 tabular-nums shrink-0">
             <span data-testid="popular-moods-24h-total">
-              {summary.totalEvents24h} {summary.totalEvents24h === 1 ? 'check-in' : 'check-ins'}
+              {summary.totalEvents24h}{' '}
+              {summary.totalEvents24h === 1 ? 'check-in' : 'check-ins'}
             </span>
             <span aria-hidden="true" className="text-zinc-700">
               ·
             </span>
             <span data-testid="popular-moods-24h-peers">
               {summary.uniqueActivePeers24h}{' '}
-              {summary.uniqueActivePeers24h === 1 ? 'active peer' : 'active peers'}
+              {summary.uniqueActivePeers24h === 1
+                ? 'active peer'
+                : 'active peers'}
             </span>
             {activeMoodFilter !== 'all' && (
               <>
@@ -113,8 +174,263 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
           </div>
         </div>
         <p className="text-[11px] text-zinc-400">
-          Most popular moods used by active peers over the last 24 hours. Click a mood bar to filter peers.
+          Most popular moods used by active peers over the last 24 hours. Click a mood bar or legend item to filter peers.
         </p>
+      </div>
+
+      {/* Top 3 Moods 24-Hour Fluctuation Line Chart */}
+      <div
+        className="p-3 rounded bg-[#0A0A0C] border border-zinc-800/80 space-y-2.5"
+        data-testid="popular-moods-24h-line-chart"
+      >
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="space-y-0.5">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-zinc-300">
+              Top 3 Moods · 24h Fluctuation Trend
+            </div>
+            <div className="text-[11px] text-zinc-500">
+              4-hour interval check-in & active peer trend lines with data point markers
+            </div>
+          </div>
+
+          {/* Interactive Top 3 Legend */}
+          <div
+            className="flex flex-wrap items-center gap-1.5"
+            role="group"
+            aria-label="Filter by top 3 popular moods in trend chart"
+          >
+            {top3Moods.map((m, idx) => {
+              const toneCls = getToneClasses(m.tone);
+              const isSelected =
+                activeMoodFilter !== 'all' &&
+                activeMoodFilter.toLowerCase() === m.mood.toLowerCase();
+              return (
+                <button
+                  key={m.mood}
+                  type="button"
+                  onClick={() =>
+                    onSelectMoodFilter(isSelected ? 'all' : m.mood)
+                  }
+                  aria-pressed={isSelected}
+                  data-testid={`popular-mood-trend-legend-${idx + 1}`}
+                  className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded border text-[11px] font-mono transition-colors whitespace-nowrap shrink-0 ${
+                    isSelected
+                      ? 'bg-zinc-800 text-white border-zinc-500'
+                      : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                  }`}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`w-2 h-2 rounded-full ${toneCls.dot}`}
+                  />
+                  <span>
+                    #{idx + 1} {m.mood}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* SVG Line Chart with Clear Axis Labels & Data Point Markers */}
+        <div className="w-full overflow-hidden">
+          <svg
+            viewBox={`0 0 ${svgW} ${svgH}`}
+            role="img"
+            aria-label="Line chart showing 24-hour fluctuation of the top 3 most popular moods with labeled axes and data point markers"
+            className="w-full h-auto block select-none"
+          >
+            {/* Y-Axis Title Label */}
+            <text
+              x={15}
+              y={padTop + plotH / 2}
+              transform={`rotate(-90 15 ${padTop + plotH / 2})`}
+              textAnchor="middle"
+              data-testid="popular-moods-24h-yaxis-label"
+              className="fill-zinc-300 font-mono text-[11px] font-semibold"
+            >
+              {summary.yAxisLabel}
+            </text>
+
+            {/* Horizontal Y-Axis Gridlines & Numeric Tick Labels */}
+            {[
+              { label: String(maxVal), val: maxVal, id: 'max' },
+              { label: String(midVal), val: midVal, id: 'mid' },
+              { label: '0', val: 0, id: '0' },
+            ].map((tick) => {
+              const y = getValueY(tick.val);
+              return (
+                <g key={tick.id}>
+                  <line
+                    x1={padLeft}
+                    y1={y}
+                    x2={svgW - padRight}
+                    y2={y}
+                    stroke="#27272a"
+                    strokeDasharray={tick.val === 0 ? undefined : '3 3'}
+                    strokeWidth="1"
+                  />
+                  <text
+                    x={padLeft - 8}
+                    y={y + 3.5}
+                    textAnchor="end"
+                    data-testid={`popular-moods-24h-ytick-${tick.id}`}
+                    className="fill-zinc-400 font-mono text-[11px] tabular-nums"
+                  >
+                    {tick.label}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* Vertical Time Bucket Guides & X-Axis Labels */}
+            {trendBuckets.map((bucket, bIdx) => {
+              const x = getBucketX(bIdx);
+              const isSelected = bIdx === selectedBucketIdx;
+              return (
+                <g key={bucket.label}>
+                  <line
+                    x1={x}
+                    y1={padTop}
+                    x2={x}
+                    y2={padTop + plotH}
+                    stroke={isSelected ? '#52525b' : '#18181b'}
+                    strokeWidth={isSelected ? '1.5' : '1'}
+                  />
+                  <text
+                    x={x}
+                    y={padTop + plotH + 16}
+                    textAnchor="middle"
+                    data-testid={`popular-moods-24h-xtick-${bucket.label}`}
+                    className={`font-mono text-[11px] tabular-nums ${
+                      isSelected ? 'fill-white font-bold' : 'fill-zinc-400'
+                    }`}
+                  >
+                    {bucket.label}
+                  </text>
+                </g>
+              );
+            })}
+
+            {/* X-Axis Title Label */}
+            <text
+              x={padLeft + plotW / 2}
+              y={svgH - 6}
+              textAnchor="middle"
+              data-testid="popular-moods-24h-xaxis-label"
+              className="fill-zinc-300 font-mono text-[11px] font-semibold"
+            >
+              {summary.xAxisLabel}
+            </text>
+
+            {/* Top 3 Moods Polylines (drawn #3 -> #2 -> #1 so #1 is in foreground) */}
+            {renderOrderIndices.map((rankIdx) => {
+              const moodStat = top3Moods[rankIdx];
+              if (!moodStat) return null;
+              const strokeColor = lineColors[rankIdx];
+              const pointsStr = trendBuckets
+                .map((b, bIdx) => {
+                  const val = b.valuesByMood[moodStat.mood] ?? 0;
+                  return `${getBucketX(bIdx)},${getValueY(val)}`;
+                })
+                .join(' ');
+
+              return (
+                <polyline
+                  key={`line-${moodStat.mood}`}
+                  fill="none"
+                  stroke={strokeColor}
+                  strokeWidth={rankIdx === 0 ? '2.5' : '1.85'}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  points={pointsStr}
+                  data-testid={`popular-mood-trend-line-${rankIdx + 1}`}
+                />
+              );
+            })}
+
+            {/* Small Data Point Markers for Each Mood Across All 24h Time Buckets */}
+            {renderOrderIndices.map((rankIdx) => {
+              const moodStat = top3Moods[rankIdx];
+              if (!moodStat) return null;
+              const strokeColor = lineColors[rankIdx];
+              return trendBuckets.map((b, bIdx) => {
+                const val = b.valuesByMood[moodStat.mood] ?? 0;
+                const cx = getBucketX(bIdx);
+                const cy = getValueY(val);
+                const isSelected = bIdx === selectedBucketIdx;
+                return (
+                  <g
+                    key={`marker-${moodStat.mood}-${b.label}`}
+                    onClick={() => setSelectedBucketIdx(bIdx)}
+                    className="cursor-pointer"
+                  >
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={isSelected ? 4.8 : 3.6}
+                      fill="#050505"
+                      stroke={strokeColor}
+                      strokeWidth={isSelected ? '2.4' : '1.9'}
+                      data-testid={`popular-mood-trend-marker-${rankIdx + 1}-${bIdx}`}
+                    >
+                      <title>{`${moodStat.mood} (${b.label}): ${val} active/check-ins`}</title>
+                    </circle>
+                  </g>
+                );
+              });
+            })}
+          </svg>
+        </div>
+
+        {/* Interactive Time-Window Inspector & Bucket Selector */}
+        {activeBucket && (
+          <div
+            className="flex flex-wrap items-center justify-between gap-2 pt-1.5 border-t border-zinc-800/70 text-[11px] font-mono tabular-nums"
+            data-testid="popular-moods-24h-bucket-inspector"
+          >
+            <div className="flex flex-wrap items-center gap-1">
+              <span className="text-zinc-500 mr-1">Inspect Window:</span>
+              {trendBuckets.map((b, bIdx) => (
+                <button
+                  key={b.label}
+                  type="button"
+                  onClick={() => setSelectedBucketIdx(bIdx)}
+                  data-testid={`popular-mood-bucket-btn-${b.label}`}
+                  className={`px-1.5 py-0.5 rounded text-[10px] transition-colors whitespace-nowrap shrink-0 ${
+                    bIdx === selectedBucketIdx
+                      ? 'bg-white text-black font-bold'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  {b.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2.5 text-zinc-300">
+              <span className="text-zinc-500">{activeBucket.windowLabel}:</span>
+              {top3Moods.map((m, idx) => {
+                const toneCls = getToneClasses(m.tone);
+                const val = activeBucket.valuesByMood[m.mood] ?? 0;
+                return (
+                  <span
+                    key={m.mood}
+                    data-testid={`popular-mood-bucket-val-${idx + 1}`}
+                    className="inline-flex items-center gap-1"
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={`w-1.5 h-1.5 rounded-full ${toneCls.dot}`}
+                    />
+                    <span className="text-zinc-400">{m.mood}:</span>
+                    <strong className="text-white">{val}</strong>
+                  </span>
+                );
+              })}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Horizontal Distribution Bars */}
@@ -166,13 +482,25 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                 </div>
 
                 <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400 tabular-nums shrink-0">
-                  <span className={item.usageCount24h > 0 ? 'text-zinc-200 font-semibold' : 'text-zinc-500'}>
+                  <span
+                    className={
+                      item.usageCount24h > 0
+                        ? 'text-zinc-200 font-semibold'
+                        : 'text-zinc-500'
+                    }
+                  >
                     {item.usageCount24h} in 24h
                   </span>
                   <span aria-hidden="true" className="text-zinc-700">
                     ·
                   </span>
-                  <span className={item.activePeersNow > 0 ? 'text-emerald-400' : 'text-zinc-500'}>
+                  <span
+                    className={
+                      item.activePeersNow > 0
+                        ? 'text-emerald-400'
+                        : 'text-zinc-500'
+                    }
+                  >
                     {item.activePeersNow} live
                   </span>
                   <span aria-hidden="true" className="text-zinc-700">

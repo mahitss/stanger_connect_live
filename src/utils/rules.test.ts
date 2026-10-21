@@ -109,6 +109,26 @@ test('Online Directory 24-hour popular moods summary ranks moods, filters out st
   const coffeeItem = summary.items.find((i) => i.mood === 'Coffee Break');
   assert.ok(coffeeItem);
   assert.equal(coffeeItem.usageCount24h, 0);
+
+  // Top 3 moods fluctuation line chart series & axis metadata
+  assert.equal(summary.top3Moods.length, 3);
+  assert.equal(summary.top3Moods[0].mood, 'Brainstorming');
+  assert.equal(summary.top3Moods[1].mood, 'Deep Work');
+  assert.equal(summary.top3Moods[2].mood, 'Quick Questions');
+  assert.equal(summary.xAxisLabel, 'Time (Last 24 Hours)');
+  assert.equal(summary.yAxisLabel, 'Peer Mood Activity');
+  assert.equal(summary.trendBuckets.length, 7);
+  assert.deepEqual(
+    summary.trendBuckets.map((b) => b.label),
+    ['-24h', '-20h', '-16h', '-12h', '-8h', '-4h', 'Now']
+  );
+  // Bucket 5 ('-4h', covering 4h-1h ago) includes the 3 Brainstorming events at recentMs (2h ago)
+  assert.ok(summary.trendBuckets[5].rank1Value >= 3);
+  // Bucket 6 ('Now') reflects the top 3 moods' current values
+  assert.equal(summary.trendBuckets[6].rank1Value, 3);
+  assert.equal(summary.trendBuckets[6].rank2Value, 1);
+  assert.equal(summary.trendBuckets[6].rank3Value, 1);
+  assert.ok(summary.trendMaxValue >= 4);
 });
 
 test('Online Directory Mood indicator validates presets, custom moods, security guards, summaries, and filters', () => {

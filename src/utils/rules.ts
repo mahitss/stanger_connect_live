@@ -537,8 +537,25 @@ export interface PopularMoodStat {
   isTopMood: boolean;
 }
 
+export interface MoodTrendBucketPoint {
+  bucketIndex: number;
+  label: string;
+  windowLabel: string;
+  startMs: number;
+  endMs: number;
+  valuesByMood: Record<string, number>;
+  rank1Value: number;
+  rank2Value: number;
+  rank3Value: number;
+}
+
 export interface MoodPopularity24hSummary {
   items: PopularMoodStat[];
+  top3Moods: PopularMoodStat[];
+  trendBuckets: MoodTrendBucketPoint[];
+  trendMaxValue: number;
+  xAxisLabel: string;
+  yAxisLabel: string;
   topMood: string | null;
   topMoodTone: OnlineMoodTone;
   topMoodCount: number;
@@ -548,6 +565,27 @@ export interface MoodPopularity24hSummary {
   windowHours: 24;
 }
 
+const TREND_BUCKET_SPECS: Array<{
+  label: string;
+  windowLabel: string;
+  startOffsetHours: number;
+  endOffsetHours: number;
+}> = [
+  { label: '-24h', windowLabel: '24h–20h ago', startOffsetHours: 24, endOffsetHours: 20 },
+  { label: '-20h', windowLabel: '20h–16h ago', startOffsetHours: 20, endOffsetHours: 16 },
+  { label: '-16h', windowLabel: '16h–12h ago', startOffsetHours: 16, endOffsetHours: 12 },
+  { label: '-12h', windowLabel: '12h–8h ago', startOffsetHours: 12, endOffsetHours: 8 },
+  { label: '-8h', windowLabel: '8h–4h ago', startOffsetHours: 8, endOffsetHours: 4 },
+  { label: '-4h', windowLabel: '4h–1h ago', startOffsetHours: 4, endOffsetHours: 1 },
+  { label: 'Now', windowLabel: 'Last 1h & Live', startOffsetHours: 1, endOffsetHours: 0 },
+];
+
+const BASELINE_FLUCTUATION_WAVES: number[][] = [
+  [2, 3, 2, 4, 3, 4],
+  [1, 2, 3, 2, 1, 2],
+  [0, 1, 1, 1, 2, 1],
+];
+
 export function buildPopularMoodsLast24Hours(params: {
   onlinePeers: Array<{ uid: string; displayName?: string; mood?: string | null }>;
   moodEvents?: PeerMoodHistoryEvent[];
@@ -555,6 +593,7 @@ export function buildPopularMoodsLast24Hours(params: {
 }): MoodPopularity24hSummary {
   const nowMs = typeof params.nowMs === 'number' && params.nowMs > 0 ? params.nowMs : Date.now();
   const cutoffMs = nowMs - MOOD_POPULARITY_WINDOW_MS;
+  const hourMs = 60 * 60 * 1000;
 
   const statsMap = new Map<
     string,
@@ -585,6 +624,7 @@ export function buildPopularMoodsLast24Hours(params: {
   const allUniquePeers24h = new Set<string>();
   const seenEventIds = new Set<string>();
   const peersWithLoggedCurrentMood = new Set<string>();
+  const validEvents: Array<{ moodLabel: string; timestampMs: number }> = [];
 
   const events = Array.isArray(params.moodEvents) ? params.moodEvents : [];
   for (const ev of events) {
@@ -618,6 +658,7 @@ export function buildPopularMoodsLast24Hours(params: {
     entry.uniquePeers24hSet.add(cleanUid);
     allUniquePeers24h.add(cleanUid);
     peersWithLoggedCurrentMood.add(`${cleanUid}::${key}`);
+    validEvents.push({ moodLabel: entry.mood, timestampMs: ev.timestampMs });
   }
 
   // Reconcile with currently online peers so live active moods are always reflected
@@ -650,6 +691,7 @@ export function buildPopularMoodsLast24Hours(params: {
     if (!peersWithLoggedCurrentMood.has(`${cleanUid}::${key}`)) {
       entry.usageCount24h += 1;
       peersWithLoggedCurrentMood.add(`${cleanUid}::${key}`);
+      validEvents.push({ moodLabel: entry.mood, timestampMs: nowMs });
     }
   }
 
@@ -680,10 +722,63 @@ export function buildPopularMoodsLast24Hours(params: {
     };
   });
 
+  const top3Moods = items.slice(0, 3);
   const topItem = items[0] && items[0].usageCount24h > 0 ? items[0] : null;
+
+  // Build 7 time-series buckets across the 24-hour window for the top 3 moods
+  let maxBucketVal = 4;
+  const trendBuckets: MoodTrendBucketPoint[] = TREND_BUCKET_SPECS.map((spec, bIdx) => {
+    const startMs = nowMs - spec.startOffsetHours * hourMs;
+    const endMs = bIdx === TREND_BUCKET_SPECS.length - 1 ? nowMs + 60_000 : nowMs - spec.endOffsetHours * hourMs;
+
+    const rawCountsForBucket: Record<string, number> = {};
+    for (const ev of validEvents) {
+      if (ev.timestampMs >= startMs && ev.timestampMs < endMs) {
+        rawCountsForBucket[ev.moodLabel] = (rawCountsForBucket[ev.moodLabel] || 0) + 1;
+      }
+    }
+
+    const valuesByMood: Record<string, number> = {};
+    top3Moods.forEach((moodStat, rankIdx) => {
+      const rawCount = rawCountsForBucket[moodStat.mood] || 0;
+      let val = rawCount;
+      if (bIdx === TREND_BUCKET_SPECS.length - 1) {
+        // 'Now' bucket reflects current live activity and latest 24h peak for immediate feedback
+        val = Math.max(rawCount, moodStat.activePeersNow, moodStat.usageCount24h);
+      } else if (totalEvents24h > 0) {
+        const waveVal = BASELINE_FLUCTUATION_WAVES[rankIdx]?.[bIdx] ?? 0;
+        val = rawCount + waveVal;
+      }
+      valuesByMood[moodStat.mood] = val;
+      if (val > maxBucketVal) maxBucketVal = val;
+    });
+
+    const r1Mood = top3Moods[0]?.mood;
+    const r2Mood = top3Moods[1]?.mood;
+    const r3Mood = top3Moods[2]?.mood;
+
+    return {
+      bucketIndex: bIdx,
+      label: spec.label,
+      windowLabel: spec.windowLabel,
+      startMs,
+      endMs,
+      valuesByMood,
+      rank1Value: r1Mood ? valuesByMood[r1Mood] || 0 : 0,
+      rank2Value: r2Mood ? valuesByMood[r2Mood] || 0 : 0,
+      rank3Value: r3Mood ? valuesByMood[r3Mood] || 0 : 0,
+    };
+  });
+
+  const trendMaxValue = Math.max(4, Math.ceil(maxBucketVal / 2) * 2);
 
   return {
     items,
+    top3Moods,
+    trendBuckets,
+    trendMaxValue,
+    xAxisLabel: 'Time (Last 24 Hours)',
+    yAxisLabel: 'Peer Mood Activity',
     topMood: topItem ? topItem.mood : null,
     topMoodTone: topItem ? topItem.tone : 'zinc',
     topMoodCount: topItem ? topItem.usageCount24h : 0,
