@@ -2861,3 +2861,44 @@ export function formatTimerMMSS(totalSeconds: number): string {
   const secs = String(clamped % 60).padStart(2, '0');
   return `${mins}:${secs}`;
 }
+
+// --- Photo Moments Share URL & Clipboard Payload Builder ---
+export interface MomentSharePayload {
+  momentId: string;
+  url: string;
+  caption: string;
+  authorName: string;
+  clipboardText: string;
+}
+
+export function buildMomentShareUrl(origin: string, momentId: string): string {
+  const cleanOrigin = String(origin || 'https://mrstranger.app')
+    .trim()
+    .replace(/\/+$/, '');
+  const cleanId = sanitizeSafeText(String(momentId || '').trim(), 120) || 'moment';
+  return `${cleanOrigin}/?moment=${encodeURIComponent(cleanId)}`;
+}
+
+export function buildMomentSharePayload(params: {
+  origin: string;
+  momentId: string;
+  caption: string;
+  authorName?: string;
+}): MomentSharePayload {
+  const cleanMomentId = sanitizeSafeText(String(params.momentId || '').trim(), 120) || 'moment';
+  const cleanCaption =
+    sanitizeSafeText(String(params.caption || '').trim(), 500) || 'Shared Moment';
+  const cleanAuthor =
+    sanitizeSafeText(String(params.authorName || '').trim(), 60) || 'Verified Member';
+  const url = buildMomentShareUrl(params.origin, cleanMomentId);
+  const clipboardText = `"${cleanCaption}" — ${cleanAuthor}\n${url}`;
+
+  return {
+    momentId: cleanMomentId,
+    url,
+    caption: cleanCaption,
+    authorName: cleanAuthor,
+    clipboardText,
+  };
+}
+

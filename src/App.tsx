@@ -32,6 +32,8 @@ import {
   Lock,
   Volume2,
   VolumeX,
+  Share2,
+  Check,
 } from 'lucide-react';
 import {
   auth,
@@ -78,6 +80,8 @@ import {
   buildWeeklyProductivityDistribution,
   normalizeStudyTopicName,
   APP_LOGO_URL,
+  buildMomentSharePayload,
+  MomentSharePayload,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -152,11 +156,17 @@ export default function App() {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
 
-  // Detect ?room=CODE invite URL parameter on arrival
+  // Detect ?room=CODE invite URL parameter or ?moment=ID shared moment URL parameter on arrival
   const initialRoomParam = (() => {
     const params = new URLSearchParams(window.location.search);
     const r = params.get('room');
     return r ? normalizeStudyRoomCode(r) : '';
+  })();
+
+  const initialMomentParam = (() => {
+    const params = new URLSearchParams(window.location.search);
+    const m = params.get('moment');
+    return m ? sanitizeSafeText(m.trim(), 120) : '';
   })();
 
   const [activeStudyRoomCode, setActiveStudyRoomCode] = useState<string>(
@@ -164,7 +174,7 @@ export default function App() {
   );
 
   const [activePage, setActivePage] = useState<SidebarPage>(() =>
-    initialRoomParam ? 'study' : 'hub'
+    initialRoomParam ? 'study' : initialMomentParam ? 'moments' : 'hub'
   );
 
   // Persistent Authenticated Account State
@@ -250,6 +260,8 @@ export default function App() {
   const [momentFilter, setMomentFilter] = useState<'all' | 'public' | 'connections' | 'mine'>('all');
   const [momentCommentInputs, setMomentCommentInputs] = useState<Record<string, string>>({});
   const [momentCommentErrors, setMomentCommentErrors] = useState<Record<string, string>>({});
+  const [copiedMomentShare, setCopiedMomentShare] = useState<MomentSharePayload | null>(null);
+  const shareResetTimerRef = useRef<number | null>(null);
 
   // Daily Productivity Goal State (Target Focus Time & Completed Minutes for Today)
   const todayDateStr = formatDateKey(new Date());
@@ -1262,7 +1274,7 @@ export default function App() {
       setAccountSession(newSession);
       localStorage.setItem('mr_stranger_account_v2', JSON.stringify(newSession));
       setPasswordInput('');
-      setActivePage(initialRoomParam ? 'study' : 'hub');
+      setActivePage(initialRoomParam ? 'study' : initialMomentParam ? 'moments' : 'hub');
     } catch {
       setAuthFormError('Network error while contacting authentication server.');
     } finally {
@@ -1505,10 +1517,12 @@ export default function App() {
   const generateCameraSnapshotSvgDataUrl = (captionText: string, author: string) => {
     const safeCaption = captionText.replace(/[<>&"']/g, '');
     const safeAuthor = author.replace(/[<>&"']/g, '');
+    const displayCaption =
+      safeCaption.length > 38 ? `${safeCaption.slice(0, 37).trimEnd()}…` : safeCaption;
     const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="800" height="500" viewBox="0 0 800 500">
       <rect width="800" height="500" fill="#050505"/>
       <rect x="48" y="48" width="704" height="404" rx="8" fill="#0A0A0C" stroke="#27272a" stroke-width="2"/>
-      <text x="80" y="230" fill="#fafafa" font-family="sans-serif" font-size="32" font-weight="bold">${safeCaption.slice(0, 36)}</text>
+      <text x="80" y="230" fill="#fafafa" font-family="sans-serif" font-size="30" font-weight="bold">${displayCaption}</text>
       <text x="80" y="280" fill="#a1a1aa" font-family="monospace" font-size="18">Captured by ${safeAuthor} · Mr. Stranger Verified Feed</text>
     </svg>`;
     return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
@@ -1601,6 +1615,49 @@ export default function App() {
         handleFirestoreError(err, OperationType.DELETE, `moments/${id}`);
       }
     }
+  };
+
+  const handleShareMoment = async (momentItem: MomentPostDoc) => {
+    const sharePayload = buildMomentSharePayload({
+      origin: typeof window !== 'undefined' ? window.location.origin : 'https://mrstranger.app',
+      momentId: momentItem.id,
+      caption: momentItem.caption,
+      authorName: momentItem.authorName,
+    });
+
+    let copiedViaClipboard = false;
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(sharePayload.clipboardText);
+        copiedViaClipboard = true;
+      } catch {
+        copiedViaClipboard = false;
+      }
+    }
+
+    if (!copiedViaClipboard && typeof document !== 'undefined') {
+      try {
+        const tempTextarea = document.createElement('textarea');
+        tempTextarea.value = sharePayload.clipboardText;
+        tempTextarea.setAttribute('readonly', 'true');
+        tempTextarea.style.position = 'fixed';
+        tempTextarea.style.opacity = '0';
+        document.body.appendChild(tempTextarea);
+        tempTextarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempTextarea);
+      } catch {
+        // ignore fallback error
+      }
+    }
+
+    setCopiedMomentShare(sharePayload);
+    if (shareResetTimerRef.current) {
+      window.clearTimeout(shareResetTimerRef.current);
+    }
+    shareResetTimerRef.current = window.setTimeout(() => {
+      setCopiedMomentShare((prev) => (prev?.momentId === momentItem.id ? null : prev));
+    }, 6000);
   };
 
   const handleAddMomentComment = async (e: React.FormEvent, momentItem: MomentPostDoc) => {
@@ -3757,8 +3814,8 @@ export default function App() {
                               referrerPolicy="no-referrer"
                               className="w-full max-h-80 object-cover bg-[#050505]"
                             />
-                            <div className="p-5 flex items-start justify-between gap-4">
-                              <div className="space-y-1">
+                            <div className="p-5 space-y-3">
+                              <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div className="text-xs text-zinc-400">
                                   <span className="font-semibold text-white">{item.authorName}</span>
                                   <span aria-hidden="true"> · </span>
@@ -3769,16 +3826,72 @@ export default function App() {
                                     {itemComments.length === 1 ? 'Comment' : 'Comments'}
                                   </span>
                                 </div>
-                                <p className="text-sm text-zinc-100">{item.caption}</p>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleShareMoment(item)}
+                                    data-testid={`share-moment-btn-${item.id}`}
+                                    aria-label={`Share moment by ${item.authorName}`}
+                                    title="Copy moment caption and shareable URL to clipboard"
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
+                                      copiedMomentShare?.momentId === item.id
+                                        ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
+                                        : 'bg-[#050505] border-zinc-800 text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-300'
+                                    }`}
+                                  >
+                                    {copiedMomentShare?.momentId === item.id ? (
+                                      <>
+                                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                        <span>Copied!</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Share2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                        <span>Share</span>
+                                      </>
+                                    )}
+                                  </button>
+                                  {item.authorUid === currentIdentity.uid && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleDeleteMoment(item.id)}
+                                      data-testid={`delete-moment-btn-${item.id}`}
+                                      className="px-3 py-1 text-xs text-rose-400 hover:text-rose-300 bg-[#050505] border border-zinc-800 rounded whitespace-nowrap shrink-0"
+                                    >
+                                      Delete
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                              {item.authorUid === currentIdentity.uid && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleDeleteMoment(item.id)}
-                                  className="px-3 py-1 text-xs text-rose-400 hover:text-rose-300 bg-[#050505] border border-zinc-800 rounded whitespace-nowrap shrink-0"
+
+                              <p
+                                className="text-sm text-zinc-100 leading-relaxed break-words"
+                                data-testid={`moment-caption-${item.id}`}
+                              >
+                                {item.caption}
+                              </p>
+
+                              {copiedMomentShare?.momentId === item.id && (
+                                <div
+                                  data-testid={`moment-share-feedback-${item.id}`}
+                                  role="status"
+                                  className="rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 flex flex-col gap-1"
                                 >
-                                  Delete
-                                </button>
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <span className="font-semibold text-emerald-300">
+                                      Copied moment caption &amp; share link to clipboard
+                                    </span>
+                                    <span className="font-mono text-[11px] text-emerald-400 whitespace-nowrap">
+                                      Ready to paste
+                                    </span>
+                                  </div>
+                                  <p
+                                    className="font-mono text-[11px] text-zinc-300 truncate"
+                                    data-testid={`moment-share-copied-url-${item.id}`}
+                                  >
+                                    {copiedMomentShare.url}
+                                  </p>
+                                </div>
                               )}
                             </div>
 

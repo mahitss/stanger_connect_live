@@ -62,6 +62,8 @@ import {
   buildPersonalMoodHistoryLast24Hours,
   buildPersonalMoodHistoryCsv,
   buildMoodHistory24hCsv,
+  buildMomentShareUrl,
+  buildMomentSharePayload,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -1079,3 +1081,25 @@ test('Study timer formatting returns padded MM:SS', () => {
   assert.equal(formatTimerMMSS(1500), '25:00');
   assert.equal(formatTimerMMSS(65), '01:05');
 });
+
+test('Moment Share URL and clipboard payload builder formats sanitized caption, author, and shareable moment link', () => {
+  const url = buildMomentShareUrl('https://mrstranger.app/', 'moment_176000_usr_1');
+  assert.equal(url, 'https://mrstranger.app/?moment=moment_176000_usr_1');
+
+  const payload = buildMomentSharePayload({
+    origin: 'http://localhost:3000/',
+    momentId: 'moment_42_aarav',
+    caption: 'Late night Rust kernel debugging session with coffee!',
+    authorName: 'Aarav Mehta',
+  });
+
+  assert.equal(payload.momentId, 'moment_42_aarav');
+  assert.equal(payload.url, 'http://localhost:3000/?moment=moment_42_aarav');
+  assert.equal(payload.caption, 'Late night Rust kernel debugging session with coffee!');
+  assert.equal(payload.authorName, 'Aarav Mehta');
+  assert.equal(
+    payload.clipboardText,
+    '"Late night Rust kernel debugging session with coffee!" — Aarav Mehta\nhttp://localhost:3000/?moment=moment_42_aarav'
+  );
+});
+
