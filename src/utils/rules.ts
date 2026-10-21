@@ -739,18 +739,18 @@ export function buildPopularMoodsLast24Hours(params: {
     }
 
     const valuesByMood: Record<string, number> = {};
-    top3Moods.forEach((moodStat, rankIdx) => {
+    items.forEach((moodStat, rankIdx) => {
       const rawCount = rawCountsForBucket[moodStat.mood] || 0;
       let val = rawCount;
       if (bIdx === TREND_BUCKET_SPECS.length - 1) {
         // 'Now' bucket reflects current live activity and latest 24h peak for immediate feedback
         val = Math.max(rawCount, moodStat.activePeersNow, moodStat.usageCount24h);
-      } else if (totalEvents24h > 0) {
+      } else if (totalEvents24h > 0 && rankIdx < 3) {
         const waveVal = BASELINE_FLUCTUATION_WAVES[rankIdx]?.[bIdx] ?? 0;
         val = rawCount + waveVal;
       }
       valuesByMood[moodStat.mood] = val;
-      if (val > maxBucketVal) maxBucketVal = val;
+      if (rankIdx < 3 && val > maxBucketVal) maxBucketVal = val;
     });
 
     const r1Mood = top3Moods[0]?.mood;
@@ -1522,6 +1522,172 @@ export function buildMoodHistory24hCsv(params: {
     csvContent,
     filename,
     rowCount: params.summary.items.length,
+  };
+}
+
+export interface UserMoodPopularitySpikeAlertItem {
+  mood: string;
+  rank: number;
+  tone: OnlineMoodTone;
+  usageCount24h: number;
+  activePeersNow: number;
+  sharePercent: number;
+  peakCount: number;
+  baselineAvg: number;
+  surgeDelta: number;
+  surgePercent: number;
+  peakBucketIndex: number;
+  peakBucketLabel: string;
+  peakWindowLabel: string;
+  badgeLabel: string;
+  notificationMessage: string;
+}
+
+export interface UserMoodPopularitySpikeSummary {
+  hasSpikeAlert: boolean;
+  userMoodsToday: string[];
+  spikingMoods: UserMoodPopularitySpikeAlertItem[];
+  primaryAlert: UserMoodPopularitySpikeAlertItem | null;
+}
+
+export function computeUserMoodPopularitySpikeAlerts(params: {
+  summary: MoodPopularity24hSummary;
+  currentUid?: string;
+  currentDisplayName?: string;
+  currentMood?: string | null;
+  moodEvents?: PeerMoodHistoryEvent[];
+  nowMs?: number;
+}): UserMoodPopularitySpikeSummary {
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0
+      ? params.nowMs
+      : Date.now();
+
+  const personalEntries = buildPersonalMoodHistoryLast24Hours({
+    currentUid: params.currentUid || '',
+    currentDisplayName: params.currentDisplayName,
+    currentMood: params.currentMood,
+    moodEvents: params.moodEvents,
+    nowMs,
+  });
+
+  const userMoodsToday: string[] = [];
+  const seenMoodKeys = new Set<string>();
+
+  const addCandidateUserMood = (rawMood: string | null | undefined) => {
+    const meta = getOnlinePeerMoodMeta(rawMood);
+    if (!meta.hasMood || !meta.label) return;
+    const key = meta.label.toLowerCase();
+    if (seenMoodKeys.has(key)) return;
+    seenMoodKeys.add(key);
+    userMoodsToday.push(meta.label);
+  };
+
+  // Prioritize the user's currently active mood first, followed by other moods logged in the last 24h
+  addCandidateUserMood(params.currentMood);
+  for (const entry of personalEntries) {
+    addCandidateUserMood(entry.mood);
+  }
+
+  if (userMoodsToday.length === 0 || !params.summary) {
+    return {
+      hasSpikeAlert: false,
+      userMoodsToday: [],
+      spikingMoods: [],
+      primaryAlert: null,
+    };
+  }
+
+  const buckets = Array.isArray(params.summary.trendBuckets)
+    ? params.summary.trendBuckets
+    : [];
+  const items = Array.isArray(params.summary.items) ? params.summary.items : [];
+  const spikingMoods: UserMoodPopularitySpikeAlertItem[] = [];
+
+  for (const moodName of userMoodsToday) {
+    const moodStat = items.find(
+      (item) => item.mood.toLowerCase() === moodName.toLowerCase()
+    );
+    if (!moodStat) continue;
+    if (moodStat.usageCount24h <= 0 && moodStat.activePeersNow <= 0) continue;
+
+    const counts = buckets.map((b) =>
+      Math.max(0, Math.round(Number(b.valuesByMood?.[moodStat.mood] ?? 0) || 0))
+    );
+
+    let peakCount = Math.max(moodStat.usageCount24h, moodStat.activePeersNow);
+    let peakBucketIndex = Math.max(0, buckets.length - 1);
+
+    counts.forEach((val, idx) => {
+      if (val >= peakCount) {
+        peakCount = val;
+        peakBucketIndex = idx;
+      }
+    });
+
+    const minCount = counts.length > 0 ? Math.min(...counts) : 0;
+    const nonPeakCounts = counts.filter((_, idx) => idx !== peakBucketIndex);
+    const nonPeakMean =
+      nonPeakCounts.length > 0
+        ? nonPeakCounts.reduce((acc, v) => acc + v, 0) / nonPeakCounts.length
+        : minCount;
+
+    const baselineAvg = Number(Math.max(1, nonPeakMean).toFixed(1));
+    const surgeDelta = Math.max(0, Math.round(peakCount - nonPeakMean));
+    const surgePercent = Math.max(
+      0,
+      Math.round(((peakCount - baselineAvg) / baselineAvg) * 100)
+    );
+
+    const hasPlatformMomentum =
+      moodStat.isTopMood ||
+      moodStat.usageCount24h >= 2 ||
+      moodStat.activePeersNow >= 2;
+
+    const isSpiking =
+      hasPlatformMomentum &&
+      ((peakCount >= 3 && peakCount - minCount >= 2) ||
+        (peakCount >= 2 && surgePercent >= 35) ||
+        (moodStat.isTopMood && peakCount >= 3));
+
+    if (!isSpiking) continue;
+
+    const effectiveSurgePercent = Math.max(25, surgePercent);
+    const peakBucket = buckets[peakBucketIndex];
+    const peakBucketLabel = peakBucket ? peakBucket.label : 'Now';
+    const peakWindowLabel = peakBucket ? peakBucket.windowLabel : 'Last 1h & Live';
+
+    spikingMoods.push({
+      mood: moodStat.mood,
+      rank: moodStat.rank,
+      tone: moodStat.tone,
+      usageCount24h: moodStat.usageCount24h,
+      activePeersNow: moodStat.activePeersNow,
+      sharePercent: moodStat.sharePercent,
+      peakCount,
+      baselineAvg,
+      surgeDelta: Math.max(1, surgeDelta),
+      surgePercent: effectiveSurgePercent,
+      peakBucketIndex,
+      peakBucketLabel,
+      peakWindowLabel,
+      badgeLabel: `Spike Alert · ${moodStat.mood} +${effectiveSurgePercent}%`,
+      notificationMessage: `Your "${moodStat.mood}" mood spiked +${effectiveSurgePercent}% across the platform (Peak ${peakCount} check-ins @ ${peakBucketLabel} · ${moodStat.sharePercent}% 24h share)`,
+    });
+  }
+
+  spikingMoods.sort((a, b) => {
+    if (b.peakCount !== a.peakCount) return b.peakCount - a.peakCount;
+    if (b.usageCount24h !== a.usageCount24h) return b.usageCount24h - a.usageCount24h;
+    if (b.surgePercent !== a.surgePercent) return b.surgePercent - a.surgePercent;
+    return a.rank - b.rank;
+  });
+
+  return {
+    hasSpikeAlert: spikingMoods.length > 0,
+    userMoodsToday,
+    spikingMoods,
+    primaryAlert: spikingMoods[0] || null,
   };
 }
 

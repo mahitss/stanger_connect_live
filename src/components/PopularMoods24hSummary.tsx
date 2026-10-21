@@ -17,6 +17,7 @@ import {
   filterMoodTrendByRangeHours,
   buildPersonalMoodHistoryCsv,
   buildMoodHistory24hCsv,
+  computeUserMoodPopularitySpikeAlerts,
 } from '../utils/rules';
 
 interface PopularMoods24hSummaryProps {
@@ -177,6 +178,49 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     currentMood,
     moodEvents,
   });
+
+  const moodSpikeSummary = computeUserMoodPopularitySpikeAlerts({
+    summary,
+    currentUid,
+    currentDisplayName,
+    currentMood,
+    moodEvents,
+  });
+  const primarySpikeAlert = moodSpikeSummary.primaryAlert;
+  const spikingMoodMap = new Map(
+    moodSpikeSummary.spikingMoods.map((s) => [s.mood.toLowerCase(), s])
+  );
+
+  const handleInspectSpikeAlert = () => {
+    if (!primarySpikeAlert) return;
+    if (trendRangeHours !== 24) {
+      setTrendRangeHours(24);
+    }
+    const top3Idx = top3Moods.findIndex(
+      (m) => m.mood.toLowerCase() === primarySpikeAlert.mood.toLowerCase()
+    );
+    if (top3Idx >= 0) {
+      setChartViewMode('top3');
+      setHiddenTrendMoods((prev) =>
+        prev.filter(
+          (m) => m.trim().toLowerCase() !== primarySpikeAlert.mood.toLowerCase()
+        )
+      );
+      setSelectedBucketIdx(primarySpikeAlert.peakBucketIndex);
+      setHoveredPoint({
+        rankIdx: top3Idx,
+        bucketIdx: primarySpikeAlert.peakBucketIndex,
+      });
+    } else {
+      setChartViewMode('compare');
+      setCompareMoodA(primarySpikeAlert.mood);
+      setSelectedBucketIdx(primarySpikeAlert.peakBucketIndex);
+      setHoveredPoint({
+        rankIdx: 0,
+        bucketIdx: primarySpikeAlert.peakBucketIndex,
+      });
+    }
+  };
 
   const triggerCsvFileDownload = (csvContent: string, filename: string) => {
     const blob = new Blob(['\uFEFF' + csvContent], {
@@ -372,6 +416,62 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
             Most popular moods used by active peers over the last 24 hours. Click a mood bar to filter peers, or switch to Compare 2 Moods to overlay and correlate any two mood trend lines.
           </p>
         </div>
+
+        {/* Visual Alert Badge When a Mood Used Today Spikes in Platform Popularity */}
+        {moodSpikeSummary.hasSpikeAlert && primarySpikeAlert && (
+          <div
+            role="status"
+            aria-live="polite"
+            data-testid="popular-mood-spike-alert-badge"
+            className="p-2.5 rounded border border-amber-500/40 bg-amber-500/10 flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono tabular-nums"
+          >
+            <div className="flex flex-wrap items-center gap-2 min-w-0">
+              <span
+                data-testid="popular-mood-spike-alert-pill"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-amber-400 text-black font-bold text-[10px] uppercase tracking-wider whitespace-nowrap shrink-0"
+              >
+                <span>{primarySpikeAlert.badgeLabel}</span>
+              </span>
+              <span
+                data-testid="popular-mood-spike-alert-message"
+                className="text-zinc-100"
+              >
+                {primarySpikeAlert.notificationMessage}
+              </span>
+              {moodSpikeSummary.spikingMoods.length > 1 && (
+                <span
+                  data-testid="popular-mood-spike-alert-secondary"
+                  className="text-amber-300"
+                >
+                  · Also spiking:{' '}
+                  {moodSpikeSummary.spikingMoods
+                    .slice(1)
+                    .map((s) => `${s.mood} (+${s.surgePercent}%)`)
+                    .join(', ')}
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleInspectSpikeAlert}
+                data-testid="popular-mood-spike-alert-action-btn"
+                className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-amber-300 hover:text-white border border-amber-500/40 text-[10px] font-mono font-semibold transition-colors whitespace-nowrap shrink-0"
+              >
+                Inspect Spike
+              </button>
+              <button
+                type="button"
+                onClick={() => onSelectMoodFilter(primarySpikeAlert.mood)}
+                data-testid="popular-mood-spike-alert-filter-btn"
+                className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-200 hover:text-white border border-zinc-700 text-[10px] font-mono transition-colors whitespace-nowrap shrink-0"
+              >
+                Filter Peers
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* 24-Hour Mood History & Personal Log CSV Export Row */}
         <div
@@ -1578,6 +1678,15 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                   {item.isTopMood && (
                     <span className="text-[10px] font-mono uppercase tracking-wider text-amber-400 shrink-0">
                       Top 24h
+                    </span>
+                  )}
+                  {spikingMoodMap.has(item.mood.toLowerCase()) && (
+                    <span
+                      data-testid={`popular-mood-bar-spike-badge-${item.rank}`}
+                      className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-[10px] font-mono font-semibold text-amber-300 whitespace-nowrap shrink-0"
+                    >
+                      Your Mood Spiking +
+                      {spikingMoodMap.get(item.mood.toLowerCase())?.surgePercent}%
                     </span>
                   )}
                 </div>

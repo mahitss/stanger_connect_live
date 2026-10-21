@@ -62,6 +62,7 @@ import {
   buildPersonalMoodHistoryLast24Hours,
   buildPersonalMoodHistoryCsv,
   buildMoodHistory24hCsv,
+  computeUserMoodPopularitySpikeAlerts,
   buildMomentShareUrl,
   buildMomentSharePayload,
 } from './rules.ts';
@@ -1102,4 +1103,67 @@ test('Moment Share URL and clipboard payload builder formats sanitized caption, 
     '"Late night Rust kernel debugging session with coffee!" — Aarav Mehta\nhttp://localhost:3000/?moment=moment_42_aarav'
   );
 });
+
+test('User mood popularity spike alert badge notifies when a mood used today spikes and ignores moods not used by the user or flat low-activity moods', () => {
+  const nowMs = 1_760_000_000_000;
+  const thirtyMinsAgo = nowMs - 30 * 60 * 1000;
+  const twoHoursAgo = nowMs - 2 * 60 * 60 * 1000;
+
+  const summary = buildPopularMoodsLast24Hours({
+    nowMs,
+    onlinePeers: [
+      { uid: 'usr_aarav', displayName: 'Aarav', mood: 'Deep Work' },
+      { uid: 'usr_maya', displayName: 'Maya', mood: 'Deep Work' },
+      { uid: 'usr_liam', displayName: 'Liam', mood: 'Deep Work' },
+      { uid: 'usr_noah', displayName: 'Noah', mood: 'Brainstorming' },
+    ],
+    moodEvents: [
+      { id: 'e1', uid: 'usr_aarav', mood: 'Deep Work', timestampMs: thirtyMinsAgo },
+      { id: 'e2', uid: 'usr_maya', mood: 'Deep Work', timestampMs: thirtyMinsAgo },
+      { id: 'e3', uid: 'usr_liam', mood: 'Deep Work', timestampMs: thirtyMinsAgo },
+      { id: 'e4', uid: 'usr_zoya', mood: 'Deep Work', timestampMs: thirtyMinsAgo },
+      { id: 'e5', uid: 'usr_kiran', mood: 'Deep Work', timestampMs: thirtyMinsAgo },
+      { id: 'e6', uid: 'usr_aarav', mood: 'Coffee Break', timestampMs: twoHoursAgo },
+    ],
+  });
+
+  // 1. User Aarav used 'Deep Work' and 'Coffee Break' today; 'Deep Work' spiked to 5 check-ins in the 'Now' window
+  const alertForAarav = computeUserMoodPopularitySpikeAlerts({
+    summary,
+    currentUid: 'usr_aarav',
+    currentDisplayName: 'Aarav',
+    currentMood: 'Deep Work',
+    moodEvents: [
+      { id: 'e1', uid: 'usr_aarav', mood: 'Deep Work', timestampMs: thirtyMinsAgo },
+      { id: 'e6', uid: 'usr_aarav', mood: 'Coffee Break', timestampMs: twoHoursAgo },
+    ],
+    nowMs,
+  });
+
+  assert.equal(alertForAarav.hasSpikeAlert, true);
+  assert.ok(alertForAarav.userMoodsToday.includes('Deep Work'));
+  assert.ok(alertForAarav.userMoodsToday.includes('Coffee Break'));
+  assert.ok(alertForAarav.primaryAlert);
+  assert.equal(alertForAarav.primaryAlert?.mood, 'Deep Work');
+  assert.ok((alertForAarav.primaryAlert?.peakCount ?? 0) >= 5);
+  assert.ok((alertForAarav.primaryAlert?.surgePercent ?? 0) >= 25);
+  assert.ok(alertForAarav.primaryAlert?.badgeLabel.includes('Spike Alert · Deep Work'));
+  assert.ok(alertForAarav.primaryAlert?.notificationMessage.includes('Deep Work'));
+
+  // 2. Another user ('usr_solo') who only used 'Coffee Break' (which has only 1 check-in and did NOT spike) gets no false alert
+  const alertForSoloUser = computeUserMoodPopularitySpikeAlerts({
+    summary,
+    currentUid: 'usr_solo',
+    currentDisplayName: 'Solo User',
+    currentMood: 'Coffee Break',
+    moodEvents: [
+      { id: 'e_solo', uid: 'usr_solo', mood: 'Coffee Break', timestampMs: twoHoursAgo },
+    ],
+    nowMs,
+  });
+
+  assert.equal(alertForSoloUser.hasSpikeAlert, false);
+  assert.equal(alertForSoloUser.primaryAlert, null);
+});
+
 
