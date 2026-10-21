@@ -1062,6 +1062,175 @@ export function isMoodTrendPeakBucket(
   return info.peakBucketIndices.includes(bucketIdx);
 }
 
+export type MoodTrendChartViewMode = 'top3' | 'compare';
+
+export interface MoodPairComparisonBucketDelta {
+  bucketIndex: number;
+  label: string;
+  windowLabel: string;
+  valA: number;
+  valB: number;
+  delta: number;
+  absDelta: number;
+  leaderMood: string;
+}
+
+export interface MoodPairComparisonResult {
+  moodAStat: PopularMoodStat;
+  moodBStat: PopularMoodStat;
+  seriesA: number[];
+  seriesB: number[];
+  deltasByBucket: MoodPairComparisonBucketDelta[];
+  correlationScore: number;
+  relationshipType: 'Correlated' | 'Divergent' | 'Independent';
+  relationshipLabel: string;
+  maxDivergenceBucket: MoodPairComparisonBucketDelta;
+  maxConvergenceBucket: MoodPairComparisonBucketDelta;
+  totalCountA: number;
+  totalCountB: number;
+  netLeadMood: string;
+  netLeadCount: number;
+  summaryInsight: string;
+}
+
+export function computeMoodPairComparison(params: {
+  items: PopularMoodStat[];
+  trendBuckets: MoodTrendBucketPoint[];
+  moodA?: string;
+  moodB?: string;
+}): MoodPairComparisonResult | null {
+  const items = Array.isArray(params.items) ? params.items : [];
+  const buckets = Array.isArray(params.trendBuckets) ? params.trendBuckets : [];
+  if (items.length < 2 || buckets.length === 0) return null;
+
+  const targetA = (params.moodA || '').trim().toLowerCase();
+  const moodAStat =
+    items.find((i) => i.mood.toLowerCase() === targetA) || items[0];
+
+  const targetB = (params.moodB || '').trim().toLowerCase();
+  let moodBStat = items.find(
+    (i) =>
+      i.mood.toLowerCase() === targetB &&
+      i.mood.toLowerCase() !== moodAStat.mood.toLowerCase()
+  );
+  if (!moodBStat) {
+    moodBStat =
+      items.find(
+        (i) => i.mood.toLowerCase() !== moodAStat.mood.toLowerCase()
+      ) || items[1];
+  }
+
+  const seriesA: number[] = [];
+  const seriesB: number[] = [];
+  const deltasByBucket: MoodPairComparisonBucketDelta[] = buckets.map(
+    (b, idx) => {
+      const valA = Math.max(
+        0,
+        Math.round(Number(b.valuesByMood?.[moodAStat.mood] ?? 0) || 0)
+      );
+      const valB = Math.max(
+        0,
+        Math.round(Number(b.valuesByMood?.[moodBStat.mood] ?? 0) || 0)
+      );
+      seriesA.push(valA);
+      seriesB.push(valB);
+      const delta = valA - valB;
+      const absDelta = Math.abs(delta);
+      const leaderMood =
+        delta > 0 ? moodAStat.mood : delta < 0 ? moodBStat.mood : 'Tie';
+      return {
+        bucketIndex: idx,
+        label: b.label,
+        windowLabel: b.windowLabel,
+        valA,
+        valB,
+        delta,
+        absDelta,
+        leaderMood,
+      };
+    }
+  );
+
+  const n = deltasByBucket.length;
+  const meanA = seriesA.reduce((acc, v) => acc + v, 0) / n;
+  const meanB = seriesB.reduce((acc, v) => acc + v, 0) / n;
+
+  let cov = 0;
+  let varA = 0;
+  let varB = 0;
+  for (let i = 0; i < n; i++) {
+    const da = seriesA[i] - meanA;
+    const db = seriesB[i] - meanB;
+    cov += da * db;
+    varA += da * da;
+    varB += db * db;
+  }
+
+  let correlationScore = 0;
+  if (varA > 0 && varB > 0) {
+    correlationScore = Number(
+      Math.max(-1, Math.min(1, cov / Math.sqrt(varA * varB))).toFixed(2)
+    );
+  } else if (varA === 0 && varB === 0) {
+    correlationScore = seriesA[0] === seriesB[0] ? 1 : 0;
+  } else {
+    correlationScore = 0;
+  }
+
+  let relationshipType: 'Correlated' | 'Divergent' | 'Independent';
+  let relationshipLabel: string;
+  if (correlationScore >= 0.35) {
+    relationshipType = 'Correlated';
+    relationshipLabel = `Correlated Trend (r = +${correlationScore.toFixed(2)})`;
+  } else if (correlationScore <= -0.35) {
+    relationshipType = 'Divergent';
+    relationshipLabel = `Divergent Trend (r = ${correlationScore.toFixed(2)})`;
+  } else {
+    relationshipType = 'Independent';
+    relationshipLabel = `Independent Shift (r = ${
+      correlationScore >= 0 ? '+' : ''
+    }${correlationScore.toFixed(2)})`;
+  }
+
+  let maxDivergenceBucket = deltasByBucket[0];
+  let maxConvergenceBucket = deltasByBucket[0];
+  for (const d of deltasByBucket) {
+    if (d.absDelta >= maxDivergenceBucket.absDelta) {
+      maxDivergenceBucket = d;
+    }
+    if (d.absDelta <= maxConvergenceBucket.absDelta) {
+      maxConvergenceBucket = d;
+    }
+  }
+
+  const totalCountA = seriesA.reduce((acc, v) => acc + v, 0);
+  const totalCountB = seriesB.reduce((acc, v) => acc + v, 0);
+  const netDiff = totalCountA - totalCountB;
+  const netLeadMood =
+    netDiff > 0 ? moodAStat.mood : netDiff < 0 ? moodBStat.mood : 'Tie';
+  const netLeadCount = Math.abs(netDiff);
+
+  const summaryInsight = `${moodAStat.mood} vs ${moodBStat.mood}: ${relationshipLabel} · Max gap Δ${maxDivergenceBucket.absDelta} at ${maxDivergenceBucket.label} · Closest match Δ${maxConvergenceBucket.absDelta} at ${maxConvergenceBucket.label}`;
+
+  return {
+    moodAStat,
+    moodBStat,
+    seriesA,
+    seriesB,
+    deltasByBucket,
+    correlationScore,
+    relationshipType,
+    relationshipLabel,
+    maxDivergenceBucket,
+    maxConvergenceBucket,
+    totalCountA,
+    totalCountB,
+    netLeadMood,
+    netLeadCount,
+    summaryInsight,
+  };
+}
+
 export interface MoodTrendPointTooltipData {
   rank: number;
   mood: string;

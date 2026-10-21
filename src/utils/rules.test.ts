@@ -56,6 +56,7 @@ import {
   computeMoodTrendPeakMarkers,
   buildMostPopularMoodPeakAnnotation,
   isMoodTrendPeakBucket,
+  computeMoodPairComparison,
   formatMoodTrendPointTooltip,
   escapeCsvCell,
   buildPersonalMoodHistoryLast24Hours,
@@ -350,6 +351,42 @@ test('Online Directory 24-hour popular moods summary ranks moods, filters out st
   });
   assert.equal(peakTooltip.isPeak, true);
   assert.equal(peakTooltip.peakBadgeLabel, 'PEAK');
+
+  // Two-mood comparison view overlay & correlation/divergence metrics
+  const cmpDefault = computeMoodPairComparison({
+    items: summary.items,
+    trendBuckets: summary.trendBuckets,
+    moodA: 'Brainstorming',
+    moodB: 'Deep Work',
+  });
+  assert.ok(cmpDefault);
+  assert.equal(cmpDefault.moodAStat.mood, 'Brainstorming');
+  assert.equal(cmpDefault.moodBStat.mood, 'Deep Work');
+  assert.equal(cmpDefault.seriesA.length, 7);
+  assert.equal(cmpDefault.seriesB.length, 7);
+  assert.equal(cmpDefault.deltasByBucket.length, 7);
+  assert.equal(cmpDefault.maxDivergenceBucket.label, '-4h');
+  assert.ok(cmpDefault.maxDivergenceBucket.absDelta > 0);
+  assert.ok(
+    ['Correlated', 'Divergent', 'Independent'].includes(
+      cmpDefault.relationshipType
+    )
+  );
+  assert.ok(
+    cmpDefault.summaryInsight.startsWith('Brainstorming vs Deep Work:')
+  );
+
+  // Passing identical moodA and moodB automatically resolves moodB to a distinct mood
+  const cmpSame = computeMoodPairComparison({
+    items: summary.items,
+    trendBuckets: range6.buckets,
+    moodA: 'Brainstorming',
+    moodB: 'Brainstorming',
+  });
+  assert.ok(cmpSame);
+  assert.equal(cmpSame.moodAStat.mood, 'Brainstorming');
+  assert.notEqual(cmpSame.moodBStat.mood, 'Brainstorming');
+  assert.equal(cmpSame.deltasByBucket.length, 3);
 });
 
 test('Online Directory Mood indicator validates presets, custom moods, security guards, summaries, and filters', () => {
