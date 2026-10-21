@@ -51,6 +51,7 @@ import {
   isMoodTrendLineVisible,
   toggleMoodTrendLineVisibility,
   getVisibleTop3Moods,
+  formatMoodTrendPointTooltip,
   escapeCsvCell,
   buildPersonalMoodHistoryLast24Hours,
   buildPersonalMoodHistoryCsv,
@@ -206,6 +207,27 @@ test('Online Directory 24-hour popular moods summary ranks moods, filters out st
   assert.equal(summary.trendBuckets[6].rank2Value, 1);
   assert.equal(summary.trendBuckets[6].rank3Value, 1);
   assert.ok(summary.trendMaxValue >= 4);
+
+  // Data point hover tooltip formatting with exact mood count and timestamp
+  const tooltipNow = formatMoodTrendPointTooltip({
+    moodStat: summary.top3Moods[0],
+    bucket: summary.trendBuckets[6],
+  });
+  assert.equal(tooltipNow.mood, 'Brainstorming');
+  assert.equal(tooltipNow.rank, 1);
+  assert.equal(tooltipNow.exactCount, 3);
+  assert.equal(tooltipNow.countLabel, '3 mood check-ins');
+  assert.match(
+    tooltipNow.timestampLabel,
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}–\d{2}:\d{2} UTC \(Now\)$/
+  );
+
+  const tooltipSingle = formatMoodTrendPointTooltip({
+    moodStat: summary.top3Moods[1],
+    bucket: summary.trendBuckets[6],
+  });
+  assert.equal(tooltipSingle.exactCount, 1);
+  assert.equal(tooltipSingle.countLabel, '1 mood check-in');
 
   // Clickable legend visibility toggling for individual mood trend lines
   let hidden: string[] = [];

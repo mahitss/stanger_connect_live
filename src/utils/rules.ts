@@ -822,6 +822,57 @@ export function getVisibleTop3Moods(
   return top3Moods.filter((m) => isMoodTrendLineVisible(hiddenMoods, m.mood));
 }
 
+export interface MoodTrendPointTooltipData {
+  rank: number;
+  mood: string;
+  tone: OnlineMoodTone;
+  bucketIndex: number;
+  bucketLabel: string;
+  windowLabel: string;
+  exactCount: number;
+  countLabel: string;
+  timestampLabel: string;
+  isoTimestamp: string;
+}
+
+export function formatMoodTrendPointTooltip(params: {
+  moodStat: PopularMoodStat;
+  bucket: MoodTrendBucketPoint;
+}): MoodTrendPointTooltipData {
+  const { moodStat, bucket } = params;
+  const rawVal = bucket.valuesByMood?.[moodStat.mood] ?? 0;
+  const exactCount = Math.max(0, Math.round(Number(rawVal) || 0));
+  const countLabel = `${exactCount} ${
+    exactCount === 1 ? 'mood check-in' : 'mood check-ins'
+  }`;
+
+  const startMs = Number(bucket.startMs) || Date.now();
+  const rawEndMs = Number(bucket.endMs) || startMs;
+  const displayEndMs =
+    bucket.label === 'Now' ? Math.max(startMs, rawEndMs - 60_000) : rawEndMs;
+
+  const startIso = new Date(startMs).toISOString();
+  const endIso = new Date(displayEndMs).toISOString();
+  const datePart = endIso.slice(0, 10);
+  const startClock = startIso.slice(11, 16);
+  const endClock = endIso.slice(11, 16);
+
+  const timestampLabel = `${datePart} ${startClock}–${endClock} UTC (${bucket.label})`;
+
+  return {
+    rank: moodStat.rank,
+    mood: moodStat.mood,
+    tone: moodStat.tone,
+    bucketIndex: bucket.bucketIndex,
+    bucketLabel: bucket.label,
+    windowLabel: bucket.windowLabel,
+    exactCount,
+    countLabel,
+    timestampLabel,
+    isoTimestamp: endIso,
+  };
+}
+
 export interface PersonalMoodHistoryEntry {
   id: string;
   uid: string;

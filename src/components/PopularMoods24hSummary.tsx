@@ -6,6 +6,7 @@ import {
   isMoodTrendLineVisible,
   toggleMoodTrendLineVisibility,
   getVisibleTop3Moods,
+  formatMoodTrendPointTooltip,
   buildPersonalMoodHistoryCsv,
 } from '../utils/rules';
 
@@ -84,6 +85,10 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     Math.max(0, trendBuckets.length - 1)
   );
   const [hiddenTrendMoods, setHiddenTrendMoods] = useState<string[]>([]);
+  const [hoveredPoint, setHoveredPoint] = useState<{
+    rankIdx: number;
+    bucketIdx: number;
+  } | null>(null);
   const [lastExportNotice, setLastExportNotice] = useState<string>('');
 
   const personalCsvPreview = buildPersonalMoodHistoryCsv({
@@ -170,6 +175,25 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
     const m = top3Moods[rankIdx];
     return m ? isMoodTrendLineVisible(hiddenTrendMoods, m.mood) : false;
   });
+
+  const hoveredMoodStat =
+    hoveredPoint && top3Moods[hoveredPoint.rankIdx]
+      ? top3Moods[hoveredPoint.rankIdx]
+      : null;
+  const hoveredBucket =
+    hoveredPoint && trendBuckets[hoveredPoint.bucketIdx]
+      ? trendBuckets[hoveredPoint.bucketIdx]
+      : null;
+  const activeTooltipData =
+    hoveredPoint &&
+    hoveredMoodStat &&
+    hoveredBucket &&
+    isMoodTrendLineVisible(hiddenTrendMoods, hoveredMoodStat.mood)
+      ? formatMoodTrendPointTooltip({
+          moodStat: hoveredMoodStat,
+          bucket: hoveredBucket,
+        })
+      : null;
 
   return (
     <div
@@ -518,27 +542,135 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                 const cx = getBucketX(bIdx);
                 const cy = getValueY(val);
                 const isSelected = bIdx === selectedBucketIdx;
+                const isHovered =
+                  hoveredPoint?.rankIdx === rankIdx &&
+                  hoveredPoint?.bucketIdx === bIdx;
+                const ptTooltip = formatMoodTrendPointTooltip({
+                  moodStat,
+                  bucket: b,
+                });
+                const handleActivatePoint = () =>
+                  setHoveredPoint({ rankIdx, bucketIdx: bIdx });
+                const handleDeactivatePoint = () =>
+                  setHoveredPoint((prev) =>
+                    prev &&
+                    prev.rankIdx === rankIdx &&
+                    prev.bucketIdx === bIdx
+                      ? null
+                      : prev
+                  );
                 return (
                   <g
                     key={`marker-${moodStat.mood}-${b.label}`}
-                    onClick={() => setSelectedBucketIdx(bIdx)}
+                    onClick={() => {
+                      setSelectedBucketIdx(bIdx);
+                      setHoveredPoint({ rankIdx, bucketIdx: bIdx });
+                    }}
+                    onMouseEnter={handleActivatePoint}
+                    onMouseLeave={handleDeactivatePoint}
+                    onFocus={handleActivatePoint}
+                    onBlur={handleDeactivatePoint}
                     className="cursor-pointer"
                   >
+                    {isHovered && (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={7.5}
+                        fill="none"
+                        stroke={strokeColor}
+                        strokeOpacity="0.45"
+                        strokeWidth="2"
+                        pointerEvents="none"
+                      />
+                    )}
                     <circle
                       cx={cx}
                       cy={cy}
-                      r={isSelected ? 4.8 : 3.6}
+                      r={isHovered ? 5.2 : isSelected ? 4.8 : 3.6}
                       fill="#050505"
                       stroke={strokeColor}
-                      strokeWidth={isSelected ? '2.4' : '1.9'}
+                      strokeWidth={isHovered ? '2.6' : isSelected ? '2.4' : '1.9'}
+                      onMouseEnter={handleActivatePoint}
+                      onMouseLeave={handleDeactivatePoint}
                       data-testid={`popular-mood-trend-marker-${rankIdx + 1}-${bIdx}`}
                     >
-                      <title>{`${moodStat.mood} (${b.label}): ${val} active/check-ins`}</title>
+                      <title>{`#${ptTooltip.rank} ${ptTooltip.mood} · ${ptTooltip.countLabel} · ${ptTooltip.timestampLabel}`}</title>
                     </circle>
                   </g>
                 );
               });
             })}
+
+            {/* Floating Hover Tooltip Showing Exact Mood Count & Timestamp */}
+            {activeTooltipData && hoveredPoint && (() => {
+              const hoveredStroke =
+                lineColors[hoveredPoint.rankIdx] || '#34d399';
+              const hoveredCx = getBucketX(hoveredPoint.bucketIdx);
+              const hoveredCy = getValueY(activeTooltipData.exactCount);
+              const tooltipW = 264;
+              const tooltipH = 44;
+              const tooltipX = Math.max(
+                padLeft + 2,
+                Math.min(
+                  svgW - padRight - tooltipW - 2,
+                  Number((hoveredCx - tooltipW / 2).toFixed(1))
+                )
+              );
+              const placeAbove = hoveredCy >= padTop + tooltipH + 10;
+              const tooltipY = placeAbove
+                ? Number((hoveredCy - tooltipH - 8).toFixed(1))
+                : Number((hoveredCy + 10).toFixed(1));
+
+              return (
+                <g
+                  data-testid="popular-mood-trend-tooltip"
+                  pointerEvents="none"
+                >
+                  <rect
+                    x={tooltipX}
+                    y={tooltipY}
+                    width={tooltipW}
+                    height={tooltipH}
+                    rx="5"
+                    fill="#050505"
+                    stroke={hoveredStroke}
+                    strokeWidth="1.25"
+                  />
+                  <circle
+                    cx={tooltipX + 12}
+                    cy={tooltipY + 13.5}
+                    r="3.5"
+                    fill={hoveredStroke}
+                  />
+                  <text
+                    x={tooltipX + 20}
+                    y={tooltipY + 17}
+                    data-testid="popular-mood-trend-tooltip-mood"
+                    className="fill-white font-mono text-[10.5px] font-bold"
+                  >
+                    {`#${activeTooltipData.rank} ${activeTooltipData.mood}`}
+                  </text>
+                  <text
+                    x={tooltipX + tooltipW - 10}
+                    y={tooltipY + 17}
+                    textAnchor="end"
+                    data-testid="popular-mood-trend-tooltip-count"
+                    className="fill-emerald-400 font-mono text-[10.5px] font-bold tabular-nums"
+                  >
+                    {activeTooltipData.countLabel}
+                  </text>
+                  <text
+                    x={tooltipX + 10}
+                    y={tooltipY + 34}
+                    data-testid="popular-mood-trend-tooltip-timestamp"
+                    className="fill-zinc-300 font-mono text-[10px] tabular-nums"
+                  >
+                    {activeTooltipData.timestampLabel}
+                  </text>
+                </g>
+              );
+            })()}
           </svg>
         </div>
 
