@@ -16,8 +16,13 @@ import {
   formatAmbientWorkspaceStatus,
   detectSecurityThreat,
   sanitizeSafeText,
+  formatDateKey,
+  WeeklyActivitySummary,
+  TopicFocusSessionRecord,
+  buildStudyFocus7DaySessionTrend,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
+import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
 import {
   Volume2,
   VolumeX,
@@ -89,6 +94,11 @@ interface StudyRoomViewProps {
   ) => Promise<void>;
   onSendStudyChat: (roomCode: string, text: string) => void;
   onFocusMinutesLogged?: (minutes: number) => void;
+  weeklyActivitySummary?: WeeklyActivitySummary;
+  topicFocusSessions?: TopicFocusSessionRecord[];
+  dailyTargetMinutes?: number;
+  todayFocusMinutes?: number;
+  onLogTopicFocusSession?: (topic: string, roomCode: string, minutes: number) => void;
 }
 
 const STUDY_MODULES = [
@@ -128,10 +138,29 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   onSaveStudyNote,
   onSendStudyChat,
   onFocusMinutesLogged,
+  weeklyActivitySummary,
+  topicFocusSessions,
+  dailyTargetMinutes = 120,
+  todayFocusMinutes = 65,
+  onLogTopicFocusSession,
 }) => {
   const [durationMinutes, setDurationMinutes] = useState(25);
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
   const [isRunning, setIsRunning] = useState(false);
+
+  const [localStudySessions, setLocalStudySessions] = useState<TopicFocusSessionRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_topic_sessions_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+  const [localAddedTodayMinutes, setLocalAddedTodayMinutes] = useState(0);
 
   // Personal Workspace Ambient Soundscapes State (Rain, Cafe, White Noise, Binaural, Lo-Fi)
   const [ambientState, setAmbientState] = useState<AmbientWorkspaceState>(() => {
@@ -370,9 +399,38 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     const safeNote = sanitizeSafeText(trimmedNote, 400);
     onJoinDesk(activeRoomCode, newRoomTitle, safeSub, safeNote, durationMinutes);
     await onSaveStudyNote(activeRoomCode, safeSub, safeNote, durationMinutes);
-    onFocusMinutesLogged?.(durationMinutes);
+    handleLogStudySessionFromChart(durationMinutes, safeSub);
     setSubject('');
     setPositiveNote('');
+  };
+
+  const handleLogStudySessionFromChart = (minutesToAdd: number, topicLabel: string) => {
+    const added = Math.max(1, Math.round(minutesToAdd));
+    const todayKey = formatDateKey(new Date());
+    const newSession: TopicFocusSessionRecord = {
+      id: `study_d3_${Date.now()}_${currentUid}`,
+      topic: sanitizeSafeText(topicLabel || 'Pomodoro Deep Focus Protocol', 80),
+      roomCode: activeRoomCode,
+      focusMinutes: added,
+      dateKey: todayKey,
+      createdAtMs: Date.now(),
+      authorUid: currentUid,
+    };
+    setLocalStudySessions((prev) => {
+      const next = [...prev, newSession];
+      try {
+        localStorage.setItem('mr_stranger_topic_sessions_v1', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    setLocalAddedTodayMinutes((prev) => prev + added);
+    if (onLogTopicFocusSession) {
+      onLogTopicFocusSession(newSession.topic, activeRoomCode, added);
+    } else {
+      onFocusMinutesLogged?.(added);
+    }
   };
 
   const handleAddStudyTask = (e: React.FormEvent) => {
@@ -421,6 +479,21 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   const ambientMode = ambientState.activeProfile;
   const effectiveVolumePercent = ambientState.isMuted ? 0 : ambientState.volumePercent;
   const activePresetMeta = AMBIENT_SOUNDSCAPES.find((s) => s.id === ambientMode);
+
+  const mergedSessions =
+    topicFocusSessions && topicFocusSessions.length > 0
+      ? topicFocusSessions
+      : localStudySessions;
+
+  const studyFocus7DayTrend = buildStudyFocus7DaySessionTrend({
+    todayDateKey: formatDateKey(new Date()),
+    todayFocusMinutes: todayFocusMinutes + (onLogTopicFocusSession ? 0 : localAddedTodayMinutes),
+    dailyTargetMinutes,
+    weeklyActivity: weeklyActivitySummary,
+    storedSessions: mergedSessions,
+    studyNotes,
+    activeRoomCode,
+  });
 
   return (
     <section className="space-y-8" aria-label="Study Mode and Shareable Study Room">
@@ -826,6 +899,13 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           })}
         </div>
       </div>
+
+      {/* D3 7-Day Completed Study Focus Minutes & Individual Session Growth Chart */}
+      <StudyFocus7DayD3Chart
+        trendSummary={studyFocus7DayTrend}
+        activeRoomCode={activeRoomCode}
+        onLogStudySession={handleLogStudySessionFromChart}
+      />
 
       {/* Curated Study Modules Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

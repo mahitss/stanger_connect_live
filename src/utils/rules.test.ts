@@ -75,6 +75,7 @@ import {
   computeUserMoodPopularitySpikeAlerts,
   buildMomentShareUrl,
   buildMomentSharePayload,
+  buildStudyFocus7DaySessionTrend,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -1310,4 +1311,60 @@ test('Ambient Soundscapes panel toggles between Rain, Cafe, and White Noise prof
   state = selectAmbientWorkspaceProfile(state, 'whitenoise');
   assert.equal(state.activeProfile, 'off');
   assert.equal(getEffectiveAmbientGain(state), 0);
+});
+
+test('Study Room 7-day focus session trend builds stacked individual sessions per day and tracks session growth', () => {
+  const baseline = buildStudyFocus7DaySessionTrend({
+    todayDateKey: '2026-10-22',
+    todayFocusMinutes: 65,
+    dailyTargetMinutes: 120,
+    streakCount: 5,
+    activeRoomCode: 'STUDY-GLOBAL',
+  });
+
+  assert.equal(baseline.days.length, 7);
+  assert.ok(baseline.totalSessionsCount >= 14);
+  assert.equal(baseline.days[6].dateKey, '2026-10-22');
+  assert.equal(baseline.days[6].isToday, true);
+  assert.equal(baseline.days[6].totalFocusMinutes, 65);
+
+  // Verify each day's individual sessions stack cleanly to the day's totalFocusMinutes
+  for (const day of baseline.days) {
+    const sumOfSessions = day.sessions.reduce((acc, s) => acc + s.minutes, 0);
+    assert.equal(sumOfSessions, day.totalFocusMinutes);
+    day.sessions.forEach((sess, idx) => {
+      if (idx === 0) {
+        assert.equal(sess.startMinuteOffset, 0);
+      } else {
+        assert.equal(sess.startMinuteOffset, day.sessions[idx - 1].cumulativeDayMinutes);
+      }
+      assert.equal(sess.cumulativeDayMinutes, sess.startMinuteOffset + sess.minutes);
+    });
+  }
+
+  // Logging a new 50-minute deep session on today updates today's sessions and 7-day total
+  const updated = buildStudyFocus7DaySessionTrend({
+    todayDateKey: '2026-10-22',
+    todayFocusMinutes: 115,
+    dailyTargetMinutes: 120,
+    streakCount: 5,
+    activeRoomCode: 'STUDY-GLOBAL',
+    storedSessions: [
+      {
+        id: 'sess_today_deep_50',
+        topic: 'Deep Work Synthesis (STUDY-GLOBAL)',
+        roomCode: 'STUDY-GLOBAL',
+        focusMinutes: 50,
+        dateKey: '2026-10-22',
+        createdAtMs: 1_761_100_000_000,
+      },
+    ],
+  });
+
+  assert.equal(updated.days[6].totalFocusMinutes, 115);
+  assert.equal(updated.totalFocusMinutes, baseline.totalFocusMinutes + 50);
+  const lastTodaySession =
+    updated.days[6].sessions[updated.days[6].sessions.length - 1];
+  assert.equal(lastTodaySession.minutes, 50);
+  assert.equal(lastTodaySession.cumulativeDayMinutes, 115);
 });

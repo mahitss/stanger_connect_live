@@ -3618,6 +3618,11 @@ export default function App() {
                 awardParticipation(5);
               }}
               onFocusMinutesLogged={handleLogFocusMinutes}
+              weeklyActivitySummary={weeklyActivitySummary}
+              topicFocusSessions={topicFocusSessions}
+              dailyTargetMinutes={dailyTargetMinutes}
+              todayFocusMinutes={dailyCompletedMinutes}
+              onLogTopicFocusSession={handleLogTopicFocusSession}
             />
           )}
 
