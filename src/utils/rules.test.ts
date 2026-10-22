@@ -50,6 +50,7 @@ import {
   canUserCommentOnMoment,
   validateAndSanitizeMomentComment,
   groupMomentCommentsByMomentId,
+  formatRelativeCommentTimestamp,
   normalizeStudyTopicName,
   buildWeeklyProductivityDistribution,
   APP_LOGO_URL,
@@ -1495,6 +1496,18 @@ test('buildDailyGoalShareSummary generates sharable summary of progress, complet
   assert.ok(reachedSummary.caption.includes('Daily Goal Reached'));
 });
 
+test('formatRelativeCommentTimestamp formats Moment comment timestamps as relative time (e.g., 5m ago, 2h ago) instead of HH:MM', () => {
+  const now = 1_761_140_000_000;
 
-
-
+  assert.equal(formatRelativeCommentTimestamp(now, now), 'just now');
+  assert.equal(formatRelativeCommentTimestamp(now - 5_000, now), 'just now');
+  assert.equal(formatRelativeCommentTimestamp(now - 25_000, now), '25s ago');
+  assert.equal(formatRelativeCommentTimestamp(now - 5 * 60_000, now), '5m ago');
+  assert.equal(formatRelativeCommentTimestamp(now - 42 * 60_000, now), '42m ago');
+  assert.equal(formatRelativeCommentTimestamp(now - 2 * 3_600_000, now), '2h ago');
+  assert.equal(formatRelativeCommentTimestamp(now - 14 * 3_600_000, now), '14h ago');
+  assert.equal(formatRelativeCommentTimestamp(now - 3 * 86_400_000, now), '3d ago');
+  assert.equal(formatRelativeCommentTimestamp(now - 14 * 86_400_000, now), '2w ago');
+  assert.equal(formatRelativeCommentTimestamp(NaN, now), 'just now');
+  assert.equal(formatRelativeCommentTimestamp(now + 10_000, now), 'just now');
+});

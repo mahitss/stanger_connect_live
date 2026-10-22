@@ -78,6 +78,7 @@ import {
   canUserCommentOnMoment,
   validateAndSanitizeMomentComment,
   groupMomentCommentsByMomentId,
+  formatRelativeCommentTimestamp,
   TopicFocusSessionRecord,
   buildWeeklyProductivityDistribution,
   normalizeStudyTopicName,
@@ -262,8 +263,16 @@ export default function App() {
   const [momentFilter, setMomentFilter] = useState<'all' | 'public' | 'connections' | 'mine'>('all');
   const [momentCommentInputs, setMomentCommentInputs] = useState<Record<string, string>>({});
   const [momentCommentErrors, setMomentCommentErrors] = useState<Record<string, string>>({});
+  const [commentClockNowMs, setCommentClockNowMs] = useState<number>(() => Date.now());
   const [copiedMomentShare, setCopiedMomentShare] = useState<MomentSharePayload | null>(null);
   const shareResetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      setCommentClockNowMs(Date.now());
+    }, 15_000);
+    return () => window.clearInterval(intervalId);
+  }, []);
 
   // Daily Productivity Goal State (Target Focus Time & Completed Minutes for Today)
   const todayDateStr = formatDateKey(new Date());
@@ -1794,6 +1803,7 @@ export default function App() {
       localStorage.setItem('mr_stranger_moment_comments_v1', JSON.stringify(next));
       return next;
     });
+    setCommentClockNowMs(Date.now());
     setMomentCommentInputs((prev) => ({
       ...prev,
       [momentItem.id]: '',
@@ -4129,12 +4139,24 @@ export default function App() {
                                               {relationLabel}
                                             </span>
                                             <span aria-hidden="true" className="text-zinc-600">·</span>
-                                            <span className="text-[11px] font-mono text-zinc-500 tabular-nums">
-                                              {new Date(cmt.createdAtMs).toLocaleTimeString([], {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                              })}
-                                            </span>
+                                            <time
+                                              dateTime={new Date(cmt.createdAtMs).toISOString()}
+                                              title={new Date(cmt.createdAtMs).toLocaleTimeString(
+                                                [],
+                                                {
+                                                  hour: '2-digit',
+                                                  minute: '2-digit',
+                                                }
+                                              )}
+                                              data-testid="moment-comment-timestamp"
+                                              data-comment-id={cmt.id}
+                                              className="text-[11px] font-mono text-zinc-400 tabular-nums"
+                                            >
+                                              {formatRelativeCommentTimestamp(
+                                                cmt.createdAtMs,
+                                                commentClockNowMs
+                                              )}
+                                            </time>
                                           </div>
 
                                           {(isCommentAuthor || isMomentOwner) && (

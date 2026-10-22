@@ -2127,6 +2127,43 @@ export function groupMomentCommentsByMomentId(
   return grouped;
 }
 
+export function formatRelativeCommentTimestamp(
+  createdAtMs: number,
+  nowMs: number = Date.now()
+): string {
+  if (!Number.isFinite(createdAtMs) || createdAtMs <= 0) {
+    return 'just now';
+  }
+  const safeNow = Number.isFinite(nowMs) ? nowMs : Date.now();
+  const elapsedMs = Math.max(0, safeNow - createdAtMs);
+  const elapsedSeconds = Math.floor(elapsedMs / 1000);
+
+  if (elapsedSeconds < 10) {
+    return 'just now';
+  }
+  if (elapsedSeconds < 60) {
+    return `${elapsedSeconds}s ago`;
+  }
+
+  const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+  if (elapsedMinutes < 60) {
+    return `${elapsedMinutes}m ago`;
+  }
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60);
+  if (elapsedHours < 24) {
+    return `${elapsedHours}h ago`;
+  }
+
+  const elapsedDays = Math.floor(elapsedHours / 24);
+  if (elapsedDays < 7) {
+    return `${elapsedDays}d ago`;
+  }
+
+  const elapsedWeeks = Math.floor(elapsedDays / 7);
+  return `${elapsedWeeks}w ago`;
+}
+
 // --- Daily Productivity Goal Pure Math ---
 export interface DailyProductivityProgress {
   targetMinutes: number;
