@@ -35,6 +35,8 @@ import {
   Share2,
   Check,
   CornerDownRight,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import {
   auth,
@@ -80,6 +82,12 @@ import {
   validateAndSanitizeMomentComment,
   groupMomentCommentsByMomentId,
   buildThreadedMomentComments,
+  buildMomentCommentThreadGroups,
+  toggleCollapsedCommentThread,
+  resolveRootCommentIdForThread,
+  getNestedThreadAnimationState,
+  ThreadedMomentCommentItem,
+  NestedThreadAnimationState,
   formatRelativeCommentTimestamp,
   TopicFocusSessionRecord,
   buildWeeklyProductivityDistribution,
@@ -268,6 +276,7 @@ export default function App() {
   const [activeReplyTargetByMoment, setActiveReplyTargetByMoment] = useState<
     Record<string, { commentId: string; authorName: string } | null>
   >({});
+  const [collapsedCommentThreadIds, setCollapsedCommentThreadIds] = useState<string[]>([]);
   const [momentCommentErrors, setMomentCommentErrors] = useState<Record<string, string>>({});
   const [commentClockNowMs, setCommentClockNowMs] = useState<number>(() => Date.now());
   const [copiedMomentShare, setCopiedMomentShare] = useState<MomentSharePayload | null>(null);
@@ -1853,6 +1862,15 @@ export default function App() {
         ...prev,
         [cleanParentId]: '',
       }));
+      const rootThreadId = resolveRootCommentIdForThread(
+        [...momentComments, newComment],
+        cleanParentId
+      );
+      if (rootThreadId) {
+        setCollapsedCommentThreadIds((prev) =>
+          prev.filter((id) => id !== rootThreadId)
+        );
+      }
     }
     setMomentCommentInputs((prev) => ({
       ...prev,
@@ -4126,294 +4144,461 @@ export default function App() {
                               data-moment-id={item.id}
                               className="border-t border-zinc-800/80 bg-[#050505]/70 p-5 space-y-4"
                             >
-                              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                                  <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                                    <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                    <h3
-                                      className="font-bold text-white"
-                                      data-testid={`moment-comment-count-${item.id}`}
+                              {(() => {
+                                const threadGroups = buildMomentCommentThreadGroups(
+                                  itemComments,
+                                  collapsedCommentThreadIds
+                                );
+                                const threadsWithReplies = threadGroups.filter(
+                                  (g) => g.totalRepliesCount > 0
+                                );
+                                const allThreadsCollapsed =
+                                  threadsWithReplies.length > 0 &&
+                                  threadsWithReplies.every((g) => g.isCollapsed);
+
+                                const renderThreadedCommentNode = (
+                                  threadedItem: ThreadedMomentCommentItem,
+                                  replyAnim?: NestedThreadAnimationState,
+                                  threadGroup?: {
+                                    totalRepliesCount: number;
+                                    isCollapsed: boolean;
+                                  }
+                                ) => {
+                                  const {
+                                    comment: cmt,
+                                    depth,
+                                    isReply,
+                                    parentCommentId,
+                                    replyToAuthorName,
+                                  } = threadedItem;
+                                  const isCommentAuthor =
+                                    cmt.authorUid === currentIdentity.uid;
+                                  const isMomentOwner =
+                                    item.authorUid === currentIdentity.uid;
+                                  const relationLabel =
+                                    cmt.authorUid === item.authorUid
+                                      ? 'Author'
+                                      : acceptedPeerUids.has(cmt.authorUid)
+                                      ? 'Connected'
+                                      : isCommentAuthor
+                                      ? 'You'
+                                      : 'Member';
+                                  const activeReplyTarget =
+                                    activeReplyTargetByMoment[item.id] || null;
+                                  const isReplyingToThis =
+                                    activeReplyTarget?.commentId === cmt.id;
+                                  const indentClass =
+                                    depth === 0
+                                      ? ''
+                                      : depth === 1
+                                      ? 'ml-6 sm:ml-8'
+                                      : depth === 2
+                                      ? 'ml-10 sm:ml-14'
+                                      : 'ml-12 sm:ml-16';
+                                  const rootThreadAnim =
+                                    !isReply && threadGroup && threadGroup.totalRepliesCount > 0
+                                      ? getNestedThreadAnimationState(threadGroup.isCollapsed, 0)
+                                      : null;
+
+                                  return (
+                                    <div
+                                      key={cmt.id}
+                                      data-testid={
+                                        isReply
+                                          ? 'moment-thread-animated-reply'
+                                          : 'moment-thread-root-node'
+                                      }
+                                      data-thread-animation-state={
+                                        replyAnim ? replyAnim.state : undefined
+                                      }
+                                      style={
+                                        replyAnim && replyAnim.staggerDelayMs > 0
+                                          ? { animationDelay: `${replyAnim.staggerDelayMs}ms` }
+                                          : undefined
+                                      }
+                                      className={`space-y-2 ${indentClass} ${
+                                        replyAnim ? replyAnim.itemAnimationClassName : ''
+                                      }`}
                                     >
-                                      Discussion ({itemComments.length}{' '}
-                                      {itemComments.length === 1 ? 'Comment' : 'Comments'})
-                                    </h3>
-                                  </span>
-                                  <span aria-hidden="true" className="text-zinc-600">·</span>
-                                  <span className="text-zinc-400 font-mono whitespace-nowrap">
-                                    {item.visibility === 'connections'
-                                      ? 'Accepted Connections Only'
-                                      : 'Connections & Verified Feed'}
-                                  </span>
-                                </div>
-                                <span className="text-[11px] font-mono text-zinc-500 whitespace-nowrap">
-                                  +5 pts per comment
-                                </span>
-                              </div>
-
-                              {itemComments.length === 0 ? (
-                                commentGate.allowed ? (
-                                  <p
-                                    className="text-xs text-zinc-400 py-1"
-                                    data-testid={`moment-comments-empty-${item.id}`}
-                                  >
-                                    No comments yet. Share a thought below to discuss this photo with{' '}
-                                    {item.authorUid === currentIdentity.uid
-                                      ? 'your connections'
-                                      : item.authorName}
-                                    .
-                                  </p>
-                                ) : null
-                              ) : (
-                                <div
-                                  className="space-y-2.5"
-                                  data-testid={`moment-comments-list-${item.id}`}
-                                >
-                                  {buildThreadedMomentComments(itemComments).map(
-                                    (threadedItem) => {
-                                      const {
-                                        comment: cmt,
-                                        depth,
-                                        isReply,
-                                        parentCommentId,
-                                        replyToAuthorName,
-                                      } = threadedItem;
-                                      const isCommentAuthor =
-                                        cmt.authorUid === currentIdentity.uid;
-                                      const isMomentOwner =
-                                        item.authorUid === currentIdentity.uid;
-                                      const relationLabel =
-                                        cmt.authorUid === item.authorUid
-                                          ? 'Author'
-                                          : acceptedPeerUids.has(cmt.authorUid)
-                                          ? 'Connected'
-                                          : isCommentAuthor
-                                          ? 'You'
-                                          : 'Member';
-                                      const activeReplyTarget =
-                                        activeReplyTargetByMoment[item.id] || null;
-                                      const isReplyingToThis =
-                                        activeReplyTarget?.commentId === cmt.id;
-                                      const indentClass =
-                                        depth === 0
-                                          ? ''
-                                          : depth === 1
-                                          ? 'ml-6 sm:ml-8'
-                                          : depth === 2
-                                          ? 'ml-10 sm:ml-14'
-                                          : 'ml-12 sm:ml-16';
-
-                                      return (
-                                        <div
-                                          key={cmt.id}
-                                          className={`space-y-2 ${indentClass}`}
-                                        >
+                                      <div
+                                        data-testid={
+                                          isReply
+                                            ? 'moment-comment-reply-item'
+                                            : 'moment-comment-item'
+                                        }
+                                        data-comment-id={cmt.id}
+                                        data-parent-comment-id={parentCommentId || ''}
+                                        data-comment-depth={depth}
+                                        data-is-reply={isReply ? 'true' : 'false'}
+                                        className={`p-3 rounded-md border space-y-1.5 ${
+                                          isReply
+                                            ? 'bg-[#08080A] border-zinc-800/70'
+                                            : 'bg-[#0A0A0C] border-zinc-800/80'
+                                        }`}
+                                      >
+                                        {isReply && replyToAuthorName && (
                                           <div
-                                            data-testid={
-                                              isReply
-                                                ? 'moment-comment-reply-item'
-                                                : 'moment-comment-item'
-                                            }
-                                            data-comment-id={cmt.id}
-                                            data-parent-comment-id={parentCommentId || ''}
-                                            data-comment-depth={depth}
-                                            data-is-reply={isReply ? 'true' : 'false'}
-                                            className={`p-3 rounded-md border space-y-1.5 ${
-                                              isReply
-                                                ? 'bg-[#08080A] border-zinc-800/70'
-                                                : 'bg-[#0A0A0C] border-zinc-800/80'
-                                            }`}
+                                            data-testid="moment-comment-reply-context"
+                                            className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400"
                                           >
-                                            {isReply && replyToAuthorName && (
-                                              <div
-                                                data-testid="moment-comment-reply-context"
-                                                className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400"
+                                            <CornerDownRight
+                                              aria-hidden="true"
+                                              className="w-3 h-3 text-emerald-400 shrink-0"
+                                            />
+                                            <span>
+                                              Replying to{' '}
+                                              <strong className="text-zinc-200 font-semibold">
+                                                @{replyToAuthorName}
+                                              </strong>
+                                            </span>
+                                          </div>
+                                        )}
+
+                                        <div className="flex items-center justify-between gap-2 text-xs">
+                                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                            <span className="font-semibold text-white truncate">
+                                              {cmt.authorName}
+                                            </span>
+                                            <span
+                                              aria-hidden="true"
+                                              className="text-zinc-600"
+                                            >
+                                              ·
+                                            </span>
+                                            <span className="text-[11px] font-mono text-emerald-400">
+                                              {relationLabel}
+                                            </span>
+                                            <span
+                                              aria-hidden="true"
+                                              className="text-zinc-600"
+                                            >
+                                              ·
+                                            </span>
+                                            <time
+                                              dateTime={new Date(
+                                                cmt.createdAtMs
+                                              ).toISOString()}
+                                              title={new Date(
+                                                cmt.createdAtMs
+                                              ).toLocaleTimeString([], {
+                                                hour: '2-digit',
+                                                minute: '2-digit',
+                                              })}
+                                              data-testid="moment-comment-timestamp"
+                                              data-comment-id={cmt.id}
+                                              className="text-[11px] font-mono text-zinc-400 tabular-nums"
+                                            >
+                                              {formatRelativeCommentTimestamp(
+                                                cmt.createdAtMs,
+                                                commentClockNowMs
+                                              )}
+                                            </time>
+                                          </div>
+
+                                          <div className="flex items-center gap-2.5 shrink-0">
+                                            {rootThreadAnim && threadGroup && (
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  setCollapsedCommentThreadIds((prev) =>
+                                                    toggleCollapsedCommentThread(prev, cmt.id)
+                                                  )
+                                                }
+                                                aria-expanded={rootThreadAnim.ariaExpanded}
+                                                aria-controls={`moment-comment-thread-replies-${cmt.id}`}
+                                                data-testid={`toggle-comment-thread-${cmt.id}`}
+                                                className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 hover:text-emerald-300 transition-colors whitespace-nowrap shrink-0"
                                               >
-                                                <CornerDownRight
+                                                {threadGroup.isCollapsed ? (
+                                                  <ChevronDown
+                                                    aria-hidden="true"
+                                                    className="w-3 h-3 shrink-0"
+                                                  />
+                                                ) : (
+                                                  <ChevronUp
+                                                    aria-hidden="true"
+                                                    className="w-3 h-3 shrink-0"
+                                                  />
+                                                )}
+                                                <span>
+                                                  {rootThreadAnim.formatToggleLabel(
+                                                    threadGroup.totalRepliesCount
+                                                  )}
+                                                </span>
+                                              </button>
+                                            )}
+
+                                            {commentGate.allowed && (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  setMomentCommentErrors((prev) => ({
+                                                    ...prev,
+                                                    [item.id]: '',
+                                                  }));
+                                                  setActiveReplyTargetByMoment(
+                                                    (prev) => ({
+                                                      ...prev,
+                                                      [item.id]:
+                                                        prev[item.id]?.commentId ===
+                                                        cmt.id
+                                                          ? null
+                                                          : {
+                                                              commentId: cmt.id,
+                                                              authorName:
+                                                                cmt.authorName,
+                                                            },
+                                                    })
+                                                  );
+                                                }}
+                                                aria-label={
+                                                  isReplyingToThis
+                                                    ? `Cancel reply to ${cmt.authorName}`
+                                                    : `Reply to ${cmt.authorName}`
+                                                }
+                                                data-testid={`reply-moment-comment-${cmt.id}`}
+                                                className={`text-[11px] font-mono transition-colors whitespace-nowrap shrink-0 ${
+                                                  isReplyingToThis
+                                                    ? 'text-emerald-400 font-semibold'
+                                                    : 'text-zinc-400 hover:text-white'
+                                                }`}
+                                              >
+                                                {isReplyingToThis ? 'Cancel' : 'Reply'}
+                                              </button>
+                                            )}
+
+                                            {(isCommentAuthor || isMomentOwner) && (
+                                              <button
+                                                type="button"
+                                                onClick={() =>
+                                                  handleDeleteMomentComment(cmt.id)
+                                                }
+                                                aria-label={`Delete comment by ${cmt.authorName}`}
+                                                data-testid={`delete-moment-comment-${cmt.id}`}
+                                                className="text-[11px] text-zinc-500 hover:text-rose-400 font-mono transition-colors shrink-0"
+                                              >
+                                                Delete
+                                              </button>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <p className="text-xs text-zinc-200 leading-relaxed break-words">
+                                          {cmt.text}
+                                        </p>
+                                      </div>
+
+                                      {commentGate.allowed && isReplyingToThis && (
+                                        <form
+                                          onSubmit={(e) =>
+                                            handleAddMomentComment(e, item, {
+                                              commentId: cmt.id,
+                                              authorName: cmt.authorName,
+                                            })
+                                          }
+                                          data-testid={`moment-reply-form-${cmt.id}`}
+                                          className="ml-6 sm:ml-8 p-2.5 rounded-md bg-[#08080A] border border-zinc-800/80 space-y-2"
+                                        >
+                                          <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-zinc-400">
+                                            <span className="inline-flex items-center gap-1.5">
+                                              <CornerDownRight
+                                                aria-hidden="true"
+                                                className="w-3 h-3 text-emerald-400 shrink-0"
+                                              />
+                                              <span>
+                                                Replying to{' '}
+                                                <strong className="text-white">
+                                                  @{cmt.authorName}
+                                                </strong>
+                                              </span>
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() =>
+                                                setActiveReplyTargetByMoment(
+                                                  (prev) => ({
+                                                    ...prev,
+                                                    [item.id]: null,
+                                                  })
+                                                )
+                                              }
+                                              data-testid={`cancel-reply-comment-${cmt.id}`}
+                                              className="text-zinc-500 hover:text-zinc-300 whitespace-nowrap"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                          <div className="flex flex-col sm:flex-row gap-2">
+                                            <input
+                                              type="text"
+                                              maxLength={400}
+                                              value={momentReplyInputs[cmt.id] || ''}
+                                              onChange={(e) =>
+                                                setMomentReplyInputs((prev) => ({
+                                                  ...prev,
+                                                  [cmt.id]: e.target.value,
+                                                }))
+                                              }
+                                              placeholder={`Write a reply to ${cmt.authorName}...`}
+                                              aria-label={`Write a reply to ${cmt.authorName}`}
+                                              data-testid="moment-reply-input"
+                                              className="flex-1 px-3 py-1.5 text-xs bg-[#050505] border border-zinc-800 rounded text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+                                            />
+                                            <button
+                                              type="submit"
+                                              data-testid="moment-reply-submit"
+                                              className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                                            >
+                                              Post Reply
+                                            </button>
+                                          </div>
+                                        </form>
+                                      )}
+                                    </div>
+                                  );
+                                };
+
+                                return (
+                                  <>
+                                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
+                                          <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                          <h3
+                                            className="font-bold text-white"
+                                            data-testid={`moment-comment-count-${item.id}`}
+                                          >
+                                            Discussion ({itemComments.length}{' '}
+                                            {itemComments.length === 1 ? 'Comment' : 'Comments'})
+                                          </h3>
+                                        </span>
+                                        <span aria-hidden="true" className="text-zinc-600">
+                                          ·
+                                        </span>
+                                        <span className="text-zinc-400 font-mono whitespace-nowrap">
+                                          {item.visibility === 'connections'
+                                            ? 'Accepted Connections Only'
+                                            : 'Connections & Verified Feed'}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-3">
+                                        {threadsWithReplies.length > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              const momentRootIds = threadsWithReplies.map(
+                                                (g) => g.rootItem.comment.id
+                                              );
+                                              setCollapsedCommentThreadIds((prev) => {
+                                                const nextSet = new Set(prev);
+                                                if (allThreadsCollapsed) {
+                                                  for (const id of momentRootIds) {
+                                                    nextSet.delete(id);
+                                                  }
+                                                } else {
+                                                  for (const id of momentRootIds) {
+                                                    nextSet.add(id);
+                                                  }
+                                                }
+                                                return Array.from(nextSet);
+                                              });
+                                            }}
+                                            data-testid={`toggle-all-comment-threads-${item.id}`}
+                                            className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-300 hover:text-white transition-colors whitespace-nowrap shrink-0"
+                                          >
+                                            {allThreadsCollapsed ? (
+                                              <>
+                                                <ChevronDown
                                                   aria-hidden="true"
                                                   className="w-3 h-3 text-emerald-400 shrink-0"
                                                 />
-                                                <span>
-                                                  Replying to{' '}
-                                                  <strong className="text-zinc-200 font-semibold">
-                                                    @{replyToAuthorName}
-                                                  </strong>
-                                                </span>
-                                              </div>
-                                            )}
-
-                                            <div className="flex items-center justify-between gap-2 text-xs">
-                                              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                                <span className="font-semibold text-white truncate">
-                                                  {cmt.authorName}
-                                                </span>
-                                                <span
+                                                <span>Expand Replies</span>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <ChevronUp
                                                   aria-hidden="true"
-                                                  className="text-zinc-600"
-                                                >
-                                                  ·
-                                                </span>
-                                                <span className="text-[11px] font-mono text-emerald-400">
-                                                  {relationLabel}
-                                                </span>
-                                                <span
-                                                  aria-hidden="true"
-                                                  className="text-zinc-600"
-                                                >
-                                                  ·
-                                                </span>
-                                                <time
-                                                  dateTime={new Date(
-                                                    cmt.createdAtMs
-                                                  ).toISOString()}
-                                                  title={new Date(
-                                                    cmt.createdAtMs
-                                                  ).toLocaleTimeString([], {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                  })}
-                                                  data-testid="moment-comment-timestamp"
-                                                  data-comment-id={cmt.id}
-                                                  className="text-[11px] font-mono text-zinc-400 tabular-nums"
-                                                >
-                                                  {formatRelativeCommentTimestamp(
-                                                    cmt.createdAtMs,
-                                                    commentClockNowMs
-                                                  )}
-                                                </time>
-                                              </div>
-
-                                              <div className="flex items-center gap-2.5 shrink-0">
-                                                {commentGate.allowed && (
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => {
-                                                      setMomentCommentErrors((prev) => ({
-                                                        ...prev,
-                                                        [item.id]: '',
-                                                      }));
-                                                      setActiveReplyTargetByMoment(
-                                                        (prev) => ({
-                                                          ...prev,
-                                                          [item.id]:
-                                                            prev[item.id]?.commentId ===
-                                                            cmt.id
-                                                              ? null
-                                                              : {
-                                                                  commentId: cmt.id,
-                                                                  authorName:
-                                                                    cmt.authorName,
-                                                                },
-                                                        })
-                                                      );
-                                                    }}
-                                                    aria-label={
-                                                      isReplyingToThis
-                                                        ? `Cancel reply to ${cmt.authorName}`
-                                                        : `Reply to ${cmt.authorName}`
-                                                    }
-                                                    data-testid={`reply-moment-comment-${cmt.id}`}
-                                                    className={`text-[11px] font-mono transition-colors whitespace-nowrap shrink-0 ${
-                                                      isReplyingToThis
-                                                        ? 'text-emerald-400 font-semibold'
-                                                        : 'text-zinc-400 hover:text-white'
-                                                    }`}
-                                                  >
-                                                    {isReplyingToThis ? 'Cancel' : 'Reply'}
-                                                  </button>
-                                                )}
-
-                                                {(isCommentAuthor || isMomentOwner) && (
-                                                  <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                      handleDeleteMomentComment(cmt.id)
-                                                    }
-                                                    aria-label={`Delete comment by ${cmt.authorName}`}
-                                                    data-testid={`delete-moment-comment-${cmt.id}`}
-                                                    className="text-[11px] text-zinc-500 hover:text-rose-400 font-mono transition-colors shrink-0"
-                                                  >
-                                                    Delete
-                                                  </button>
-                                                )}
-                                              </div>
-                                            </div>
-                                            <p className="text-xs text-zinc-200 leading-relaxed break-words">
-                                              {cmt.text}
-                                            </p>
-                                          </div>
-
-                                          {commentGate.allowed && isReplyingToThis && (
-                                            <form
-                                              onSubmit={(e) =>
-                                                handleAddMomentComment(e, item, {
-                                                  commentId: cmt.id,
-                                                  authorName: cmt.authorName,
-                                                })
-                                              }
-                                              data-testid={`moment-reply-form-${cmt.id}`}
-                                              className="ml-6 sm:ml-8 p-2.5 rounded-md bg-[#08080A] border border-zinc-800/80 space-y-2"
-                                            >
-                                              <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-zinc-400">
-                                                <span className="inline-flex items-center gap-1.5">
-                                                  <CornerDownRight
-                                                    aria-hidden="true"
-                                                    className="w-3 h-3 text-emerald-400 shrink-0"
-                                                  />
-                                                  <span>
-                                                    Replying to{' '}
-                                                    <strong className="text-white">
-                                                      @{cmt.authorName}
-                                                    </strong>
-                                                  </span>
-                                                </span>
-                                                <button
-                                                  type="button"
-                                                  onClick={() =>
-                                                    setActiveReplyTargetByMoment(
-                                                      (prev) => ({
-                                                        ...prev,
-                                                        [item.id]: null,
-                                                      })
-                                                    )
-                                                  }
-                                                  data-testid={`cancel-reply-comment-${cmt.id}`}
-                                                  className="text-zinc-500 hover:text-zinc-300 whitespace-nowrap"
-                                                >
-                                                  Cancel
-                                                </button>
-                                              </div>
-                                              <div className="flex flex-col sm:flex-row gap-2">
-                                                <input
-                                                  type="text"
-                                                  maxLength={400}
-                                                  value={momentReplyInputs[cmt.id] || ''}
-                                                  onChange={(e) =>
-                                                    setMomentReplyInputs((prev) => ({
-                                                      ...prev,
-                                                      [cmt.id]: e.target.value,
-                                                    }))
-                                                  }
-                                                  placeholder={`Write a reply to ${cmt.authorName}...`}
-                                                  aria-label={`Write a reply to ${cmt.authorName}`}
-                                                  data-testid="moment-reply-input"
-                                                  className="flex-1 px-3 py-1.5 text-xs bg-[#050505] border border-zinc-800 rounded text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+                                                  className="w-3 h-3 text-emerald-400 shrink-0"
                                                 />
-                                                <button
-                                                  type="submit"
-                                                  data-testid="moment-reply-submit"
-                                                  className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                                                <span>Collapse Replies</span>
+                                              </>
+                                            )}
+                                          </button>
+                                        )}
+                                        <span className="text-[11px] font-mono text-zinc-500 whitespace-nowrap">
+                                          +5 pts per comment
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {itemComments.length === 0 ? (
+                                      commentGate.allowed ? (
+                                        <p
+                                          className="text-xs text-zinc-400 py-1"
+                                          data-testid={`moment-comments-empty-${item.id}`}
+                                        >
+                                          No comments yet. Share a thought below to discuss this photo with{' '}
+                                          {item.authorUid === currentIdentity.uid
+                                            ? 'your connections'
+                                            : item.authorName}
+                                          .
+                                        </p>
+                                      ) : null
+                                    ) : (
+                                      <div
+                                        className="space-y-2.5"
+                                        data-testid={`moment-comments-list-${item.id}`}
+                                      >
+                                        {threadGroups.map((group) => {
+                                          const rootCmt = group.rootItem.comment;
+                                          const threadAnim = getNestedThreadAnimationState(
+                                            group.isCollapsed,
+                                            0
+                                          );
+                                          return (
+                                            <div
+                                              key={rootCmt.id}
+                                              data-testid={`moment-comment-thread-${rootCmt.id}`}
+                                              className="space-y-2"
+                                            >
+                                              {renderThreadedCommentNode(
+                                                group.rootItem,
+                                                undefined,
+                                                group
+                                              )}
+
+                                              {group.totalRepliesCount > 0 && (
+                                                <div
+                                                  id={`moment-comment-thread-replies-${rootCmt.id}`}
+                                                  data-testid={`moment-comment-thread-replies-${rootCmt.id}`}
+                                                  data-thread-state={threadAnim.state}
+                                                  aria-hidden={group.isCollapsed}
+                                                  className={threadAnim.wrapperClassName}
                                                 >
-                                                  Post Reply
-                                                </button>
-                                              </div>
-                                            </form>
-                                          )}
-                                        </div>
-                                      );
-                                    }
-                                  )}
-                                </div>
-                              )}
+                                                  <div className="overflow-hidden space-y-2 pt-0.5">
+                                                    {group.nestedReplies.map(
+                                                      (replyItem, replyIdx) => {
+                                                        const replyAnim =
+                                                          getNestedThreadAnimationState(
+                                                            group.isCollapsed,
+                                                            replyIdx
+                                                          );
+                                                        return renderThreadedCommentNode(
+                                                          replyItem,
+                                                          replyAnim
+                                                        );
+                                                      }
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              )}
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </>
+                                );
+                              })()}
 
                               {commentGate.allowed ? (
                                 <form

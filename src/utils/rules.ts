@@ -2227,6 +2227,115 @@ export function buildThreadedMomentComments(
   return result;
 }
 
+export interface MomentCommentThreadGroup {
+  rootItem: ThreadedMomentCommentItem;
+  nestedReplies: ThreadedMomentCommentItem[];
+  totalRepliesCount: number;
+  isCollapsed: boolean;
+}
+
+export interface NestedThreadAnimationState {
+  state: 'expanded' | 'collapsed';
+  wrapperClassName: string;
+  itemAnimationClassName: string;
+  staggerDelayMs: number;
+  ariaExpanded: boolean;
+  formatToggleLabel: (replyCount: number) => string;
+}
+
+export function buildMomentCommentThreadGroups(
+  comments: MomentCommentRecord[],
+  collapsedThreadIds: Iterable<string> = [],
+  maxDepth: number = 3
+): MomentCommentThreadGroup[] {
+  const flatThreaded = buildThreadedMomentComments(comments, maxDepth);
+  const collapsedSet = new Set<string>();
+  for (const rawId of collapsedThreadIds || []) {
+    const cleanId = String(rawId || '').trim();
+    if (cleanId) collapsedSet.add(cleanId);
+  }
+
+  const groups: MomentCommentThreadGroup[] = [];
+  for (const item of flatThreaded) {
+    if (!item.isReply || item.depth === 0 || groups.length === 0) {
+      groups.push({
+        rootItem: item,
+        nestedReplies: [],
+        totalRepliesCount: 0,
+        isCollapsed: collapsedSet.has(item.comment.id),
+      });
+    } else {
+      const currentGroup = groups[groups.length - 1];
+      currentGroup.nestedReplies.push(item);
+      currentGroup.totalRepliesCount = currentGroup.nestedReplies.length;
+    }
+  }
+
+  return groups;
+}
+
+export function toggleCollapsedCommentThread(
+  collapsedThreadIds: Iterable<string>,
+  rootCommentId: string
+): string[] {
+  const cleanTarget = String(rootCommentId || '').trim();
+  const nextSet = new Set<string>();
+  for (const id of collapsedThreadIds || []) {
+    const clean = String(id || '').trim();
+    if (clean) nextSet.add(clean);
+  }
+  if (!cleanTarget) {
+    return Array.from(nextSet);
+  }
+  if (nextSet.has(cleanTarget)) {
+    nextSet.delete(cleanTarget);
+  } else {
+    nextSet.add(cleanTarget);
+  }
+  return Array.from(nextSet);
+}
+
+export function resolveRootCommentIdForThread(
+  comments: MomentCommentRecord[],
+  targetCommentId: string
+): string | null {
+  const cleanTarget = String(targetCommentId || '').trim();
+  if (!cleanTarget) return null;
+  const groups = buildMomentCommentThreadGroups(comments);
+  for (const group of groups) {
+    if (group.rootItem.comment.id === cleanTarget) {
+      return group.rootItem.comment.id;
+    }
+    if (group.nestedReplies.some((r) => r.comment.id === cleanTarget)) {
+      return group.rootItem.comment.id;
+    }
+  }
+  return cleanTarget;
+}
+
+export function getNestedThreadAnimationState(
+  isCollapsed: boolean,
+  replyIndex: number = 0
+): NestedThreadAnimationState {
+  const safeIndex = Number.isFinite(replyIndex)
+    ? Math.max(0, Math.round(replyIndex))
+    : 0;
+  return {
+    state: isCollapsed ? 'collapsed' : 'expanded',
+    wrapperClassName: 'moment-thread-collapse-grid',
+    itemAnimationClassName: isCollapsed
+      ? 'moment-thread-slide-out'
+      : 'moment-thread-slide-in',
+    staggerDelayMs: isCollapsed ? 0 : Math.min(150, safeIndex * 25),
+    ariaExpanded: !isCollapsed,
+    formatToggleLabel: (replyCount: number) => {
+      const safeCount = Math.max(0, Math.round(Number(replyCount) || 0));
+      const noun = safeCount === 1 ? 'reply' : 'replies';
+      return isCollapsed ? `Show ${safeCount} ${noun}` : `Hide ${safeCount} ${noun}`;
+    },
+  };
+}
+
 export function formatRelativeCommentTimestamp(
   createdAtMs: number,
   nowMs: number = Date.now()

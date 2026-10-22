@@ -51,6 +51,10 @@ import {
   validateAndSanitizeMomentComment,
   groupMomentCommentsByMomentId,
   buildThreadedMomentComments,
+  buildMomentCommentThreadGroups,
+  toggleCollapsedCommentThread,
+  resolveRootCommentIdForThread,
+  getNestedThreadAnimationState,
   formatRelativeCommentTimestamp,
   normalizeStudyTopicName,
   buildWeeklyProductivityDistribution,
@@ -1609,4 +1613,103 @@ test('buildThreadedMomentComments organizes nested replies beneath parent commen
     ]
   );
 });
+
+test('buildMomentCommentThreadGroups, toggleCollapsedCommentThread, and getNestedThreadAnimationState manage nested reply thread expand/collapse and slide-in animation state', () => {
+  const comments = [
+    {
+      id: 'c_root_1',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_maya',
+      authorName: 'Maya Lin',
+      text: 'Great consistency on the 5-day study streak!',
+      visibility: 'public' as const,
+      createdAtMs: 1_000,
+    },
+    {
+      id: 'c_root_2',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_aarav',
+      authorName: 'Aarav Mehta',
+      text: 'Joining STUDY-GLOBAL now for a 50m Pomodoro.',
+      visibility: 'public' as const,
+      createdAtMs: 2_000,
+    },
+    {
+      id: 'c_reply_1a',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_alex',
+      authorName: 'Alex Rivera',
+      text: 'Thanks Maya! Pushing for 120m today.',
+      visibility: 'public' as const,
+      createdAtMs: 3_000,
+      parentCommentId: 'c_root_1',
+      replyToAuthorName: 'Maya Lin',
+    },
+    {
+      id: 'c_reply_1b_nested',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_maya',
+      authorName: 'Maya Lin',
+      text: 'You got this! See you in the study room.',
+      visibility: 'public' as const,
+      createdAtMs: 4_000,
+      parentCommentId: 'c_reply_1a',
+    },
+  ];
+
+  // 1. Initially all threads are expanded
+  let collapsedIds: string[] = [];
+  let groups = buildMomentCommentThreadGroups(comments, collapsedIds);
+  assert.equal(groups.length, 2);
+  assert.equal(groups[0].rootItem.comment.id, 'c_root_1');
+  assert.equal(groups[0].totalRepliesCount, 2);
+  assert.equal(groups[0].isCollapsed, false);
+  assert.deepEqual(
+    groups[0].nestedReplies.map((r) => r.comment.id),
+    ['c_reply_1a', 'c_reply_1b_nested']
+  );
+  assert.equal(groups[1].rootItem.comment.id, 'c_root_2');
+  assert.equal(groups[1].totalRepliesCount, 0);
+  assert.equal(groups[1].isCollapsed, false);
+
+  // 2. Animation state when expanded uses slide-in class and staggered delay
+  const expandedAnim0 = getNestedThreadAnimationState(false, 0);
+  assert.equal(expandedAnim0.state, 'expanded');
+  assert.equal(expandedAnim0.wrapperClassName, 'moment-thread-collapse-grid');
+  assert.equal(expandedAnim0.itemAnimationClassName, 'moment-thread-slide-in');
+  assert.equal(expandedAnim0.staggerDelayMs, 0);
+  assert.equal(expandedAnim0.ariaExpanded, true);
+  assert.equal(expandedAnim0.formatToggleLabel(2), 'Hide 2 replies');
+  assert.equal(expandedAnim0.formatToggleLabel(1), 'Hide 1 reply');
+
+  const expandedAnim2 = getNestedThreadAnimationState(false, 2);
+  assert.equal(expandedAnim2.staggerDelayMs, 50);
+
+  // 3. Toggling c_root_1 collapses its nested replies and switches to slide-out state
+  collapsedIds = toggleCollapsedCommentThread(collapsedIds, 'c_root_1');
+  assert.deepEqual(collapsedIds, ['c_root_1']);
+  groups = buildMomentCommentThreadGroups(comments, collapsedIds);
+  assert.equal(groups[0].isCollapsed, true);
+
+  const collapsedAnim = getNestedThreadAnimationState(true, 1);
+  assert.equal(collapsedAnim.state, 'collapsed');
+  assert.equal(collapsedAnim.itemAnimationClassName, 'moment-thread-slide-out');
+  assert.equal(collapsedAnim.staggerDelayMs, 0);
+  assert.equal(collapsedAnim.ariaExpanded, false);
+  assert.equal(collapsedAnim.formatToggleLabel(2), 'Show 2 replies');
+  assert.equal(collapsedAnim.formatToggleLabel(1), 'Show 1 reply');
+
+  // 4. Toggling c_root_1 again expands it back
+  collapsedIds = toggleCollapsedCommentThread(collapsedIds, 'c_root_1');
+  assert.deepEqual(collapsedIds, []);
+
+  // 5. Resolving root thread ID from a deeply nested reply returns the root comment ID
+  assert.equal(resolveRootCommentIdForThread(comments, 'c_reply_1b_nested'), 'c_root_1');
+  assert.equal(resolveRootCommentIdForThread(comments, 'c_root_1'), 'c_root_1');
+});
+
 
