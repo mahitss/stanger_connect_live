@@ -1998,6 +1998,17 @@ export interface MomentCommentRecord {
   text: string;
   visibility: 'public' | 'connections';
   createdAtMs: number;
+  parentCommentId?: string | null;
+  replyToAuthorName?: string | null;
+}
+
+export interface ThreadedMomentCommentItem {
+  comment: MomentCommentRecord;
+  depth: number;
+  isReply: boolean;
+  parentCommentId: string | null;
+  replyToAuthorName: string | null;
+  replyCount: number;
 }
 
 export function canUserCommentOnMoment(params: {
@@ -2125,6 +2136,95 @@ export function groupMomentCommentsByMomentId(
   }
 
   return grouped;
+}
+
+export function buildThreadedMomentComments(
+  comments: MomentCommentRecord[],
+  maxDepth: number = 3
+): ThreadedMomentCommentItem[] {
+  const safeMaxDepth = Math.max(1, Math.min(6, Math.round(maxDepth)));
+  const dedupedById = new Map<string, MomentCommentRecord>();
+  for (const item of comments) {
+    const cleanId = String(item?.id || '').trim();
+    if (!cleanId) continue;
+    dedupedById.set(cleanId, item);
+  }
+
+  const sorted = Array.from(dedupedById.values()).sort(
+    (a, b) => a.createdAtMs - b.createdAtMs
+  );
+
+  const byId = new Map<string, MomentCommentRecord>();
+  for (const item of sorted) {
+    byId.set(item.id, item);
+  }
+
+  const childrenByParentId = new Map<string, MomentCommentRecord[]>();
+  const rootComments: MomentCommentRecord[] = [];
+
+  for (const item of sorted) {
+    const rawParentId = item.parentCommentId ? String(item.parentCommentId).trim() : '';
+    if (
+      rawParentId &&
+      rawParentId !== item.id &&
+      byId.has(rawParentId) &&
+      byId.get(rawParentId)?.momentId === item.momentId
+    ) {
+      const list = childrenByParentId.get(rawParentId) || [];
+      list.push(item);
+      childrenByParentId.set(rawParentId, list);
+    } else {
+      rootComments.push(item);
+    }
+  }
+
+  const result: ThreadedMomentCommentItem[] = [];
+  const visited = new Set<string>();
+
+  const traverse = (node: MomentCommentRecord, currentDepth: number) => {
+    if (visited.has(node.id)) return;
+    visited.add(node.id);
+
+    const rawParentId = node.parentCommentId ? String(node.parentCommentId).trim() : '';
+    const parentRecord =
+      rawParentId && rawParentId !== node.id ? byId.get(rawParentId) : undefined;
+    const directReplies = childrenByParentId.get(node.id) || [];
+    const effectiveDepth = parentRecord
+      ? Math.min(safeMaxDepth, Math.max(1, currentDepth))
+      : 0;
+    const resolvedReplyAuthor =
+      (node.replyToAuthorName ? String(node.replyToAuthorName).trim() : '') ||
+      (parentRecord ? parentRecord.authorName : '') ||
+      null;
+
+    result.push({
+      comment: node,
+      depth: effectiveDepth,
+      isReply: effectiveDepth > 0 || Boolean(node.parentCommentId),
+      parentCommentId: parentRecord
+        ? parentRecord.id
+        : rawParentId || null,
+      replyToAuthorName: resolvedReplyAuthor,
+      replyCount: directReplies.length,
+    });
+
+    for (const child of directReplies) {
+      traverse(child, currentDepth + 1);
+    }
+  };
+
+  for (const root of rootComments) {
+    traverse(root, 0);
+  }
+
+  // Ensure any remaining unvisited comments (e.g. from cycles) are included safely
+  for (const item of sorted) {
+    if (!visited.has(item.id)) {
+      traverse(item, 0);
+    }
+  }
+
+  return result;
 }
 
 export function formatRelativeCommentTimestamp(

@@ -158,7 +158,7 @@ service cloud.firestore {
         'momentId', 'momentAuthorUid', 'authorUid', 'authorName', 'text', 'visibility', 'createdAt'
       ]) &&
       data.keys().hasOnly([
-        'momentId', 'momentAuthorUid', 'authorUid', 'authorName', 'text', 'visibility', 'createdAt'
+        'momentId', 'momentAuthorUid', 'authorUid', 'authorName', 'text', 'visibility', 'parentCommentId', 'replyToAuthorName', 'createdAt'
       ]) &&
       data.momentId is string && data.momentId.size() >= 1 && data.momentId.size() <= 128 && data.momentId.matches('^[a-zA-Z0-9_\\-]+$') &&
       data.momentAuthorUid is string && data.momentAuthorUid.size() >= 1 && data.momentAuthorUid.size() <= 128 && data.momentAuthorUid.matches('^[a-zA-Z0-9_\\-]+$') &&
@@ -167,6 +167,8 @@ service cloud.firestore {
       data.authorName is string && data.authorName.size() >= 1 && data.authorName.size() <= 64 &&
       data.text is string && data.text.size() >= 1 && data.text.size() <= 400 &&
       data.visibility is string && data.visibility.size() <= 16 && (data.visibility == 'public' || data.visibility == 'connections') &&
+      (!('parentCommentId' in data) || (data.parentCommentId is string && data.parentCommentId.size() >= 1 && data.parentCommentId.size() <= 128 && data.parentCommentId.matches('^[a-zA-Z0-9_\\-]+$'))) &&
+      (!('replyToAuthorName' in data) || (data.replyToAuthorName is string && data.replyToAuthorName.size() >= 1 && data.replyToAuthorName.size() <= 64)) &&
       data.createdAt is timestamp;
     }
 

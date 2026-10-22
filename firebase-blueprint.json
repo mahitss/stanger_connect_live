@@ -343,7 +343,7 @@
     },
     "MomentComment": {
       "title": "MomentComment",
-      "description": "Comment posted by a connection or member on a photo Moment to discuss the photo.",
+      "description": "Comment or nested reply posted by a connection or member on a photo Moment to discuss the photo.",
       "type": "object",
       "properties": {
         "momentId": {
@@ -374,6 +374,16 @@
         "visibility": {
           "type": "string",
           "enum": ["public", "connections"]
+        },
+        "parentCommentId": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "replyToAuthorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
         },
         "createdAt": {
           "type": "string",

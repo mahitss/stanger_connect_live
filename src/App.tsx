@@ -34,6 +34,7 @@ import {
   VolumeX,
   Share2,
   Check,
+  CornerDownRight,
 } from 'lucide-react';
 import {
   auth,
@@ -78,6 +79,7 @@ import {
   canUserCommentOnMoment,
   validateAndSanitizeMomentComment,
   groupMomentCommentsByMomentId,
+  buildThreadedMomentComments,
   formatRelativeCommentTimestamp,
   TopicFocusSessionRecord,
   buildWeeklyProductivityDistribution,
@@ -262,6 +264,10 @@ export default function App() {
   const [momentError, setMomentError] = useState('');
   const [momentFilter, setMomentFilter] = useState<'all' | 'public' | 'connections' | 'mine'>('all');
   const [momentCommentInputs, setMomentCommentInputs] = useState<Record<string, string>>({});
+  const [momentReplyInputs, setMomentReplyInputs] = useState<Record<string, string>>({});
+  const [activeReplyTargetByMoment, setActiveReplyTargetByMoment] = useState<
+    Record<string, { commentId: string; authorName: string } | null>
+  >({});
   const [momentCommentErrors, setMomentCommentErrors] = useState<Record<string, string>>({});
   const [commentClockNowMs, setCommentClockNowMs] = useState<number>(() => Date.now());
   const [copiedMomentShare, setCopiedMomentShare] = useState<MomentSharePayload | null>(null);
@@ -718,6 +724,10 @@ export default function App() {
             text: String(data.text || ''),
             visibility: (data.visibility as 'public' | 'connections') || 'public',
             createdAtMs: data.createdAt?.toMillis?.() || Date.now(),
+            ...(data.parentCommentId ? { parentCommentId: String(data.parentCommentId) } : {}),
+            ...(data.replyToAuthorName
+              ? { replyToAuthorName: String(data.replyToAuthorName) }
+              : {}),
           };
         });
         setMomentComments((prev) => {
@@ -836,6 +846,12 @@ export default function App() {
                     text: String(raw.text || ''),
                     visibility: raw.visibility === 'connections' ? 'connections' : 'public',
                     createdAtMs: Number(raw.createdAtMs) || Date.now(),
+                    ...(raw.parentCommentId
+                      ? { parentCommentId: String(raw.parentCommentId) }
+                      : {}),
+                    ...(raw.replyToAuthorName
+                      ? { replyToAuthorName: String(raw.replyToAuthorName) }
+                      : {}),
                   });
                 }
               }
@@ -901,6 +917,12 @@ export default function App() {
             text: String(msg.comment.text || ''),
             visibility: msg.comment.visibility === 'connections' ? 'connections' : 'public',
             createdAtMs: Number(msg.comment.createdAtMs) || Date.now(),
+            ...(msg.comment.parentCommentId
+              ? { parentCommentId: String(msg.comment.parentCommentId) }
+              : {}),
+            ...(msg.comment.replyToAuthorName
+              ? { replyToAuthorName: String(msg.comment.replyToAuthorName) }
+              : {}),
           };
           setMomentComments((prev) => {
             if (prev.some((c) => c.id === incomingComment.id)) return prev;
@@ -1746,7 +1768,11 @@ export default function App() {
     }, 6000);
   };
 
-  const handleAddMomentComment = async (e: React.FormEvent, momentItem: MomentPostDoc) => {
+  const handleAddMomentComment = async (
+    e: React.FormEvent,
+    momentItem: MomentPostDoc,
+    explicitReplyTarget?: { commentId: string; authorName: string } | null
+  ) => {
     e.preventDefault();
     if (!currentIdentity) return;
 
@@ -1771,7 +1797,16 @@ export default function App() {
       return;
     }
 
-    const rawText = momentCommentInputs[momentItem.id] || '';
+    const replyTarget =
+      explicitReplyTarget !== undefined
+        ? explicitReplyTarget
+        : activeReplyTargetByMoment[momentItem.id] || null;
+
+    const rawText =
+      explicitReplyTarget && momentReplyInputs[explicitReplyTarget.commentId] !== undefined
+        ? momentReplyInputs[explicitReplyTarget.commentId]
+        : momentCommentInputs[momentItem.id] || '';
+
     const check = validateAndSanitizeMomentComment(rawText);
     if (!check.valid) {
       setMomentCommentErrors((prev) => ({
@@ -1786,6 +1821,13 @@ export default function App() {
       [momentItem.id]: '',
     }));
 
+    const cleanParentId = replyTarget?.commentId
+      ? String(replyTarget.commentId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128)
+      : '';
+    const cleanReplyAuthor = replyTarget?.authorName
+      ? sanitizeSafeText(replyTarget.authorName, 64)
+      : '';
+
     const commentId = `cmt_${Date.now()}_${currentIdentity.uid}`;
     const newComment: MomentCommentRecord = {
       id: commentId,
@@ -1796,6 +1838,8 @@ export default function App() {
       text: check.sanitizedText,
       visibility: momentItem.visibility,
       createdAtMs: Date.now(),
+      ...(cleanParentId ? { parentCommentId: cleanParentId } : {}),
+      ...(cleanReplyAuthor ? { replyToAuthorName: cleanReplyAuthor } : {}),
     };
 
     setMomentComments((prev) => {
@@ -1804,9 +1848,19 @@ export default function App() {
       return next;
     });
     setCommentClockNowMs(Date.now());
+    if (cleanParentId) {
+      setMomentReplyInputs((prev) => ({
+        ...prev,
+        [cleanParentId]: '',
+      }));
+    }
     setMomentCommentInputs((prev) => ({
       ...prev,
       [momentItem.id]: '',
+    }));
+    setActiveReplyTargetByMoment((prev) => ({
+      ...prev,
+      [momentItem.id]: null,
     }));
     awardParticipation(5);
 
@@ -1821,6 +1875,8 @@ export default function App() {
           text: newComment.text,
           visibility: newComment.visibility,
           createdAtMs: newComment.createdAtMs,
+          ...(cleanParentId ? { parentCommentId: cleanParentId } : {}),
+          ...(cleanReplyAuthor ? { replyToAuthorName: cleanReplyAuthor } : {}),
         })
       );
     }
@@ -1834,6 +1890,8 @@ export default function App() {
           authorName: newComment.authorName,
           text: newComment.text,
           visibility: newComment.visibility,
+          ...(cleanParentId ? { parentCommentId: cleanParentId } : {}),
+          ...(cleanReplyAuthor ? { replyToAuthorName: cleanReplyAuthor } : {}),
           createdAt: serverTimestamp(),
         });
       } catch (err) {
@@ -2168,7 +2226,7 @@ export default function App() {
     totalWeeklyFocusMinutes: weeklyActivitySummary.totalFocusMinutes,
     storedSessions: topicFocusSessions,
     studyNotes,
-    activeDeskSubject: myFocusStatus.deskSubject || undefined,
+    activeDeskSubject: myFocusStatus.subject || undefined,
     activeRoomCode: activeStudyRoomCode,
     currentUid: currentIdentity.uid,
   });
@@ -2835,7 +2893,7 @@ export default function App() {
                   streakCount: currentIdentity.streakCount,
                   participationPoints: currentIdentity.participationPoints,
                   isOnline: true,
-                  currentMode: activePage === 'signout' ? 'hub' : activePage,
+                  currentMode: activePage,
                   privacyVisibility: currentIdentity.privacyVisibility,
                 }}
                 acceptedPeerUids={acceptedPeerUids}
@@ -4110,73 +4168,250 @@ export default function App() {
                                   className="space-y-2.5"
                                   data-testid={`moment-comments-list-${item.id}`}
                                 >
-                                  {itemComments.map((cmt) => {
-                                    const isCommentAuthor = cmt.authorUid === currentIdentity.uid;
-                                    const isMomentOwner = item.authorUid === currentIdentity.uid;
-                                    const relationLabel =
-                                      cmt.authorUid === item.authorUid
-                                        ? 'Author'
-                                        : acceptedPeerUids.has(cmt.authorUid)
-                                        ? 'Connected'
-                                        : isCommentAuthor
-                                        ? 'You'
-                                        : 'Member';
+                                  {buildThreadedMomentComments(itemComments).map(
+                                    (threadedItem) => {
+                                      const {
+                                        comment: cmt,
+                                        depth,
+                                        isReply,
+                                        parentCommentId,
+                                        replyToAuthorName,
+                                      } = threadedItem;
+                                      const isCommentAuthor =
+                                        cmt.authorUid === currentIdentity.uid;
+                                      const isMomentOwner =
+                                        item.authorUid === currentIdentity.uid;
+                                      const relationLabel =
+                                        cmt.authorUid === item.authorUid
+                                          ? 'Author'
+                                          : acceptedPeerUids.has(cmt.authorUid)
+                                          ? 'Connected'
+                                          : isCommentAuthor
+                                          ? 'You'
+                                          : 'Member';
+                                      const activeReplyTarget =
+                                        activeReplyTargetByMoment[item.id] || null;
+                                      const isReplyingToThis =
+                                        activeReplyTarget?.commentId === cmt.id;
+                                      const indentClass =
+                                        depth === 0
+                                          ? ''
+                                          : depth === 1
+                                          ? 'ml-6 sm:ml-8'
+                                          : depth === 2
+                                          ? 'ml-10 sm:ml-14'
+                                          : 'ml-12 sm:ml-16';
 
-                                    return (
-                                      <div
-                                        key={cmt.id}
-                                        data-testid="moment-comment-item"
-                                        data-comment-id={cmt.id}
-                                        className="p-3 rounded-md bg-[#0A0A0C] border border-zinc-800/80 space-y-1.5"
-                                      >
-                                        <div className="flex items-center justify-between gap-2 text-xs">
-                                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                            <span className="font-semibold text-white truncate">
-                                              {cmt.authorName}
-                                            </span>
-                                            <span aria-hidden="true" className="text-zinc-600">·</span>
-                                            <span className="text-[11px] font-mono text-emerald-400">
-                                              {relationLabel}
-                                            </span>
-                                            <span aria-hidden="true" className="text-zinc-600">·</span>
-                                            <time
-                                              dateTime={new Date(cmt.createdAtMs).toISOString()}
-                                              title={new Date(cmt.createdAtMs).toLocaleTimeString(
-                                                [],
-                                                {
-                                                  hour: '2-digit',
-                                                  minute: '2-digit',
-                                                }
-                                              )}
-                                              data-testid="moment-comment-timestamp"
-                                              data-comment-id={cmt.id}
-                                              className="text-[11px] font-mono text-zinc-400 tabular-nums"
-                                            >
-                                              {formatRelativeCommentTimestamp(
-                                                cmt.createdAtMs,
-                                                commentClockNowMs
-                                              )}
-                                            </time>
+                                      return (
+                                        <div
+                                          key={cmt.id}
+                                          className={`space-y-2 ${indentClass}`}
+                                        >
+                                          <div
+                                            data-testid={
+                                              isReply
+                                                ? 'moment-comment-reply-item'
+                                                : 'moment-comment-item'
+                                            }
+                                            data-comment-id={cmt.id}
+                                            data-parent-comment-id={parentCommentId || ''}
+                                            data-comment-depth={depth}
+                                            data-is-reply={isReply ? 'true' : 'false'}
+                                            className={`p-3 rounded-md border space-y-1.5 ${
+                                              isReply
+                                                ? 'bg-[#08080A] border-zinc-800/70'
+                                                : 'bg-[#0A0A0C] border-zinc-800/80'
+                                            }`}
+                                          >
+                                            {isReply && replyToAuthorName && (
+                                              <div
+                                                data-testid="moment-comment-reply-context"
+                                                className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400"
+                                              >
+                                                <CornerDownRight
+                                                  aria-hidden="true"
+                                                  className="w-3 h-3 text-emerald-400 shrink-0"
+                                                />
+                                                <span>
+                                                  Replying to{' '}
+                                                  <strong className="text-zinc-200 font-semibold">
+                                                    @{replyToAuthorName}
+                                                  </strong>
+                                                </span>
+                                              </div>
+                                            )}
+
+                                            <div className="flex items-center justify-between gap-2 text-xs">
+                                              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                                <span className="font-semibold text-white truncate">
+                                                  {cmt.authorName}
+                                                </span>
+                                                <span
+                                                  aria-hidden="true"
+                                                  className="text-zinc-600"
+                                                >
+                                                  ·
+                                                </span>
+                                                <span className="text-[11px] font-mono text-emerald-400">
+                                                  {relationLabel}
+                                                </span>
+                                                <span
+                                                  aria-hidden="true"
+                                                  className="text-zinc-600"
+                                                >
+                                                  ·
+                                                </span>
+                                                <time
+                                                  dateTime={new Date(
+                                                    cmt.createdAtMs
+                                                  ).toISOString()}
+                                                  title={new Date(
+                                                    cmt.createdAtMs
+                                                  ).toLocaleTimeString([], {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                  })}
+                                                  data-testid="moment-comment-timestamp"
+                                                  data-comment-id={cmt.id}
+                                                  className="text-[11px] font-mono text-zinc-400 tabular-nums"
+                                                >
+                                                  {formatRelativeCommentTimestamp(
+                                                    cmt.createdAtMs,
+                                                    commentClockNowMs
+                                                  )}
+                                                </time>
+                                              </div>
+
+                                              <div className="flex items-center gap-2.5 shrink-0">
+                                                {commentGate.allowed && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setMomentCommentErrors((prev) => ({
+                                                        ...prev,
+                                                        [item.id]: '',
+                                                      }));
+                                                      setActiveReplyTargetByMoment(
+                                                        (prev) => ({
+                                                          ...prev,
+                                                          [item.id]:
+                                                            prev[item.id]?.commentId ===
+                                                            cmt.id
+                                                              ? null
+                                                              : {
+                                                                  commentId: cmt.id,
+                                                                  authorName:
+                                                                    cmt.authorName,
+                                                                },
+                                                        })
+                                                      );
+                                                    }}
+                                                    aria-label={
+                                                      isReplyingToThis
+                                                        ? `Cancel reply to ${cmt.authorName}`
+                                                        : `Reply to ${cmt.authorName}`
+                                                    }
+                                                    data-testid={`reply-moment-comment-${cmt.id}`}
+                                                    className={`text-[11px] font-mono transition-colors whitespace-nowrap shrink-0 ${
+                                                      isReplyingToThis
+                                                        ? 'text-emerald-400 font-semibold'
+                                                        : 'text-zinc-400 hover:text-white'
+                                                    }`}
+                                                  >
+                                                    {isReplyingToThis ? 'Cancel' : 'Reply'}
+                                                  </button>
+                                                )}
+
+                                                {(isCommentAuthor || isMomentOwner) && (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() =>
+                                                      handleDeleteMomentComment(cmt.id)
+                                                    }
+                                                    aria-label={`Delete comment by ${cmt.authorName}`}
+                                                    data-testid={`delete-moment-comment-${cmt.id}`}
+                                                    className="text-[11px] text-zinc-500 hover:text-rose-400 font-mono transition-colors shrink-0"
+                                                  >
+                                                    Delete
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                            <p className="text-xs text-zinc-200 leading-relaxed break-words">
+                                              {cmt.text}
+                                            </p>
                                           </div>
 
-                                          {(isCommentAuthor || isMomentOwner) && (
-                                            <button
-                                              type="button"
-                                              onClick={() => handleDeleteMomentComment(cmt.id)}
-                                              aria-label={`Delete comment by ${cmt.authorName}`}
-                                              data-testid={`delete-moment-comment-${cmt.id}`}
-                                              className="text-[11px] text-zinc-500 hover:text-rose-400 font-mono transition-colors shrink-0"
+                                          {commentGate.allowed && isReplyingToThis && (
+                                            <form
+                                              onSubmit={(e) =>
+                                                handleAddMomentComment(e, item, {
+                                                  commentId: cmt.id,
+                                                  authorName: cmt.authorName,
+                                                })
+                                              }
+                                              data-testid={`moment-reply-form-${cmt.id}`}
+                                              className="ml-6 sm:ml-8 p-2.5 rounded-md bg-[#08080A] border border-zinc-800/80 space-y-2"
                                             >
-                                              Delete
-                                            </button>
+                                              <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-zinc-400">
+                                                <span className="inline-flex items-center gap-1.5">
+                                                  <CornerDownRight
+                                                    aria-hidden="true"
+                                                    className="w-3 h-3 text-emerald-400 shrink-0"
+                                                  />
+                                                  <span>
+                                                    Replying to{' '}
+                                                    <strong className="text-white">
+                                                      @{cmt.authorName}
+                                                    </strong>
+                                                  </span>
+                                                </span>
+                                                <button
+                                                  type="button"
+                                                  onClick={() =>
+                                                    setActiveReplyTargetByMoment(
+                                                      (prev) => ({
+                                                        ...prev,
+                                                        [item.id]: null,
+                                                      })
+                                                    )
+                                                  }
+                                                  data-testid={`cancel-reply-comment-${cmt.id}`}
+                                                  className="text-zinc-500 hover:text-zinc-300 whitespace-nowrap"
+                                                >
+                                                  Cancel
+                                                </button>
+                                              </div>
+                                              <div className="flex flex-col sm:flex-row gap-2">
+                                                <input
+                                                  type="text"
+                                                  maxLength={400}
+                                                  value={momentReplyInputs[cmt.id] || ''}
+                                                  onChange={(e) =>
+                                                    setMomentReplyInputs((prev) => ({
+                                                      ...prev,
+                                                      [cmt.id]: e.target.value,
+                                                    }))
+                                                  }
+                                                  placeholder={`Write a reply to ${cmt.authorName}...`}
+                                                  aria-label={`Write a reply to ${cmt.authorName}`}
+                                                  data-testid="moment-reply-input"
+                                                  className="flex-1 px-3 py-1.5 text-xs bg-[#050505] border border-zinc-800 rounded text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+                                                />
+                                                <button
+                                                  type="submit"
+                                                  data-testid="moment-reply-submit"
+                                                  className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                                                >
+                                                  Post Reply
+                                                </button>
+                                              </div>
+                                            </form>
                                           )}
                                         </div>
-                                        <p className="text-xs text-zinc-200 leading-relaxed break-words">
-                                          {cmt.text}
-                                        </p>
-                                      </div>
-                                    );
-                                  })}
+                                      );
+                                    }
+                                  )}
                                 </div>
                               )}
 

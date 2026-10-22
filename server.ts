@@ -216,6 +216,8 @@ async function startServer() {
       text: string;
       visibility: 'public' | 'connections';
       createdAtMs: number;
+      parentCommentId?: string | null;
+      replyToAuthorName?: string | null;
     }
   >();
   const liveMoodEvents = new Map<string, PeerMoodHistoryEvent>();
@@ -840,6 +842,13 @@ async function startServer() {
             .replace(/[^a-zA-Z0-9_-]/g, '')
             .slice(0, 128);
 
+          const rawParentId = msg.parentCommentId
+            ? String(msg.parentCommentId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128)
+            : '';
+          const rawReplyAuthor = msg.replyToAuthorName
+            ? sanitizeSafeText(String(msg.replyToAuthorName), 64)
+            : '';
+
           const commentRecord = {
             id: commentId,
             momentId,
@@ -849,6 +858,8 @@ async function startServer() {
             text: sanitizeSafeText(rawText, 400),
             visibility,
             createdAtMs: Number(msg.createdAtMs) || Date.now(),
+            ...(rawParentId ? { parentCommentId: rawParentId } : {}),
+            ...(rawReplyAuthor ? { replyToAuthorName: rawReplyAuthor } : {}),
           };
 
           liveMomentComments.set(commentId, commentRecord);

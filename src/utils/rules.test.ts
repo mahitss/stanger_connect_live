@@ -50,6 +50,7 @@ import {
   canUserCommentOnMoment,
   validateAndSanitizeMomentComment,
   groupMomentCommentsByMomentId,
+  buildThreadedMomentComments,
   formatRelativeCommentTimestamp,
   normalizeStudyTopicName,
   buildWeeklyProductivityDistribution,
@@ -1511,3 +1512,101 @@ test('formatRelativeCommentTimestamp formats Moment comment timestamps as relati
   assert.equal(formatRelativeCommentTimestamp(NaN, now), 'just now');
   assert.equal(formatRelativeCommentTimestamp(now + 10_000, now), 'just now');
 });
+
+test('buildThreadedMomentComments organizes nested replies beneath parent comments with depth and reply metadata', () => {
+  const comments = [
+    {
+      id: 'c_root_1',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_maya',
+      authorName: 'Maya Lin',
+      text: 'Great consistency on the 5-day study streak!',
+      visibility: 'public' as const,
+      createdAtMs: 1_000,
+    },
+    {
+      id: 'c_root_2',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_aarav',
+      authorName: 'Aarav Mehta',
+      text: 'Joining STUDY-GLOBAL now for a 50m Pomodoro.',
+      visibility: 'public' as const,
+      createdAtMs: 2_000,
+    },
+    {
+      id: 'c_reply_1a',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_alex',
+      authorName: 'Alex Rivera',
+      text: 'Thanks Maya! Pushing for 120m today.',
+      visibility: 'public' as const,
+      createdAtMs: 3_000,
+      parentCommentId: 'c_root_1',
+      replyToAuthorName: 'Maya Lin',
+    },
+    {
+      id: 'c_reply_1b_nested',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_maya',
+      authorName: 'Maya Lin',
+      text: 'You got this! See you in the study room.',
+      visibility: 'public' as const,
+      createdAtMs: 4_000,
+      parentCommentId: 'c_reply_1a',
+    },
+  ];
+
+  const threaded = buildThreadedMomentComments(comments);
+  assert.equal(threaded.length, 4);
+
+  // Order should be: c_root_1 (depth 0) -> c_reply_1a (depth 1) -> c_reply_1b_nested (depth 2) -> c_root_2 (depth 0)
+  assert.deepEqual(
+    threaded.map((t) => ({
+      id: t.comment.id,
+      depth: t.depth,
+      isReply: t.isReply,
+      parentCommentId: t.parentCommentId,
+      replyToAuthorName: t.replyToAuthorName,
+      replyCount: t.replyCount,
+    })),
+    [
+      {
+        id: 'c_root_1',
+        depth: 0,
+        isReply: false,
+        parentCommentId: null,
+        replyToAuthorName: null,
+        replyCount: 1,
+      },
+      {
+        id: 'c_reply_1a',
+        depth: 1,
+        isReply: true,
+        parentCommentId: 'c_root_1',
+        replyToAuthorName: 'Maya Lin',
+        replyCount: 1,
+      },
+      {
+        id: 'c_reply_1b_nested',
+        depth: 2,
+        isReply: true,
+        parentCommentId: 'c_reply_1a',
+        replyToAuthorName: 'Alex Rivera',
+        replyCount: 0,
+      },
+      {
+        id: 'c_root_2',
+        depth: 0,
+        isReply: false,
+        parentCommentId: null,
+        replyToAuthorName: null,
+        replyCount: 0,
+      },
+    ]
+  );
+});
+
