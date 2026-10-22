@@ -2307,6 +2307,74 @@ export function buildWeeklyActivityJsonExport(params: {
   };
 }
 
+export function buildWeeklyActivityCsvExport(params: {
+  summary: WeeklyActivitySummary;
+  dailyTargetMinutes: number;
+  nowMs?: number;
+}): {
+  csvContent: string;
+  filename: string;
+  rowCount: number;
+  headers: string[];
+} {
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0
+      ? params.nowMs
+      : Date.now();
+  const exportedAtIso = new Date(nowMs).toISOString();
+  const safeTarget = clampProductivityTarget(params.dailyTargetMinutes);
+  const days = Array.isArray(params.summary?.days) ? params.summary.days : [];
+  const latestDayKey =
+    days[days.length - 1]?.dateKey || exportedAtIso.slice(0, 10);
+
+  const headers = [
+    'Date',
+    'Day',
+    'Short Date',
+    'Focus Minutes',
+    'Daily Target Minutes',
+    'Goal Progress (%)',
+    'Goal Reached',
+    'Points Earned',
+    'Is Today',
+  ];
+
+  const rows = days.map((day) => {
+    const dayTarget = day.targetMinutes > 0 ? day.targetMinutes : safeTarget;
+    const progressPct = Math.min(
+      999,
+      Math.round((day.focusMinutes / Math.max(1, dayTarget)) * 100)
+    );
+    return [
+      day.dateKey,
+      day.dayName,
+      day.shortDate,
+      day.focusMinutes,
+      dayTarget,
+      progressPct,
+      day.goalReached ? 'Yes' : 'No',
+      day.pointsEarned,
+      day.isToday ? 'Yes' : 'No',
+    ]
+      .map((cell) => escapeCsvCell(cell))
+      .join(',');
+  });
+
+  const csvContent = [
+    headers.map((h) => escapeCsvCell(h)).join(','),
+    ...rows,
+  ].join('\n');
+
+  const filename = `weekly-activity-overview-${latestDayKey}.csv`;
+
+  return {
+    csvContent,
+    filename,
+    rowCount: days.length,
+    headers,
+  };
+}
+
 
 // --- Weekly Productivity Distribution (Focus Session Breakdown by Study Room Topic) ---
 export interface TopicFocusSessionRecord {

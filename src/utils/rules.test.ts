@@ -36,6 +36,7 @@ import {
   getPastDateKey,
   buildWeeklyActivityOverview,
   buildWeeklyActivityJsonExport,
+  buildWeeklyActivityCsvExport,
   DEFAULT_UI_SOUND_PREFERENCES,
   toggleUiSoundEffects,
   getUiSoundChimeSpec,
@@ -1368,3 +1369,45 @@ test('Study Room 7-day focus session trend builds stacked individual sessions pe
   assert.equal(lastTodaySession.minutes, 50);
   assert.equal(lastTodaySession.cumulativeDayMinutes, 115);
 });
+
+test('buildWeeklyActivityCsvExport formats 7-day weekly activity history into downloadable CSV with headers and progress percentages', () => {
+  const summary = buildWeeklyActivityOverview({
+    todayDateKey: '2026-10-22',
+    todayFocusMinutes: 135,
+    dailyTargetMinutes: 120,
+    todayPointsEarned: 95,
+    streakCount: 6,
+  });
+
+  const exported = buildWeeklyActivityCsvExport({
+    summary,
+    dailyTargetMinutes: 120,
+    nowMs: 1_761_100_000_000,
+  });
+
+  assert.equal(exported.filename, 'weekly-activity-overview-2026-10-22.csv');
+  assert.equal(exported.rowCount, 7);
+  assert.deepEqual(exported.headers, [
+    'Date',
+    'Day',
+    'Short Date',
+    'Focus Minutes',
+    'Daily Target Minutes',
+    'Goal Progress (%)',
+    'Goal Reached',
+    'Points Earned',
+    'Is Today',
+  ]);
+
+  const lines = exported.csvContent.split('\n');
+  assert.equal(lines.length, 8);
+  assert.equal(
+    lines[0],
+    'Date,Day,Short Date,Focus Minutes,Daily Target Minutes,Goal Progress (%),Goal Reached,Points Earned,Is Today'
+  );
+  // Check today's row (index 7 in lines, i.e., 2026-10-22 with 135 mins / 120 target = 113%)
+  assert.ok(lines[7].startsWith('2026-10-22,'));
+  assert.ok(lines[7].includes(',135,120,113,Yes,95,Yes'));
+});
+
+

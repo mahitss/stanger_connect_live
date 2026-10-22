@@ -11,11 +11,20 @@ import {
   ReferenceLine,
   Cell,
 } from 'recharts';
-import { BarChart3, Clock, Award, CheckCircle2, Flame, Download } from 'lucide-react';
+import {
+  BarChart3,
+  Clock,
+  Award,
+  CheckCircle2,
+  Flame,
+  Download,
+  FileSpreadsheet,
+} from 'lucide-react';
 import {
   WeeklyActivitySummary,
   WeeklyActivityDayEntry,
   buildWeeklyActivityJsonExport,
+  buildWeeklyActivityCsvExport,
 } from '../utils/rules';
 
 export type WeeklyChartMode = 'combined' | 'productivity' | 'points';
@@ -100,6 +109,33 @@ export function WeeklyActivityOverview({
     );
   };
 
+  const handleDownloadActivityCsv = () => {
+    const csvPayload = buildWeeklyActivityCsvExport({
+      summary,
+      dailyTargetMinutes,
+      nowMs: Date.now(),
+    });
+    const fileOrBlob =
+      typeof window !== 'undefined' && typeof window.File === 'function'
+        ? new File([csvPayload.csvContent], csvPayload.filename, {
+            type: 'text/csv;charset=utf-8;',
+          })
+        : new Blob([csvPayload.csvContent], {
+            type: 'text/csv;charset=utf-8;',
+          });
+    const url = URL.createObjectURL(fileOrBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', csvPayload.filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setExportNotice(
+      `Downloaded ${csvPayload.filename} (${csvPayload.rowCount} days · ${summary.totalFocusMinutes}m focus)`
+    );
+  };
+
   return (
     <section
       className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-5"
@@ -169,6 +205,18 @@ export function WeeklyActivityOverview({
                 Points Earned
               </button>
             </div>
+
+            {/* Download Activity CSV Button */}
+            <button
+              type="button"
+              onClick={handleDownloadActivityCsv}
+              data-testid="download-weekly-activity-csv-btn"
+              aria-label="Download weekly productivity activity history as a CSV file"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-semibold rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700 hover:border-zinc-500 transition-colors whitespace-nowrap shrink-0"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Download Activity CSV</span>
+            </button>
 
             {/* Export Activity JSON Button */}
             <button
