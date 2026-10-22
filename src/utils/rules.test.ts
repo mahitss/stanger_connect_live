@@ -56,6 +56,7 @@ import {
   computeMoodTrendPeakMarkers,
   buildMostPopularMoodPeakAnnotation,
   isMoodTrendPeakBucket,
+  getMoodPeakHoverPulseSpec,
   computeMoodPairComparison,
   formatMoodTrendPointTooltip,
   escapeCsvCell,
@@ -1165,5 +1166,43 @@ test('User mood popularity spike alert badge notifies when a mood used today spi
   assert.equal(alertForSoloUser.hasSpikeAlert, false);
   assert.equal(alertForSoloUser.primaryAlert, null);
 });
+
+test('Peak popularity marker hover pulse spec activates gentle pulse on hovered peak markers and their parent trend line', () => {
+  const hoveredPeakSpec = getMoodPeakHoverPulseSpec({
+    isPeak: true,
+    isPrimaryPeak: true,
+    isHovered: true,
+    isLineHoveredPeak: true,
+    baseStrokeWidth: 2.5,
+  });
+
+  assert.equal(hoveredPeakSpec.isPulsingPeak, true);
+  assert.equal(hoveredPeakSpec.isPulsingTrendLine, true);
+  assert.equal(hoveredPeakSpec.pulseDuration, '1.6s');
+  assert.ok(hoveredPeakSpec.pulseOuterRadiusTo > hoveredPeakSpec.pulseOuterRadiusFrom);
+  assert.equal(hoveredPeakSpec.pulseOuterRadiusValues, '8.2;13.8;8.2');
+  assert.equal(hoveredPeakSpec.lineStrokeWidthValues, '2.5;3.35;2.5');
+
+  const unhoveredPeakSpec = getMoodPeakHoverPulseSpec({
+    isPeak: true,
+    isPrimaryPeak: true,
+    isHovered: false,
+    isLineHoveredPeak: false,
+    baseStrokeWidth: 2.5,
+  });
+  assert.equal(unhoveredPeakSpec.isPulsingPeak, false);
+  assert.equal(unhoveredPeakSpec.isPulsingTrendLine, false);
+
+  const hoveredNonPeakSpec = getMoodPeakHoverPulseSpec({
+    isPeak: false,
+    isPrimaryPeak: false,
+    isHovered: true,
+    isLineHoveredPeak: false,
+    baseStrokeWidth: 1.95,
+  });
+  assert.equal(hoveredNonPeakSpec.isPulsingPeak, false);
+  assert.equal(hoveredNonPeakSpec.isPulsingTrendLine, false);
+});
+
 
 

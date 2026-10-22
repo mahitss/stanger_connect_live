@@ -13,6 +13,7 @@ import {
   buildMostPopularMoodPeakAnnotation,
   computeMoodPairComparison,
   isMoodTrendPeakBucket,
+  getMoodPeakHoverPulseSpec,
   formatMoodTrendPointTooltip,
   filterMoodTrendByRangeHours,
   buildPersonalMoodHistoryCsv,
@@ -1083,11 +1084,28 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                 );
               })()}
 
-            {/* Visible Moods Polylines (drawn in reverse so #1 / Mood A is in foreground) */}
+            {/* Visible Moods Polylines (drawn in reverse so #1 / Mood A is in foreground, with gentle pulse when a peak marker on that line is hovered) */}
             {visibleRenderIndices.map((rankIdx) => {
               const moodStat = activeChartMoods[rankIdx];
               if (!moodStat) return null;
               const strokeColor = lineColors[rankIdx];
+              const baseStrokeWidth = rankIdx === 0 ? 2.5 : 1.95;
+              const isLineHoveredPeak = Boolean(
+                hoveredPoint &&
+                  hoveredPoint.rankIdx === rankIdx &&
+                  isMoodTrendPeakBucket(
+                    trendPeaks,
+                    rankIdx,
+                    hoveredPoint.bucketIdx
+                  )
+              );
+              const linePulseSpec = getMoodPeakHoverPulseSpec({
+                isPeak: isLineHoveredPeak,
+                isPrimaryPeak: rankIdx === 0,
+                isHovered: isLineHoveredPeak,
+                isLineHoveredPeak,
+                baseStrokeWidth,
+              });
               const pointsStr = trendBuckets
                 .map((b, bIdx) => {
                   const val = b.valuesByMood[moodStat.mood] ?? 0;
@@ -1096,16 +1114,53 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                 .join(' ');
 
               return (
-                <polyline
-                  key={`line-${moodStat.mood}`}
-                  fill="none"
-                  stroke={strokeColor}
-                  strokeWidth={rankIdx === 0 ? '2.5' : '1.95'}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  points={pointsStr}
-                  data-testid={`popular-mood-trend-line-${rankIdx + 1}`}
-                />
+                <g key={`line-group-${moodStat.mood}`}>
+                  {linePulseSpec.isPulsingTrendLine && (
+                    <polyline
+                      fill="none"
+                      stroke={strokeColor}
+                      strokeWidth={baseStrokeWidth + 3.2}
+                      strokeOpacity="0.28"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      points={pointsStr}
+                      pointerEvents="none"
+                      data-testid={`popular-mood-trend-line-pulse-${rankIdx + 1}`}
+                    >
+                      <animate
+                        attributeName="stroke-opacity"
+                        values={linePulseSpec.lineGlowOpacityValues}
+                        dur={linePulseSpec.pulseDuration}
+                        repeatCount="indefinite"
+                      />
+                      <animate
+                        attributeName="stroke-width"
+                        values={`${baseStrokeWidth + 1.8};${baseStrokeWidth + 4.4};${baseStrokeWidth + 1.8}`}
+                        dur={linePulseSpec.pulseDuration}
+                        repeatCount="indefinite"
+                      />
+                    </polyline>
+                  )}
+                  <polyline
+                    fill="none"
+                    stroke={strokeColor}
+                    strokeWidth={String(baseStrokeWidth)}
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    points={pointsStr}
+                    data-pulsing={linePulseSpec.isPulsingTrendLine ? 'true' : 'false'}
+                    data-testid={`popular-mood-trend-line-${rankIdx + 1}`}
+                  >
+                    {linePulseSpec.isPulsingTrendLine && (
+                      <animate
+                        attributeName="stroke-width"
+                        values={linePulseSpec.lineStrokeWidthValues}
+                        dur={linePulseSpec.pulseDuration}
+                        repeatCount="indefinite"
+                      />
+                    )}
+                  </polyline>
+                </g>
               );
             })}
 
@@ -1127,6 +1182,12 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                 const isHovered =
                   hoveredPoint?.rankIdx === rankIdx &&
                   hoveredPoint?.bucketIdx === bIdx;
+                const pulseSpec = getMoodPeakHoverPulseSpec({
+                  isPeak,
+                  isPrimaryPeak,
+                  isHovered,
+                  isLineHoveredPeak: isPeak && isHovered,
+                });
                 const ptTooltip = formatMoodTrendPointTooltip({
                   moodStat,
                   bucket: b,
@@ -1153,8 +1214,42 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                     onMouseLeave={handleDeactivatePoint}
                     onFocus={handleActivatePoint}
                     onBlur={handleDeactivatePoint}
+                    data-pulsing-peak={pulseSpec.isPulsingPeak ? 'true' : 'false'}
                     className="cursor-pointer"
                   >
+                    {pulseSpec.isPulsingPeak && (
+                      <circle
+                        cx={cx}
+                        cy={cy}
+                        r={pulseSpec.pulseOuterRadiusFrom}
+                        fill={strokeColor}
+                        fillOpacity="0.14"
+                        stroke={strokeColor}
+                        strokeOpacity="0.75"
+                        strokeWidth="1.5"
+                        pointerEvents="none"
+                        data-testid={`popular-mood-trend-peak-pulse-ring-${rankIdx + 1}-${bIdx}`}
+                      >
+                        <animate
+                          attributeName="r"
+                          values={pulseSpec.pulseOuterRadiusValues}
+                          dur={pulseSpec.pulseDuration}
+                          repeatCount="indefinite"
+                        />
+                        <animate
+                          attributeName="stroke-opacity"
+                          values={pulseSpec.pulseOuterOpacityValues}
+                          dur={pulseSpec.pulseDuration}
+                          repeatCount="indefinite"
+                        />
+                        <animate
+                          attributeName="fill-opacity"
+                          values="0.22;0.03;0.22"
+                          dur={pulseSpec.pulseDuration}
+                          repeatCount="indefinite"
+                        />
+                      </circle>
+                    )}
                     {isPeak && (
                       <circle
                         cx={cx}
@@ -1162,14 +1257,38 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                         r={isPrimaryPeak ? 8.2 : 7.2}
                         fill="none"
                         stroke={strokeColor}
-                        strokeOpacity={isPrimaryPeak ? '0.8' : '0.55'}
+                        strokeOpacity={
+                          pulseSpec.isPulsingPeak
+                            ? '0.95'
+                            : isPrimaryPeak
+                            ? '0.8'
+                            : '0.55'
+                        }
                         strokeDasharray="2.5 2"
-                        strokeWidth={isPrimaryPeak ? '1.6' : '1.3'}
+                        strokeWidth={
+                          pulseSpec.isPulsingPeak
+                            ? '1.9'
+                            : isPrimaryPeak
+                            ? '1.6'
+                            : '1.3'
+                        }
                         pointerEvents="none"
+                        data-pulsing={pulseSpec.isPulsingPeak ? 'true' : 'false'}
                         data-testid={`popular-mood-trend-peak-marker-${rankIdx + 1}-${bIdx}`}
-                      />
+                      >
+                        {pulseSpec.isPulsingPeak && (
+                          <animate
+                            attributeName="r"
+                            values={
+                              isPrimaryPeak ? '8.2;10.4;8.2' : '7.2;9.2;7.2'
+                            }
+                            dur={pulseSpec.pulseDuration}
+                            repeatCount="indefinite"
+                          />
+                        )}
+                      </circle>
                     )}
-                    {isHovered && (
+                    {isHovered && !isPeak && (
                       <circle
                         cx={cx}
                         cy={cy}
@@ -1206,8 +1325,17 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                       }
                       onMouseEnter={handleActivatePoint}
                       onMouseLeave={handleDeactivatePoint}
+                      data-pulsing={pulseSpec.isPulsingPeak ? 'true' : 'false'}
                       data-testid={`popular-mood-trend-marker-${rankIdx + 1}-${bIdx}`}
                     >
+                      {pulseSpec.isPulsingPeak && (
+                        <animate
+                          attributeName="r"
+                          values={pulseSpec.pulseInnerRadiusValues}
+                          dur={pulseSpec.pulseDuration}
+                          repeatCount="indefinite"
+                        />
+                      )}
                       <title>{`#${ptTooltip.rank} ${ptTooltip.mood}${ptTooltip.isPeak ? ' (PEAK)' : ''} · ${ptTooltip.countLabel} · ${ptTooltip.timestampLabel}`}</title>
                     </circle>
                     {isPeak && (
@@ -1217,6 +1345,14 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                         pointerEvents="none"
                       />
                     )}
+                    {/* Topmost stable hover hit target so gentle pulse expansion never causes hover flicker */}
+                    <circle
+                      cx={cx}
+                      cy={cy}
+                      r={11}
+                      fill="transparent"
+                      data-testid={`popular-mood-trend-hit-${rankIdx + 1}-${bIdx}`}
+                    />
                   </g>
                 );
               });

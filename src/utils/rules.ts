@@ -1062,6 +1062,61 @@ export function isMoodTrendPeakBucket(
   return info.peakBucketIndices.includes(bucketIdx);
 }
 
+export interface MoodPeakHoverPulseSpec {
+  isPulsingPeak: boolean;
+  isPulsingTrendLine: boolean;
+  pulseDuration: string;
+  pulseOuterRadiusFrom: number;
+  pulseOuterRadiusTo: number;
+  pulseOuterRadiusValues: string;
+  pulseOuterOpacityValues: string;
+  pulseInnerRadiusValues: string;
+  lineStrokeWidthValues: string;
+  lineGlowOpacityValues: string;
+}
+
+export function getMoodPeakHoverPulseSpec(params: {
+  isPeak: boolean;
+  isPrimaryPeak?: boolean;
+  isHovered: boolean;
+  isLineHoveredPeak?: boolean;
+  baseStrokeWidth?: number;
+}): MoodPeakHoverPulseSpec {
+  const isPulsingPeak = Boolean(params.isPeak && params.isHovered);
+  const isPulsingTrendLine = Boolean(params.isLineHoveredPeak);
+  const baseWidth =
+    typeof params.baseStrokeWidth === 'number' && params.baseStrokeWidth > 0
+      ? params.baseStrokeWidth
+      : 2.2;
+  const peakWidth = Number((baseWidth + 0.85).toFixed(2));
+
+  const fromR = params.isPrimaryPeak ? 8.2 : 7.2;
+  const toR = params.isPrimaryPeak ? 13.8 : 12.4;
+  const midR = Number(((fromR + toR) / 2).toFixed(1));
+
+  return {
+    isPulsingPeak,
+    isPulsingTrendLine,
+    pulseDuration: '1.6s',
+    pulseOuterRadiusFrom: fromR,
+    pulseOuterRadiusTo: toR,
+    pulseOuterRadiusValues: isPulsingPeak
+      ? `${fromR};${toR};${fromR}`
+      : `${fromR}`,
+    pulseOuterOpacityValues: isPulsingPeak ? '0.82;0.12;0.82' : '0.75',
+    pulseInnerRadiusValues: isPulsingPeak
+      ? params.isPrimaryPeak
+        ? '5.4;6.5;5.4'
+        : '5.1;6.1;5.1'
+      : `${midR}`,
+    lineStrokeWidthValues: isPulsingTrendLine
+      ? `${baseWidth};${peakWidth};${baseWidth}`
+      : `${baseWidth}`,
+    lineGlowOpacityValues: isPulsingTrendLine ? '0.38;0.1;0.38' : '0',
+  };
+}
+
+
 export type MoodTrendChartViewMode = 'top3' | 'compare';
 
 export interface MoodPairComparisonBucketDelta {
