@@ -14,6 +14,10 @@ import {
   toggleAmbientWorkspaceMute,
   getEffectiveAmbientGain,
   formatAmbientWorkspaceStatus,
+  UiSoundEffectPreferences,
+  DEFAULT_UI_SOUND_PREFERENCES,
+  isStudyRoomAllAudioMuted,
+  toggleStudyRoomAllAudioMute,
   detectSecurityThreat,
   sanitizeSafeText,
   formatDateKey,
@@ -99,6 +103,8 @@ interface StudyRoomViewProps {
   dailyTargetMinutes?: number;
   todayFocusMinutes?: number;
   onLogTopicFocusSession?: (topic: string, roomCode: string, minutes: number) => void;
+  uiSoundPrefs?: UiSoundEffectPreferences;
+  onUpdateUiSoundPrefs?: (nextPrefs: UiSoundEffectPreferences) => void;
 }
 
 const STUDY_MODULES = [
@@ -143,6 +149,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   dailyTargetMinutes = 120,
   todayFocusMinutes = 65,
   onLogTopicFocusSession,
+  uiSoundPrefs,
+  onUpdateUiSoundPrefs,
 }) => {
   const [durationMinutes, setDurationMinutes] = useState(25);
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
@@ -186,6 +194,39 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     }
     return DEFAULT_AMBIENT_WORKSPACE_STATE;
   });
+
+  // System & UI Sound Effects State (synced with Privacy Settings without needing to open it)
+  const [localUiSoundPrefs, setLocalUiSoundPrefs] = useState<UiSoundEffectPreferences>(() => {
+    if (uiSoundPrefs) return uiSoundPrefs;
+    try {
+      const saved = localStorage.getItem('mr_stranger_ui_sound_prefs_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.enabled === 'boolean') {
+          return {
+            ...DEFAULT_UI_SOUND_PREFERENCES,
+            ...parsed,
+          };
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return DEFAULT_UI_SOUND_PREFERENCES;
+  });
+
+  useEffect(() => {
+    if (uiSoundPrefs) {
+      setLocalUiSoundPrefs(uiSoundPrefs);
+    }
+  }, [uiSoundPrefs]);
+
+  const effectiveUiSoundPrefs = uiSoundPrefs ?? localUiSoundPrefs;
+  const isAllSoundsMuted = isStudyRoomAllAudioMuted(ambientState, effectiveUiSoundPrefs);
+
+  useEffect(() => {
+    soundEngine.setSystemSfxMuted(!effectiveUiSoundPrefs.enabled || isAllSoundsMuted);
+  }, [effectiveUiSoundPrefs.enabled, isAllSoundsMuted]);
 
   // Permission-First Camera & Mic Hardware Gate (NEVER open by default)
   const [hardwarePermissionGranted, setHardwarePermissionGranted] = useState(false);
@@ -339,6 +380,23 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     const nextState = toggleAmbientWorkspaceMute(ambientState);
     persistAmbientWorkspaceState(nextState);
     soundEngine.setVolume(getEffectiveAmbientGain(nextState));
+  };
+
+  const handleToggleAllStudyRoomSounds = () => {
+    const next = toggleStudyRoomAllAudioMute({
+      ambientState,
+      uiSoundPrefs: effectiveUiSoundPrefs,
+    });
+    persistAmbientWorkspaceState(next.ambientState);
+    setLocalUiSoundPrefs(next.uiSoundPrefs);
+    try {
+      localStorage.setItem('mr_stranger_ui_sound_prefs_v1', JSON.stringify(next.uiSoundPrefs));
+    } catch {
+      // ignore storage errors
+    }
+    onUpdateUiSoundPrefs?.(next.uiSoundPrefs);
+    soundEngine.setSystemSfxMuted(!next.uiSoundPrefs.enabled || next.isAllMuted);
+    soundEngine.setVolume(getEffectiveAmbientGain(next.ambientState));
   };
 
   const handleCopyInvite = async (kind: 'code' | 'link') => {
@@ -501,15 +559,56 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-5">
           <div className="space-y-1">
-            <h1 className="text-2xl font-bold tracking-tight text-white">
-              Study Mode & Live Study Room
-            </h1>
+            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+              <h1 className="text-2xl font-bold tracking-tight text-white">
+                Study Mode & Live Study Room
+              </h1>
+              <span aria-hidden="true" className="text-xs text-zinc-600">
+                ·
+              </span>
+              <span
+                data-testid="study-room-all-sounds-status"
+                className={`text-xs font-mono tabular-nums ${
+                  isAllSoundsMuted ? 'text-amber-400' : 'text-emerald-400'
+                }`}
+              >
+                {isAllSoundsMuted
+                  ? 'All System & Ambient Sounds Muted'
+                  : `System & Ambient Sounds Active (${effectiveVolumePercent}% Vol)`}
+              </span>
+            </div>
             <p className="text-sm text-zinc-400">
               Invite friends via room code or shareable link, synchronize focus timers, and toggle studio-synthesized ambient soundscapes.
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 max-w-full">
+            <button
+              type="button"
+              onClick={handleToggleAllStudyRoomSounds}
+              aria-pressed={isAllSoundsMuted}
+              aria-label={
+                isAllSoundsMuted
+                  ? 'Unmute all system and ambient sound effects'
+                  : 'Mute all system and ambient sound effects'
+              }
+              data-testid="study-room-mute-all-sounds-btn"
+              className={`px-3.5 py-2 text-xs font-semibold rounded-md border flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 ${
+                isAllSoundsMuted
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border-zinc-800'
+              }`}
+            >
+              {isAllSoundsMuted ? (
+                <VolumeX className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              ) : (
+                <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              )}
+              <span>
+                {isAllSoundsMuted ? 'Unmute All Sounds' : 'Mute All Sounds'}
+              </span>
+            </button>
+
             {isSeated ? (
               <button
                 type="button"
@@ -533,7 +632,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                     durationMinutes
                   )
                 }
-                className="px-4 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0"
+                className="px-4 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0 max-w-full truncate"
               >
                 Sit at Desk in {activeRoomCode}
               </button>

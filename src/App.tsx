@@ -3623,6 +3623,15 @@ export default function App() {
               dailyTargetMinutes={dailyTargetMinutes}
               todayFocusMinutes={dailyCompletedMinutes}
               onLogTopicFocusSession={handleLogTopicFocusSession}
+              uiSoundPrefs={uiSoundPrefs}
+              onUpdateUiSoundPrefs={(nextPrefs) => {
+                persistUiSoundPreferences(nextPrefs);
+                setLastSoundFeedback(
+                  nextPrefs.enabled
+                    ? 'System & ambient sounds active'
+                    : 'All system & ambient sounds muted from Study Room'
+                );
+              }}
             />
           )}
 

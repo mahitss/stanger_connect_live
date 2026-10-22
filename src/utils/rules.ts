@@ -290,6 +290,80 @@ export function toggleUiSoundEffects(
   };
 }
 
+export function isStudyRoomAllAudioMuted(
+  ambientState: AmbientWorkspaceState,
+  uiSoundPrefs: UiSoundEffectPreferences
+): boolean {
+  const ambientMuted =
+    Boolean(ambientState?.isMuted) ||
+    clampAmbientVolumePercent(ambientState?.volumePercent ?? 0) === 0;
+  const systemMuted = !uiSoundPrefs?.enabled;
+  return ambientMuted && systemMuted;
+}
+
+export function toggleStudyRoomAllAudioMute(params: {
+  ambientState: AmbientWorkspaceState;
+  uiSoundPrefs: UiSoundEffectPreferences;
+  forceMute?: boolean;
+}): {
+  ambientState: AmbientWorkspaceState;
+  uiSoundPrefs: UiSoundEffectPreferences;
+  isAllMuted: boolean;
+  statusLabel: string;
+} {
+  const currentlyAllMuted = isStudyRoomAllAudioMuted(
+    params.ambientState,
+    params.uiSoundPrefs
+  );
+  const targetMute =
+    typeof params.forceMute === 'boolean' ? params.forceMute : !currentlyAllMuted;
+
+  if (targetMute) {
+    const preservedNonZero =
+      params.ambientState.volumePercent > 0
+        ? clampAmbientVolumePercent(params.ambientState.volumePercent)
+        : params.ambientState.lastNonZeroVolumePercent > 0
+        ? clampAmbientVolumePercent(params.ambientState.lastNonZeroVolumePercent)
+        : 65;
+
+    const nextAmbient: AmbientWorkspaceState = {
+      ...params.ambientState,
+      isMuted: true,
+      lastNonZeroVolumePercent: preservedNonZero,
+    };
+    const nextUiPrefs = toggleUiSoundEffects(params.uiSoundPrefs, false);
+    return {
+      ambientState: nextAmbient,
+      uiSoundPrefs: nextUiPrefs,
+      isAllMuted: true,
+      statusLabel: 'All System & Ambient Sounds Muted',
+    };
+  }
+
+  const restoredVolume =
+    params.ambientState.lastNonZeroVolumePercent > 0
+      ? clampAmbientVolumePercent(params.ambientState.lastNonZeroVolumePercent)
+      : params.ambientState.volumePercent > 0
+      ? clampAmbientVolumePercent(params.ambientState.volumePercent)
+      : 65;
+
+  const nextAmbient: AmbientWorkspaceState = {
+    ...params.ambientState,
+    volumePercent: restoredVolume,
+    isMuted: false,
+    lastNonZeroVolumePercent: restoredVolume,
+  };
+  const nextUiPrefs = toggleUiSoundEffects(params.uiSoundPrefs, true);
+
+  return {
+    ambientState: nextAmbient,
+    uiSoundPrefs: nextUiPrefs,
+    isAllMuted: false,
+    statusLabel: 'System & Ambient Sounds Active',
+  };
+}
+
+
 export function getUiSoundChimeSpec(
   eventType: UiSoundAlertEvent,
   isAppInBackground = false,

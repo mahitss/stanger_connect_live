@@ -19,6 +19,7 @@ class SoundscapeEngine {
   private activeInterval: number | null = null;
   private currentMode: AmbientSoundscapeId = 'off';
   private volume = 0.65;
+  private systemSfxMuted = false;
 
   private ensureContext(): AudioContext | null {
     if (typeof window === 'undefined') return null;
@@ -49,6 +50,14 @@ class SoundscapeEngine {
 
   public getVolume(): number {
     return this.volume;
+  }
+
+  public setSystemSfxMuted(muted: boolean): void {
+    this.systemSfxMuted = Boolean(muted);
+  }
+
+  public isSystemSfxMuted(): boolean {
+    return this.systemSfxMuted;
   }
 
   public stopAmbient(): void {
@@ -255,6 +264,7 @@ class SoundscapeEngine {
   }
 
   public playSfx(type: 'jump' | 'coin' | 'hit' | 'launch' | 'clear' | 'chime'): void {
+    if (this.systemSfxMuted || this.volume <= 0) return;
     const ctx = this.ensureContext();
     if (!ctx || !this.masterGain) return;
     const now = ctx.currentTime;

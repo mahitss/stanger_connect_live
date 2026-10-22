@@ -39,6 +39,8 @@ import {
   buildWeeklyActivityCsvExport,
   DEFAULT_UI_SOUND_PREFERENCES,
   toggleUiSoundEffects,
+  isStudyRoomAllAudioMuted,
+  toggleStudyRoomAllAudioMute,
   getUiSoundChimeSpec,
   shouldPlayUiNotificationSound,
   getOnlinePeerFocusStatus,
@@ -1409,5 +1411,50 @@ test('buildWeeklyActivityCsvExport formats 7-day weekly activity history into do
   assert.ok(lines[7].startsWith('2026-10-22,'));
   assert.ok(lines[7].includes(',135,120,113,Yes,95,Yes'));
 });
+
+test('StudyRoomView quick mute/unmute all sounds button toggles both system UI sound effects and ambient soundscapes simultaneously', () => {
+  const activeAmbient = {
+    ...DEFAULT_AMBIENT_WORKSPACE_STATE,
+    activeProfile: 'rainfall' as const,
+    volumePercent: 75,
+    isMuted: false,
+    lastNonZeroVolumePercent: 75,
+  };
+  const activeUiPrefs = {
+    ...DEFAULT_UI_SOUND_PREFERENCES,
+    enabled: true,
+  };
+
+  assert.equal(isStudyRoomAllAudioMuted(activeAmbient, activeUiPrefs), false);
+
+  // 1. Clicking Mute All Sounds mutes both ambient workspace audio and system UI sound effects
+  const mutedResult = toggleStudyRoomAllAudioMute({
+    ambientState: activeAmbient,
+    uiSoundPrefs: activeUiPrefs,
+  });
+  assert.equal(mutedResult.isAllMuted, true);
+  assert.equal(mutedResult.ambientState.isMuted, true);
+  assert.equal(mutedResult.ambientState.lastNonZeroVolumePercent, 75);
+  assert.equal(getEffectiveAmbientGain(mutedResult.ambientState), 0);
+  assert.equal(mutedResult.uiSoundPrefs.enabled, false);
+  assert.equal(mutedResult.statusLabel, 'All System & Ambient Sounds Muted');
+  assert.equal(
+    isStudyRoomAllAudioMuted(mutedResult.ambientState, mutedResult.uiSoundPrefs),
+    true
+  );
+
+  // 2. Clicking Unmute All Sounds restores both system UI sound effects and the preserved ambient volume (75%)
+  const unmutedResult = toggleStudyRoomAllAudioMute({
+    ambientState: mutedResult.ambientState,
+    uiSoundPrefs: mutedResult.uiSoundPrefs,
+  });
+  assert.equal(unmutedResult.isAllMuted, false);
+  assert.equal(unmutedResult.ambientState.isMuted, false);
+  assert.equal(unmutedResult.ambientState.volumePercent, 75);
+  assert.equal(getEffectiveAmbientGain(unmutedResult.ambientState), 0.75);
+  assert.equal(unmutedResult.uiSoundPrefs.enabled, true);
+  assert.equal(unmutedResult.statusLabel, 'System & Ambient Sounds Active');
+});
+
 
 
