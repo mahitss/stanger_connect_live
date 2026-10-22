@@ -6,7 +6,14 @@ import {
   buildStudyRoomInviteUrl,
   AMBIENT_SOUNDSCAPES,
   AmbientPresetId,
-  toggleAmbientSoundscape,
+  AmbientWorkspaceState,
+  DEFAULT_AMBIENT_WORKSPACE_STATE,
+  AMBIENT_VOLUME_PRESETS,
+  selectAmbientWorkspaceProfile,
+  updateAmbientWorkspaceVolume,
+  toggleAmbientWorkspaceMute,
+  getEffectiveAmbientGain,
+  formatAmbientWorkspaceStatus,
   detectSecurityThreat,
   sanitizeSafeText,
 } from '../utils/rules';
@@ -126,9 +133,30 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   const [secondsLeft, setSecondsLeft] = useState(25 * 60);
   const [isRunning, setIsRunning] = useState(false);
 
-  // Ambient Soundscape State (Rainfall, Coffee Shop, White Noise, Binaural, Lo-Fi)
-  const [ambientMode, setAmbientMode] = useState<AmbientPresetId>('off');
-  const [masterVolume, setMasterVolume] = useState<number>(65);
+  // Personal Workspace Ambient Soundscapes State (Rain, Cafe, White Noise, Binaural, Lo-Fi)
+  const [ambientState, setAmbientState] = useState<AmbientWorkspaceState>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_ambient_workspace_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed.volumePercent === 'number') {
+          return {
+            activeProfile: 'off',
+            volumePercent: Math.min(100, Math.max(0, Math.round(parsed.volumePercent))),
+            isMuted: Boolean(parsed.isMuted),
+            lastNonZeroVolumePercent:
+              typeof parsed.lastNonZeroVolumePercent === 'number' &&
+              parsed.lastNonZeroVolumePercent > 0
+                ? Math.min(100, Math.max(1, Math.round(parsed.lastNonZeroVolumePercent)))
+                : 65,
+          };
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return DEFAULT_AMBIENT_WORKSPACE_STATE;
+  });
 
   // Permission-First Camera & Mic Hardware Gate (NEVER open by default)
   const [hardwarePermissionGranted, setHardwarePermissionGranted] = useState(false);
@@ -256,15 +284,32 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setIsRunning(false);
   };
 
+  const persistAmbientWorkspaceState = (next: AmbientWorkspaceState) => {
+    setAmbientState(next);
+    try {
+      localStorage.setItem('mr_stranger_ambient_workspace_v1', JSON.stringify(next));
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   const handleToggleSoundscape = (clickedId: AmbientPresetId) => {
-    const nextMode = toggleAmbientSoundscape(ambientMode, clickedId);
-    setAmbientMode(nextMode);
-    soundEngine.startAmbient(nextMode);
+    const nextState = selectAmbientWorkspaceProfile(ambientState, clickedId);
+    persistAmbientWorkspaceState(nextState);
+    soundEngine.setVolume(getEffectiveAmbientGain(nextState));
+    soundEngine.startAmbient(nextState.activeProfile);
   };
 
   const handleVolumeChange = (nextPercent: number) => {
-    setMasterVolume(nextPercent);
-    soundEngine.setVolume(nextPercent / 100);
+    const nextState = updateAmbientWorkspaceVolume(ambientState, nextPercent);
+    persistAmbientWorkspaceState(nextState);
+    soundEngine.setVolume(getEffectiveAmbientGain(nextState));
+  };
+
+  const handleToggleMuteWorkspaceAudio = () => {
+    const nextState = toggleAmbientWorkspaceMute(ambientState);
+    persistAmbientWorkspaceState(nextState);
+    soundEngine.setVolume(getEffectiveAmbientGain(nextState));
   };
 
   const handleCopyInvite = async (kind: 'code' | 'link') => {
@@ -373,6 +418,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     (c) => !c.roomCode || c.roomCode === activeRoomCode
   );
   const isSeated = desksInCurrentRoom.some((d) => d.uid === currentUid);
+  const ambientMode = ambientState.activeProfile;
+  const effectiveVolumePercent = ambientState.isMuted ? 0 : ambientState.volumePercent;
   const activePresetMeta = AMBIENT_SOUNDSCAPES.find((s) => s.id === ambientMode);
 
   return (
@@ -576,64 +623,154 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         </div>
       </div>
 
-      {/* Dedicated Ambient Focus Soundscape Mixer (Rainfall, Coffee Shop, White Noise, Binaural, Lo-Fi) */}
+      {/* Dedicated Ambient Soundscapes Panel (Rain, Cafe, White Noise, Binaural, Lo-Fi) */}
       <div
         className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-5"
         data-testid="ambient-soundscape-panel"
+        aria-label="Ambient Soundscapes"
       >
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-4">
           <div className="space-y-1">
-            <div className="flex items-center gap-2.5">
-              <h2 className="text-base font-bold text-white">
-                Ambient Focus Soundscapes
+            <div className="flex flex-wrap items-center gap-2.5">
+              <h2
+                className="text-base font-bold text-white"
+                data-testid="ambient-soundscapes-heading"
+              >
+                Ambient Soundscapes
               </h2>
-              <span className="text-xs text-zinc-500">·</span>
+              <span aria-hidden="true" className="text-xs text-zinc-500">
+                ·
+              </span>
+              <span className="text-xs font-mono text-zinc-400">
+                Personal Workspace Audio
+              </span>
+              <span aria-hidden="true" className="text-xs text-zinc-500">
+                ·
+              </span>
               <span
                 className="text-xs font-mono tabular-nums text-emerald-400"
                 data-testid="active-soundscape-status"
               >
-                {activePresetMeta
-                  ? `Playing: ${activePresetMeta.label} (${activePresetMeta.frequencyProfile})`
-                  : 'Standby · Click any soundscape to toggle'}
+                {formatAmbientWorkspaceStatus(ambientState)}
               </span>
             </div>
             <p className="text-xs text-zinc-400">
-              Toggle real-time synthesized Rainfall, Coffee Shop, White Noise, 432Hz Alpha Focus, or Lo-Fi Chords while studying.
+              Toggle between synthesized sound profiles (Rain, Cafe, White Noise, 432Hz Alpha Focus, or Lo-Fi Chords) and adjust the background volume for your personal workspace.
             </p>
           </div>
 
-          {/* Master Gain Slider & Mute Toggle */}
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2.5">
-              <Volume2 className="w-4 h-4 text-zinc-400" />
-              <label htmlFor="soundscape-volume" className="text-xs text-zinc-400 font-mono tabular-nums">
-                Gain {masterVolume}%
-              </label>
-              <input
-                id="soundscape-volume"
-                type="range"
-                min={0}
-                max={100}
-                value={masterVolume}
-                onChange={(e) => handleVolumeChange(Number(e.target.value))}
-                aria-label="Ambient Soundscape Master Volume"
-                className="w-24 accent-white cursor-pointer"
-              />
-            </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleToggleMuteWorkspaceAudio}
+              aria-pressed={ambientState.isMuted}
+              data-testid="ambient-mute-toggle-btn"
+              className={`px-3 py-1.5 text-xs font-semibold rounded-md border flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 ${
+                ambientState.isMuted
+                  ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-800'
+              }`}
+            >
+              {ambientState.isMuted ? (
+                <VolumeX className="w-3.5 h-3.5 shrink-0" />
+              ) : (
+                <Volume2 className="w-3.5 h-3.5 shrink-0" />
+              )}
+              <span>{ambientState.isMuted ? 'Unmute Workspace' : 'Mute Volume'}</span>
+            </button>
 
             <button
               type="button"
               onClick={() => handleToggleSoundscape('off')}
               disabled={ambientMode === 'off'}
+              data-testid="ambient-stop-btn"
               className="px-3 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-200 border border-zinc-800 rounded-md flex items-center gap-1.5 whitespace-nowrap shrink-0"
             >
-              <VolumeX className="w-3.5 h-3.5" />
-              <span>Mute Soundscape</span>
+              <span>Turn Off Soundscape</span>
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        {/* Personal Workspace Background Volume Controls */}
+        <div
+          className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 flex flex-wrap items-center justify-between gap-4"
+          data-testid="ambient-volume-controls"
+        >
+          <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[240px]">
+            <div className="flex items-center gap-2">
+              {ambientState.isMuted || effectiveVolumePercent === 0 ? (
+                <VolumeX className="w-4 h-4 text-zinc-500 shrink-0" />
+              ) : (
+                <Volume2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              )}
+              <label
+                htmlFor="soundscape-volume"
+                className="text-xs font-semibold text-zinc-200 whitespace-nowrap"
+              >
+                Background Volume
+              </label>
+            </div>
+
+            <input
+              id="soundscape-volume"
+              type="range"
+              min={0}
+              max={100}
+              value={effectiveVolumePercent}
+              onChange={(e) => handleVolumeChange(Number(e.target.value))}
+              aria-label="Personal Workspace Background Volume"
+              data-testid="ambient-volume-slider"
+              className="w-36 sm:w-48 accent-white cursor-pointer"
+            />
+
+            <span
+              className="text-xs font-mono font-bold tabular-nums text-white min-w-[42px]"
+              data-testid="ambient-volume-value"
+            >
+              {effectiveVolumePercent}%
+            </span>
+
+            {activePresetMeta && (
+              <span className="text-xs font-mono text-zinc-400">
+                Active Profile: <strong className="text-white">{activePresetMeta.label}</strong> ({activePresetMeta.frequencyProfile})
+              </span>
+            )}
+          </div>
+
+          <div
+            className="flex flex-wrap items-center gap-1.5"
+            role="group"
+            aria-label="Background volume presets"
+          >
+            <span className="text-xs text-zinc-500 mr-1">Levels:</span>
+            {AMBIENT_VOLUME_PRESETS.map((preset) => {
+              const isCurrentLevel =
+                !ambientState.isMuted && ambientState.volumePercent === preset.percent;
+              return (
+                <button
+                  key={preset.percent}
+                  type="button"
+                  onClick={() => handleVolumeChange(preset.percent)}
+                  data-testid={`ambient-volume-preset-${preset.percent}`}
+                  className={`px-2.5 py-1 text-xs font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
+                    isCurrentLevel
+                      ? 'bg-white text-black border-white font-bold'
+                      : 'bg-[#0A0A0C] text-zinc-400 border-zinc-800 hover:text-white'
+                  }`}
+                >
+                  {preset.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Sound Profile Selector Cards (Rain, Cafe, White Noise, 432Hz Alpha Focus, Lo-Fi Study Chords) */}
+        <div
+          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
+          role="group"
+          aria-label="Ambient sound profiles"
+        >
           {AMBIENT_SOUNDSCAPES.map((preset) => {
             const isSelected = ambientMode === preset.id;
             return (
@@ -641,6 +778,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 key={preset.id}
                 type="button"
                 aria-pressed={isSelected}
+                data-testid={`ambient-profile-${preset.id}`}
                 onClick={() => handleToggleSoundscape(preset.id)}
                 className={`p-4 rounded-md border text-left transition-colors flex flex-col justify-between gap-3 ${
                   isSelected
@@ -672,13 +810,16 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 </div>
 
                 <div
-                  className={`pt-2 border-t text-[10px] font-mono tabular-nums ${
+                  className={`pt-2 border-t text-[10px] font-mono tabular-nums flex items-center justify-between gap-1 ${
                     isSelected
                       ? 'border-zinc-300 text-zinc-900'
                       : 'border-zinc-900 text-zinc-500'
                   }`}
                 >
-                  {preset.frequencyProfile}
+                  <span className="truncate">{preset.frequencyProfile}</span>
+                  {isSelected && (
+                    <span className="font-bold shrink-0">{effectiveVolumePercent}%</span>
+                  )}
                 </div>
               </button>
             );

@@ -14,6 +14,14 @@ import {
   deriveE2eeFingerprint,
   AMBIENT_SOUNDSCAPES,
   toggleAmbientSoundscape,
+  DEFAULT_AMBIENT_WORKSPACE_STATE,
+  AMBIENT_VOLUME_PRESETS,
+  resolveAmbientProfileId,
+  selectAmbientWorkspaceProfile,
+  updateAmbientWorkspaceVolume,
+  toggleAmbientWorkspaceMute,
+  getEffectiveAmbientGain,
+  formatAmbientWorkspaceStatus,
   computeProductivityGoalProgress,
   detectSecurityThreat,
   sanitizeSafeText,
@@ -1235,6 +1243,71 @@ test('Weekly Activity Overview JSON export builds valid formatted JSON with 7-da
   assert.equal(parsed.days[6].focusMinutes, 135);
 });
 
+test('Ambient Soundscapes panel toggles between Rain, Cafe, and White Noise profiles and adjusts personal workspace background volume', () => {
+  const labels = AMBIENT_SOUNDSCAPES.map((s) => s.label);
+  assert.ok(labels.includes('Rain'));
+  assert.ok(labels.includes('Cafe'));
+  assert.ok(labels.includes('White Noise'));
+  assert.equal(AMBIENT_VOLUME_PRESETS.length, 4);
 
+  assert.equal(resolveAmbientProfileId('Rain'), 'rainfall');
+  assert.equal(resolveAmbientProfileId('Cafe'), 'coffeeshop');
+  assert.equal(resolveAmbientProfileId('White Noise'), 'whitenoise');
 
+  let state = DEFAULT_AMBIENT_WORKSPACE_STATE;
+  assert.equal(state.activeProfile, 'off');
+  assert.equal(state.volumePercent, 65);
+  assert.equal(getEffectiveAmbientGain(state), 0);
+  assert.equal(formatAmbientWorkspaceStatus(state), 'Standby · Background Volume 65%');
 
+  // Toggle Rain on
+  state = selectAmbientWorkspaceProfile(state, 'Rain');
+  assert.equal(state.activeProfile, 'rainfall');
+  assert.equal(getEffectiveAmbientGain(state), 0.65);
+  assert.equal(
+    formatAmbientWorkspaceStatus(state),
+    'Playing: Rain · 65% Background Volume'
+  );
+
+  // Switch directly to Cafe
+  state = selectAmbientWorkspaceProfile(state, 'Cafe');
+  assert.equal(state.activeProfile, 'coffeeshop');
+  assert.equal(
+    formatAmbientWorkspaceStatus(state),
+    'Playing: Cafe · 65% Background Volume'
+  );
+
+  // Adjust personal workspace background volume to 80%
+  state = updateAmbientWorkspaceVolume(state, 80);
+  assert.equal(state.volumePercent, 80);
+  assert.equal(state.lastNonZeroVolumePercent, 80);
+  assert.equal(getEffectiveAmbientGain(state), 0.8);
+  assert.equal(
+    formatAmbientWorkspaceStatus(state),
+    'Playing: Cafe · 80% Background Volume'
+  );
+
+  // Mute and verify effective gain drops to 0 while remembering 80%
+  state = toggleAmbientWorkspaceMute(state);
+  assert.equal(state.isMuted, true);
+  assert.equal(getEffectiveAmbientGain(state), 0);
+  assert.equal(
+    formatAmbientWorkspaceStatus(state),
+    'Playing: Cafe (Muted · 0% Volume)'
+  );
+
+  // Selecting White Noise while muted restores last non-zero volume (80%)
+  state = selectAmbientWorkspaceProfile(state, 'White Noise');
+  assert.equal(state.activeProfile, 'whitenoise');
+  assert.equal(state.isMuted, false);
+  assert.equal(state.volumePercent, 80);
+  assert.equal(
+    formatAmbientWorkspaceStatus(state),
+    'Playing: White Noise · 80% Background Volume'
+  );
+
+  // Clicking White Noise again toggles it off
+  state = selectAmbientWorkspaceProfile(state, 'whitenoise');
+  assert.equal(state.activeProfile, 'off');
+  assert.equal(getEffectiveAmbientGain(state), 0);
+});

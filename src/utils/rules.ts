@@ -25,6 +25,7 @@ export type AmbientPresetId =
 export interface AmbientPresetMeta {
   id: Exclude<AmbientPresetId, 'off'>;
   label: string;
+  shortLabel: string;
   subtitle: string;
   frequencyProfile: string;
   cadence: string;
@@ -33,21 +34,24 @@ export interface AmbientPresetMeta {
 export const AMBIENT_SOUNDSCAPES: AmbientPresetMeta[] = [
   {
     id: 'rainfall',
-    label: 'Rainfall',
-    subtitle: 'Steady warm rain bed with pattering window droplets',
+    label: 'Rain',
+    shortLabel: 'Rain',
+    subtitle: 'Steady warm rainfall bed with pattering window droplets',
     frequencyProfile: '120Hz – 920Hz Low-Pass Pink',
     cadence: 'Continuous Acoustic Bed',
   },
   {
     id: 'coffeeshop',
-    label: 'Coffee Shop',
-    subtitle: 'Warm café room murmur with subtle porcelain acoustics',
+    label: 'Cafe',
+    shortLabel: 'Cafe',
+    subtitle: 'Warm coffee shop murmur with subtle porcelain acoustics',
     frequencyProfile: '460Hz Band-Pass Room Envelope',
     cadence: 'Organic Room Cadence',
   },
   {
     id: 'whitenoise',
     label: 'White Noise',
+    shortLabel: 'White Noise',
     subtitle: 'Calibrated broadband masking to block external distractions',
     frequencyProfile: '20Hz – 4.2kHz Flat Mask',
     cadence: 'Zero-Variance Shield',
@@ -55,6 +59,7 @@ export const AMBIENT_SOUNDSCAPES: AmbientPresetMeta[] = [
   {
     id: 'binaural',
     label: '432Hz Alpha Focus',
+    shortLabel: 'Alpha Focus',
     subtitle: 'Phase-locked 8Hz alpha binaural harmonic carrier',
     frequencyProfile: '216Hz L / 224Hz R Sine',
     cadence: '8.0Hz Alpha Entrainment',
@@ -62,6 +67,7 @@ export const AMBIENT_SOUNDSCAPES: AmbientPresetMeta[] = [
   {
     id: 'lofi',
     label: 'Lo-Fi Study Chords',
+    shortLabel: 'Lo-Fi Chords',
     subtitle: 'Warm analog Cmaj7–Am7–Fmaj7–G6 harmonic progression',
     frequencyProfile: '174Hz – 493Hz Triangle Pad',
     cadence: '20 BPM Chord Cycle',
@@ -74,6 +80,168 @@ export function toggleAmbientSoundscape(
 ): AmbientPresetId {
   if (clicked === 'off') return 'off';
   return current === clicked ? 'off' : clicked;
+}
+
+export interface AmbientWorkspaceState {
+  activeProfile: AmbientPresetId;
+  volumePercent: number;
+  isMuted: boolean;
+  lastNonZeroVolumePercent: number;
+}
+
+export const DEFAULT_AMBIENT_WORKSPACE_STATE: AmbientWorkspaceState = {
+  activeProfile: 'off',
+  volumePercent: 65,
+  isMuted: false,
+  lastNonZeroVolumePercent: 65,
+};
+
+export const AMBIENT_VOLUME_PRESETS: readonly {
+  percent: number;
+  label: string;
+}[] = [
+  { percent: 25, label: '25% Subtle' },
+  { percent: 50, label: '50% Balanced' },
+  { percent: 75, label: '75% Immersive' },
+  { percent: 100, label: '100% Max' },
+];
+
+export function clampAmbientVolumePercent(rawVolume: number): number {
+  if (!Number.isFinite(rawVolume)) return 65;
+  return Math.min(100, Math.max(0, Math.round(rawVolume)));
+}
+
+export function resolveAmbientProfileId(input: string): AmbientPresetId {
+  const normalized = String(input || '')
+    .trim()
+    .toLowerCase();
+  if (normalized === 'rain' || normalized === 'rainfall') return 'rainfall';
+  if (
+    normalized === 'cafe' ||
+    normalized === 'café' ||
+    normalized === 'coffee shop' ||
+    normalized === 'coffeeshop'
+  ) {
+    return 'coffeeshop';
+  }
+  if (normalized === 'white noise' || normalized === 'whitenoise') {
+    return 'whitenoise';
+  }
+  if (
+    normalized === 'binaural' ||
+    normalized === 'alpha focus' ||
+    normalized === '432hz alpha focus'
+  ) {
+    return 'binaural';
+  }
+  if (
+    normalized === 'lofi' ||
+    normalized === 'lo-fi' ||
+    normalized === 'lo-fi chords' ||
+    normalized === 'lo-fi study chords'
+  ) {
+    return 'lofi';
+  }
+  return 'off';
+}
+
+export function selectAmbientWorkspaceProfile(
+  state: AmbientWorkspaceState,
+  profileInput: AmbientPresetId | string
+): AmbientWorkspaceState {
+  const resolved =
+    profileInput === 'off' ||
+    profileInput === 'rainfall' ||
+    profileInput === 'coffeeshop' ||
+    profileInput === 'whitenoise' ||
+    profileInput === 'binaural' ||
+    profileInput === 'lofi'
+      ? profileInput
+      : resolveAmbientProfileId(profileInput);
+
+  const nextProfile = toggleAmbientSoundscape(state.activeProfile, resolved);
+  const safeLastNonZero =
+    state.lastNonZeroVolumePercent > 0
+      ? clampAmbientVolumePercent(state.lastNonZeroVolumePercent)
+      : 65;
+
+  // If activating a sound profile while muted or at 0% volume, restore last non-zero volume
+  if (nextProfile !== 'off' && (state.isMuted || state.volumePercent === 0)) {
+    return {
+      activeProfile: nextProfile,
+      volumePercent: safeLastNonZero,
+      isMuted: false,
+      lastNonZeroVolumePercent: safeLastNonZero,
+    };
+  }
+
+  return {
+    ...state,
+    activeProfile: nextProfile,
+  };
+}
+
+export function updateAmbientWorkspaceVolume(
+  state: AmbientWorkspaceState,
+  rawVolume: number
+): AmbientWorkspaceState {
+  const clamped = clampAmbientVolumePercent(rawVolume);
+  if (clamped === 0) {
+    return {
+      ...state,
+      volumePercent: 0,
+      isMuted: true,
+    };
+  }
+  return {
+    ...state,
+    volumePercent: clamped,
+    isMuted: false,
+    lastNonZeroVolumePercent: clamped,
+  };
+}
+
+export function toggleAmbientWorkspaceMute(
+  state: AmbientWorkspaceState
+): AmbientWorkspaceState {
+  if (!state.isMuted && state.volumePercent > 0) {
+    return {
+      ...state,
+      isMuted: true,
+      lastNonZeroVolumePercent: state.volumePercent,
+    };
+  }
+  const restored =
+    state.lastNonZeroVolumePercent > 0
+      ? clampAmbientVolumePercent(state.lastNonZeroVolumePercent)
+      : 65;
+  return {
+    ...state,
+    volumePercent: restored,
+    isMuted: false,
+    lastNonZeroVolumePercent: restored,
+  };
+}
+
+export function getEffectiveAmbientGain(state: AmbientWorkspaceState): number {
+  if (state.activeProfile === 'off' || state.isMuted || state.volumePercent <= 0) {
+    return 0;
+  }
+  return Number((clampAmbientVolumePercent(state.volumePercent) / 100).toFixed(2));
+}
+
+export function formatAmbientWorkspaceStatus(
+  state: AmbientWorkspaceState
+): string {
+  const preset = AMBIENT_SOUNDSCAPES.find((p) => p.id === state.activeProfile);
+  const effectivePercent = state.isMuted ? 0 : clampAmbientVolumePercent(state.volumePercent);
+  if (!preset) {
+    return `Standby · Background Volume ${effectivePercent}%`;
+  }
+  if (state.isMuted || effectivePercent === 0) {
+    return `Playing: ${preset.label} (Muted · 0% Volume)`;
+  }
+  return `Playing: ${preset.label} · ${effectivePercent}% Background Volume`;
 }
 
 // --- Subtle UI Sound Effect Toggle for Incoming Messages & Connection Requests ---
