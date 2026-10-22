@@ -2158,6 +2158,95 @@ export function computeProductivityGoalProgress(
   };
 }
 
+export interface DailyGoalMomentShareSummary {
+  headline: string;
+  caption: string;
+  photoDataUrl: string;
+  progressPercent: number;
+  completedMinutes: number;
+  targetMinutes: number;
+  remainingMinutes: number;
+  isGoalReached: boolean;
+  streakCount: number;
+  participationPoints: number;
+  visibility: 'public' | 'connections';
+}
+
+export function buildDailyGoalShareSummary(params: {
+  displayName: string;
+  completedMinutes: number;
+  targetMinutes: number;
+  streakCount: number;
+  participationPoints?: number;
+  dateKey?: string;
+  visibility?: 'public' | 'connections';
+}): DailyGoalMomentShareSummary {
+  const cleanName =
+    sanitizeSafeText(params.displayName || 'Verified Scholar', 64) || 'Verified Scholar';
+  const progress = computeProductivityGoalProgress(
+    params.targetMinutes,
+    params.completedMinutes
+  );
+  const safeStreak = Math.max(1, Math.round(Number(params.streakCount) || 1));
+  const safePoints = Math.max(0, Math.round(Number(params.participationPoints) || 0));
+  const safeDate =
+    sanitizeSafeText(params.dateKey || formatDateKey(new Date()), 16) ||
+    formatDateKey(new Date());
+  const visibility: 'public' | 'connections' =
+    params.visibility === 'connections' ? 'connections' : 'public';
+
+  const statusTag = progress.isGoalReached
+    ? `Daily Goal Reached (${progress.completedMinutes}m / ${progress.targetMinutes}m)`
+    : `${progress.remainingMinutes}m remaining to reach ${progress.targetMinutes}m target`;
+
+  const streakLabel = `${safeStreak}-${safeStreak === 1 ? 'day' : 'day'} active streak`;
+
+  const headline = `${progress.progressPercent}% Daily Goal Complete · ${safeStreak}-Day Streak`;
+
+  const rawCaption = `Daily Productivity Goal Update: ${progress.progressPercent}% complete (${progress.completedMinutes}/${progress.targetMinutes} mins focused today) · ${streakLabel}${
+    safePoints > 0 ? ` · ${safePoints} participation pts` : ''
+  } · ${statusTag}.`;
+  const caption = sanitizeSafeText(rawCaption, 500);
+
+  const barWidth = Math.max(8, Math.round((progress.progressPercent / 100) * 680));
+  const accentColor = progress.isGoalReached ? '#10b981' : '#34d399';
+  const svgXml = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" width="800" height="420">
+  <rect width="800" height="420" fill="#050505"/>
+  <rect x="24" y="24" width="752" height="372" rx="16" fill="#0A0A0C" stroke="#27272a" stroke-width="2"/>
+  <text x="60" y="78" fill="#a1a1aa" font-family="monospace" font-size="15" letter-spacing="1">DAILY PRODUCTIVITY GOAL &amp; STREAK SUMMARY · ${safeDate}</text>
+  <text x="60" y="126" fill="#ffffff" font-family="sans-serif" font-size="32" font-weight="bold">${cleanName}</text>
+  <text x="740" y="126" text-anchor="end" fill="${accentColor}" font-family="monospace" font-size="42" font-weight="bold">${progress.progressPercent}%</text>
+  <rect x="60" y="158" width="680" height="22" rx="11" fill="#18181b" stroke="#27272a" stroke-width="1"/>
+  <rect x="60" y="158" width="${barWidth}" height="22" rx="11" fill="${accentColor}"/>
+  <text x="60" y="216" fill="#e4e4e7" font-family="monospace" font-size="18">Focus Completed: ${progress.completedMinutes} mins / Target: ${progress.targetMinutes} mins</text>
+  <rect x="60" y="250" width="210" height="96" rx="10" fill="#050505" stroke="#27272a" stroke-width="1.5"/>
+  <text x="80" y="282" fill="#a1a1aa" font-family="sans-serif" font-size="13">COMPLETION</text>
+  <text x="80" y="320" fill="#10b981" font-family="monospace" font-size="28" font-weight="bold">${progress.progressPercent}%</text>
+  <rect x="295" y="250" width="210" height="96" rx="10" fill="#050505" stroke="#27272a" stroke-width="1.5"/>
+  <text x="315" y="282" fill="#a1a1aa" font-family="sans-serif" font-size="13">ACTIVE STREAK</text>
+  <text x="315" y="320" fill="#fbbf24" font-family="monospace" font-size="28" font-weight="bold">${safeStreak} ${safeStreak === 1 ? 'Day' : 'Days'}</text>
+  <rect x="530" y="250" width="210" height="96" rx="10" fill="#050505" stroke="#27272a" stroke-width="1.5"/>
+  <text x="550" y="282" fill="#a1a1aa" font-family="sans-serif" font-size="13">GOAL STATUS</text>
+  <text x="550" y="320" fill="#ffffff" font-family="monospace" font-size="22" font-weight="bold">${progress.isGoalReached ? 'REACHED' : `${progress.remainingMinutes}m LEFT`}</text>
+</svg>`;
+
+  const photoDataUrl = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgXml)}`;
+
+  return {
+    headline,
+    caption,
+    photoDataUrl,
+    progressPercent: progress.progressPercent,
+    completedMinutes: progress.completedMinutes,
+    targetMinutes: progress.targetMinutes,
+    remainingMinutes: progress.remainingMinutes,
+    isGoalReached: progress.isGoalReached,
+    streakCount: safeStreak,
+    participationPoints: safePoints,
+    visibility,
+  };
+}
+
 // --- Weekly Activity Overview (Last 7 Days Productivity & Points Earned) ---
 export interface StoredDailyActivityRecord {
   focusMinutes: number;

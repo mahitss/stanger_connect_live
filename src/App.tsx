@@ -51,6 +51,8 @@ import {
   deriveE2eeFingerprint,
   clampProductivityTarget,
   computeProductivityGoalProgress,
+  buildDailyGoalShareSummary,
+  DailyGoalMomentShareSummary,
   canUsersChatOrCall,
   detectSecurityThreat,
   sanitizeSafeText,
@@ -336,6 +338,9 @@ export default function App() {
     return 25;
   });
   const [securityNotice, setSecurityNotice] = useState<string>('');
+  const [sharedDailyGoalSummary, setSharedDailyGoalSummary] = useState<
+    (DailyGoalMomentShareSummary & { momentId: string; copied: boolean }) | null
+  >(null);
   const [showOnlyInFocusPeers, setShowOnlyInFocusPeers] = useState<boolean>(false);
   const [directoryMoodFilter, setDirectoryMoodFilter] = useState<string>('all');
   const [userMood, setUserMood] = useState<string | null>(() => {
@@ -1594,6 +1599,78 @@ export default function App() {
     }
   };
 
+  const handleShareDailyGoalToFeed = async () => {
+    if (!currentIdentity) return;
+
+    const summary = buildDailyGoalShareSummary({
+      displayName: currentIdentity.displayName,
+      completedMinutes: dailyCompletedMinutes,
+      targetMinutes: dailyTargetMinutes,
+      streakCount: currentIdentity.streakCount,
+      participationPoints: currentIdentity.participationPoints,
+      dateKey: todayDateStr,
+      visibility: 'public',
+    });
+
+    const momentId = `moment_goal_${Date.now()}_${currentIdentity.uid}`;
+    const newPost: MomentPostDoc = {
+      id: momentId,
+      authorUid: currentIdentity.uid,
+      authorName: currentIdentity.displayName,
+      caption: summary.caption,
+      photoDataUrl: summary.photoDataUrl,
+      visibility: summary.visibility,
+    };
+
+    setMoments((prev) => {
+      const next = [newPost, ...prev];
+      localStorage.setItem('mr_stranger_moments_v1', JSON.stringify(next));
+      return next;
+    });
+    awardParticipation(15);
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'moment:publish',
+          moment: {
+            ...newPost,
+            createdAtMs: Date.now(),
+          },
+        })
+      );
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(summary.caption);
+      } catch {
+        // ignore clipboard restriction in headless context
+      }
+    }
+
+    setSharedDailyGoalSummary({
+      ...summary,
+      momentId,
+      copied: true,
+    });
+
+    if (authUser) {
+      try {
+        await setDoc(doc(db, 'moments', momentId), {
+          authorUid: newPost.authorUid,
+          authorName: newPost.authorName,
+          caption: newPost.caption,
+          photoDataUrl: newPost.photoDataUrl,
+          visibility: newPost.visibility,
+          createdAt: serverTimestamp(),
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, `moments/${momentId}`);
+      }
+    }
+  };
+
   const handleDeleteMoment = async (id: string) => {
     setMoments((prev) => {
       const next = prev.filter((m) => m.id !== id);
@@ -2548,8 +2625,74 @@ export default function App() {
                     >
                       +25m Pomodoro
                     </button>
+                    <button
+                      type="button"
+                      onClick={handleShareDailyGoalToFeed}
+                      data-testid="share-daily-goal-btn"
+                      aria-label="Share Daily Goal progress and streak as a new Moment to your feed"
+                      className="px-3 py-1.5 text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+                    >
+                      <Share2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Share Daily Goal</span>
+                    </button>
                   </div>
                 </div>
+
+                {sharedDailyGoalSummary && (
+                  <div
+                    data-testid="daily-goal-share-summary-panel"
+                    role="status"
+                    className="p-4 rounded-md bg-[#050505] border border-emerald-500/40 space-y-2.5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="font-bold text-white">
+                          Posted to Moments Feed: {sharedDailyGoalSummary.headline}
+                        </span>
+                        <span aria-hidden="true" className="text-zinc-600">
+                          ·
+                        </span>
+                        <span
+                          data-testid="daily-goal-share-summary-percent"
+                          className="font-mono font-semibold text-emerald-400 tabular-nums"
+                        >
+                          {sharedDailyGoalSummary.progressPercent}% Complete
+                        </span>
+                        <span aria-hidden="true" className="text-zinc-600">
+                          ·
+                        </span>
+                        <span
+                          data-testid="daily-goal-share-summary-streak"
+                          className="font-mono font-semibold text-amber-400 tabular-nums"
+                        >
+                          {sharedDailyGoalSummary.streakCount}-Day Streak
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMomentFilter('all');
+                            setActivePage('moments');
+                          }}
+                          data-testid="view-shared-goal-moment-btn"
+                          className="px-3 py-1 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                        >
+                          View in Moments Feed
+                        </button>
+                      </div>
+                    </div>
+
+                    <p
+                      data-testid="daily-goal-share-summary-caption"
+                      className="text-xs font-mono text-zinc-200 leading-relaxed break-words"
+                    >
+                      {sharedDailyGoalSummary.caption}
+                    </p>
+                  </div>
+                )}
 
                 {/* Progress Bar Visualization */}
                 <div className="space-y-2">

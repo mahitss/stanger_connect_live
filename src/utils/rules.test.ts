@@ -23,6 +23,7 @@ import {
   getEffectiveAmbientGain,
   formatAmbientWorkspaceStatus,
   computeProductivityGoalProgress,
+  buildDailyGoalShareSummary,
   detectSecurityThreat,
   sanitizeSafeText,
   checkSlidingWindowRateLimit,
@@ -1455,6 +1456,45 @@ test('StudyRoomView quick mute/unmute all sounds button toggles both system UI s
   assert.equal(unmutedResult.uiSoundPrefs.enabled, true);
   assert.equal(unmutedResult.statusLabel, 'System & Ambient Sounds Active');
 });
+
+test('buildDailyGoalShareSummary generates sharable summary of progress, completion percentage, and streak for Moment feed post', () => {
+  const inProgressSummary = buildDailyGoalShareSummary({
+    displayName: 'Alex Rivera',
+    completedMinutes: 90,
+    targetMinutes: 120,
+    streakCount: 5,
+    participationPoints: 420,
+    dateKey: '2026-10-22',
+    visibility: 'public',
+  });
+
+  assert.equal(inProgressSummary.progressPercent, 75);
+  assert.equal(inProgressSummary.completedMinutes, 90);
+  assert.equal(inProgressSummary.targetMinutes, 120);
+  assert.equal(inProgressSummary.remainingMinutes, 30);
+  assert.equal(inProgressSummary.isGoalReached, false);
+  assert.equal(inProgressSummary.streakCount, 5);
+  assert.equal(inProgressSummary.headline, '75% Daily Goal Complete · 5-Day Streak');
+  assert.ok(inProgressSummary.caption.includes('75% complete'));
+  assert.ok(inProgressSummary.caption.includes('90/120 mins'));
+  assert.ok(inProgressSummary.caption.includes('5-day active streak'));
+  assert.ok(inProgressSummary.photoDataUrl.startsWith('data:image/svg+xml;charset=utf-8,'));
+  assert.ok(decodeURIComponent(inProgressSummary.photoDataUrl).includes('75%'));
+
+  const reachedSummary = buildDailyGoalShareSummary({
+    displayName: 'Alex Rivera',
+    completedMinutes: 135,
+    targetMinutes: 120,
+    streakCount: 6,
+    participationPoints: 500,
+    dateKey: '2026-10-22',
+  });
+  assert.equal(reachedSummary.progressPercent, 100);
+  assert.equal(reachedSummary.isGoalReached, true);
+  assert.ok(reachedSummary.caption.includes('100% complete'));
+  assert.ok(reachedSummary.caption.includes('Daily Goal Reached'));
+});
+
 
 
 
