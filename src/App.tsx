@@ -95,6 +95,10 @@ import {
   APP_LOGO_URL,
   buildMomentSharePayload,
   MomentSharePayload,
+  CURATED_STUDY_MOMENT_IMAGES,
+  getStudyMomentPlaceholderById,
+  selectStudyMomentPlaceholder,
+  resolveMomentPublishImageSource,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -268,6 +272,9 @@ export default function App() {
 
   const [momentCaption, setMomentCaption] = useState('');
   const [momentPhotoDataUrl, setMomentPhotoDataUrl] = useState('');
+  const [selectedMomentPlaceholderId, setSelectedMomentPlaceholderId] = useState<
+    string | null
+  >(null);
   const [momentVisibility, setMomentVisibility] = useState<'public' | 'connections'>('public');
   const [momentError, setMomentError] = useState('');
   const [momentFilter, setMomentFilter] = useState<'all' | 'public' | 'connections' | 'mine'>('all');
@@ -1554,6 +1561,7 @@ export default function App() {
     reader.onload = () => {
       if (typeof reader.result === 'string') {
         setMomentPhotoDataUrl(reader.result);
+        setSelectedMomentPlaceholderId(null);
       }
     };
     reader.readAsDataURL(file);
@@ -1588,9 +1596,13 @@ export default function App() {
     }
     setMomentError('');
     const safeCaption = sanitizeSafeText(trimmedCaption, 500);
-    const finalPhotoData =
-      momentPhotoDataUrl ||
-      generateCameraSnapshotSvgDataUrl(safeCaption, currentIdentity.displayName);
+    const resolvedImage = resolveMomentPublishImageSource({
+      uploadedPhotoDataUrl: momentPhotoDataUrl,
+      selectedPlaceholderId: selectedMomentPlaceholderId,
+      fallbackGenerator: () =>
+        generateCameraSnapshotSvgDataUrl(safeCaption, currentIdentity.displayName),
+    });
+    const finalPhotoData = resolvedImage.photoDataUrl;
 
     const momentId = `moment_${Date.now()}_${currentIdentity.uid}`;
     const newPost: MomentPostDoc = {
@@ -1609,6 +1621,7 @@ export default function App() {
     });
     setMomentCaption('');
     setMomentPhotoDataUrl('');
+    setSelectedMomentPlaceholderId(null);
     awardParticipation(15);
 
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -3964,13 +3977,21 @@ export default function App() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 <form
                   onSubmit={handlePublishMoment}
+                  data-testid="publish-moment-form"
                   className="lg:col-span-5 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4"
                 >
-                  <h2 className="text-base font-bold text-white">Upload a Real Photo</h2>
+                  <div className="space-y-0.5">
+                    <h2 className="text-base font-bold text-white">
+                      Publish a Study or Social Moment
+                    </h2>
+                    <p className="text-xs text-zinc-400">
+                      Upload your own device photo or pick from our curated study-aesthetic placeholders below.
+                    </p>
+                  </div>
 
                   <div className="space-y-1.5">
                     <label htmlFor="moment-photo-file" className="block text-xs font-medium text-zinc-300">
-                      Select Photo File (PNG, JPG, WebP)
+                      Option 1 · Upload Device Photo (PNG, JPG, WebP)
                     </label>
                     <input
                       id="moment-photo-file"
@@ -3979,6 +4000,160 @@ export default function App() {
                       onChange={handlePhotoFileSelect}
                       className="w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-900 file:text-zinc-100 hover:file:bg-zinc-800"
                     />
+                  </div>
+
+                  {/* Curated Study-Related Aesthetic Placeholder Selector */}
+                  <div
+                    data-testid="moment-placeholder-gallery"
+                    className="space-y-2.5 pt-1 border-t border-zinc-800/80"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <span className="block text-xs font-medium text-zinc-300">
+                          Option 2 · Curated Study Aesthetic Placeholders
+                        </span>
+                        <span className="text-[11px] text-zinc-500">
+                          Pick an aesthetic study scene if you prefer not to upload a photo
+                        </span>
+                      </div>
+                      <span
+                        data-testid="moment-image-source-indicator"
+                        className="text-[11px] font-mono text-emerald-400 whitespace-nowrap"
+                      >
+                        {momentPhotoDataUrl
+                          ? 'Source: Uploaded Photo'
+                          : selectedMomentPlaceholderId
+                          ? `Selected: ${
+                              getStudyMomentPlaceholderById(selectedMomentPlaceholderId)
+                                ?.title || 'Study Scene'
+                            }`
+                          : `${CURATED_STUDY_MOMENT_IMAGES.length} Study Scenes`}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5">
+                      {CURATED_STUDY_MOMENT_IMAGES.map((preset) => {
+                        const isSelected =
+                          !momentPhotoDataUrl &&
+                          selectedMomentPlaceholderId === preset.id;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => {
+                              setMomentPhotoDataUrl('');
+                              setSelectedMomentPlaceholderId((prev) =>
+                                selectStudyMomentPlaceholder(prev, preset.id)
+                              );
+                            }}
+                            aria-pressed={isSelected}
+                            aria-label={`Select ${preset.title} (${preset.category}) placeholder image`}
+                            data-testid={`moment-placeholder-option-${preset.id}`}
+                            data-placeholder-id={preset.id}
+                            className={`group text-left rounded-md overflow-hidden border transition-all flex flex-col ${
+                              isSelected
+                                ? 'border-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-400/50'
+                                : 'border-zinc-800 bg-[#050505] hover:border-zinc-600'
+                            }`}
+                          >
+                            <div className="relative h-16 w-full overflow-hidden bg-[#050505]">
+                              <img
+                                src={preset.photoDataUrl}
+                                alt={preset.title}
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-cover"
+                              />
+                              {isSelected && (
+                                <span
+                                  data-testid={`moment-placeholder-selected-badge-${preset.id}`}
+                                  className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-400 text-black"
+                                >
+                                  <Check className="w-3 h-3 stroke-[2.5]" />
+                                </span>
+                              )}
+                            </div>
+                            <div className="p-2 space-y-0.5">
+                              <div className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 truncate">
+                                {preset.category}
+                              </div>
+                              <div className="text-[11px] font-semibold text-zinc-100 truncate">
+                                {preset.title}
+                              </div>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {(momentPhotoDataUrl || selectedMomentPlaceholderId) &&
+                      (() => {
+                        const activePreset = !momentPhotoDataUrl
+                          ? getStudyMomentPlaceholderById(selectedMomentPlaceholderId)
+                          : null;
+                        const previewSrc =
+                          momentPhotoDataUrl || activePreset?.photoDataUrl || '';
+                        return (
+                          <div
+                            data-testid="moment-selected-image-preview"
+                            className="p-2.5 rounded-md bg-[#050505] border border-zinc-800 space-y-2"
+                          >
+                            <div className="flex items-center gap-3">
+                              <img
+                                src={previewSrc}
+                                alt={
+                                  activePreset
+                                    ? `Selected study aesthetic: ${activePreset.title}`
+                                    : 'Uploaded moment preview'
+                                }
+                                referrerPolicy="no-referrer"
+                                data-testid="moment-selected-preview-img"
+                                className="w-16 h-12 rounded object-cover border border-zinc-800 shrink-0"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs font-semibold text-white truncate">
+                                  {activePreset
+                                    ? activePreset.title
+                                    : 'Custom Device Photo Ready'}
+                                </div>
+                                <div className="text-[11px] text-zinc-400 truncate">
+                                  {activePreset
+                                    ? activePreset.description
+                                    : 'Your uploaded image will be used for this Moment.'}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-zinc-900">
+                              {activePreset ? (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setMomentCaption(activePreset.suggestedCaption)
+                                  }
+                                  data-testid="moment-use-suggested-caption"
+                                  className="text-[11px] font-mono text-emerald-400 hover:text-emerald-300 transition-colors"
+                                >
+                                  + Use Suggested Study Caption
+                                </button>
+                              ) : (
+                                <span className="text-[11px] font-mono text-zinc-500">
+                                  Device Upload Active
+                                </span>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setMomentPhotoDataUrl('');
+                                  setSelectedMomentPlaceholderId(null);
+                                }}
+                                data-testid="moment-clear-image-selection"
+                                className="text-[11px] font-mono text-zinc-400 hover:text-rose-400 transition-colors"
+                              >
+                                Clear Selection
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
                   </div>
 
                   <div className="space-y-1.5">
@@ -4017,9 +4192,10 @@ export default function App() {
 
                   <button
                     type="submit"
+                    data-testid="publish-moment-submit-btn"
                     className="w-full py-2.5 px-4 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
                   >
-                    Publish Real Photo Moment
+                    Publish Photo Moment
                   </button>
                 </form>
 
@@ -4055,7 +4231,7 @@ export default function App() {
                               src={item.photoDataUrl}
                               alt={item.caption}
                               referrerPolicy="no-referrer"
-                              className="w-full max-h-80 object-cover bg-[#050505]"
+                              className="w-full max-h-96 object-contain bg-[#050505]"
                             />
                             <div className="p-5 space-y-3">
                               <div className="flex flex-wrap items-center justify-between gap-3">

@@ -86,6 +86,10 @@ import {
   buildMomentShareUrl,
   buildMomentSharePayload,
   buildStudyFocus7DaySessionTrend,
+  CURATED_STUDY_MOMENT_IMAGES,
+  getStudyMomentPlaceholderById,
+  selectStudyMomentPlaceholder,
+  resolveMomentPublishImageSource,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -1710,6 +1714,63 @@ test('buildMomentCommentThreadGroups, toggleCollapsedCommentThread, and getNeste
   // 5. Resolving root thread ID from a deeply nested reply returns the root comment ID
   assert.equal(resolveRootCommentIdForThread(comments, 'c_reply_1b_nested'), 'c_root_1');
   assert.equal(resolveRootCommentIdForThread(comments, 'c_root_1'), 'c_root_1');
+});
+
+test('Curated study-related aesthetic placeholder images provide valid SVG data URLs, toggle selection, and resolve moment publish image priority', () => {
+  assert.equal(CURATED_STUDY_MOMENT_IMAGES.length, 6);
+  for (const preset of CURATED_STUDY_MOMENT_IMAGES) {
+    assert.ok(preset.id.length > 0);
+    assert.ok(preset.title.length > 0);
+    assert.ok(preset.category.length > 0);
+    assert.ok(preset.suggestedCaption.length > 0);
+    assert.ok(preset.photoDataUrl.startsWith('data:image/svg+xml;charset=utf-8,'));
+    assert.ok(decodeURIComponent(preset.photoDataUrl).includes('<svg'));
+  }
+
+  // Lookup by ID (case-insensitive)
+  const rainy = getStudyMomentPlaceholderById('RAINY_WINDOW_LOFI');
+  assert.ok(rainy);
+  assert.equal(rainy.id, 'rainy_window_lofi');
+  assert.equal(rainy.title, 'Rainy Window Study Nook');
+  assert.equal(getStudyMomentPlaceholderById('non_existent'), null);
+
+  // Toggling selection selects, switches, and deselects cleanly
+  let selectedId = selectStudyMomentPlaceholder(null, 'midnight_desk');
+  assert.equal(selectedId, 'midnight_desk');
+  selectedId = selectStudyMomentPlaceholder(selectedId, 'library_stacks');
+  assert.equal(selectedId, 'library_stacks');
+  selectedId = selectStudyMomentPlaceholder(selectedId, 'library_stacks');
+  assert.equal(selectedId, null);
+
+  // Resolution priority: uploadedPhotoDataUrl > selectedPlaceholderId > fallbackGenerator
+  const fromUpload = resolveMomentPublishImageSource({
+    uploadedPhotoDataUrl: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==',
+    selectedPlaceholderId: 'midnight_desk',
+    fallbackGenerator: () => 'data:image/svg+xml;utf8,fallback',
+  });
+  assert.equal(fromUpload.sourceType, 'uploaded');
+  assert.equal(fromUpload.photoDataUrl, 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==');
+  assert.equal(fromUpload.placeholder, null);
+
+  const fromPlaceholder = resolveMomentPublishImageSource({
+    uploadedPhotoDataUrl: '',
+    selectedPlaceholderId: 'whiteboard_systems',
+    fallbackGenerator: () => 'data:image/svg+xml;utf8,fallback',
+  });
+  assert.equal(fromPlaceholder.sourceType, 'placeholder');
+  assert.equal(fromPlaceholder.placeholder?.id, 'whiteboard_systems');
+  assert.equal(
+    fromPlaceholder.photoDataUrl,
+    getStudyMomentPlaceholderById('whiteboard_systems')?.photoDataUrl
+  );
+
+  const fromFallback = resolveMomentPublishImageSource({
+    uploadedPhotoDataUrl: '',
+    selectedPlaceholderId: null,
+    fallbackGenerator: () => 'data:image/svg+xml;utf8,custom_fallback',
+  });
+  assert.equal(fromFallback.sourceType, 'fallback');
+  assert.equal(fromFallback.photoDataUrl, 'data:image/svg+xml;utf8,custom_fallback');
 });
 
 

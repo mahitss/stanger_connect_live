@@ -4197,3 +4197,386 @@ export function buildStudyFocus7DaySessionTrend(params: {
       : 'Pomodoro Deep Focus Protocol',
   };
 }
+
+// --- Curated Study-Related Aesthetic Placeholder Images for Moments ---
+export interface StudyMomentPlaceholderImage {
+  id: string;
+  title: string;
+  category: string;
+  description: string;
+  suggestedCaption: string;
+  accentHex: string;
+  photoDataUrl: string;
+}
+
+function encodeStudyAestheticSvg(svgXml: string): string {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgXml.trim())}`;
+}
+
+export const CURATED_STUDY_MOMENT_IMAGES: readonly StudyMomentPlaceholderImage[] = [
+  {
+    id: 'midnight_desk',
+    title: 'Midnight Coding Desk',
+    category: 'Deep Work',
+    description: 'Dual dark-mode monitors, warm desk lamp glow, and mechanical keyboard.',
+    suggestedCaption:
+      'Locked in for a late-night deep work session — building and debugging in flow state.',
+    accentHex: '#10b981',
+    photoDataUrl: encodeStudyAestheticSvg(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+        <defs>
+          <linearGradient id="bg1" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#050507"/>
+            <stop offset="55%" stop-color="#0a0f18"/>
+            <stop offset="100%" stop-color="#071512"/>
+          </linearGradient>
+          <radialGradient id="lampGlow1" cx="72%" cy="24%" r="48%">
+            <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.28"/>
+            <stop offset="50%" stop-color="#10b981" stop-opacity="0.1"/>
+            <stop offset="100%" stop-color="#050507" stop-opacity="0"/>
+          </radialGradient>
+        </defs>
+        <rect width="800" height="500" fill="url(#bg1)"/>
+        <rect width="800" height="500" fill="url(#lampGlow1)"/>
+        <!-- Desk Surface -->
+        <rect x="0" y="360" width="800" height="140" fill="#09090c" stroke="#27272a" stroke-width="2"/>
+        <line x1="0" y1="362" x2="800" y2="362" stroke="#10b981" stroke-opacity="0.35" stroke-width="1.5"/>
+        <!-- Primary Ultrawide Monitor -->
+        <rect x="130" y="105" width="440" height="220" rx="10" fill="#0c0e14" stroke="#3f3f46" stroke-width="3"/>
+        <rect x="144" y="119" width="412" height="192" rx="4" fill="#05070b"/>
+        <!-- Code Syntax Lines -->
+        <rect x="164" y="138" width="95" height="8" rx="4" fill="#10b981" opacity="0.85"/>
+        <rect x="268" y="138" width="60" height="8" rx="4" fill="#38bdf8" opacity="0.75"/>
+        <rect x="180" y="158" width="160" height="7" rx="3.5" fill="#a1a1aa" opacity="0.55"/>
+        <rect x="180" y="175" width="210" height="7" rx="3.5" fill="#e4e4e7" opacity="0.45"/>
+        <rect x="198" y="192" width="140" height="7" rx="3.5" fill="#f59e0b" opacity="0.75"/>
+        <rect x="198" y="209" width="185" height="7" rx="3.5" fill="#10b981" opacity="0.65"/>
+        <rect x="180" y="226" width="110" height="7" rx="3.5" fill="#38bdf8" opacity="0.6"/>
+        <rect x="164" y="245" width="75" height="7" rx="3.5" fill="#a1a1aa" opacity="0.5"/>
+        <!-- Terminal Split Pane -->
+        <line x1="415" y1="119" x2="415" y2="311" stroke="#27272a" stroke-width="2"/>
+        <rect x="432" y="138" width="102" height="8" rx="4" fill="#f59e0b" opacity="0.8"/>
+        <rect x="432" y="160" width="84" height="6" rx="3" fill="#52525b"/>
+        <rect x="432" y="176" width="108" height="6" rx="3" fill="#10b981" opacity="0.7"/>
+        <rect x="432" y="192" width="72" height="6" rx="3" fill="#52525b"/>
+        <rect x="432" y="216" width="96" height="44" rx="6" fill="#091914" stroke="#10b981" stroke-opacity="0.45"/>
+        <text x="444" y="243" fill="#10b981" font-family="monospace" font-size="14" font-weight="bold">PASS 100%</text>
+        <!-- Monitor Stand -->
+        <rect x="325" y="325" width="50" height="35" fill="#18181b"/>
+        <rect x="285" y="354" width="130" height="8" rx="4" fill="#27272a"/>
+        <!-- Warm Architect Lamp -->
+        <path d="M650 360 L685 180 L595 135" fill="none" stroke="#52525b" stroke-width="6" stroke-linecap="round"/>
+        <polygon points="565,142 612,118 625,148 575,165" fill="#27272a" stroke="#f59e0b" stroke-width="2"/>
+        <!-- Mechanical Keyboard & Coffee Mug -->
+        <rect x="240" y="382" width="220" height="42" rx="6" fill="#141418" stroke="#3f3f46" stroke-width="2"/>
+        <rect x="250" y="390" width="200" height="8" rx="2" fill="#27272a"/>
+        <rect x="250" y="403" width="200" height="8" rx="2" fill="#27272a"/>
+        <rect x="285" y="415" width="110" height="5" rx="2" fill="#10b981" opacity="0.7"/>
+        <rect x="530" y="374" width="38" height="44" rx="6" fill="#1f2937" stroke="#f59e0b" stroke-width="1.5"/>
+        <path d="M568 384 C580 384, 580 408, 568 408" fill="none" stroke="#f59e0b" stroke-width="3"/>
+        <!-- Top Aesthetic Badge -->
+        <rect x="44" y="38" width="256" height="32" rx="6" fill="#0A0A0C" stroke="#27272a" stroke-width="1.5"/>
+        <text x="60" y="59" fill="#10b981" font-family="monospace" font-size="13" font-weight="bold">STUDY AESTHETIC · DEEP WORK</text>
+        <text x="44" y="468" fill="#f4f4f5" font-family="sans-serif" font-size="22" font-weight="bold">Midnight Coding Desk</text>
+      </svg>
+    `),
+  },
+  {
+    id: 'rainy_window_lofi',
+    title: 'Rainy Window Study Nook',
+    category: 'Ambient Rain',
+    description: 'Rain-streaked glass overlooking dusk city bokeh with an open study notebook.',
+    suggestedCaption:
+      'Rainy evening study session with ambient rainfall and structured synthesis notes.',
+    accentHex: '#38bdf8',
+    photoDataUrl: encodeStudyAestheticSvg(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+        <defs>
+          <linearGradient id="rainBg" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#060b16"/>
+            <stop offset="65%" stop-color="#0c192c"/>
+            <stop offset="100%" stop-color="#07090e"/>
+          </linearGradient>
+        </defs>
+        <rect width="800" height="500" fill="url(#rainBg)"/>
+        <!-- Window Frame -->
+        <rect x="70" y="40" width="660" height="295" rx="8" fill="#081221" stroke="#1e293b" stroke-width="4"/>
+        <line x1="400" y1="40" x2="400" y2="335" stroke="#1e293b" stroke-width="4"/>
+        <line x1="70" y1="190" x2="730" y2="190" stroke="#1e293b" stroke-width="3"/>
+        <!-- Distant City Bokeh Lights -->
+        <circle cx="170" cy="240" r="18" fill="#f59e0b" opacity="0.22"/>
+        <circle cx="235" cy="255" r="24" fill="#38bdf8" opacity="0.2"/>
+        <circle cx="310" cy="230" r="14" fill="#10b981" opacity="0.22"/>
+        <circle cx="495" cy="245" r="22" fill="#f59e0b" opacity="0.2"/>
+        <circle cx="585" cy="225" r="28" fill="#38bdf8" opacity="0.18"/>
+        <circle cx="655" cy="260" r="16" fill="#a855f7" opacity="0.2"/>
+        <!-- Rain Streaks -->
+        <g stroke="#7dd3fc" stroke-opacity="0.38" stroke-width="1.5" stroke-linecap="round">
+          <line x1="125" y1="65" x2="110" y2="125"/>
+          <line x1="210" y1="80" x2="195" y2="155"/>
+          <line x1="295" y1="55" x2="280" y2="120"/>
+          <line x1="355" y1="100" x2="340" y2="170"/>
+          <line x1="455" y1="70" x2="440" y2="140"/>
+          <line x1="540" y1="60" x2="525" y2="135"/>
+          <line x1="635" y1="85" x2="620" y2="160"/>
+          <line x1="160" y1="210" x2="145" y2="285"/>
+          <line x1="265" y1="205" x2="250" y2="290"/>
+          <line x1="480" y1="215" x2="465" y2="300"/>
+          <line x1="610" y1="205" x2="595" y2="280"/>
+        </g>
+        <!-- Nook Desk & Open Notebook -->
+        <rect x="0" y="335" width="800" height="165" fill="#090b10" stroke="#1e293b" stroke-width="2"/>
+        <rect x="230" y="358" width="320" height="105" rx="6" fill="#111827" stroke="#38bdf8" stroke-opacity="0.5" stroke-width="2"/>
+        <line x1="390" y1="358" x2="390" y2="463" stroke="#334155" stroke-width="2"/>
+        <line x1="252" y1="382" x2="368" y2="382" stroke="#64748b" stroke-width="3"/>
+        <line x1="252" y1="400" x2="355" y2="400" stroke="#475569" stroke-width="2.5"/>
+        <line x1="252" y1="418" x2="342" y2="418" stroke="#475569" stroke-width="2.5"/>
+        <line x1="412" y1="382" x2="525" y2="382" stroke="#38bdf8" stroke-opacity="0.8" stroke-width="3"/>
+        <line x1="412" y1="400" x2="515" y2="400" stroke="#475569" stroke-width="2.5"/>
+        <line x1="412" y1="418" x2="495" y2="418" stroke="#475569" stroke-width="2.5"/>
+        <!-- Badge & Title -->
+        <rect x="44" y="38" width="256" height="32" rx="6" fill="#0A0A0C" stroke="#1e293b" stroke-width="1.5"/>
+        <text x="60" y="59" fill="#38bdf8" font-family="monospace" font-size="13" font-weight="bold">STUDY AESTHETIC · AMBIENT RAIN</text>
+        <text x="44" y="472" fill="#f4f4f5" font-family="sans-serif" font-size="22" font-weight="bold">Rainy Window Study Nook</text>
+      </svg>
+    `),
+  },
+  {
+    id: 'library_stacks',
+    title: 'Classical Library Reading Room',
+    category: 'Library Archive',
+    description: 'Warm timber bookshelves, brass banker lamp, and open academic reference volumes.',
+    suggestedCaption:
+      'Quiet reading room hours — reviewing core theory and distilling key takeaways.',
+    accentHex: '#f59e0b',
+    photoDataUrl: encodeStudyAestheticSvg(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+        <defs>
+          <radialGradient id="libraryGlow" cx="50%" cy="45%" r="55%">
+            <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.28"/>
+            <stop offset="55%" stop-color="#10b981" stop-opacity="0.1"/>
+            <stop offset="100%" stop-color="#090706" stop-opacity="0.95"/>
+          </radialGradient>
+        </defs>
+        <rect width="800" height="500" fill="#0b0908"/>
+        <rect width="800" height="500" fill="url(#libraryGlow)"/>
+        <!-- Bookshelf Grid -->
+        <g stroke="#292524" stroke-width="3">
+          <line x1="60" y1="95" x2="740" y2="95"/>
+          <line x1="60" y1="195" x2="740" y2="195"/>
+          <line x1="60" y1="295" x2="740" y2="295"/>
+        </g>
+        <!-- Book Spines -->
+        <g opacity="0.85">
+          <rect x="90" y="115" width="24" height="78" rx="2" fill="#78350f"/>
+          <rect x="118" y="122" width="20" height="71" rx="2" fill="#065f46"/>
+          <rect x="142" y="110" width="28" height="83" rx="2" fill="#1e3a8a"/>
+          <rect x="174" y="125" width="22" height="68" rx="2" fill="#92400e"/>
+          <rect x="580" y="112" width="26" height="81" rx="2" fill="#065f46"/>
+          <rect x="610" y="120" width="22" height="73" rx="2" fill="#78350f"/>
+          <rect x="636" y="108" width="30" height="85" rx="2" fill="#3f3f46"/>
+          <rect x="105" y="212" width="26" height="80" rx="2" fill="#1f2937"/>
+          <rect x="135" y="218" width="24" height="74" rx="2" fill="#78350f"/>
+          <rect x="600" y="215" width="28" height="77" rx="2" fill="#92400e"/>
+          <rect x="632" y="208" width="24" height="84" rx="2" fill="#065f46"/>
+        </g>
+        <!-- Classic Green Banker's Lamp -->
+        <rect x="388" y="215" width="24" height="115" fill="#d97706"/>
+        <rect x="345" y="325" width="110" height="14" rx="4" fill="#b45309"/>
+        <path d="M315 220 C330 165, 470 165, 485 220 Z" fill="#059669" stroke="#34d399" stroke-width="2"/>
+        <!-- Reading Table -->
+        <rect x="0" y="340" width="800" height="160" fill="#0c0a09" stroke="#292524" stroke-width="2"/>
+        <rect x="260" y="365" width="280" height="85" rx="6" fill="#1c1917" stroke="#f59e0b" stroke-opacity="0.55" stroke-width="2"/>
+        <line x1="400" y1="365" x2="400" y2="450" stroke="#44403c" stroke-width="2"/>
+        <!-- Badge & Title -->
+        <rect x="44" y="38" width="268" height="32" rx="6" fill="#0A0A0C" stroke="#292524" stroke-width="1.5"/>
+        <text x="60" y="59" fill="#f59e0b" font-family="monospace" font-size="13" font-weight="bold">STUDY AESTHETIC · LIBRARY ARCHIVE</text>
+        <text x="44" y="472" fill="#f4f4f5" font-family="sans-serif" font-size="22" font-weight="bold">Classical Library Reading Room</text>
+      </svg>
+    `),
+  },
+  {
+    id: 'whiteboard_systems',
+    title: 'Distributed Systems Whiteboard',
+    category: 'Systems Design',
+    description: 'Dark glass architecture board with consensus nodes, state machines, and flow vectors.',
+    suggestedCaption:
+      'Mapping out distributed state machine replication and system architecture on the whiteboard.',
+    accentHex: '#a855f7',
+    photoDataUrl: encodeStudyAestheticSvg(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+        <rect width="800" height="500" fill="#060609"/>
+        <!-- Glass Whiteboard Frame -->
+        <rect x="52" y="46" width="696" height="370" rx="12" fill="#090b10" stroke="#27272a" stroke-width="3"/>
+        <!-- Subtle Dot Grid -->
+        <g fill="#27272a">
+          <circle cx="140" cy="120" r="2"/><circle cx="240" cy="120" r="2"/><circle cx="340" cy="120" r="2"/><circle cx="440" cy="120" r="2"/><circle cx="540" cy="120" r="2"/><circle cx="640" cy="120" r="2"/>
+          <circle cx="140" cy="220" r="2"/><circle cx="240" cy="220" r="2"/><circle cx="340" cy="220" r="2"/><circle cx="440" cy="220" r="2"/><circle cx="540" cy="220" r="2"/><circle cx="640" cy="220" r="2"/>
+          <circle cx="140" cy="320" r="2"/><circle cx="240" cy="320" r="2"/><circle cx="340" cy="320" r="2"/><circle cx="440" cy="320" r="2"/><circle cx="540" cy="320" r="2"/><circle cx="640" cy="320" r="2"/>
+        </g>
+        <!-- Node Topology Connectors -->
+        <line x1="230" y1="185" x2="375" y2="145" stroke="#10b981" stroke-width="2.5" stroke-dasharray="6 4"/>
+        <line x1="230" y1="205" x2="375" y2="265" stroke="#38bdf8" stroke-width="2.5"/>
+        <line x1="455" y1="145" x2="575" y2="205" stroke="#a855f7" stroke-width="2.5"/>
+        <line x1="455" y1="265" x2="575" y2="215" stroke="#10b981" stroke-width="2.5"/>
+        <!-- Architecture Nodes -->
+        <rect x="115" y="165" width="115" height="62" rx="8" fill="#0d1512" stroke="#10b981" stroke-width="2"/>
+        <text x="132" y="194" fill="#10b981" font-family="monospace" font-size="13" font-weight="bold">LEADER NODE</text>
+        <text x="132" y="213" fill="#a1a1aa" font-family="monospace" font-size="11">Term #42 · OK</text>
+
+        <rect x="375" y="112" width="120" height="58" rx="8" fill="#0d131f" stroke="#38bdf8" stroke-width="2"/>
+        <text x="392" y="140" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="bold">REPLICA A</text>
+        <text x="392" y="157" fill="#a1a1aa" font-family="monospace" font-size="11">CommitIdx 984</text>
+
+        <rect x="375" y="238" width="120" height="58" rx="8" fill="#0d131f" stroke="#38bdf8" stroke-width="2"/>
+        <text x="392" y="266" fill="#38bdf8" font-family="monospace" font-size="12" font-weight="bold">REPLICA B</text>
+        <text x="392" y="283" fill="#a1a1aa" font-family="monospace" font-size="11">CommitIdx 984</text>
+
+        <rect x="575" y="175" width="130" height="66" rx="8" fill="#160f24" stroke="#a855f7" stroke-width="2"/>
+        <text x="592" y="204" fill="#c084fc" font-family="monospace" font-size="12" font-weight="bold">STATE MACHINE</text>
+        <text x="592" y="223" fill="#e4e4e7" font-family="monospace" font-size="11">p99 &lt; 4.2ms</text>
+
+        <!-- Badge & Title -->
+        <rect x="74" y="68" width="268" height="32" rx="6" fill="#050505" stroke="#27272a" stroke-width="1.5"/>
+        <text x="90" y="89" fill="#c084fc" font-family="monospace" font-size="13" font-weight="bold">STUDY AESTHETIC · SYSTEMS DESIGN</text>
+        <text x="52" y="464" fill="#f4f4f5" font-family="sans-serif" font-size="22" font-weight="bold">Distributed Systems Whiteboard</text>
+      </svg>
+    `),
+  },
+  {
+    id: 'espresso_journal',
+    title: 'Cafe Study & Dot-Grid Journal',
+    category: 'Cafe Study',
+    description: 'Overhead flat-lay of a dot-grid study planner, latte art cup, and focus timer.',
+    suggestedCaption:
+      'Afternoon cafe sprint — mapping out today’s priority blocks over espresso.',
+    accentHex: '#fbbf24',
+    photoDataUrl: encodeStudyAestheticSvg(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+        <rect width="800" height="500" fill="#0b0908"/>
+        <!-- Warm Table Surface -->
+        <rect x="36" y="36" width="728" height="428" rx="14" fill="#120f0d" stroke="#292524" stroke-width="2"/>
+        <!-- Open Dot-Grid Journal -->
+        <rect x="95" y="105" width="380" height="275" rx="8" fill="#1c1917" stroke="#44403c" stroke-width="2"/>
+        <line x1="285" y1="105" x2="285" y2="380" stroke="#292524" stroke-width="2"/>
+        <!-- Checklist Items inside Journal -->
+        <rect x="122" y="138" width="14" height="14" rx="3" fill="#10b981"/>
+        <rect x="146" y="141" width="110" height="8" rx="4" fill="#e4e4e7"/>
+        <rect x="122" y="168" width="14" height="14" rx="3" fill="#10b981"/>
+        <rect x="146" y="171" width="96" height="8" rx="4" fill="#e4e4e7"/>
+        <rect x="122" y="198" width="14" height="14" rx="3" fill="none" stroke="#fbbf24" stroke-width="2"/>
+        <rect x="146" y="201" width="118" height="8" rx="4" fill="#fbbf24" opacity="0.85"/>
+        <!-- Right Page Graph -->
+        <rect x="310" y="138" width="138" height="92" rx="6" fill="#0c0a09" stroke="#292524" stroke-width="1.5"/>
+        <polyline points="324,210 352,188 380,194 408,164 434,152" fill="none" stroke="#10b981" stroke-width="3" stroke-linecap="round"/>
+        <line x1="310" y1="255" x2="442" y2="255" stroke="#57534e" stroke-width="3"/>
+        <line x1="310" y1="275" x2="420" y2="275" stroke="#44403c" stroke-width="2.5"/>
+        <!-- Ceramic Latte Cup -->
+        <circle cx="605" cy="215" r="68" fill="#1c1917" stroke="#44403c" stroke-width="3"/>
+        <circle cx="605" cy="215" r="50" fill="#78350f"/>
+        <path d="M585 215 C595 195, 615 195, 625 215 C615 235, 595 235, 585 215 Z" fill="#fef3c7" opacity="0.85"/>
+        <!-- Badge & Title -->
+        <rect x="64" y="54" width="248" height="32" rx="6" fill="#090807" stroke="#292524" stroke-width="1.5"/>
+        <text x="80" y="75" fill="#fbbf24" font-family="monospace" font-size="13" font-weight="bold">STUDY AESTHETIC · CAFE STUDY</text>
+        <text x="64" y="436" fill="#f4f4f5" font-family="sans-serif" font-size="22" font-weight="bold">Cafe Study &amp; Dot-Grid Journal</text>
+      </svg>
+    `),
+  },
+  {
+    id: 'sunrise_pomodoro',
+    title: 'Dawn Horizon Study Desk',
+    category: 'Morning Sprint',
+    description: 'Minimalist morning studio overlooking mountain ridges with a 50:00 Pomodoro ring.',
+    suggestedCaption:
+      'Early morning 50-minute Pomodoro sprint completed before the day begins.',
+    accentHex: '#34d399',
+    photoDataUrl: encodeStudyAestheticSvg(`
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 500" width="800" height="500">
+        <defs>
+          <linearGradient id="dawnSky" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#070b19"/>
+            <stop offset="48%" stop-color="#1e1b4b"/>
+            <stop offset="82%" stop-color="#065f46"/>
+            <stop offset="100%" stop-color="#050505"/>
+          </linearGradient>
+        </defs>
+        <rect width="800" height="500" fill="url(#dawnSky)"/>
+        <!-- Mountain Silhouette -->
+        <polygon points="0,350 165,245 310,310 490,215 665,295 800,240 800,360 0,360" fill="#070a12" opacity="0.9"/>
+        <polygon points="0,365 230,285 420,335 610,260 800,320 800,500 0,500" fill="#050507"/>
+        <!-- Glowing Pomodoro Ring Centerpiece -->
+        <circle cx="400" cy="195" r="76" fill="#050507" fill-opacity="0.75" stroke="#1f2937" stroke-width="6"/>
+        <circle cx="400" cy="195" r="76" fill="none" stroke="#34d399" stroke-width="6" stroke-dasharray="395 480" stroke-linecap="round" transform="rotate(-90 400 195)"/>
+        <text x="400" y="202" text-anchor="middle" fill="#ffffff" font-family="monospace" font-size="30" font-weight="bold">50:00</text>
+        <text x="400" y="226" text-anchor="middle" fill="#34d399" font-family="monospace" font-size="11">FOCUS SPRINT</text>
+        <!-- Badge & Title -->
+        <rect x="44" y="38" width="266" height="32" rx="6" fill="#050507" stroke="#27272a" stroke-width="1.5"/>
+        <text x="60" y="59" fill="#34d399" font-family="monospace" font-size="13" font-weight="bold">STUDY AESTHETIC · MORNING SPRINT</text>
+        <text x="44" y="466" fill="#f4f4f5" font-family="sans-serif" font-size="22" font-weight="bold">Dawn Horizon Study Desk</text>
+      </svg>
+    `),
+  },
+] as const;
+
+export function getStudyMomentPlaceholderById(
+  imageId: string | null | undefined
+): StudyMomentPlaceholderImage | null {
+  const cleanId = String(imageId || '').trim().toLowerCase();
+  if (!cleanId) return null;
+  return (
+    CURATED_STUDY_MOMENT_IMAGES.find((item) => item.id.toLowerCase() === cleanId) ||
+    null
+  );
+}
+
+export function selectStudyMomentPlaceholder(
+  currentSelectedId: string | null | undefined,
+  clickedId: string | null | undefined
+): string | null {
+  const matched = getStudyMomentPlaceholderById(clickedId);
+  if (!matched) return null;
+  const currentClean = String(currentSelectedId || '').trim().toLowerCase();
+  if (currentClean === matched.id.toLowerCase()) {
+    return null;
+  }
+  return matched.id;
+}
+
+export function resolveMomentPublishImageSource(params: {
+  uploadedPhotoDataUrl?: string | null;
+  selectedPlaceholderId?: string | null;
+  fallbackGenerator?: () => string;
+}): {
+  photoDataUrl: string;
+  sourceType: 'uploaded' | 'placeholder' | 'fallback';
+  placeholder: StudyMomentPlaceholderImage | null;
+} {
+  const cleanUploaded = String(params.uploadedPhotoDataUrl || '').trim();
+  if (cleanUploaded) {
+    return {
+      photoDataUrl: cleanUploaded,
+      sourceType: 'uploaded',
+      placeholder: null,
+    };
+  }
+
+  const placeholder = getStudyMomentPlaceholderById(params.selectedPlaceholderId);
+  if (placeholder) {
+    return {
+      photoDataUrl: placeholder.photoDataUrl,
+      sourceType: 'placeholder',
+      placeholder,
+    };
+  }
+
+  const fallbackDataUrl = params.fallbackGenerator
+    ? params.fallbackGenerator()
+    : CURATED_STUDY_MOMENT_IMAGES[0].photoDataUrl;
+
+  return {
+    photoDataUrl: fallbackDataUrl,
+    sourceType: 'fallback',
+    placeholder: null,
+  };
+}
+
