@@ -11,8 +11,12 @@ import {
   ReferenceLine,
   Cell,
 } from 'recharts';
-import { BarChart3, Clock, Award, CheckCircle2, Flame } from 'lucide-react';
-import { WeeklyActivitySummary, WeeklyActivityDayEntry } from '../utils/rules';
+import { BarChart3, Clock, Award, CheckCircle2, Flame, Download } from 'lucide-react';
+import {
+  WeeklyActivitySummary,
+  WeeklyActivityDayEntry,
+  buildWeeklyActivityJsonExport,
+} from '../utils/rules';
 
 export type WeeklyChartMode = 'combined' | 'productivity' | 'points';
 
@@ -69,9 +73,32 @@ export function WeeklyActivityOverview({
   dailyTargetMinutes,
 }: WeeklyActivityOverviewProps) {
   const [chartMode, setChartMode] = useState<WeeklyChartMode>('combined');
+  const [exportNotice, setExportNotice] = useState<string>('');
 
   const showProductivity = chartMode === 'combined' || chartMode === 'productivity';
   const showPoints = chartMode === 'combined' || chartMode === 'points';
+
+  const handleExportActivityJson = () => {
+    const exportPayload = buildWeeklyActivityJsonExport({
+      summary,
+      dailyTargetMinutes,
+      nowMs: Date.now(),
+    });
+    const blob = new Blob([exportPayload.jsonContent], {
+      type: 'application/json;charset=utf-8;',
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', exportPayload.filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setExportNotice(
+      `Exported ${exportPayload.filename} (${exportPayload.dayCount} days · ${summary.totalFocusMinutes}m focus)`
+    );
+  };
 
   return (
     <section
@@ -80,66 +107,92 @@ export function WeeklyActivityOverview({
       data-testid="weekly-activity-overview"
     >
       {/* Header & Chart View Switcher */}
-      <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-4">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-emerald-400 shrink-0" />
-            <h2 className="text-lg font-bold text-white">Weekly Activity Overview</h2>
-            <span aria-hidden="true" className="text-xs text-zinc-600">
-              ·
-            </span>
-            <span className="text-xs font-mono text-zinc-400 tabular-nums">
-              Last 7 Days
-            </span>
+      <div className="border-b border-zinc-800/80 pb-4 space-y-2.5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <BarChart3 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <h2 className="text-lg font-bold text-white">Weekly Activity Overview</h2>
+              <span aria-hidden="true" className="text-xs text-zinc-600">
+                ·
+              </span>
+              <span className="text-xs font-mono text-zinc-400 tabular-nums">
+                Last 7 Days
+              </span>
+            </div>
+            <p className="text-xs text-zinc-400">
+              Visualizing your daily focus productivity (minutes) and participation points earned over the past 7 days.
+            </p>
           </div>
-          <p className="text-xs text-zinc-400">
-            Visualizing your daily focus productivity (minutes) and participation points earned over the past 7 days.
-          </p>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Interactive Chart Metric Filter Controls */}
+            <div
+              className="flex flex-wrap items-center gap-1 p-1 bg-[#050505] border border-zinc-800 rounded-md max-w-full"
+              role="group"
+              aria-label="Weekly Activity Chart View Mode"
+            >
+              <button
+                type="button"
+                onClick={() => setChartMode('combined')}
+                data-testid="weekly-chart-mode-combined"
+                className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                  chartMode === 'combined'
+                    ? 'bg-white text-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Combined Overview
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartMode('productivity')}
+                data-testid="weekly-chart-mode-productivity"
+                className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                  chartMode === 'productivity'
+                    ? 'bg-white text-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Productivity (Mins)
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartMode('points')}
+                data-testid="weekly-chart-mode-points"
+                className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                  chartMode === 'points'
+                    ? 'bg-white text-black'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                Points Earned
+              </button>
+            </div>
+
+            {/* Export Activity JSON Button */}
+            <button
+              type="button"
+              onClick={handleExportActivityJson}
+              data-testid="export-weekly-activity-json-btn"
+              aria-label="Export weekly productivity activity data as a JSON file"
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-mono font-semibold rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-700 hover:border-zinc-500 transition-colors whitespace-nowrap shrink-0"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>Export Activity</span>
+            </button>
+          </div>
         </div>
 
-        {/* Interactive Chart Metric Filter Controls */}
-        <div
-          className="flex items-center gap-1 p-1 bg-[#050505] border border-zinc-800 rounded-md"
-          role="group"
-          aria-label="Weekly Activity Chart View Mode"
-        >
-          <button
-            type="button"
-            onClick={() => setChartMode('combined')}
-            data-testid="weekly-chart-mode-combined"
-            className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
-              chartMode === 'combined'
-                ? 'bg-white text-black'
-                : 'text-zinc-400 hover:text-white'
-            }`}
+        {exportNotice && (
+          <div
+            role="status"
+            data-testid="export-weekly-activity-json-status"
+            className="text-xs font-mono text-emerald-400 font-semibold"
           >
-            Combined Overview
-          </button>
-          <button
-            type="button"
-            onClick={() => setChartMode('productivity')}
-            data-testid="weekly-chart-mode-productivity"
-            className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
-              chartMode === 'productivity'
-                ? 'bg-white text-black'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Productivity (Mins)
-          </button>
-          <button
-            type="button"
-            onClick={() => setChartMode('points')}
-            data-testid="weekly-chart-mode-points"
-            className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
-              chartMode === 'points'
-                ? 'bg-white text-black'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            Points Earned
-          </button>
-        </div>
+            {exportNotice}
+          </div>
+        )}
       </div>
 
       {/* 7-Day Aggregate KPI Strip */}

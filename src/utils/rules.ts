@@ -2068,6 +2068,78 @@ export function buildWeeklyActivityOverview(params: {
   };
 }
 
+export interface WeeklyActivityJsonExportDocument {
+  schemaVersion: '1.0';
+  exportedAtIso: string;
+  windowDays: 7;
+  dailyTargetMinutes: number;
+  aggregates: {
+    totalFocusMinutes: number;
+    totalPointsEarned: number;
+    averageFocusMinutes: number;
+    averagePointsEarned: number;
+    daysGoalReached: number;
+    goalHitRatePercent: number;
+    peakDayLabel: string;
+    peakFocusMinutes: number;
+  };
+  days: WeeklyActivityDayEntry[];
+}
+
+export function buildWeeklyActivityJsonExport(params: {
+  summary: WeeklyActivitySummary;
+  dailyTargetMinutes: number;
+  nowMs?: number;
+}): {
+  jsonContent: string;
+  filename: string;
+  dayCount: number;
+  document: WeeklyActivityJsonExportDocument;
+} {
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0
+      ? params.nowMs
+      : Date.now();
+  const exportedAtIso = new Date(nowMs).toISOString();
+  const safeTarget = clampProductivityTarget(params.dailyTargetMinutes);
+  const days = Array.isArray(params.summary?.days) ? params.summary.days : [];
+  const latestDayKey =
+    days[days.length - 1]?.dateKey || exportedAtIso.slice(0, 10);
+  const goalHitRatePercent =
+    days.length > 0
+      ? Math.round((params.summary.daysGoalReached / days.length) * 100)
+      : 0;
+
+  const document: WeeklyActivityJsonExportDocument = {
+    schemaVersion: '1.0',
+    exportedAtIso,
+    windowDays: 7,
+    dailyTargetMinutes: safeTarget,
+    aggregates: {
+      totalFocusMinutes: params.summary.totalFocusMinutes,
+      totalPointsEarned: params.summary.totalPointsEarned,
+      averageFocusMinutes: params.summary.averageFocusMinutes,
+      averagePointsEarned: params.summary.averagePointsEarned,
+      daysGoalReached: params.summary.daysGoalReached,
+      goalHitRatePercent,
+      peakDayLabel: params.summary.peakDayLabel,
+      peakFocusMinutes: params.summary.peakFocusMinutes,
+    },
+    days,
+  };
+
+  const jsonContent = JSON.stringify(document, null, 2);
+  const filename = `weekly-activity-overview-${latestDayKey}.json`;
+
+  return {
+    jsonContent,
+    filename,
+    dayCount: days.length,
+    document,
+  };
+}
+
+
 // --- Weekly Productivity Distribution (Focus Session Breakdown by Study Room Topic) ---
 export interface TopicFocusSessionRecord {
   id: string;

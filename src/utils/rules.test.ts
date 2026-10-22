@@ -27,6 +27,7 @@ import {
   getTopContributorBadge,
   getPastDateKey,
   buildWeeklyActivityOverview,
+  buildWeeklyActivityJsonExport,
   DEFAULT_UI_SOUND_PREFERENCES,
   toggleUiSoundEffects,
   getUiSoundChimeSpec,
@@ -1203,6 +1204,37 @@ test('Peak popularity marker hover pulse spec activates gentle pulse on hovered 
   assert.equal(hoveredNonPeakSpec.isPulsingPeak, false);
   assert.equal(hoveredNonPeakSpec.isPulsingTrendLine, false);
 });
+
+test('Weekly Activity Overview JSON export builds valid formatted JSON with 7-day entries and aggregate productivity metrics', () => {
+  const nowMs = 1_761_000_000_000;
+  const summary = buildWeeklyActivityOverview({
+    todayDateKey: '2026-10-22',
+    todayFocusMinutes: 135,
+    dailyTargetMinutes: 120,
+    todayPointsEarned: 95,
+    streakCount: 6,
+  });
+
+  const exported = buildWeeklyActivityJsonExport({
+    summary,
+    dailyTargetMinutes: 120,
+    nowMs,
+  });
+
+  assert.equal(exported.filename, 'weekly-activity-overview-2026-10-22.json');
+  assert.equal(exported.dayCount, 7);
+
+  const parsed = JSON.parse(exported.jsonContent);
+  assert.equal(parsed.schemaVersion, '1.0');
+  assert.equal(parsed.windowDays, 7);
+  assert.equal(parsed.dailyTargetMinutes, 120);
+  assert.equal(parsed.aggregates.totalFocusMinutes, summary.totalFocusMinutes);
+  assert.equal(parsed.aggregates.totalPointsEarned, summary.totalPointsEarned);
+  assert.equal(parsed.days.length, 7);
+  assert.equal(parsed.days[6].dateKey, '2026-10-22');
+  assert.equal(parsed.days[6].focusMinutes, 135);
+});
+
 
 
 
