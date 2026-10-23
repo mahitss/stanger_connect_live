@@ -8,10 +8,13 @@ import {
   Lock,
   Plus,
   Sparkles,
+  Snowflake,
+  ShieldAlert,
 } from 'lucide-react';
 import {
   BadgeId,
   EvaluatedUserBadge,
+  StreakFreezeStatusSummary,
   UserBadgeEvaluationSummary,
 } from '../utils/rules';
 
@@ -95,11 +98,26 @@ interface UserProfileBadgesCardProps {
   streakCount: number;
   participationPoints: number;
   badgeSummary: UserBadgeEvaluationSummary;
+  streakFreezeStatus: StreakFreezeStatusSummary;
   onAdvanceStreak: (targetStreakDays?: number) => void;
   onRecordConsecutiveGoalDay: (daysToEnsure?: number) => void;
   onContributeHelpfulNote: (subject: string, noteText: string) => {
     valid: boolean;
     error: string;
+  };
+  onPurchaseStreakFreeze: () => {
+    success: boolean;
+    message: string;
+    error: string;
+  };
+  onRescueMissedDayWithFreeze: () => {
+    success: boolean;
+    message: string;
+    error: string;
+  };
+  onSimulateMissedDay: () => {
+    preservedByEquippedFreeze: boolean;
+    message: string;
   };
   onOpenStudyRoom: () => void;
 }
@@ -111,9 +129,13 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
   streakCount,
   participationPoints,
   badgeSummary,
+  streakFreezeStatus,
   onAdvanceStreak,
   onRecordConsecutiveGoalDay,
   onContributeHelpfulNote,
+  onPurchaseStreakFreeze,
+  onRescueMissedDayWithFreeze,
+  onSimulateMissedDay,
   onOpenStudyRoom,
 }) => {
   const [noteSubject, setNoteSubject] = useState('Distributed Systems & Focus');
@@ -150,6 +172,32 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
         message: 'Helpful study note contributed to Study Room! Achievement updated.',
       });
     }
+  };
+
+  const handleBuyFreezeClick = () => {
+    const res = onPurchaseStreakFreeze();
+    if (!res.success) {
+      setNoteFeedback({ type: 'error', message: res.error });
+    } else {
+      setNoteFeedback({ type: 'success', message: res.message });
+    }
+  };
+
+  const handleRescueFreezeClick = () => {
+    const res = onRescueMissedDayWithFreeze();
+    if (!res.success) {
+      setNoteFeedback({ type: 'error', message: res.error });
+    } else {
+      setNoteFeedback({ type: 'success', message: res.message });
+    }
+  };
+
+  const handleSimulateMissedDayClick = () => {
+    const res = onSimulateMissedDay();
+    setNoteFeedback({
+      type: res.preservedByEquippedFreeze ? 'success' : 'error',
+      message: res.message,
+    });
   };
 
   return (
@@ -200,7 +248,7 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
         </div>
       </div>
 
-      {/* Achievement Feedback Banner */}
+      {/* Achievement & Streak Freeze Feedback Banner */}
       {noteFeedback && (
         <div
           role="status"
@@ -221,6 +269,130 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
           </button>
         </div>
       )}
+
+      {/* Streak Freeze Protection Panel (Spend Participation Points to Preserve Streak on Missed Days) */}
+      <div
+        data-testid="streak-freeze-panel"
+        className={`p-4 rounded-md border transition-colors ${
+          streakFreezeStatus.isStreakAtRisk
+            ? 'border-amber-500/50 bg-[#0D0E12]'
+            : streakFreezeStatus.isProtected
+            ? 'border-sky-500/40 bg-[#0D0E12]'
+            : 'border-zinc-800/80 bg-[#050505]'
+        }`}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1.5 min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              {streakFreezeStatus.isStreakAtRisk ? (
+                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+              ) : (
+                <Snowflake
+                  className={`w-4 h-4 shrink-0 ${
+                    streakFreezeStatus.isProtected ? 'text-sky-400' : 'text-zinc-400'
+                  }`}
+                />
+              )}
+              <h3 className="text-sm font-bold text-white">
+                Streak Freeze Protection
+              </h3>
+              <span className="text-xs text-zinc-500">·</span>
+              <span
+                data-testid="streak-freeze-headline"
+                className={`text-xs font-mono font-semibold tabular-nums ${
+                  streakFreezeStatus.isStreakAtRisk
+                    ? 'text-amber-400'
+                    : streakFreezeStatus.isProtected
+                    ? 'text-sky-400'
+                    : 'text-zinc-400'
+                }`}
+              >
+                {streakFreezeStatus.protectionHeadline}
+              </span>
+            </div>
+
+            <p
+              data-testid="streak-freeze-subtext"
+              className="text-xs text-zinc-400 leading-relaxed"
+            >
+              {streakFreezeStatus.protectionSubtext}
+            </p>
+
+            {/* Frozen Dates & Points Summary */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 pt-1 text-[11px] font-mono text-zinc-400 tabular-nums">
+              <span data-testid="streak-freeze-owned-count">
+                Equipped Freezes:{' '}
+                <strong className="text-sky-400">
+                  {streakFreezeStatus.streakFreezesOwned}/{streakFreezeStatus.maxFreezes}
+                </strong>
+              </span>
+              <span>·</span>
+              <span>
+                Freeze Cost:{' '}
+                <strong className="text-white">{streakFreezeStatus.costPoints} pts</strong>
+              </span>
+              <span>·</span>
+              <span data-testid="streak-freeze-available-points">
+                Available Balance:{' '}
+                <strong className="text-emerald-400">{participationPoints} pts</strong>
+              </span>
+              {streakFreezeStatus.frozenDates.length > 0 && (
+                <>
+                  <span>·</span>
+                  <span data-testid="streak-freeze-frozen-dates">
+                    Preserved Days:{' '}
+                    <strong className="text-sky-300">
+                      {streakFreezeStatus.frozenDates.join(', ')}
+                    </strong>
+                  </span>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* Interactive Streak Freeze Actions */}
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {streakFreezeStatus.isStreakAtRisk && (
+              <button
+                type="button"
+                onClick={handleRescueFreezeClick}
+                disabled={!streakFreezeStatus.canRescueMissedDay}
+                data-testid="rescue-streak-freeze-btn"
+                className="px-3 py-1.5 text-xs font-semibold bg-amber-400 hover:bg-amber-300 disabled:opacity-50 text-black rounded transition-colors whitespace-nowrap shrink-0"
+              >
+                {streakFreezeStatus.streakFreezesOwned > 0
+                  ? `Use Equipped Freeze (Restore ${streakFreezeStatus.streakAtRiskCount}d Streak)`
+                  : `Freeze Missed Day & Restore ${streakFreezeStatus.streakAtRiskCount}d Streak (${streakFreezeStatus.costPoints} pts)`}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleBuyFreezeClick}
+              disabled={!streakFreezeStatus.canPurchaseFreeze}
+              data-testid="buy-streak-freeze-btn"
+              className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 disabled:opacity-40 text-black rounded transition-colors inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
+            >
+              <Snowflake className="w-3.5 h-3.5 text-sky-600 shrink-0" />
+              <span>
+                {streakFreezeStatus.isAtMaxCapacity
+                  ? `Max Freezes (${streakFreezeStatus.maxFreezes}/${streakFreezeStatus.maxFreezes})`
+                  : `Buy Streak Freeze (${streakFreezeStatus.costPoints} pts)`}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleSimulateMissedDayClick}
+              data-testid="simulate-missed-day-btn"
+              title="Test what happens to your login & productivity streak when you miss a day"
+              className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded transition-colors whitespace-nowrap shrink-0"
+            >
+              Simulate Missed Day
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* 3 Achievement Cards Grid: 5-Day Streak, 3-Day Goal Hit, Helpful Notes */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -484,6 +656,13 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
           <span>
             Active Streak: <strong className="text-amber-400">{streakCount}d</strong>
+          </span>
+          <span>·</span>
+          <span>
+            Streak Freezes:{' '}
+            <strong className="text-sky-400">
+              {streakFreezeStatus.streakFreezesOwned}/{streakFreezeStatus.maxFreezes}
+            </strong>
           </span>
           <span>·</span>
           <span>

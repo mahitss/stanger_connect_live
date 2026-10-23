@@ -3602,10 +3602,18 @@ export function canUsersChatOrCall(
   return { allowed: true, reason: '' };
 }
 
+export const STREAK_FREEZE_COST_POINTS = 50;
+export const MAX_STREAK_FREEZES_OWNED = 3;
+
 export interface StreakState {
   streakCount: number;
   lastLoginDate: string; // YYYY-MM-DD
   participationPoints: number;
+  streakFreezesOwned?: number;
+  frozenDates?: string[];
+  lastFreezeUsedDate?: string | null;
+  streakAtRiskCount?: number | null;
+  missedDateKey?: string | null;
 }
 
 export function formatDateKey(date: Date): string {
@@ -3619,15 +3627,34 @@ export function computeUpdatedStreak(
   current: StreakState,
   todayDateKey: string,
   bonusPoints = 10
-): { updated: StreakState; incremented: boolean } {
+): {
+  updated: StreakState;
+  incremented: boolean;
+  freezeUsed?: boolean;
+  freezesConsumed?: number;
+} {
+  const existingFreezes = Math.max(
+    0,
+    Math.min(MAX_STREAK_FREEZES_OWNED, Math.round(Number(current.streakFreezesOwned) || 0))
+  );
+  const existingFrozenDates = Array.isArray(current.frozenDates)
+    ? [...current.frozenDates]
+    : [];
+
   if (!current.lastLoginDate) {
     return {
       updated: {
+        ...current,
         streakCount: 1,
         lastLoginDate: todayDateKey,
         participationPoints: Math.max(0, current.participationPoints) + bonusPoints,
+        ...(current.streakFreezesOwned !== undefined
+          ? { streakFreezesOwned: existingFreezes }
+          : {}),
       },
       incremented: true,
+      freezeUsed: false,
+      freezesConsumed: 0,
     };
   }
 
@@ -3638,6 +3665,8 @@ export function computeUpdatedStreak(
         streakCount: Math.max(1, current.streakCount),
       },
       incremented: false,
+      freezeUsed: false,
+      freezesConsumed: 0,
     };
   }
 
@@ -3648,21 +3677,77 @@ export function computeUpdatedStreak(
   if (diffDays === 1) {
     return {
       updated: {
+        ...current,
         streakCount: current.streakCount + 1,
         lastLoginDate: todayDateKey,
         participationPoints: current.participationPoints + bonusPoints + 15,
+        ...(current.streakAtRiskCount !== undefined ? { streakAtRiskCount: null } : {}),
+        ...(current.missedDateKey !== undefined ? { missedDateKey: null } : {}),
       },
       incremented: true,
+      freezeUsed: false,
+      freezesConsumed: 0,
     };
   }
 
+  const missedDaysCount = diffDays - 1;
+  if (
+    diffDays > 1 &&
+    missedDaysCount <= MAX_STREAK_FREEZES_OWNED &&
+    existingFreezes >= missedDaysCount
+  ) {
+    const newlyFrozenDates = [...existingFrozenDates];
+    for (let offset = missedDaysCount; offset >= 1; offset--) {
+      const mKey = getPastDateKey(todayDateKey, offset);
+      if (!newlyFrozenDates.includes(mKey)) {
+        newlyFrozenDates.push(mKey);
+      }
+    }
+    const lastFrozen = getPastDateKey(todayDateKey, 1);
+
+    return {
+      updated: {
+        ...current,
+        streakCount: Math.max(1, current.streakCount),
+        lastLoginDate: todayDateKey,
+        participationPoints: current.participationPoints + bonusPoints,
+        streakFreezesOwned: existingFreezes - missedDaysCount,
+        frozenDates: newlyFrozenDates,
+        lastFreezeUsedDate: lastFrozen,
+        streakAtRiskCount: null,
+        missedDateKey: null,
+      },
+      incremented: true,
+      freezeUsed: true,
+      freezesConsumed: missedDaysCount,
+    };
+  }
+
+  const hasExtendedFreezeTracking =
+    current.streakFreezesOwned !== undefined ||
+    current.frozenDates !== undefined ||
+    current.streakAtRiskCount !== undefined;
+
+  const missedYesterdayKey = diffDays > 1 ? getPastDateKey(todayDateKey, 1) : null;
+
   return {
     updated: {
+      ...current,
       streakCount: 1,
       lastLoginDate: todayDateKey,
       participationPoints: current.participationPoints + bonusPoints,
+      ...(hasExtendedFreezeTracking
+        ? {
+            streakFreezesOwned: existingFreezes,
+            frozenDates: existingFrozenDates,
+            streakAtRiskCount: current.streakCount > 1 ? current.streakCount : null,
+            missedDateKey: current.streakCount > 1 ? missedYesterdayKey : null,
+          }
+        : {}),
     },
     incremented: true,
+    freezeUsed: false,
+    freezesConsumed: 0,
   };
 }
 
@@ -6583,13 +6668,23 @@ export function computeConsecutiveGoalDays(
     goalReached?: boolean;
     focusMinutes?: number;
     targetMinutes?: number;
-  }>
+    freezeApplied?: boolean;
+  }>,
+  frozenDates?: Iterable<string>
 ): {
   currentConsecutiveDays: number;
   maxConsecutiveDays: number;
 } {
   if (!Array.isArray(days) || days.length === 0) {
     return { currentConsecutiveDays: 0, maxConsecutiveDays: 0 };
+  }
+
+  const frozenSet = new Set<string>();
+  if (frozenDates) {
+    for (const d of frozenDates) {
+      const clean = String(d || '').trim();
+      if (clean) frozenSet.add(clean);
+    }
   }
 
   let running = 0;
@@ -6606,8 +6701,16 @@ export function computeConsecutiveGoalDays(
         ? day.focusMinutes >= day.targetMinutes
         : false;
 
+    const isFrozen =
+      Boolean(day.freezeApplied) ||
+      Boolean(day.dateKey && frozenSet.has(String(day.dateKey).trim()));
+
     if (isHit) {
       running += 1;
+      if (running > maxRun) {
+        maxRun = running;
+      }
+    } else if (isFrozen) {
       if (running > maxRun) {
         maxRun = running;
       }
@@ -6713,11 +6816,13 @@ export interface UserBadgeEvaluationInput {
   uid?: string;
   streakCount?: number;
   consecutiveGoalDays?: number;
+  frozenDates?: string[];
   weeklyDays?: Array<{
     dateKey?: string;
     goalReached?: boolean;
     focusMinutes?: number;
     targetMinutes?: number;
+    freezeApplied?: boolean;
   }>;
   helpfulNotesCount?: number;
   studyNotes?: Array<{
@@ -6736,7 +6841,7 @@ export function evaluateUserBadges(
   const safeStreak = Math.max(0, Math.round(Number(input.streakCount) || 0));
 
   const computedFromDays = input.weeklyDays
-    ? computeConsecutiveGoalDays(input.weeklyDays).maxConsecutiveDays
+    ? computeConsecutiveGoalDays(input.weeklyDays, input.frozenDates).maxConsecutiveDays
     : 0;
   const explicitGoalDays =
     typeof input.consecutiveGoalDays === 'number' &&
@@ -6966,4 +7071,377 @@ export function validateAndBuildHelpfulNoteContribution(params: {
     },
   };
 }
+
+// --- Streak Freeze System (Spend Participation Points to Preserve Login & Productivity Streak) ---
+export interface StreakFreezeInventoryState {
+  streakFreezesOwned: number;
+  frozenDates: string[];
+  lastFreezeUsedDate: string | null;
+  streakAtRiskCount: number | null;
+  missedDateKey: string | null;
+}
+
+export const DEFAULT_STREAK_FREEZE_STATE: StreakFreezeInventoryState = {
+  streakFreezesOwned: 0,
+  frozenDates: [],
+  lastFreezeUsedDate: null,
+  streakAtRiskCount: null,
+  missedDateKey: null,
+};
+
+export interface StreakFreezeStatusSummary {
+  streakFreezesOwned: number;
+  maxFreezes: number;
+  costPoints: number;
+  participationPoints: number;
+  canAffordFreeze: boolean;
+  isAtMaxCapacity: boolean;
+  canPurchaseFreeze: boolean;
+  isProtected: boolean;
+  isStreakAtRisk: boolean;
+  streakAtRiskCount: number | null;
+  missedDateKey: string | null;
+  canRescueMissedDay: boolean;
+  frozenDates: string[];
+  lastFreezeUsedDate: string | null;
+  protectionHeadline: string;
+  protectionSubtext: string;
+}
+
+export function evaluateStreakFreezeStatus(params: {
+  streakCount: number;
+  participationPoints: number;
+  streakFreezesOwned?: number;
+  frozenDates?: string[];
+  lastFreezeUsedDate?: string | null;
+  streakAtRiskCount?: number | null;
+  missedDateKey?: string | null;
+  costPoints?: number;
+  maxFreezes?: number;
+}): StreakFreezeStatusSummary {
+  const costPoints = Math.max(
+    1,
+    Math.round(Number(params.costPoints) || STREAK_FREEZE_COST_POINTS)
+  );
+  const maxFreezes = Math.max(
+    1,
+    Math.round(Number(params.maxFreezes) || MAX_STREAK_FREEZES_OWNED)
+  );
+  const participationPoints = Math.max(
+    0,
+    Math.round(Number(params.participationPoints) || 0)
+  );
+  const streakFreezesOwned = Math.max(
+    0,
+    Math.min(maxFreezes, Math.round(Number(params.streakFreezesOwned) || 0))
+  );
+  const frozenDates = Array.isArray(params.frozenDates)
+    ? params.frozenDates.filter((d) => Boolean(String(d || '').trim()))
+    : [];
+  const lastFreezeUsedDate = params.lastFreezeUsedDate
+    ? String(params.lastFreezeUsedDate).trim()
+    : frozenDates[frozenDates.length - 1] || null;
+
+  const streakAtRiskCount =
+    typeof params.streakAtRiskCount === 'number' && params.streakAtRiskCount > 1
+      ? Math.round(params.streakAtRiskCount)
+      : null;
+  const missedDateKey = params.missedDateKey
+    ? String(params.missedDateKey).trim()
+    : null;
+  const isStreakAtRisk = Boolean(streakAtRiskCount && streakAtRiskCount > 1);
+  const canAffordFreeze = participationPoints >= costPoints;
+  const isAtMaxCapacity = streakFreezesOwned >= maxFreezes;
+  const canPurchaseFreeze = canAffordFreeze && !isAtMaxCapacity;
+  const isProtected = streakFreezesOwned > 0;
+  const canRescueMissedDay =
+    isStreakAtRisk && (streakFreezesOwned > 0 || canAffordFreeze);
+
+  let protectionHeadline = '';
+  let protectionSubtext = '';
+
+  if (isStreakAtRisk && streakAtRiskCount) {
+    protectionHeadline = `Streak At Risk · ${streakAtRiskCount}-Day Streak Missed (${
+      missedDateKey || 'Yesterday'
+    })`;
+    protectionSubtext =
+      streakFreezesOwned > 0
+        ? `Apply 1 of your ${streakFreezesOwned} equipped Streak Freezes to restore your ${streakAtRiskCount}-day streak.`
+        : canAffordFreeze
+        ? `Spend ${costPoints} participation pts to freeze ${
+            missedDateKey || 'yesterday'
+          } and restore your ${streakAtRiskCount}-day streak.`
+        : `Earn ${
+            costPoints - participationPoints
+          } more pts to spend ${costPoints} pts on a Streak Freeze recovery.`;
+  } else if (isProtected) {
+    protectionHeadline = `Streak Shield Armed · ${streakFreezesOwned}/${maxFreezes} Freeze${
+      streakFreezesOwned === 1 ? '' : 's'
+    } Active`;
+    protectionSubtext = `Automatically protects your ${Math.max(
+      1,
+      Math.round(params.streakCount)
+    )}-day login & productivity streak if you miss a day.`;
+  } else {
+    protectionHeadline = `No Streak Freeze Equipped (0/${maxFreezes})`;
+    protectionSubtext = canAffordFreeze
+      ? `Spend ${costPoints} participation pts to equip a Streak Freeze before missing a day.`
+      : `Accumulate ${costPoints} participation pts (${
+          costPoints - participationPoints
+        } more needed) to unlock a Streak Freeze.`;
+  }
+
+  return {
+    streakFreezesOwned,
+    maxFreezes,
+    costPoints,
+    participationPoints,
+    canAffordFreeze,
+    isAtMaxCapacity,
+    canPurchaseFreeze,
+    isProtected,
+    isStreakAtRisk,
+    streakAtRiskCount,
+    missedDateKey,
+    canRescueMissedDay,
+    frozenDates,
+    lastFreezeUsedDate,
+    protectionHeadline,
+    protectionSubtext,
+  };
+}
+
+export function purchaseStreakFreeze(params: {
+  participationPoints: number;
+  streakFreezesOwned: number;
+  costPoints?: number;
+  maxFreezes?: number;
+}): {
+  success: boolean;
+  participationPoints: number;
+  streakFreezesOwned: number;
+  pointsSpent: number;
+  message: string;
+  error: string;
+} {
+  const costPoints = Math.max(
+    1,
+    Math.round(Number(params.costPoints) || STREAK_FREEZE_COST_POINTS)
+  );
+  const maxFreezes = Math.max(
+    1,
+    Math.round(Number(params.maxFreezes) || MAX_STREAK_FREEZES_OWNED)
+  );
+  const currentPoints = Math.max(0, Math.round(Number(params.participationPoints) || 0));
+  const currentFreezes = Math.max(
+    0,
+    Math.min(maxFreezes, Math.round(Number(params.streakFreezesOwned) || 0))
+  );
+
+  if (currentFreezes >= maxFreezes) {
+    return {
+      success: false,
+      participationPoints: currentPoints,
+      streakFreezesOwned: currentFreezes,
+      pointsSpent: 0,
+      message: '',
+      error: `Maximum capacity reached (${maxFreezes}/${maxFreezes} Streak Freezes equipped).`,
+    };
+  }
+
+  if (currentPoints < costPoints) {
+    return {
+      success: false,
+      participationPoints: currentPoints,
+      streakFreezesOwned: currentFreezes,
+      pointsSpent: 0,
+      message: '',
+      error: `Insufficient participation points. Need ${costPoints} pts (you have ${currentPoints} pts).`,
+    };
+  }
+
+  const nextPoints = currentPoints - costPoints;
+  const nextFreezes = currentFreezes + 1;
+
+  return {
+    success: true,
+    participationPoints: nextPoints,
+    streakFreezesOwned: nextFreezes,
+    pointsSpent: costPoints,
+    message: `Streak Freeze equipped (-${costPoints} pts)! You now have ${nextFreezes}/${maxFreezes} Streak Freeze${
+      nextFreezes === 1 ? '' : 's'
+    } ready to protect your streak.`,
+    error: '',
+  };
+}
+
+export function spendPointsToFreezeMissedDay(params: {
+  streakCount: number;
+  lastLoginDate: string;
+  participationPoints: number;
+  streakFreezesOwned: number;
+  frozenDates?: string[];
+  lastFreezeUsedDate?: string | null;
+  streakAtRiskCount?: number | null;
+  missedDateKey?: string | null;
+  todayDateKey: string;
+  targetMissedDateKey?: string;
+  preferDirectPoints?: boolean;
+  costPoints?: number;
+}): {
+  success: boolean;
+  streakCount: number;
+  lastLoginDate: string;
+  participationPoints: number;
+  streakFreezesOwned: number;
+  frozenDates: string[];
+  lastFreezeUsedDate: string | null;
+  streakAtRiskCount: null;
+  missedDateKey: null;
+  pointsSpent: number;
+  freezeConsumed: boolean;
+  frozenDateKey: string;
+  message: string;
+  error: string;
+} {
+  const costPoints = Math.max(
+    1,
+    Math.round(Number(params.costPoints) || STREAK_FREEZE_COST_POINTS)
+  );
+  const currentPoints = Math.max(0, Math.round(Number(params.participationPoints) || 0));
+  const currentFreezes = Math.max(
+    0,
+    Math.min(
+      MAX_STREAK_FREEZES_OWNED,
+      Math.round(Number(params.streakFreezesOwned) || 0)
+    )
+  );
+  const existingFrozen = Array.isArray(params.frozenDates)
+    ? [...params.frozenDates]
+    : [];
+
+  const resolvedMissedDate =
+    (params.targetMissedDateKey && String(params.targetMissedDateKey).trim()) ||
+    (params.missedDateKey && String(params.missedDateKey).trim()) ||
+    getPastDateKey(params.todayDateKey, 1);
+
+  const useEquippedFreeze = !params.preferDirectPoints && currentFreezes > 0;
+
+  if (!useEquippedFreeze && currentPoints < costPoints) {
+    return {
+      success: false,
+      streakCount: Math.max(1, Math.round(params.streakCount)),
+      lastLoginDate: params.lastLoginDate || params.todayDateKey,
+      participationPoints: currentPoints,
+      streakFreezesOwned: currentFreezes,
+      frozenDates: existingFrozen,
+      lastFreezeUsedDate: params.lastFreezeUsedDate || null,
+      streakAtRiskCount: null,
+      missedDateKey: null,
+      pointsSpent: 0,
+      freezeConsumed: false,
+      frozenDateKey: resolvedMissedDate,
+      message: '',
+      error: `Insufficient participation points to freeze missed day. Need ${costPoints} pts (you have ${currentPoints} pts).`,
+    };
+  }
+
+  const nextPoints = useEquippedFreeze ? currentPoints : currentPoints - costPoints;
+  const nextFreezes = useEquippedFreeze ? currentFreezes - 1 : currentFreezes;
+  const restoredStreak =
+    typeof params.streakAtRiskCount === 'number' && params.streakAtRiskCount > 1
+      ? Math.max(params.streakCount, Math.round(params.streakAtRiskCount))
+      : Math.max(1, Math.round(params.streakCount));
+
+  const nextFrozenDates = existingFrozen.includes(resolvedMissedDate)
+    ? existingFrozen
+    : [...existingFrozen, resolvedMissedDate];
+
+  const message = useEquippedFreeze
+    ? `Equipped Streak Freeze consumed! Preserved your ${restoredStreak}-day login & productivity streak across missed day ${resolvedMissedDate}.`
+    : `Spent ${costPoints} participation pts on a Streak Freeze! Preserved your ${restoredStreak}-day login & productivity streak across missed day ${resolvedMissedDate}.`;
+
+  return {
+    success: true,
+    streakCount: restoredStreak,
+    lastLoginDate: params.todayDateKey,
+    participationPoints: nextPoints,
+    streakFreezesOwned: nextFreezes,
+    frozenDates: nextFrozenDates,
+    lastFreezeUsedDate: resolvedMissedDate,
+    streakAtRiskCount: null,
+    missedDateKey: null,
+    pointsSpent: useEquippedFreeze ? 0 : costPoints,
+    freezeConsumed: useEquippedFreeze,
+    frozenDateKey: resolvedMissedDate,
+    message,
+    error: '',
+  };
+}
+
+export function simulateMissedDayStreakEvaluation(params: {
+  streakCount: number;
+  participationPoints: number;
+  streakFreezesOwned: number;
+  frozenDates?: string[];
+  lastFreezeUsedDate?: string | null;
+  todayDateKey: string;
+}): {
+  preservedByEquippedFreeze: boolean;
+  streakCount: number;
+  lastLoginDate: string;
+  participationPoints: number;
+  streakFreezesOwned: number;
+  frozenDates: string[];
+  lastFreezeUsedDate: string | null;
+  streakAtRiskCount: number | null;
+  missedDateKey: string | null;
+  message: string;
+} {
+  const twoDaysAgoKey = getPastDateKey(params.todayDateKey, 2);
+  const yesterdayKey = getPastDateKey(params.todayDateKey, 1);
+  const effectivePriorStreak = Math.max(2, Math.round(Number(params.streakCount) || 2));
+
+  const evalResult = computeUpdatedStreak(
+    {
+      streakCount: effectivePriorStreak,
+      lastLoginDate: twoDaysAgoKey,
+      participationPoints: Math.max(0, Math.round(Number(params.participationPoints) || 0)),
+      streakFreezesOwned: Math.max(0, Math.round(Number(params.streakFreezesOwned) || 0)),
+      frozenDates: Array.isArray(params.frozenDates) ? [...params.frozenDates] : [],
+      lastFreezeUsedDate: params.lastFreezeUsedDate || null,
+    },
+    params.todayDateKey,
+    0
+  );
+
+  if (evalResult.freezeUsed) {
+    return {
+      preservedByEquippedFreeze: true,
+      streakCount: evalResult.updated.streakCount,
+      lastLoginDate: evalResult.updated.lastLoginDate,
+      participationPoints: evalResult.updated.participationPoints,
+      streakFreezesOwned: evalResult.updated.streakFreezesOwned ?? 0,
+      frozenDates: evalResult.updated.frozenDates ?? [yesterdayKey],
+      lastFreezeUsedDate: evalResult.updated.lastFreezeUsedDate ?? yesterdayKey,
+      streakAtRiskCount: null,
+      missedDateKey: null,
+      message: `Streak Freeze Automatically Triggered! 1 Freeze consumed to preserve your ${evalResult.updated.streakCount}-day login & productivity streak across missed day ${yesterdayKey}.`,
+    };
+  }
+
+  return {
+    preservedByEquippedFreeze: false,
+    streakCount: 1,
+    lastLoginDate: params.todayDateKey,
+    participationPoints: evalResult.updated.participationPoints,
+    streakFreezesOwned: evalResult.updated.streakFreezesOwned ?? 0,
+    frozenDates: evalResult.updated.frozenDates ?? [],
+    lastFreezeUsedDate: params.lastFreezeUsedDate || null,
+    streakAtRiskCount: effectivePriorStreak,
+    missedDateKey: yesterdayKey,
+    message: `Missed day ${yesterdayKey} with 0 Streak Freezes equipped! Your ${effectivePriorStreak}-day streak is at risk — spend ${STREAK_FREEZE_COST_POINTS} participation pts now to freeze ${yesterdayKey} and restore your ${effectivePriorStreak}-day streak.`,
+  };
+}
+
 

@@ -123,6 +123,12 @@ import {
   evaluateUserBadges,
   recordConsecutiveGoalHitDay,
   validateAndBuildHelpfulNoteContribution,
+  StreakFreezeInventoryState,
+  DEFAULT_STREAK_FREEZE_STATE,
+  evaluateStreakFreezeStatus,
+  purchaseStreakFreeze,
+  spendPointsToFreezeMissedDay,
+  simulateMissedDayStreakEvaluation,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -233,6 +239,29 @@ export default function App() {
       // ignore
     }
     return null;
+  });
+
+  // Persistent Streak Freeze Inventory & Missed-Day Protection State
+  const [streakFreezeState, setStreakFreezeState] = useState<StreakFreezeInventoryState>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_streak_freeze_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') {
+          return {
+            streakFreezesOwned: Math.max(0, Number(parsed.streakFreezesOwned) || 0),
+            frozenDates: Array.isArray(parsed.frozenDates) ? parsed.frozenDates : [],
+            lastFreezeUsedDate: parsed.lastFreezeUsedDate || null,
+            streakAtRiskCount:
+              typeof parsed.streakAtRiskCount === 'number' ? parsed.streakAtRiskCount : null,
+            missedDateKey: parsed.missedDateKey || null,
+          };
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_STREAK_FREEZE_STATE;
   });
 
   // Persistent Theme Mode State ('dark' default, toggles to 'light')
@@ -2680,10 +2709,158 @@ export default function App() {
     uid: currentIdentity.uid,
     streakCount: currentIdentity.streakCount,
     weeklyDays: weeklyActivitySummary.days,
+    frozenDates: streakFreezeState.frozenDates,
     studyNotes,
   });
 
+  const streakFreezeStatus = evaluateStreakFreezeStatus({
+    streakCount: currentIdentity.streakCount,
+    participationPoints: currentIdentity.participationPoints,
+    streakFreezesOwned: streakFreezeState.streakFreezesOwned,
+    frozenDates: streakFreezeState.frozenDates,
+    lastFreezeUsedDate: streakFreezeState.lastFreezeUsedDate,
+    streakAtRiskCount: streakFreezeState.streakAtRiskCount,
+    missedDateKey: streakFreezeState.missedDateKey,
+  });
+
+  const syncAccountPointsAndStreak = (nextStreak: number, nextPoints: number) => {
+    setAccountSession((prev) => {
+      const base = prev || currentIdentity;
+      const updated: AccountIdentity = {
+        ...base,
+        streakCount: nextStreak,
+        participationPoints: nextPoints,
+        lastLoginDate: todayDateStr,
+      };
+      localStorage.setItem('mr_stranger_account_v2', JSON.stringify(updated));
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: 'peer:update_stats',
+            participationPoints: nextPoints,
+            streakCount: nextStreak,
+          })
+        );
+      }
+
+      if (authUser) {
+        updateDoc(doc(db, 'profiles', base.uid), {
+          streakCount: nextStreak,
+          participationPoints: nextPoints,
+          lastLoginDate: todayDateStr,
+          updatedAt: serverTimestamp(),
+        }).catch(() => {
+          // ignore if offline
+        });
+      }
+
+      return updated;
+    });
+  };
+
+  const handlePurchaseStreakFreeze = (): {
+    success: boolean;
+    message: string;
+    error: string;
+  } => {
+    const res = purchaseStreakFreeze({
+      participationPoints: currentIdentity.participationPoints,
+      streakFreezesOwned: streakFreezeState.streakFreezesOwned,
+    });
+    if (!res.success) {
+      return { success: false, message: '', error: res.error };
+    }
+    setStreakFreezeState((prev) => {
+      const next: StreakFreezeInventoryState = {
+        ...prev,
+        streakFreezesOwned: res.streakFreezesOwned,
+      };
+      localStorage.setItem('mr_stranger_streak_freeze_v1', JSON.stringify(next));
+      return next;
+    });
+    syncAccountPointsAndStreak(currentIdentity.streakCount, res.participationPoints);
+    return { success: true, message: res.message, error: '' };
+  };
+
+  const handleRescueMissedDayWithFreeze = (): {
+    success: boolean;
+    message: string;
+    error: string;
+  } => {
+    const res = spendPointsToFreezeMissedDay({
+      streakCount: currentIdentity.streakCount,
+      lastLoginDate: currentIdentity.lastLoginDate,
+      participationPoints: currentIdentity.participationPoints,
+      streakFreezesOwned: streakFreezeState.streakFreezesOwned,
+      frozenDates: streakFreezeState.frozenDates,
+      lastFreezeUsedDate: streakFreezeState.lastFreezeUsedDate,
+      streakAtRiskCount: streakFreezeState.streakAtRiskCount,
+      missedDateKey: streakFreezeState.missedDateKey,
+      todayDateKey: todayDateStr,
+    });
+    if (!res.success) {
+      return { success: false, message: '', error: res.error };
+    }
+    const nextFreezeState: StreakFreezeInventoryState = {
+      streakFreezesOwned: res.streakFreezesOwned,
+      frozenDates: res.frozenDates,
+      lastFreezeUsedDate: res.lastFreezeUsedDate,
+      streakAtRiskCount: null,
+      missedDateKey: null,
+    };
+    setStreakFreezeState(nextFreezeState);
+    localStorage.setItem('mr_stranger_streak_freeze_v1', JSON.stringify(nextFreezeState));
+    syncAccountPointsAndStreak(res.streakCount, res.participationPoints);
+    return { success: true, message: res.message, error: '' };
+  };
+
+  const handleSimulateMissedDay = (): {
+    preservedByEquippedFreeze: boolean;
+    message: string;
+  } => {
+    const baseStreakToTest =
+      streakFreezeState.streakAtRiskCount && streakFreezeState.streakAtRiskCount > 1
+        ? streakFreezeState.streakAtRiskCount
+        : Math.max(3, currentIdentity.streakCount);
+
+    const sim = simulateMissedDayStreakEvaluation({
+      streakCount: baseStreakToTest,
+      participationPoints: currentIdentity.participationPoints,
+      streakFreezesOwned: streakFreezeState.streakFreezesOwned,
+      frozenDates: streakFreezeState.frozenDates,
+      lastFreezeUsedDate: streakFreezeState.lastFreezeUsedDate,
+      todayDateKey: todayDateStr,
+    });
+
+    const nextFreezeState: StreakFreezeInventoryState = {
+      streakFreezesOwned: sim.streakFreezesOwned,
+      frozenDates: sim.frozenDates,
+      lastFreezeUsedDate: sim.lastFreezeUsedDate,
+      streakAtRiskCount: sim.streakAtRiskCount,
+      missedDateKey: sim.missedDateKey,
+    };
+    setStreakFreezeState(nextFreezeState);
+    localStorage.setItem('mr_stranger_streak_freeze_v1', JSON.stringify(nextFreezeState));
+    syncAccountPointsAndStreak(sim.streakCount, sim.participationPoints);
+
+    return {
+      preservedByEquippedFreeze: sim.preservedByEquippedFreeze,
+      message: sim.message,
+    };
+  };
+
   const handleAdvanceUserStreak = (targetStreakDays?: number) => {
+    setStreakFreezeState((prev) => {
+      if (!prev.streakAtRiskCount) return prev;
+      const cleared: StreakFreezeInventoryState = {
+        ...prev,
+        streakAtRiskCount: null,
+        missedDateKey: null,
+      };
+      localStorage.setItem('mr_stranger_streak_freeze_v1', JSON.stringify(cleared));
+      return cleared;
+    });
     setAccountSession((prev) => {
       const base = prev || currentIdentity;
       const nextStreak =
@@ -3244,8 +3421,27 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1">
-                  <div className="text-xs text-zinc-400">Active Login Streak</div>
+                <div
+                  className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1"
+                  data-testid="hub-kpi-streak-card"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs text-zinc-400">Active Login Streak</div>
+                    <span
+                      data-testid="hub-kpi-streak-freeze-status"
+                      className={`text-[11px] font-mono font-semibold tabular-nums ${
+                        streakFreezeStatus.isStreakAtRisk
+                          ? 'text-amber-400'
+                          : streakFreezeStatus.isProtected
+                          ? 'text-sky-400'
+                          : 'text-zinc-500'
+                      }`}
+                    >
+                      {streakFreezeStatus.isStreakAtRisk
+                        ? `At Risk (${streakFreezeStatus.streakAtRiskCount}d)`
+                        : `${streakFreezeStatus.streakFreezesOwned}/${streakFreezeStatus.maxFreezes} Freezes`}
+                    </span>
+                  </div>
                   <div className="text-2xl font-bold font-mono tabular-nums text-amber-400">
                     {currentIdentity.streakCount} {currentIdentity.streakCount === 1 ? 'Day' : 'Days'}
                   </div>
@@ -3275,7 +3471,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* User Profile & Achievement Badges Card (5-Day Streak, 3-Day Goal Hit, Helpful Notes) */}
+              {/* User Profile, Streak Freeze Protection & Achievement Badges Card */}
               <UserProfileBadgesCard
                 displayName={currentIdentity.displayName}
                 email={currentIdentity.email}
@@ -3283,9 +3479,13 @@ export default function App() {
                 streakCount={currentIdentity.streakCount}
                 participationPoints={currentIdentity.participationPoints}
                 badgeSummary={userBadgeSummary}
+                streakFreezeStatus={streakFreezeStatus}
                 onAdvanceStreak={handleAdvanceUserStreak}
                 onRecordConsecutiveGoalDay={handleRecordConsecutiveGoalDay}
                 onContributeHelpfulNote={handleContributeHelpfulNoteFromProfile}
+                onPurchaseStreakFreeze={handlePurchaseStreakFreeze}
+                onRescueMissedDayWithFreeze={handleRescueMissedDayWithFreeze}
+                onSimulateMissedDay={handleSimulateMissedDay}
                 onOpenStudyRoom={() => setActivePage('study')}
               />
 

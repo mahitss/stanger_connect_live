@@ -137,6 +137,12 @@ import {
   evaluateUserBadges,
   recordConsecutiveGoalHitDay,
   validateAndBuildHelpfulNoteContribution,
+  STREAK_FREEZE_COST_POINTS,
+  MAX_STREAK_FREEZES_OWNED,
+  evaluateStreakFreezeStatus,
+  purchaseStreakFreeze,
+  spendPointsToFreezeMissedDay,
+  simulateMissedDayStreakEvaluation,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -2394,4 +2400,124 @@ test('Badges system rewards users for completing 5-day streaks, hitting producti
   assert.equal(ranked[1].uid, 'usr_starter');
   assert.equal(ranked[1].unlockedBadges.length, 0);
 });
+
+test('Streak Freeze system allows users to spend participation points to equip freezes, automatically preserves streaks on missed days, rescues at-risk streaks, and bridges consecutive productivity goal days', () => {
+  assert.equal(STREAK_FREEZE_COST_POINTS, 50);
+  assert.equal(MAX_STREAK_FREEZES_OWNED, 3);
+
+  // 1. Evaluate initial unprotected status when points < 50
+  const statusLowPts = evaluateStreakFreezeStatus({
+    streakCount: 4,
+    participationPoints: 30,
+    streakFreezesOwned: 0,
+  });
+  assert.equal(statusLowPts.canAffordFreeze, false);
+  assert.equal(statusLowPts.canPurchaseFreeze, false);
+  assert.equal(statusLowPts.isProtected, false);
+
+  // Insufficient points purchase rejected
+  const failedBuy = purchaseStreakFreeze({
+    participationPoints: 30,
+    streakFreezesOwned: 0,
+  });
+  assert.equal(failedBuy.success, false);
+  assert.equal(failedBuy.participationPoints, 30);
+  assert.equal(failedBuy.streakFreezesOwned, 0);
+
+  // 2. Purchasing a Streak Freeze with accumulated participation points (120 pts -> 70 pts, 1 freeze owned)
+  const buy1 = purchaseStreakFreeze({
+    participationPoints: 120,
+    streakFreezesOwned: 0,
+  });
+  assert.equal(buy1.success, true);
+  assert.equal(buy1.pointsSpent, 50);
+  assert.equal(buy1.participationPoints, 70);
+  assert.equal(buy1.streakFreezesOwned, 1);
+
+  const statusProtected = evaluateStreakFreezeStatus({
+    streakCount: 4,
+    participationPoints: buy1.participationPoints,
+    streakFreezesOwned: buy1.streakFreezesOwned,
+  });
+  assert.equal(statusProtected.isProtected, true);
+  assert.equal(statusProtected.canPurchaseFreeze, true);
+
+  // Max capacity (3 freezes) enforced
+  const maxCapRes = purchaseStreakFreeze({
+    participationPoints: 200,
+    streakFreezesOwned: MAX_STREAK_FREEZES_OWNED,
+  });
+  assert.equal(maxCapRes.success, false);
+  assert.equal(maxCapRes.streakFreezesOwned, 3);
+
+  // 3. Automatic login streak preservation when a day is missed (diffDays === 2) and a freeze is equipped
+  const autoProtected = simulateMissedDayStreakEvaluation({
+    streakCount: 5,
+    participationPoints: 70,
+    streakFreezesOwned: 1,
+    frozenDates: [],
+    todayDateKey: '2026-10-23',
+  });
+  assert.equal(autoProtected.preservedByEquippedFreeze, true);
+  assert.equal(autoProtected.streakCount, 5); // preserved instead of resetting to 1!
+  assert.equal(autoProtected.streakFreezesOwned, 0); // 1 freeze consumed
+  assert.deepEqual(autoProtected.frozenDates, ['2026-10-22']);
+  assert.equal(autoProtected.lastFreezeUsedDate, '2026-10-22');
+  assert.equal(autoProtected.streakAtRiskCount, null);
+
+  // 4. Missing a day with 0 freezes equipped puts the prior streak at risk, and spending 50 pts rescues & restores it
+  const missedUnprotected = simulateMissedDayStreakEvaluation({
+    streakCount: 6,
+    participationPoints: 90,
+    streakFreezesOwned: 0,
+    frozenDates: [],
+    todayDateKey: '2026-10-23',
+  });
+  assert.equal(missedUnprotected.preservedByEquippedFreeze, false);
+  assert.equal(missedUnprotected.streakCount, 1);
+  assert.equal(missedUnprotected.streakAtRiskCount, 6);
+  assert.equal(missedUnprotected.missedDateKey, '2026-10-22');
+
+  const rescued = spendPointsToFreezeMissedDay({
+    streakCount: missedUnprotected.streakCount,
+    lastLoginDate: missedUnprotected.lastLoginDate,
+    participationPoints: missedUnprotected.participationPoints,
+    streakFreezesOwned: missedUnprotected.streakFreezesOwned,
+    frozenDates: missedUnprotected.frozenDates,
+    streakAtRiskCount: missedUnprotected.streakAtRiskCount,
+    missedDateKey: missedUnprotected.missedDateKey,
+    todayDateKey: '2026-10-23',
+  });
+  assert.equal(rescued.success, true);
+  assert.equal(rescued.pointsSpent, 50);
+  assert.equal(rescued.participationPoints, 40);
+  assert.equal(rescued.streakCount, 6); // 6-day streak restored!
+  assert.deepEqual(rescued.frozenDates, ['2026-10-22']);
+  assert.equal(rescued.streakAtRiskCount, null);
+
+  // 5. Productivity goal streak preservation across a frozen missed day
+  const weeklyWithMissedDay = [
+    { dateKey: '2026-10-20', goalReached: true },
+    { dateKey: '2026-10-21', goalReached: true },
+    { dateKey: '2026-10-22', goalReached: false }, // missed day
+    { dateKey: '2026-10-23', goalReached: true },
+  ];
+  // Without freeze, consecutive run breaks on 2026-10-22 (max 2)
+  assert.equal(computeConsecutiveGoalDays(weeklyWithMissedDay).maxConsecutiveDays, 2);
+  // With 2026-10-22 in frozenDates, the 3 active goal days bridge across the frozen day -> 3 consecutive goal days!
+  const bridged = computeConsecutiveGoalDays(weeklyWithMissedDay, ['2026-10-22']);
+  assert.equal(bridged.maxConsecutiveDays, 3);
+  assert.equal(bridged.currentConsecutiveDays, 3);
+
+  const badgeEvalWithFreeze = evaluateUserBadges({
+    uid: 'usr_freeze_test',
+    streakCount: rescued.streakCount,
+    weeklyDays: weeklyWithMissedDay,
+    frozenDates: rescued.frozenDates,
+    helpfulNotesCount: 1,
+  });
+  assert.equal(badgeEvalWithFreeze.consecutiveGoalDays, 3);
+  assert.equal(badgeEvalWithFreeze.unlockedCount, 3);
+});
+
 
