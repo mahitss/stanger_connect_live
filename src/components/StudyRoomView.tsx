@@ -17,14 +17,23 @@ import {
   buildStudyRoomInviteUrl,
   AMBIENT_SOUNDSCAPES,
   AmbientPresetId,
+  AmbientTrackId,
   AmbientWorkspaceState,
   DEFAULT_AMBIENT_WORKSPACE_STATE,
   AMBIENT_VOLUME_PRESETS,
-  selectAmbientWorkspaceProfile,
-  updateAmbientWorkspaceVolume,
-  toggleAmbientWorkspaceMute,
-  getEffectiveAmbientGain,
-  formatAmbientWorkspaceStatus,
+  AMBIENT_MIX_PRESETS,
+  AmbientMultiLayerMixState,
+  DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE,
+  toggleAmbientLayer,
+  updateAmbientLayerVolume,
+  updateAmbientMasterVolume,
+  toggleAmbientMasterMute,
+  stopAllAmbientLayers,
+  applyAmbientMixPreset,
+  getActiveAmbientLayers,
+  getEffectiveAmbientLayerGain,
+  getEffectiveAmbientMixMap,
+  formatAmbientMultiLayerStatus,
   UiSoundEffectPreferences,
   DEFAULT_UI_SOUND_PREFERENCES,
   isStudyRoomAllAudioMuted,
@@ -287,30 +296,37 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   });
   const [localAddedTodayMinutes, setLocalAddedTodayMinutes] = useState(0);
 
-  // Personal Workspace Ambient Soundscapes State (Rain, Cafe, White Noise, Binaural, Lo-Fi)
-  const [ambientState, setAmbientState] = useState<AmbientWorkspaceState>(() => {
+  // Personal Workspace Multi-Layer Ambient Soundscapes State (Simultaneous Overlay + Individual Volumes)
+  const [ambientMixState, setAmbientMixState] = useState<AmbientMultiLayerMixState>(() => {
     try {
-      const saved = localStorage.getItem('mr_stranger_ambient_workspace_v1');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed && typeof parsed.volumePercent === 'number') {
+      const savedMix = localStorage.getItem('mr_stranger_ambient_multilayer_mix_v1');
+      if (savedMix) {
+        const parsed = JSON.parse(savedMix);
+        if (parsed && parsed.layers && typeof parsed.masterVolumePercent === 'number') {
           return {
-            activeProfile: 'off',
-            volumePercent: Math.min(100, Math.max(0, Math.round(parsed.volumePercent))),
-            isMuted: Boolean(parsed.isMuted),
-            lastNonZeroVolumePercent:
-              typeof parsed.lastNonZeroVolumePercent === 'number' &&
-              parsed.lastNonZeroVolumePercent > 0
-                ? Math.min(100, Math.max(1, Math.round(parsed.lastNonZeroVolumePercent)))
-                : 65,
+            ...DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE,
+            ...parsed,
+            layers: {
+              ...DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE.layers,
+              ...parsed.layers,
+            },
           };
         }
       }
     } catch {
       // ignore storage errors
     }
-    return DEFAULT_AMBIENT_WORKSPACE_STATE;
+    return DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE;
   });
+
+  // Derive legacy single-state view for system-wide mute helper compatibility
+  const activeAmbientLayers = getActiveAmbientLayers(ambientMixState);
+  const ambientState: AmbientWorkspaceState = {
+    activeProfile: activeAmbientLayers[0]?.id ?? 'off',
+    volumePercent: ambientMixState.masterVolumePercent,
+    isMuted: ambientMixState.isMasterMuted,
+    lastNonZeroVolumePercent: ambientMixState.lastNonZeroMasterVolumePercent,
+  };
 
   // System & UI Sound Effects State
   const [localUiSoundPrefs, setLocalUiSoundPrefs] = useState<UiSoundEffectPreferences>(() => {
@@ -640,32 +656,47 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setVerificationFeedback(check);
   };
 
-  const persistAmbientWorkspaceState = (next: AmbientWorkspaceState) => {
-    setAmbientState(next);
+  const syncAndPersistAmbientMix = (nextMix: AmbientMultiLayerMixState) => {
+    setAmbientMixState(nextMix);
     try {
-      localStorage.setItem('mr_stranger_ambient_workspace_v1', JSON.stringify(next));
+      localStorage.setItem(
+        'mr_stranger_ambient_multilayer_mix_v1',
+        JSON.stringify(nextMix)
+      );
     } catch {
       // ignore storage errors
     }
+    soundEngine.syncMultiLayerMix(getEffectiveAmbientMixMap(nextMix));
   };
 
-  const handleToggleSoundscape = (clickedId: AmbientPresetId) => {
-    const nextState = selectAmbientWorkspaceProfile(ambientState, clickedId);
-    persistAmbientWorkspaceState(nextState);
-    soundEngine.setVolume(getEffectiveAmbientGain(nextState));
-    soundEngine.startAmbient(nextState.activeProfile);
+  const handleToggleSoundscapeLayer = (clickedId: AmbientPresetId) => {
+    if (clickedId === 'off') {
+      const stopped = stopAllAmbientLayers(ambientMixState);
+      syncAndPersistAmbientMix(stopped);
+      return;
+    }
+    const nextMix = toggleAmbientLayer(ambientMixState, clickedId);
+    syncAndPersistAmbientMix(nextMix);
   };
 
-  const handleVolumeChange = (nextPercent: number) => {
-    const nextState = updateAmbientWorkspaceVolume(ambientState, nextPercent);
-    persistAmbientWorkspaceState(nextState);
-    soundEngine.setVolume(getEffectiveAmbientGain(nextState));
+  const handleLayerVolumeChange = (trackId: AmbientTrackId, nextPercent: number) => {
+    const nextMix = updateAmbientLayerVolume(ambientMixState, trackId, nextPercent);
+    syncAndPersistAmbientMix(nextMix);
+  };
+
+  const handleMasterVolumeChange = (nextPercent: number) => {
+    const nextMix = updateAmbientMasterVolume(ambientMixState, nextPercent);
+    syncAndPersistAmbientMix(nextMix);
   };
 
   const handleToggleMuteWorkspaceAudio = () => {
-    const nextState = toggleAmbientWorkspaceMute(ambientState);
-    persistAmbientWorkspaceState(nextState);
-    soundEngine.setVolume(getEffectiveAmbientGain(nextState));
+    const nextMix = toggleAmbientMasterMute(ambientMixState);
+    syncAndPersistAmbientMix(nextMix);
+  };
+
+  const handleApplyMixPreset = (presetId: string) => {
+    const nextMix = applyAmbientMixPreset(ambientMixState, presetId);
+    syncAndPersistAmbientMix(nextMix);
   };
 
   const handleToggleAllStudyRoomSounds = () => {
@@ -673,7 +704,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       ambientState,
       uiSoundPrefs: effectiveUiSoundPrefs,
     });
-    persistAmbientWorkspaceState(next.ambientState);
+    const nextMix = toggleAmbientMasterMute(ambientMixState, next.ambientState.isMuted);
+    syncAndPersistAmbientMix(nextMix);
     setLocalUiSoundPrefs(next.uiSoundPrefs);
     try {
       localStorage.setItem('mr_stranger_ui_sound_prefs_v1', JSON.stringify(next.uiSoundPrefs));
@@ -682,7 +714,6 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     }
     onUpdateUiSoundPrefs?.(next.uiSoundPrefs);
     soundEngine.setSystemSfxMuted(!next.uiSoundPrefs.enabled || next.isAllMuted);
-    soundEngine.setVolume(getEffectiveAmbientGain(next.ambientState));
   };
 
   const handleCopyInvite = async (kind: 'code' | 'link') => {
@@ -894,9 +925,9 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     (c) => !c.roomCode || c.roomCode === activeRoomCode
   );
   const isSeated = desksInCurrentRoom.some((d) => d.uid === currentUid);
-  const ambientMode = ambientState.activeProfile;
-  const effectiveVolumePercent = ambientState.isMuted ? 0 : ambientState.volumePercent;
-  const activePresetMeta = AMBIENT_SOUNDSCAPES.find((s) => s.id === ambientMode);
+  const effectiveVolumePercent = ambientMixState.isMasterMuted
+    ? 0
+    : ambientMixState.masterVolumePercent;
 
   const mergedSessions =
     topicFocusSessions && topicFocusSessions.length > 0
@@ -1657,11 +1688,11 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         onStartTimerWithBook={handleStartTimerWithBook}
       />
 
-      {/* Dedicated Ambient Soundscapes Panel (Rain, Cafe, White Noise, Binaural, Lo-Fi) */}
+      {/* Multi-Layer Ambient Soundscapes Mixer (Simultaneous Overlay + Individual Volume Controls) */}
       <div
         className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-5"
         data-testid="ambient-soundscape-panel"
-        aria-label="Ambient Soundscapes"
+        aria-label="Multi-Layer Ambient Soundscapes Mixer"
       >
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-4">
           <div className="space-y-1">
@@ -1670,13 +1701,16 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 className="text-base font-bold text-white"
                 data-testid="ambient-soundscapes-heading"
               >
-                Ambient Soundscapes
+                Multi-Layer Ambient Soundscape Mixer
               </h2>
               <span aria-hidden="true" className="text-xs text-zinc-500">
                 ·
               </span>
-              <span className="text-xs font-mono text-zinc-400">
-                Personal Workspace Audio
+              <span
+                className="text-xs font-mono text-zinc-400"
+                data-testid="ambient-active-layers-count"
+              >
+                {activeAmbientLayers.length} {activeAmbientLayers.length === 1 ? 'Layer' : 'Layers'} Active
               </span>
               <span aria-hidden="true" className="text-xs text-zinc-500">
                 ·
@@ -1685,11 +1719,11 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 className="text-xs font-mono tabular-nums text-emerald-400"
                 data-testid="active-soundscape-status"
               >
-                {formatAmbientWorkspaceStatus(ambientState)}
+                {formatAmbientMultiLayerStatus(ambientMixState)}
               </span>
             </div>
             <p className="text-xs text-zinc-400">
-              Toggle between synthesized sound profiles (Rain, Cafe, White Noise, 432Hz Alpha Focus, or Lo-Fi Chords) and adjust the background volume for your personal workspace.
+              Overlay multiple synthesized soundscapes simultaneously (Rainfall, Coffee Shop, White Noise, 432Hz Alpha Focus, and Lo-Fi Chords) and fine-tune each soundscape&apos;s individual volume slider to craft your custom focus environment.
             </p>
           </div>
 
@@ -1697,42 +1731,101 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
             <button
               type="button"
               onClick={handleToggleMuteWorkspaceAudio}
-              aria-pressed={ambientState.isMuted}
+              aria-pressed={ambientMixState.isMasterMuted}
               data-testid="ambient-mute-toggle-btn"
               className={`px-3 py-1.5 text-xs font-semibold rounded-md border flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 ${
-                ambientState.isMuted
+                ambientMixState.isMasterMuted
                   ? 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'
                   : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-800'
               }`}
             >
-              {ambientState.isMuted ? (
+              {ambientMixState.isMasterMuted ? (
                 <VolumeX className="w-3.5 h-3.5 shrink-0" />
               ) : (
                 <Volume2 className="w-3.5 h-3.5 shrink-0" />
               )}
-              <span>{ambientState.isMuted ? 'Unmute Workspace' : 'Mute Volume'}</span>
+              <span>{ambientMixState.isMasterMuted ? 'Unmute Master Mix' : 'Mute Master Mix'}</span>
             </button>
 
             <button
               type="button"
-              onClick={() => handleToggleSoundscape('off')}
-              disabled={ambientMode === 'off'}
+              onClick={() => handleToggleSoundscapeLayer('off')}
+              disabled={activeAmbientLayers.length === 0}
               data-testid="ambient-stop-btn"
               className="px-3 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 disabled:opacity-40 text-zinc-200 border border-zinc-800 rounded-md flex items-center gap-1.5 whitespace-nowrap shrink-0"
             >
-              <span>Turn Off Soundscape</span>
+              <span>Stop All Layers</span>
             </button>
           </div>
         </div>
 
-        {/* Personal Workspace Background Volume Controls */}
+        {/* One-Click Multi-Layer Focus Mix Presets */}
+        <div
+          className="space-y-2"
+          data-testid="ambient-mix-presets-row"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+            <span className="font-semibold text-zinc-300">
+              Quick Multi-Layer Overlay Mix Presets:
+            </span>
+            <span className="font-mono text-zinc-400">
+              Click any preset or toggle individual soundscapes below to layer them together
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {AMBIENT_MIX_PRESETS.map((mixPreset) => {
+              const presetKeys = Object.keys(mixPreset.layers) as AmbientTrackId[];
+              const isPresetActive =
+                activeAmbientLayers.length === presetKeys.length &&
+                presetKeys.every(
+                  (k) =>
+                    ambientMixState.layers[k]?.enabled &&
+                    ambientMixState.layers[k]?.volumePercent === mixPreset.layers[k]
+                );
+              return (
+                <button
+                  key={mixPreset.id}
+                  type="button"
+                  onClick={() => handleApplyMixPreset(mixPreset.id)}
+                  aria-pressed={isPresetActive}
+                  data-testid={`ambient-mix-preset-${mixPreset.id}`}
+                  className={`p-3 rounded-md border text-left transition-colors space-y-1 ${
+                    isPresetActive
+                      ? 'bg-white text-black border-white'
+                      : 'bg-[#050505] text-zinc-200 border-zinc-800/80 hover:border-zinc-600'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-bold">{mixPreset.label}</span>
+                    <span
+                      className={`text-[10px] font-mono uppercase ${
+                        isPresetActive ? 'text-black font-bold' : 'text-emerald-400'
+                      }`}
+                    >
+                      {presetKeys.length} Layers
+                    </span>
+                  </div>
+                  <div
+                    className={`text-[11px] font-mono ${
+                      isPresetActive ? 'text-zinc-800' : 'text-zinc-400'
+                    }`}
+                  >
+                    {mixPreset.subtitle}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Master Mix Output Volume Controls */}
         <div
           className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 flex flex-wrap items-center justify-between gap-4"
           data-testid="ambient-volume-controls"
         >
           <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[240px]">
             <div className="flex items-center gap-2">
-              {ambientState.isMuted || effectiveVolumePercent === 0 ? (
+              {ambientMixState.isMasterMuted || effectiveVolumePercent === 0 ? (
                 <VolumeX className="w-4 h-4 text-zinc-500 shrink-0" />
               ) : (
                 <Volume2 className="w-4 h-4 text-emerald-400 shrink-0" />
@@ -1741,7 +1834,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 htmlFor="soundscape-volume"
                 className="text-xs font-semibold text-zinc-200 whitespace-nowrap"
               >
-                Background Volume
+                Master Mix Volume
               </label>
             </div>
 
@@ -1751,8 +1844,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               min={0}
               max={100}
               value={effectiveVolumePercent}
-              onChange={(e) => handleVolumeChange(Number(e.target.value))}
-              aria-label="Personal Workspace Background Volume"
+              onChange={(e) => handleMasterVolumeChange(Number(e.target.value))}
+              aria-label="Master Mix Volume"
               data-testid="ambient-volume-slider"
               className="w-36 sm:w-48 accent-white cursor-pointer"
             />
@@ -1764,9 +1857,20 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               {effectiveVolumePercent}%
             </span>
 
-            {activePresetMeta && (
-              <span className="text-xs font-mono text-zinc-400">
-                Active Profile: <strong className="text-white">{activePresetMeta.label}</strong> ({activePresetMeta.frequencyProfile})
+            {activeAmbientLayers.length > 0 && (
+              <span
+                className="text-xs font-mono text-zinc-400"
+                data-testid="ambient-active-overlay-mix-summary"
+              >
+                Active Overlay:{' '}
+                <strong className="text-white">
+                  {activeAmbientLayers
+                    .map((l) => {
+                      const m = AMBIENT_SOUNDSCAPES.find((s) => s.id === l.id);
+                      return `${m?.shortLabel || l.id} ${l.volumePercent}%`;
+                    })
+                    .join(' + ')}
+                </strong>
               </span>
             )}
           </div>
@@ -1774,17 +1878,18 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           <div
             className="flex flex-wrap items-center gap-1.5"
             role="group"
-            aria-label="Background volume presets"
+            aria-label="Master volume presets"
           >
-            <span className="text-xs text-zinc-500 mr-1">Levels:</span>
+            <span className="text-xs text-zinc-500 mr-1">Master Levels:</span>
             {AMBIENT_VOLUME_PRESETS.map((preset) => {
               const isCurrentLevel =
-                !ambientState.isMuted && ambientState.volumePercent === preset.percent;
+                !ambientMixState.isMasterMuted &&
+                ambientMixState.masterVolumePercent === preset.percent;
               return (
                 <button
                   key={preset.percent}
                   type="button"
-                  onClick={() => handleVolumeChange(preset.percent)}
+                  onClick={() => handleMasterVolumeChange(preset.percent)}
                   data-testid={`ambient-volume-preset-${preset.percent}`}
                   className={`px-2.5 py-1 text-xs font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
                     isCurrentLevel
@@ -1799,63 +1904,121 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           </div>
         </div>
 
-        {/* Sound Profile Selector Cards */}
+        {/* Multi-Layer Soundscape Cards with Individual Toggle & Individual Volume Controls */}
         <div
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
           role="group"
-          aria-label="Ambient sound profiles"
+          aria-label="Multi-layer ambient sound profiles and individual volume controls"
         >
           {AMBIENT_SOUNDSCAPES.map((preset) => {
-            const isSelected = ambientMode === preset.id;
+            const trackId = preset.id as AmbientTrackId;
+            const layerState =
+              ambientMixState.layers[trackId] ||
+              DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE.layers[trackId];
+            const isLayerActive = Boolean(layerState?.enabled && layerState.volumePercent > 0);
+            const layerVolume = layerState?.volumePercent ?? 60;
+            const effectiveLayerPct = Math.round(
+              getEffectiveAmbientLayerGain(ambientMixState, trackId) * 100
+            );
+
             return (
-              <button
+              <div
                 key={preset.id}
-                type="button"
-                aria-pressed={isSelected}
-                data-testid={`ambient-profile-${preset.id}`}
-                onClick={() => handleToggleSoundscape(preset.id)}
-                className={`p-4 rounded-md border text-left transition-colors flex flex-col justify-between gap-3 ${
-                  isSelected
-                    ? 'bg-white text-black border-white'
-                    : 'bg-[#050505] border-zinc-800/80 text-zinc-200 hover:border-zinc-600'
+                data-testid={`ambient-layer-card-${preset.id}`}
+                className={`p-4 rounded-md border transition-colors flex flex-col justify-between gap-3.5 ${
+                  isLayerActive
+                    ? 'bg-[#111318] border-emerald-500/60 text-white'
+                    : 'bg-[#050505] border-zinc-800/80 text-zinc-200 hover:border-zinc-700'
                 }`}
               >
-                <div className="space-y-1.5 w-full">
+                <div className="space-y-2 w-full">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-2 text-xs font-bold">
+                    <span className="flex items-center gap-1.5 text-xs font-bold text-white min-w-0">
                       {renderSoundscapeIcon(preset.id)}
-                      <span>{preset.label}</span>
+                      <span className="truncate" title={preset.label}>
+                        {preset.label}
+                      </span>
                     </span>
-                    <span
-                      className={`text-[11px] font-mono uppercase ${
-                        isSelected ? 'text-black font-bold' : 'text-zinc-500'
+                    <button
+                      type="button"
+                      aria-pressed={isLayerActive}
+                      aria-label={`Toggle ${preset.label} layer`}
+                      data-testid={`ambient-profile-${preset.id}`}
+                      onClick={() => handleToggleSoundscapeLayer(preset.id)}
+                      className={`px-2 py-1 rounded text-[10px] font-mono font-bold uppercase transition-colors whitespace-nowrap shrink-0 ${
+                        isLayerActive
+                          ? 'bg-white text-black'
+                          : 'bg-zinc-900 text-zinc-400 border border-zinc-800 hover:text-white'
                       }`}
                     >
-                      {isSelected ? 'Active' : 'Off'}
-                    </span>
+                      {isLayerActive ? 'Layer On' : 'Layer Off'}
+                    </button>
                   </div>
-                  <p
-                    className={`text-[11px] leading-relaxed ${
-                      isSelected ? 'text-zinc-800' : 'text-zinc-400'
-                    }`}
-                  >
+
+                  <p className="text-[11px] leading-relaxed text-zinc-400">
                     {preset.subtitle}
                   </p>
                 </div>
 
-                <div
-                  className={`pt-2 border-t text-[10px] font-mono tabular-nums flex items-center justify-between gap-1 ${
-                    isSelected
-                      ? 'border-zinc-300 text-zinc-900'
-                      : 'border-zinc-900 text-zinc-500'
-                  }`}
-                >
-                  <span className="truncate">{preset.frequencyProfile}</span>
-                  {isSelected && (
-                    <span className="font-bold shrink-0">{effectiveVolumePercent}%</span>
-                  )}
+                {/* Individual Layer Volume Slider & Quick Levels */}
+                <div className="pt-2.5 border-t border-zinc-800/80 space-y-2">
+                  <div className="flex items-center justify-between gap-1 text-[11px] font-mono whitespace-nowrap">
+                    <label
+                      htmlFor={`layer-vol-${preset.id}`}
+                      className="text-zinc-400"
+                    >
+                      Volume
+                    </label>
+                    <span
+                      className={`font-bold tabular-nums ${
+                        isLayerActive ? 'text-emerald-400' : 'text-zinc-500'
+                      }`}
+                      data-testid={`ambient-layer-volume-value-${preset.id}`}
+                    >
+                      {layerVolume}% {isLayerActive ? `(Out ${effectiveLayerPct}%)` : '(Muted)'}
+                    </span>
+                  </div>
+
+                  <input
+                    id={`layer-vol-${preset.id}`}
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={layerVolume}
+                    onChange={(e) =>
+                      handleLayerVolumeChange(trackId, Number(e.target.value))
+                    }
+                    aria-label={`${preset.label} individual volume`}
+                    data-testid={`ambient-layer-volume-slider-${preset.id}`}
+                    className="w-full accent-emerald-400 cursor-pointer"
+                  />
+
+                  <div className="flex items-center justify-between gap-1 pt-0.5">
+                    {[25, 50, 75, 100].map((pct) => {
+                      const isPctSelected = isLayerActive && layerVolume === pct;
+                      return (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => handleLayerVolumeChange(trackId, pct)}
+                          data-testid={`ambient-layer-preset-${preset.id}-${pct}`}
+                          className={`flex-1 py-0.5 text-[10px] font-mono rounded border transition-colors ${
+                            isPctSelected
+                              ? 'bg-white text-black border-white font-bold'
+                              : 'bg-[#0A0A0C] text-zinc-400 border-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="text-[10px] font-mono text-zinc-500 truncate pt-0.5">
+                    {preset.frequencyProfile}
+                  </div>
                 </div>
-              </button>
+              </div>
             );
           })}
         </div>

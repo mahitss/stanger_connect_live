@@ -5994,5 +5994,468 @@ export function updateBookStudyProgress(params: {
   };
 }
 
+// ============================================================================
+// APP THEME SWITCHER: 'dark' (default) <-> 'light' MODE
+// ============================================================================
 
+export type AppThemeMode = 'dark' | 'light';
 
+export const DEFAULT_APP_THEME: AppThemeMode = 'dark';
+export const THEME_STORAGE_KEY = 'mr_stranger_theme_v1';
+
+export interface ThemeSwitcherMeta {
+  currentTheme: AppThemeMode;
+  nextTheme: AppThemeMode;
+  isDark: boolean;
+  isLight: boolean;
+  buttonLabel: string;
+  ariaLabel: string;
+  statusText: string;
+  rootClassName: string;
+}
+
+/**
+ * Resolves the initial theme mode from persisted storage, defaulting strictly to 'dark'.
+ */
+export function resolveInitialThemeMode(storedValue?: string | null): AppThemeMode {
+  if (typeof storedValue === 'string') {
+    const normalized = storedValue.trim().toLowerCase();
+    if (normalized === 'light') return 'light';
+    if (normalized === 'dark') return 'dark';
+  }
+  return DEFAULT_APP_THEME;
+}
+
+/**
+ * Toggles between 'dark' and 'light' theme modes.
+ */
+export function toggleAppThemeMode(currentTheme: AppThemeMode): AppThemeMode {
+  return currentTheme === 'dark' ? 'light' : 'dark';
+}
+
+/**
+ * Returns accessible labels, state flags, and root Tailwind theme class names for the active theme.
+ */
+export function getThemeSwitcherMeta(theme: AppThemeMode): ThemeSwitcherMeta {
+  const safeTheme: AppThemeMode = theme === 'light' ? 'light' : 'dark';
+  const isDark = safeTheme === 'dark';
+  const nextTheme: AppThemeMode = isDark ? 'light' : 'dark';
+
+  return {
+    currentTheme: safeTheme,
+    nextTheme,
+    isDark,
+    isLight: !isDark,
+    buttonLabel: isDark ? 'Light Mode' : 'Dark Mode',
+    ariaLabel: isDark
+      ? 'Switch theme from dark mode to light mode'
+      : 'Switch theme from light mode to dark mode',
+    statusText: isDark ? 'Theme: Dark' : 'Theme: Light',
+    rootClassName: isDark
+      ? 'dark theme-dark bg-[#050505] text-zinc-100'
+      : 'light theme-light bg-slate-50 text-slate-900',
+  };
+}
+
+// ============================================================================
+// MULTI-LAYER AMBIENT SOUNDSCAPE MIXER (SIMULTANEOUS OVERLAY + INDIVIDUAL VOLUMES)
+// ============================================================================
+
+export type AmbientTrackId = Exclude<AmbientPresetId, 'off'>;
+
+export const AMBIENT_TRACK_IDS: readonly AmbientTrackId[] = [
+  'rainfall',
+  'coffeeshop',
+  'whitenoise',
+  'binaural',
+  'lofi',
+];
+
+export interface AmbientLayerConfig {
+  id: AmbientTrackId;
+  enabled: boolean;
+  volumePercent: number;
+  lastNonZeroVolumePercent: number;
+}
+
+export interface AmbientMultiLayerMixState {
+  layers: Record<AmbientTrackId, AmbientLayerConfig>;
+  masterVolumePercent: number;
+  isMasterMuted: boolean;
+  lastNonZeroMasterVolumePercent: number;
+}
+
+export interface AmbientMixPreset {
+  id: string;
+  label: string;
+  subtitle: string;
+  layers: Partial<Record<AmbientTrackId, number>>;
+}
+
+export const AMBIENT_MIX_PRESETS: readonly AmbientMixPreset[] = [
+  {
+    id: 'rainy_cafe',
+    label: 'Rainy Café Study',
+    subtitle: 'Rainfall (70%) + Coffee Shop (55%)',
+    layers: {
+      rainfall: 70,
+      coffeeshop: 55,
+    },
+  },
+  {
+    id: 'deep_isolation',
+    label: 'Deep Isolation Mask',
+    subtitle: 'Rainfall (60%) + White Noise (45%) + Alpha Focus (50%)',
+    layers: {
+      rainfall: 60,
+      whitenoise: 45,
+      binaural: 50,
+    },
+  },
+  {
+    id: 'lofi_rain_nook',
+    label: 'Late-Night Lo-Fi Nook',
+    subtitle: 'Rainfall (50%) + Lo-Fi Chords (65%) + Coffee Shop (30%)',
+    layers: {
+      rainfall: 50,
+      lofi: 65,
+      coffeeshop: 30,
+    },
+  },
+  {
+    id: 'full_sanctuary',
+    label: 'Full Sanctuary Blend',
+    subtitle: 'All 4 Acoustic & Harmonic Layers Balanced',
+    layers: {
+      rainfall: 65,
+      coffeeshop: 40,
+      whitenoise: 30,
+      lofi: 55,
+    },
+  },
+];
+
+export const DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE: AmbientMultiLayerMixState = {
+  layers: {
+    rainfall: {
+      id: 'rainfall',
+      enabled: false,
+      volumePercent: 70,
+      lastNonZeroVolumePercent: 70,
+    },
+    coffeeshop: {
+      id: 'coffeeshop',
+      enabled: false,
+      volumePercent: 55,
+      lastNonZeroVolumePercent: 55,
+    },
+    whitenoise: {
+      id: 'whitenoise',
+      enabled: false,
+      volumePercent: 45,
+      lastNonZeroVolumePercent: 45,
+    },
+    binaural: {
+      id: 'binaural',
+      enabled: false,
+      volumePercent: 50,
+      lastNonZeroVolumePercent: 50,
+    },
+    lofi: {
+      id: 'lofi',
+      enabled: false,
+      volumePercent: 60,
+      lastNonZeroVolumePercent: 60,
+    },
+  },
+  masterVolumePercent: 75,
+  isMasterMuted: false,
+  lastNonZeroMasterVolumePercent: 75,
+};
+
+function resolveValidAmbientTrackId(input: AmbientTrackId | string): AmbientTrackId | null {
+  if (
+    input === 'rainfall' ||
+    input === 'coffeeshop' ||
+    input === 'whitenoise' ||
+    input === 'binaural' ||
+    input === 'lofi'
+  ) {
+    return input;
+  }
+  const resolved = resolveAmbientProfileId(String(input || ''));
+  return resolved === 'off' ? null : resolved;
+}
+
+export function toggleAmbientLayer(
+  state: AmbientMultiLayerMixState,
+  trackInput: AmbientTrackId | string,
+  explicitEnabled?: boolean
+): AmbientMultiLayerMixState {
+  const trackId = resolveValidAmbientTrackId(trackInput);
+  if (!trackId) return state;
+
+  const currentLayer = state.layers[trackId] || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE.layers[trackId];
+  const nextEnabled =
+    typeof explicitEnabled === 'boolean' ? explicitEnabled : !currentLayer.enabled;
+
+  const restoredLayerVol =
+    currentLayer.volumePercent > 0
+      ? clampAmbientVolumePercent(currentLayer.volumePercent)
+      : currentLayer.lastNonZeroVolumePercent > 0
+      ? clampAmbientVolumePercent(currentLayer.lastNonZeroVolumePercent)
+      : 60;
+
+  const nextLayer: AmbientLayerConfig = {
+    ...currentLayer,
+    id: trackId,
+    enabled: nextEnabled,
+    volumePercent: nextEnabled ? restoredLayerVol : currentLayer.volumePercent,
+    lastNonZeroVolumePercent: restoredLayerVol,
+  };
+
+  const restoredMasterVol =
+    state.masterVolumePercent > 0
+      ? clampAmbientVolumePercent(state.masterVolumePercent)
+      : state.lastNonZeroMasterVolumePercent > 0
+      ? clampAmbientVolumePercent(state.lastNonZeroMasterVolumePercent)
+      : 75;
+
+  return {
+    ...state,
+    layers: {
+      ...state.layers,
+      [trackId]: nextLayer,
+    },
+    masterVolumePercent: nextEnabled ? restoredMasterVol : state.masterVolumePercent,
+    isMasterMuted: nextEnabled ? false : state.isMasterMuted,
+    lastNonZeroMasterVolumePercent: restoredMasterVol,
+  };
+}
+
+export function updateAmbientLayerVolume(
+  state: AmbientMultiLayerMixState,
+  trackInput: AmbientTrackId | string,
+  rawVolumePercent: number
+): AmbientMultiLayerMixState {
+  const trackId = resolveValidAmbientTrackId(trackInput);
+  if (!trackId) return state;
+
+  const currentLayer = state.layers[trackId] || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE.layers[trackId];
+  const clamped = clampAmbientVolumePercent(rawVolumePercent);
+
+  if (clamped === 0) {
+    return {
+      ...state,
+      layers: {
+        ...state.layers,
+        [trackId]: {
+          ...currentLayer,
+          id: trackId,
+          enabled: false,
+          volumePercent: 0,
+        },
+      },
+    };
+  }
+
+  const restoredMasterVol =
+    state.masterVolumePercent > 0
+      ? clampAmbientVolumePercent(state.masterVolumePercent)
+      : state.lastNonZeroMasterVolumePercent > 0
+      ? clampAmbientVolumePercent(state.lastNonZeroMasterVolumePercent)
+      : 75;
+
+  return {
+    ...state,
+    layers: {
+      ...state.layers,
+      [trackId]: {
+        ...currentLayer,
+        id: trackId,
+        enabled: true,
+        volumePercent: clamped,
+        lastNonZeroVolumePercent: clamped,
+      },
+    },
+    masterVolumePercent: restoredMasterVol,
+    isMasterMuted: false,
+    lastNonZeroMasterVolumePercent: restoredMasterVol,
+  };
+}
+
+export function updateAmbientMasterVolume(
+  state: AmbientMultiLayerMixState,
+  rawMasterVolume: number
+): AmbientMultiLayerMixState {
+  const clamped = clampAmbientVolumePercent(rawMasterVolume);
+  if (clamped === 0) {
+    return {
+      ...state,
+      masterVolumePercent: 0,
+      isMasterMuted: true,
+    };
+  }
+  return {
+    ...state,
+    masterVolumePercent: clamped,
+    isMasterMuted: false,
+    lastNonZeroMasterVolumePercent: clamped,
+  };
+}
+
+export function toggleAmbientMasterMute(
+  state: AmbientMultiLayerMixState,
+  forceMute?: boolean
+): AmbientMultiLayerMixState {
+  const targetMute =
+    typeof forceMute === 'boolean'
+      ? forceMute
+      : !state.isMasterMuted && state.masterVolumePercent > 0;
+
+  if (targetMute) {
+    const savedMaster =
+      state.masterVolumePercent > 0
+        ? clampAmbientVolumePercent(state.masterVolumePercent)
+        : state.lastNonZeroMasterVolumePercent > 0
+        ? clampAmbientVolumePercent(state.lastNonZeroMasterVolumePercent)
+        : 75;
+    return {
+      ...state,
+      isMasterMuted: true,
+      lastNonZeroMasterVolumePercent: savedMaster,
+    };
+  }
+
+  const restored =
+    state.lastNonZeroMasterVolumePercent > 0
+      ? clampAmbientVolumePercent(state.lastNonZeroMasterVolumePercent)
+      : 75;
+
+  return {
+    ...state,
+    masterVolumePercent: restored,
+    isMasterMuted: false,
+    lastNonZeroMasterVolumePercent: restored,
+  };
+}
+
+export function stopAllAmbientLayers(
+  state: AmbientMultiLayerMixState
+): AmbientMultiLayerMixState {
+  const nextLayers = { ...state.layers };
+  for (const id of AMBIENT_TRACK_IDS) {
+    const prev = nextLayers[id] || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE.layers[id];
+    nextLayers[id] = {
+      ...prev,
+      enabled: false,
+    };
+  }
+  return {
+    ...state,
+    layers: nextLayers,
+  };
+}
+
+export function applyAmbientMixPreset(
+  state: AmbientMultiLayerMixState,
+  presetId: string
+): AmbientMultiLayerMixState {
+  const preset = AMBIENT_MIX_PRESETS.find((p) => p.id === presetId);
+  if (!preset) return state;
+
+  const nextLayers = { ...state.layers };
+  for (const id of AMBIENT_TRACK_IDS) {
+    const prev = nextLayers[id] || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE.layers[id];
+    const presetVol = preset.layers[id];
+    if (typeof presetVol === 'number' && presetVol > 0) {
+      const clamped = clampAmbientVolumePercent(presetVol);
+      nextLayers[id] = {
+        ...prev,
+        id,
+        enabled: true,
+        volumePercent: clamped,
+        lastNonZeroVolumePercent: clamped,
+      };
+    } else {
+      nextLayers[id] = {
+        ...prev,
+        id,
+        enabled: false,
+      };
+    }
+  }
+
+  const restoredMaster =
+    state.masterVolumePercent > 0
+      ? clampAmbientVolumePercent(state.masterVolumePercent)
+      : state.lastNonZeroMasterVolumePercent > 0
+      ? clampAmbientVolumePercent(state.lastNonZeroMasterVolumePercent)
+      : 75;
+
+  return {
+    ...state,
+    layers: nextLayers,
+    masterVolumePercent: restoredMaster,
+    isMasterMuted: false,
+    lastNonZeroMasterVolumePercent: restoredMaster,
+  };
+}
+
+export function getActiveAmbientLayers(
+  state: AmbientMultiLayerMixState
+): AmbientLayerConfig[] {
+  return AMBIENT_TRACK_IDS.map((id) => state.layers[id]).filter(
+    (layer): layer is AmbientLayerConfig =>
+      Boolean(layer && layer.enabled && layer.volumePercent > 0)
+  );
+}
+
+export function getEffectiveAmbientLayerGain(
+  state: AmbientMultiLayerMixState,
+  trackId: AmbientTrackId
+): number {
+  if (state.isMasterMuted || state.masterVolumePercent <= 0) return 0;
+  const layer = state.layers[trackId];
+  if (!layer || !layer.enabled || layer.volumePercent <= 0) return 0;
+  const masterScalar = clampAmbientVolumePercent(state.masterVolumePercent) / 100;
+  const layerScalar = clampAmbientVolumePercent(layer.volumePercent) / 100;
+  return Number((masterScalar * layerScalar).toFixed(4));
+}
+
+export function getEffectiveAmbientMixMap(
+  state: AmbientMultiLayerMixState
+): Record<AmbientTrackId, number> {
+  return {
+    rainfall: getEffectiveAmbientLayerGain(state, 'rainfall'),
+    coffeeshop: getEffectiveAmbientLayerGain(state, 'coffeeshop'),
+    whitenoise: getEffectiveAmbientLayerGain(state, 'whitenoise'),
+    binaural: getEffectiveAmbientLayerGain(state, 'binaural'),
+    lofi: getEffectiveAmbientLayerGain(state, 'lofi'),
+  };
+}
+
+export function formatAmbientMultiLayerStatus(
+  state: AmbientMultiLayerMixState
+): string {
+  const active = getActiveAmbientLayers(state);
+  const effectiveMaster = state.isMasterMuted
+    ? 0
+    : clampAmbientVolumePercent(state.masterVolumePercent);
+
+  if (active.length === 0) {
+    return `Standby · 0 Layers Active · Master ${effectiveMaster}%`;
+  }
+
+  const parts = active.map((layer) => {
+    const meta = AMBIENT_SOUNDSCAPES.find((s) => s.id === layer.id);
+    const name = meta ? meta.label : layer.id;
+    return `${name} (${layer.volumePercent}%)`;
+  });
+
+  if (state.isMasterMuted || effectiveMaster === 0) {
+    return `Overlaying ${active.length} ${active.length === 1 ? 'Layer' : 'Layers'}: ${parts.join(' + ')} (Master Muted · 0%)`;
+  }
+
+  return `Overlaying ${active.length} ${active.length === 1 ? 'Layer' : 'Layers'}: ${parts.join(' + ')} · Master ${effectiveMaster}%`;
+}

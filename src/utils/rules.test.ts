@@ -113,6 +113,24 @@ import {
   filterStudyBooks,
   validateAndCreateCustomStudyBook,
   updateBookStudyProgress,
+  DEFAULT_APP_THEME,
+  THEME_STORAGE_KEY,
+  resolveInitialThemeMode,
+  toggleAppThemeMode,
+  getThemeSwitcherMeta,
+  AMBIENT_TRACK_IDS,
+  AMBIENT_MIX_PRESETS,
+  DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE,
+  toggleAmbientLayer,
+  updateAmbientLayerVolume,
+  updateAmbientMasterVolume,
+  toggleAmbientMasterMute,
+  stopAllAmbientLayers,
+  applyAmbientMixPreset,
+  getActiveAmbientLayers,
+  getEffectiveAmbientLayerGain,
+  getEffectiveAmbientMixMap,
+  formatAmbientMultiLayerStatus,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -2132,6 +2150,126 @@ test('Study Books Library provides curated academic books, category/search filte
   assert.ok(prog1.completionPercent >= 25);
 });
 
+test('Theme switcher defaults strictly to dark mode, toggles cleanly between dark and light, and computes accessible Tailwind theme metadata', () => {
+  assert.equal(DEFAULT_APP_THEME, 'dark');
+  assert.equal(THEME_STORAGE_KEY, 'mr_stranger_theme_v1');
 
+  // Defaults to dark for null, undefined, empty, or unrecognized strings
+  assert.equal(resolveInitialThemeMode(null), 'dark');
+  assert.equal(resolveInitialThemeMode(undefined), 'dark');
+  assert.equal(resolveInitialThemeMode(''), 'dark');
+  assert.equal(resolveInitialThemeMode('invalid_theme'), 'dark');
+  assert.equal(resolveInitialThemeMode('DARK'), 'dark');
+  assert.equal(resolveInitialThemeMode('light'), 'light');
+  assert.equal(resolveInitialThemeMode('  LIGHT  '), 'light');
 
+  // Toggling between dark and light
+  let current = resolveInitialThemeMode(null);
+  assert.equal(current, 'dark');
 
+  const darkMeta = getThemeSwitcherMeta(current);
+  assert.equal(darkMeta.currentTheme, 'dark');
+  assert.equal(darkMeta.nextTheme, 'light');
+  assert.equal(darkMeta.isDark, true);
+  assert.equal(darkMeta.isLight, false);
+  assert.equal(darkMeta.buttonLabel, 'Light Mode');
+  assert.ok(darkMeta.rootClassName.includes('dark'));
+
+  current = toggleAppThemeMode(current);
+  assert.equal(current, 'light');
+
+  const lightMeta = getThemeSwitcherMeta(current);
+  assert.equal(lightMeta.currentTheme, 'light');
+  assert.equal(lightMeta.nextTheme, 'dark');
+  assert.equal(lightMeta.isDark, false);
+  assert.equal(lightMeta.isLight, true);
+  assert.equal(lightMeta.buttonLabel, 'Dark Mode');
+  assert.ok(lightMeta.rootClassName.includes('light'));
+
+  current = toggleAppThemeMode(current);
+  assert.equal(current, 'dark');
+});
+
+test('Multi-layer ambient soundscape mixer overlays multiple soundscapes simultaneously with independent individual volume controls and focus mix presets', () => {
+  assert.equal(AMBIENT_TRACK_IDS.length, 5);
+  assert.ok(AMBIENT_MIX_PRESETS.length >= 4);
+
+  let mix = DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE;
+  assert.equal(getActiveAmbientLayers(mix).length, 0);
+  assert.equal(
+    formatAmbientMultiLayerStatus(mix),
+    'Standby · 0 Layers Active · Master 75%'
+  );
+
+  // Enable Rainfall + Coffee Shop + White Noise simultaneously
+  mix = toggleAmbientLayer(mix, 'rainfall');
+  mix = toggleAmbientLayer(mix, 'coffeeshop');
+  mix = toggleAmbientLayer(mix, 'whitenoise');
+
+  const active3 = getActiveAmbientLayers(mix);
+  assert.equal(active3.length, 3);
+  assert.deepEqual(
+    active3.map((l) => l.id),
+    ['rainfall', 'coffeeshop', 'whitenoise']
+  );
+  assert.ok(
+    formatAmbientMultiLayerStatus(mix).includes(
+      'Overlaying 3 Layers: Rain (70%) + Cafe (55%) + White Noise (45%)'
+    )
+  );
+
+  // Adjust individual volume of Coffee Shop to 80% and White Noise to 30% without affecting Rainfall
+  mix = updateAmbientLayerVolume(mix, 'coffeeshop', 80);
+  mix = updateAmbientLayerVolume(mix, 'whitenoise', 30);
+  assert.equal(mix.layers.rainfall.volumePercent, 70);
+  assert.equal(mix.layers.coffeeshop.volumePercent, 80);
+  assert.equal(mix.layers.whitenoise.volumePercent, 30);
+
+  // Verify effective per-layer gains scale by master volume (75%)
+  assert.equal(getEffectiveAmbientLayerGain(mix, 'rainfall'), Number((0.75 * 0.7).toFixed(4)));
+  assert.equal(getEffectiveAmbientLayerGain(mix, 'coffeeshop'), Number((0.75 * 0.8).toFixed(4)));
+  assert.equal(getEffectiveAmbientLayerGain(mix, 'whitenoise'), Number((0.75 * 0.3).toFixed(4)));
+  assert.equal(getEffectiveAmbientLayerGain(mix, 'binaural'), 0);
+
+  // Setting an inactive layer's individual volume > 0 automatically enables it in the overlay
+  mix = updateAmbientLayerVolume(mix, 'lofi', 65);
+  assert.equal(mix.layers.lofi.enabled, true);
+  assert.equal(getActiveAmbientLayers(mix).length, 4);
+
+  // Setting a layer's individual volume to 0% disables only that layer while keeping the other 3 active
+  mix = updateAmbientLayerVolume(mix, 'whitenoise', 0);
+  assert.equal(mix.layers.whitenoise.enabled, false);
+  assert.equal(getActiveAmbientLayers(mix).length, 3);
+
+  // Apply a curated multi-layer focus mix preset ("rainy_cafe")
+  mix = applyAmbientMixPreset(mix, 'rainy_cafe');
+  const activePresetLayers = getActiveAmbientLayers(mix);
+  assert.equal(activePresetLayers.length, 2);
+  assert.equal(mix.layers.rainfall.enabled, true);
+  assert.equal(mix.layers.rainfall.volumePercent, 70);
+  assert.equal(mix.layers.coffeeshop.enabled, true);
+  assert.equal(mix.layers.coffeeshop.volumePercent, 55);
+  assert.equal(mix.layers.lofi.enabled, false);
+
+  // Master mute zeroes effective gains while preserving active layer configuration
+  mix = toggleAmbientMasterMute(mix);
+  assert.equal(mix.isMasterMuted, true);
+  const mutedMap = getEffectiveAmbientMixMap(mix);
+  assert.equal(mutedMap.rainfall, 0);
+  assert.equal(mutedMap.coffeeshop, 0);
+
+  // Unmuting restores gains
+  mix = toggleAmbientMasterMute(mix);
+  assert.equal(mix.isMasterMuted, false);
+  assert.ok(getEffectiveAmbientLayerGain(mix, 'rainfall') > 0);
+
+  // Update master volume to 100%
+  mix = updateAmbientMasterVolume(mix, 100);
+  assert.equal(getEffectiveAmbientLayerGain(mix, 'rainfall'), 0.7);
+  assert.equal(getEffectiveAmbientLayerGain(mix, 'coffeeshop'), 0.55);
+
+  // Stop all layers returns to Standby while preserving individual layer volume memories
+  mix = stopAllAmbientLayers(mix);
+  assert.equal(getActiveAmbientLayers(mix).length, 0);
+  assert.equal(mix.layers.rainfall.volumePercent, 70);
+});

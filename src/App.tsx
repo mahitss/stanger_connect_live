@@ -42,6 +42,8 @@ import {
   Maximize2,
   RotateCcw,
   X,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import {
   auth,
@@ -113,6 +115,11 @@ import {
   toggleTweetReaction,
   toggleFollowUser,
   validateAndBuildTwitterChatMessage,
+  AppThemeMode,
+  THEME_STORAGE_KEY,
+  resolveInitialThemeMode,
+  toggleAppThemeMode,
+  getThemeSwitcherMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -220,6 +227,35 @@ export default function App() {
     }
     return null;
   });
+
+  // Persistent Theme Mode State ('dark' default, toggles to 'light')
+  const [themeMode, setThemeMode] = useState<AppThemeMode>(() => {
+    try {
+      return resolveInitialThemeMode(localStorage.getItem(THEME_STORAGE_KEY));
+    } catch {
+      return 'dark';
+    }
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      root.classList.toggle('dark', themeMode === 'dark');
+      root.classList.toggle('light', themeMode === 'light');
+      root.setAttribute('data-theme', themeMode);
+    }
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, themeMode);
+    } catch {
+      // ignore storage errors
+    }
+  }, [themeMode]);
+
+  const handleToggleTheme = () => {
+    setThemeMode((prev) => toggleAppThemeMode(prev));
+  };
+
+  const themeMeta = getThemeSwitcherMeta(themeMode);
 
   // Sign-In / Create Account Form State (Email ID, Password & Account Info)
   const [authTab, setAuthTab] = useState<'signup' | 'signin'>('signup');
@@ -2293,27 +2329,47 @@ export default function App() {
   };
 
   // ==========================================================================
-  // DEDICATED MNC-GRADE SIGN-IN & CREATE ACCOUNT PAGE (Carbon Matte Black)
+  // DEDICATED MNC-GRADE SIGN-IN & CREATE ACCOUNT PAGE (Supports Dark & Light)
   // ==========================================================================
   if (!currentIdentity) {
     return (
-      <div className="min-h-screen bg-[#050505] text-zinc-100 flex flex-col justify-between p-6 md:p-12">
-        <div className="max-w-6xl w-full mx-auto flex items-center justify-between gap-4 border-b border-zinc-800/80 pb-5">
+      <div
+        data-theme={themeMode}
+        className={`min-h-screen flex flex-col justify-between p-6 md:p-12 transition-colors ${themeMeta.rootClassName} bg-slate-50 text-slate-900 dark:bg-[#050505] dark:text-zinc-100`}
+      >
+        <header className="max-w-6xl w-full mx-auto flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-zinc-800/80 pb-5">
           <div className="flex items-center gap-3 shrink-0">
             <img
               src={APP_LOGO_URL}
               alt="Mr. Stranger Website Logo"
               data-testid="website-header-logo"
-              className="w-10 h-10 rounded-xl object-cover border border-zinc-700/80 shadow-md shrink-0"
+              className="w-10 h-10 rounded-xl object-cover border border-slate-300 dark:border-zinc-700/80 shadow-md shrink-0"
             />
-            <span className="text-xl font-bold tracking-tight text-white font-display whitespace-nowrap shrink-0">
+            <span className="text-xl font-bold tracking-tight text-slate-900 dark:text-white font-display whitespace-nowrap shrink-0">
               Mr. Stranger
             </span>
           </div>
-          <span className="text-xs text-zinc-400 font-mono truncate">
-            Enterprise Privacy · Real-Time Presence, Study Rooms & Multiplayer Arcade
-          </span>
-        </div>
+          <div className="flex items-center gap-4">
+            <span className="hidden sm:inline text-xs text-slate-600 dark:text-zinc-400 font-mono truncate">
+              Enterprise Privacy · Real-Time Presence, Study Rooms & Multiplayer Arcade
+            </span>
+            <button
+              type="button"
+              onClick={handleToggleTheme}
+              aria-pressed={themeMeta.isLight}
+              aria-label={themeMeta.ariaLabel}
+              data-testid="theme-toggle-btn"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 bg-white border-slate-300 text-slate-800 hover:bg-slate-100 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500"
+            >
+              {themeMeta.isDark ? (
+                <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              ) : (
+                <Moon className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+              )}
+              <span>{themeMeta.buttonLabel}</span>
+            </button>
+          </div>
+        </header>
 
         <main className="max-w-6xl w-full mx-auto my-auto py-10 grid grid-cols-1 lg:grid-cols-12 gap-12 items-stretch">
           <div className="lg:col-span-7 flex flex-col justify-center space-y-6">
@@ -2682,34 +2738,37 @@ export default function App() {
   };
 
   // ==========================================================================
-  // MNC-LEVEL WORKSPACE CANVAS: CARBON MATTE BLACK SIDEBAR + VIEWPORT
+  // MNC-LEVEL WORKSPACE CANVAS: SIDEBAR + VIEWPORT (Supports Dark & Light)
   // ==========================================================================
   return (
-    <div className="min-h-screen bg-[#050505] text-zinc-100 flex flex-col md:flex-row">
+    <div
+      data-theme={themeMode}
+      className={`min-h-screen flex flex-col md:flex-row transition-colors ${themeMeta.rootClassName} bg-slate-50 text-slate-900 dark:bg-[#050505] dark:text-zinc-100`}
+    >
       {/* Persistent Left Sidebar Navigation (260px on desktop) */}
       <aside
-        className="w-full md:w-64 bg-[#0A0A0C] border-b md:border-b-0 md:border-r border-zinc-800/80 flex flex-col justify-between shrink-0"
+        className="w-full md:w-64 bg-white dark:bg-[#0A0A0C] border-b md:border-b-0 md:border-r border-slate-200 dark:border-zinc-800/80 flex flex-col justify-between shrink-0"
         aria-label="Workspace Sidebar Navigation"
       >
         <div className="p-5 space-y-6">
           {/* Brand & Live Streak Badge */}
-          <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
+          <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800/80 pb-4">
             <button
               type="button"
               onClick={() => setActivePage('hub')}
               data-testid="app-sidebar-brand-btn"
-              className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-white font-display whitespace-nowrap shrink-0"
+              className="flex items-center gap-2.5 text-lg font-bold tracking-tight text-slate-900 dark:text-white font-display whitespace-nowrap shrink-0"
             >
               <img
                 src={APP_LOGO_URL}
                 alt="Mr. Stranger App Logo"
                 data-testid="app-sidebar-logo"
-                className="w-8 h-8 rounded-lg object-cover border border-zinc-700/80 shadow-sm shrink-0"
+                className="w-8 h-8 rounded-lg object-cover border border-slate-300 dark:border-zinc-700/80 shadow-sm shrink-0"
               />
               <span>Mr. Stranger</span>
             </button>
             <div
-              className="flex items-center gap-1 text-xs font-mono font-semibold text-amber-400 tabular-nums"
+              className="flex items-center gap-1 text-xs font-mono font-semibold text-amber-600 dark:text-amber-400 tabular-nums"
               title="Consecutive Daily Login Streak"
             >
               <Flame className="w-4 h-4" />
@@ -2883,12 +2942,12 @@ export default function App() {
         </div>
 
         {/* Bottom Sidebar Account Card & Sign-Out Page Trigger */}
-        <div className="p-4 border-t border-zinc-800/80 bg-[#050505] space-y-3">
+        <div className="p-4 border-t border-slate-200 dark:border-zinc-800/80 bg-slate-50 dark:bg-[#050505] space-y-3">
           <div className="min-w-0">
-            <div className="text-xs font-bold text-white truncate">
+            <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
               {currentIdentity.displayName}
             </div>
-            <div className="text-[11px] text-zinc-500 font-mono truncate">
+            <div className="text-[11px] text-slate-500 dark:text-zinc-500 font-mono truncate">
               {currentIdentity.email}
             </div>
           </div>
@@ -2909,27 +2968,44 @@ export default function App() {
 
       {/* Right Main Workspace Viewport */}
       <div className="flex-1 flex flex-col min-w-0">
-        {/* Top Workspace Header (Follows SaaS Top Bar Contract: Breadcrumb left, Streak & Primary Action right) */}
-        <header className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-zinc-800/80 bg-[#050505]">
-          <div className="flex items-center gap-2 text-xs text-zinc-400 truncate">
+        {/* Top Workspace Header (Follows SaaS Top Bar Contract: Breadcrumb left, Theme Switcher, Streak & Primary Action right) */}
+        <header className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-[#050505]">
+          <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400 truncate">
             <img
               src={APP_LOGO_URL}
               alt="Mr. Stranger"
               data-testid="workspace-topbar-logo"
-              className="w-5 h-5 rounded object-cover border border-zinc-800 shrink-0"
+              className="w-5 h-5 rounded object-cover border border-slate-300 dark:border-zinc-800 shrink-0"
             />
-            <span className="font-semibold text-zinc-300">Workspace</span>
+            <span className="font-semibold text-slate-700 dark:text-zinc-300">Workspace</span>
             <span aria-hidden="true">/</span>
-            <span className="text-white font-semibold capitalize">
+            <span className="text-slate-900 dark:text-white font-semibold capitalize">
               {activePage.replace('_', ' ')}
             </span>
             <span aria-hidden="true">·</span>
-            <span className="font-mono tabular-nums text-zinc-400">
+            <span className="font-mono tabular-nums text-slate-500 dark:text-zinc-400">
               Room: {activeStudyRoomCode}
             </span>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-mono tabular-nums">
+            <button
+              type="button"
+              onClick={handleToggleTheme}
+              aria-pressed={themeMeta.isLight}
+              aria-label={themeMeta.ariaLabel}
+              data-testid="theme-toggle-btn"
+              title={`Current theme: ${themeMeta.currentTheme}. Click to switch to ${themeMeta.nextTheme} mode.`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500"
+            >
+              {themeMeta.isDark ? (
+                <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              ) : (
+                <Moon className="w-3.5 h-3.5 text-slate-700 shrink-0" />
+              )}
+              <span>{themeMeta.buttonLabel}</span>
+            </button>
+
             <button
               type="button"
               onClick={handleToggleUiSoundEffects}
@@ -2943,22 +3019,22 @@ export default function App() {
               title="Toggle subtle UI sound effects for incoming messages and connection requests (including when app is in background)"
               className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 ${
                 uiSoundPrefs.enabled
-                  ? 'bg-[#0A0A0C] border-zinc-700 text-zinc-100 hover:border-zinc-500'
-                  : 'bg-[#050505] border-zinc-800/80 text-zinc-500 hover:text-zinc-300'
+                  ? 'bg-slate-100 border-slate-300 text-slate-800 hover:border-slate-400 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500'
+                  : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 dark:bg-[#050505] dark:border-zinc-800/80 dark:text-zinc-500 dark:hover:text-zinc-300'
               }`}
             >
               {uiSoundPrefs.enabled ? (
-                <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <Volume2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
               ) : (
-                <VolumeX className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
+                <VolumeX className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-500 shrink-0" />
               )}
               <span>{uiSoundPrefs.enabled ? 'Sound Alerts: On' : 'Sound Alerts: Muted'}</span>
             </button>
-            <span className="text-zinc-300 whitespace-nowrap">
-              Streak: <strong className="text-amber-400">{currentIdentity.streakCount} Days</strong>
+            <span className="text-slate-700 dark:text-zinc-300 whitespace-nowrap">
+              Streak: <strong className="text-amber-600 dark:text-amber-400">{currentIdentity.streakCount} Days</strong>
             </span>
-            <span className="text-zinc-300 whitespace-nowrap">
-              Score: <strong className="text-emerald-400">{currentIdentity.participationPoints} pts</strong>
+            <span className="text-slate-700 dark:text-zinc-300 whitespace-nowrap">
+              Score: <strong className="text-emerald-600 dark:text-emerald-400">{currentIdentity.participationPoints} pts</strong>
             </span>
             <button
               type="button"
