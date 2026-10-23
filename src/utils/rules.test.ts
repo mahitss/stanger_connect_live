@@ -131,6 +131,12 @@ import {
   getEffectiveAmbientLayerGain,
   getEffectiveAmbientMixMap,
   formatAmbientMultiLayerStatus,
+  USER_BADGE_DEFINITIONS,
+  computeConsecutiveGoalDays,
+  countUserHelpfulNotes,
+  evaluateUserBadges,
+  recordConsecutiveGoalHitDay,
+  validateAndBuildHelpfulNoteContribution,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -2273,3 +2279,119 @@ test('Multi-layer ambient soundscape mixer overlays multiple soundscapes simulta
   assert.equal(getActiveAmbientLayers(mix).length, 0);
   assert.equal(mix.layers.rainfall.volumePercent, 70);
 });
+
+test('Badges system rewards users for completing 5-day streaks, hitting productivity goals 3 days in a row, and contributing helpful notes, and attaches badges to Leaderboard entries', () => {
+  assert.equal(USER_BADGE_DEFINITIONS.length, 3);
+  assert.deepEqual(
+    USER_BADGE_DEFINITIONS.map((b) => b.id),
+    ['streak_5_day', 'goal_3_day', 'helpful_notes']
+  );
+
+  // 1. Consecutive goal days calculation
+  const consec0 = computeConsecutiveGoalDays([
+    { goalReached: true },
+    { goalReached: false },
+    { goalReached: true },
+    { goalReached: true },
+    { goalReached: false },
+  ]);
+  assert.equal(consec0.maxConsecutiveDays, 2);
+  assert.equal(consec0.currentConsecutiveDays, 0);
+
+  const consec3 = computeConsecutiveGoalDays([
+    { goalReached: false },
+    { goalReached: true },
+    { goalReached: true },
+    { goalReached: true },
+  ]);
+  assert.equal(consec3.maxConsecutiveDays, 3);
+  assert.equal(consec3.currentConsecutiveDays, 3);
+
+  // 2. Helpful notes counting per user
+  const sampleNotes = [
+    { authorUid: 'usr_1', positiveNote: 'Raft log replication invariants explained.' },
+    { authorUid: 'usr_2', positiveNote: 'DP state transitions.' },
+    { authorUid: 'usr_1', positiveNote: '   ' }, // empty note ignored
+    { authorUid: 'usr_1', positiveNote: 'Linearizability vs serializability summary.' },
+  ];
+  assert.equal(countUserHelpfulNotes(sampleNotes, 'usr_1'), 2);
+  assert.equal(countUserHelpfulNotes(sampleNotes, 'usr_2'), 1);
+  assert.equal(countUserHelpfulNotes(sampleNotes, 'usr_3'), 0);
+
+  // 3. Evaluate badges for a brand-new user (none unlocked)
+  const initialEval = evaluateUserBadges({
+    uid: 'usr_new',
+    streakCount: 2,
+    consecutiveGoalDays: 1,
+    helpfulNotesCount: 0,
+  });
+  assert.equal(initialEval.unlockedCount, 0);
+  assert.equal(initialEval.totalBadgesCount, 3);
+  assert.equal(initialEval.completionPercent, 0);
+  assert.equal(initialEval.badges[0].id, 'streak_5_day');
+  assert.equal(initialEval.badges[0].unlocked, false);
+  assert.equal(initialEval.badges[0].remainingToUnlock, 3);
+
+  // 4. Record 3 consecutive daily goal hits & contribute a helpful note & reach 5-day streak
+  const goalRec = recordConsecutiveGoalHitDay({
+    todayDateKey: '2026-10-23',
+    dailyTargetMinutes: 120,
+    storedHistory: {},
+    daysToEnsure: 3,
+  });
+  assert.equal(goalRec.consecutiveDaysHit, 3);
+  assert.equal(goalRec.todayCompletedMinutes, 120);
+
+  const noteBuild = validateAndBuildHelpfulNoteContribution({
+    authorUid: 'usr_new',
+    authorName: 'Alex Mercer',
+    roomCode: 'STUDY-101',
+    subject: 'Distributed Consensus',
+    rawNote: 'Paxos vs Raft leader election safety proofs.',
+    focusMinutes: 50,
+    nowMs: 1_761_300_000_000,
+  });
+  assert.equal(noteBuild.valid, true);
+  assert.ok(noteBuild.noteRecord);
+
+  const unlockedAll = evaluateUserBadges({
+    uid: 'usr_new',
+    streakCount: 5,
+    consecutiveGoalDays: goalRec.consecutiveDaysHit,
+    studyNotes: [noteBuild.noteRecord!],
+  });
+  assert.equal(unlockedAll.unlockedCount, 3);
+  assert.equal(unlockedAll.completionPercent, 100);
+  assert.equal(unlockedAll.totalBadgeBonusPoints, 50 + 75 + 40);
+  assert.ok(unlockedAll.badges.every((b) => b.unlocked));
+
+  // 5. Leaderboard aggregation attaches badges to each ranked entry
+  const ranked = aggregateGlobalLeaderboard([
+    [
+      {
+        uid: 'usr_champion',
+        displayName: 'Elena Rostova',
+        bio: 'Systems Study Notes & Focus',
+        streakCount: 7,
+        participationPoints: 220,
+        consecutiveGoalDays: 4,
+        helpfulNotesCount: 3,
+      },
+      {
+        uid: 'usr_starter',
+        displayName: 'New Scholar',
+        bio: 'Just joined',
+        streakCount: 1,
+        participationPoints: 25,
+        consecutiveGoalDays: 0,
+        helpfulNotesCount: 0,
+      },
+    ],
+  ]);
+  assert.equal(ranked.length, 2);
+  assert.equal(ranked[0].uid, 'usr_champion');
+  assert.equal(ranked[0].unlockedBadges.length, 3);
+  assert.equal(ranked[1].uid, 'usr_starter');
+  assert.equal(ranked[1].unlockedBadges.length, 0);
+});
+

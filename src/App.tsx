@@ -120,6 +120,9 @@ import {
   resolveInitialThemeMode,
   toggleAppThemeMode,
   getThemeSwitcherMeta,
+  evaluateUserBadges,
+  recordConsecutiveGoalHitDay,
+  validateAndBuildHelpfulNoteContribution,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -135,6 +138,10 @@ import { WeeklyActivityOverview } from './components/WeeklyActivityOverview';
 import { WeeklyProductivityDistribution } from './components/WeeklyProductivityDistribution';
 import { PopularMoods24hSummary } from './components/PopularMoods24hSummary';
 import { TwitterSocialSection } from './components/TwitterSocialSection';
+import {
+  UserProfileBadgesCard,
+  AchievementBadgeChip,
+} from './components/UserProfileBadgesCard';
 import type { OnlinePeer } from '../server';
 
 type SidebarPage =
@@ -312,7 +319,18 @@ export default function App() {
     }
     return [];
   });
-  const [studyNotes, setStudyNotes] = useState<StudyNoteRecord[]>([]);
+  const [studyNotes, setStudyNotes] = useState<StudyNoteRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_study_notes_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
   const [firestoreProfiles, setFirestoreProfiles] = useState<LeaderboardCandidate[]>([]);
   const [serverPlatformUsers, setServerPlatformUsers] = useState<LeaderboardCandidate[]>([]);
 
@@ -1323,13 +1341,36 @@ export default function App() {
   const awardParticipation = (points: number) => {
     if (!currentIdentity) return;
     const safeAdded = Math.max(0, Math.round(Number(points) || 0));
-    const nextPoints = currentIdentity.participationPoints + safeAdded;
-    const updated: AccountIdentity = {
-      ...currentIdentity,
-      participationPoints: nextPoints,
-    };
-    setAccountSession(updated);
-    localStorage.setItem('mr_stranger_account_v2', JSON.stringify(updated));
+    setAccountSession((prev) => {
+      const base = prev || currentIdentity;
+      const nextPoints = base.participationPoints + safeAdded;
+      const updated: AccountIdentity = {
+        ...base,
+        participationPoints: nextPoints,
+      };
+      localStorage.setItem('mr_stranger_account_v2', JSON.stringify(updated));
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: 'peer:update_stats',
+            participationPoints: nextPoints,
+            streakCount: base.streakCount,
+          })
+        );
+      }
+
+      if (authUser) {
+        updateDoc(doc(db, 'profiles', base.uid), {
+          participationPoints: nextPoints,
+          updatedAt: serverTimestamp(),
+        }).catch(() => {
+          // ignore if offline
+        });
+      }
+
+      return updated;
+    });
 
     setTodayPointsEarned((prevTodayPts) => {
       const nextTodayPts = prevTodayPts + safeAdded;
@@ -1348,25 +1389,6 @@ export default function App() {
       });
       return nextTodayPts;
     });
-
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'peer:update_stats',
-          participationPoints: nextPoints,
-          streakCount: currentIdentity.streakCount,
-        })
-      );
-    }
-
-    if (authUser) {
-      updateDoc(doc(db, 'profiles', currentIdentity.uid), {
-        participationPoints: nextPoints,
-        updatedAt: serverTimestamp(),
-      }).catch(() => {
-        // ignore if offline
-      });
-    }
   };
 
   const persistProductivityGoal = (nextTarget: number, nextCompleted: number) => {
@@ -2654,6 +2676,122 @@ export default function App() {
     currentUid: currentIdentity.uid,
   });
 
+  const userBadgeSummary = evaluateUserBadges({
+    uid: currentIdentity.uid,
+    streakCount: currentIdentity.streakCount,
+    weeklyDays: weeklyActivitySummary.days,
+    studyNotes,
+  });
+
+  const handleAdvanceUserStreak = (targetStreakDays?: number) => {
+    setAccountSession((prev) => {
+      const base = prev || currentIdentity;
+      const nextStreak =
+        typeof targetStreakDays === 'number' && targetStreakDays > base.streakCount
+          ? Math.round(targetStreakDays)
+          : base.streakCount + 1;
+      const nextPoints = base.participationPoints + 15;
+      const updated: AccountIdentity = {
+        ...base,
+        streakCount: nextStreak,
+        participationPoints: nextPoints,
+        lastLoginDate: todayDateStr,
+      };
+      localStorage.setItem('mr_stranger_account_v2', JSON.stringify(updated));
+
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: 'peer:update_stats',
+            participationPoints: nextPoints,
+            streakCount: nextStreak,
+          })
+        );
+      }
+
+      if (authUser) {
+        updateDoc(doc(db, 'profiles', base.uid), {
+          streakCount: nextStreak,
+          participationPoints: nextPoints,
+          lastLoginDate: todayDateStr,
+          updatedAt: serverTimestamp(),
+        }).catch(() => {
+          // ignore if offline
+        });
+      }
+
+      return updated;
+    });
+  };
+
+  const handleRecordConsecutiveGoalDay = (daysToEnsure?: number) => {
+    const res = recordConsecutiveGoalHitDay({
+      todayDateKey: todayDateStr,
+      dailyTargetMinutes,
+      storedHistory: weeklyActivityHistory,
+      daysToEnsure,
+    });
+    setWeeklyActivityHistory(res.updatedHistory);
+    localStorage.setItem(
+      'mr_stranger_weekly_activity_v1',
+      JSON.stringify(res.updatedHistory)
+    );
+    setDailyCompletedMinutes(res.todayCompletedMinutes);
+    localStorage.setItem(
+      'mr_stranger_daily_goal_v1',
+      JSON.stringify({
+        dateKey: todayDateStr,
+        targetMinutes: dailyTargetMinutes,
+        completedMinutes: res.todayCompletedMinutes,
+      })
+    );
+    awardParticipation(20);
+  };
+
+  const handleContributeHelpfulNoteFromProfile = (
+    subject: string,
+    rawNote: string
+  ): { valid: boolean; error: string } => {
+    const check = validateAndBuildHelpfulNoteContribution({
+      authorUid: currentIdentity.uid,
+      authorName: currentIdentity.displayName,
+      roomCode: activeStudyRoomCode,
+      subject,
+      rawNote,
+      focusMinutes: 25,
+    });
+    if (!check.valid || !check.noteRecord) {
+      return { valid: false, error: check.error };
+    }
+    const newNote: StudyNoteRecord = check.noteRecord;
+    setStudyNotes((prev) => {
+      const next = [newNote, ...prev];
+      try {
+        localStorage.setItem('mr_stranger_study_notes_v1', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    awardParticipation(15);
+
+    if (authUser) {
+      setDoc(doc(db, 'studyNotes', newNote.id), {
+        authorUid: newNote.authorUid,
+        authorName: newNote.authorName,
+        roomCode: newNote.roomCode,
+        subject: newNote.subject,
+        positiveNote: newNote.positiveNote,
+        focusMinutes: newNote.focusMinutes,
+        createdAt: serverTimestamp(),
+      }).catch((err) =>
+        handleFirestoreError(err, OperationType.CREATE, `studyNotes/${newNote.id}`)
+      );
+    }
+
+    return { valid: true, error: '' };
+  };
+
   const handleUpdateUserMood = (rawNextMood: string | null) => {
     const check = normalizeAndValidatePeerMood(rawNextMood);
     if (!check.valid) {
@@ -2943,12 +3081,31 @@ export default function App() {
 
         {/* Bottom Sidebar Account Card & Sign-Out Page Trigger */}
         <div className="p-4 border-t border-slate-200 dark:border-zinc-800/80 bg-slate-50 dark:bg-[#050505] space-y-3">
-          <div className="min-w-0">
+          <div className="min-w-0 space-y-1.5">
             <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
               {currentIdentity.displayName}
             </div>
             <div className="text-[11px] text-slate-500 dark:text-zinc-500 font-mono truncate">
               {currentIdentity.email}
+            </div>
+            <div
+              className="flex flex-wrap items-center gap-1 pt-0.5"
+              data-testid="sidebar-profile-badges"
+            >
+              {userBadgeSummary.unlockedBadges.length > 0 ? (
+                userBadgeSummary.unlockedBadges.map((b) => (
+                  <AchievementBadgeChip
+                    key={b.id}
+                    badge={b}
+                    compact={true}
+                    testId={`sidebar-badge-${b.id}`}
+                  />
+                ))
+              ) : (
+                <span className="text-[10px] font-mono text-zinc-500">
+                  Badges: 0/{userBadgeSummary.totalBadgesCount} unlocked
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -3054,14 +3211,37 @@ export default function App() {
           {activePage === 'hub' && (
             <section className="space-y-8" aria-label="Online Presence Directory">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <div className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1">
-                  <div className="text-xs text-zinc-400">Signed-In Account</div>
+                <div
+                  className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1.5"
+                  data-testid="hub-signed-in-profile-card"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="text-xs text-zinc-400">Signed-In Account</div>
+                    <span className="text-[11px] font-mono text-emerald-400">
+                      {userBadgeSummary.unlockedCount}/{userBadgeSummary.totalBadgesCount} Badges
+                    </span>
+                  </div>
                   <div className="text-base font-bold text-white truncate">
                     {currentIdentity.displayName}
                   </div>
                   <div className="text-xs text-zinc-500 font-mono truncate">
                     {currentIdentity.email}
                   </div>
+                  {userBadgeSummary.unlockedBadges.length > 0 && (
+                    <div
+                      className="flex flex-wrap items-center gap-1 pt-1"
+                      data-testid="hub-kpi-profile-badges"
+                    >
+                      {userBadgeSummary.unlockedBadges.map((b) => (
+                        <AchievementBadgeChip
+                          key={b.id}
+                          badge={b}
+                          compact={true}
+                          testId={`hub-kpi-badge-${b.id}`}
+                        />
+                      ))}
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1">
@@ -3094,6 +3274,20 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              {/* User Profile & Achievement Badges Card (5-Day Streak, 3-Day Goal Hit, Helpful Notes) */}
+              <UserProfileBadgesCard
+                displayName={currentIdentity.displayName}
+                email={currentIdentity.email}
+                bio={currentIdentity.bio}
+                streakCount={currentIdentity.streakCount}
+                participationPoints={currentIdentity.participationPoints}
+                badgeSummary={userBadgeSummary}
+                onAdvanceStreak={handleAdvanceUserStreak}
+                onRecordConsecutiveGoalDay={handleRecordConsecutiveGoalDay}
+                onContributeHelpfulNote={handleContributeHelpfulNoteFromProfile}
+                onOpenStudyRoom={() => setActivePage('study')}
+              />
 
               {/* Daily Productivity Goal Feature with Target Setter & Progress Bar */}
               <div
@@ -3338,6 +3532,8 @@ export default function App() {
                   isOnline: true,
                   currentMode: activePage,
                   privacyVisibility: currentIdentity.privacyVisibility,
+                  consecutiveGoalDays: userBadgeSummary.consecutiveGoalDays,
+                  helpfulNotesCount: userBadgeSummary.helpfulNotesCount,
                 }}
                 acceptedPeerUids={acceptedPeerUids}
                 pendingPeerUids={pendingPeerUids}
@@ -4241,7 +4437,15 @@ export default function App() {
                   positiveNote,
                   focusMinutes,
                 };
-                setStudyNotes((prev) => [newNote, ...prev]);
+                setStudyNotes((prev) => {
+                  const next = [newNote, ...prev];
+                  try {
+                    localStorage.setItem('mr_stranger_study_notes_v1', JSON.stringify(next));
+                  } catch {
+                    // ignore
+                  }
+                  return next;
+                });
                 if (authUser) {
                   try {
                     await setDoc(doc(db, 'studyNotes', noteId), {

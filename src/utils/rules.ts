@@ -3057,6 +3057,8 @@ export interface LeaderboardCandidate {
   isOnline?: boolean;
   currentMode?: string;
   privacyVisibility?: 'everyone' | 'connections_only' | 'ghost';
+  consecutiveGoalDays?: number;
+  helpfulNotesCount?: number;
 }
 
 export type LeaderboardSortBy = 'combined' | 'points' | 'streak';
@@ -3113,6 +3115,10 @@ export interface RankedLeaderboardEntry {
   isOnline: boolean;
   currentMode: string;
   isTopContributor: boolean;
+  consecutiveGoalDays: number;
+  helpfulNotesCount: number;
+  badges: EvaluatedUserBadge[];
+  unlockedBadges: EvaluatedUserBadge[];
 }
 
 export function computeLeaderboardCompositeScore(
@@ -3152,6 +3158,28 @@ export function aggregateGlobalLeaderboard(
         existing ? Math.round(Number(existing.participationPoints) || 0) : 0
       );
 
+      const hasRawGoalDays = typeof raw.consecutiveGoalDays === 'number';
+      const hasExistingGoalDays = typeof existing?.consecutiveGoalDays === 'number';
+      const consecutiveGoalDays =
+        hasRawGoalDays || hasExistingGoalDays
+          ? Math.max(
+              0,
+              hasRawGoalDays ? Math.round(Number(raw.consecutiveGoalDays) || 0) : 0,
+              hasExistingGoalDays ? Math.round(Number(existing?.consecutiveGoalDays) || 0) : 0
+            )
+          : undefined;
+
+      const hasRawNotes = typeof raw.helpfulNotesCount === 'number';
+      const hasExistingNotes = typeof existing?.helpfulNotesCount === 'number';
+      const helpfulNotesCount =
+        hasRawNotes || hasExistingNotes
+          ? Math.max(
+              0,
+              hasRawNotes ? Math.round(Number(raw.helpfulNotesCount) || 0) : 0,
+              hasExistingNotes ? Math.round(Number(existing?.helpfulNotesCount) || 0) : 0
+            )
+          : undefined;
+
       mergedByUid.set(uid, {
         uid,
         displayName:
@@ -3166,6 +3194,8 @@ export function aggregateGlobalLeaderboard(
         isOnline: Boolean(raw.isOnline || existing?.isOnline),
         currentMode: raw.currentMode || existing?.currentMode || 'hub',
         privacyVisibility: visibility,
+        consecutiveGoalDays,
+        helpfulNotesCount,
       });
     }
   }
@@ -3209,6 +3239,13 @@ export function aggregateGlobalLeaderboard(
   const safeLimit = Math.max(1, Math.min(100, Math.round(limitCount)));
   return visibleEntries.slice(0, safeLimit).map((item, idx) => {
     const rank = idx + 1;
+    const inferred = inferPeerBadgeMetrics(item);
+    const badgeEval = evaluateUserBadges({
+      uid: item.uid,
+      streakCount: item.streakCount,
+      consecutiveGoalDays: inferred.consecutiveGoalDays,
+      helpfulNotesCount: inferred.helpfulNotesCount,
+    });
     return {
       rank,
       uid: item.uid,
@@ -3220,6 +3257,10 @@ export function aggregateGlobalLeaderboard(
       isOnline: Boolean(item.isOnline),
       currentMode: item.currentMode || 'hub',
       isTopContributor: rank <= 3,
+      consecutiveGoalDays: inferred.consecutiveGoalDays,
+      helpfulNotesCount: inferred.helpfulNotesCount,
+      badges: badgeEval.badges,
+      unlockedBadges: badgeEval.unlockedBadges,
     };
   });
 }
@@ -6459,3 +6500,470 @@ export function formatAmbientMultiLayerStatus(
 
   return `Overlaying ${active.length} ${active.length === 1 ? 'Layer' : 'Layers'}: ${parts.join(' + ')} · Master ${effectiveMaster}%`;
 }
+
+// ============================================================================
+// BADGES & ACHIEVEMENTS SYSTEM (5-Day Streak, 3-Day Goal Hit, Helpful Notes)
+// ============================================================================
+export type BadgeId = 'streak_5_day' | 'goal_3_day' | 'helpful_notes';
+
+export type BadgeTone = 'amber' | 'emerald' | 'sky';
+
+export interface UserBadgeDefinition {
+  id: BadgeId;
+  title: string;
+  shortLabel: string;
+  description: string;
+  criteriaLabel: string;
+  targetValue: number;
+  unit: string;
+  pointsReward: number;
+  tone: BadgeTone;
+}
+
+export const USER_BADGE_DEFINITIONS: readonly UserBadgeDefinition[] = [
+  {
+    id: 'streak_5_day',
+    title: '5-Day Streak',
+    shortLabel: '5-Day Streak',
+    description: 'Complete a 5-day consecutive active login & focus streak.',
+    criteriaLabel: '5 consecutive days',
+    targetValue: 5,
+    unit: 'days',
+    pointsReward: 50,
+    tone: 'amber',
+  },
+  {
+    id: 'goal_3_day',
+    title: '3-Day Goal Hit',
+    shortLabel: '3-Day Goal Hit',
+    description: 'Hit your daily productivity focus goal 3 days in a row.',
+    criteriaLabel: '3 consecutive daily goals',
+    targetValue: 3,
+    unit: 'days in a row',
+    pointsReward: 75,
+    tone: 'emerald',
+  },
+  {
+    id: 'helpful_notes',
+    title: 'Helpful Notes',
+    shortLabel: 'Helpful Notes',
+    description: 'Contribute helpful study notes or insights to the Study Room.',
+    criteriaLabel: '1+ helpful study notes',
+    targetValue: 1,
+    unit: 'notes',
+    pointsReward: 40,
+    tone: 'sky',
+  },
+] as const;
+
+export interface EvaluatedUserBadge extends UserBadgeDefinition {
+  unlocked: boolean;
+  currentValue: number;
+  progressPercent: number;
+  remainingToUnlock: number;
+  statusLabel: string;
+}
+
+export interface UserBadgeEvaluationSummary {
+  badges: EvaluatedUserBadge[];
+  unlockedBadges: EvaluatedUserBadge[];
+  lockedBadges: EvaluatedUserBadge[];
+  unlockedCount: number;
+  totalBadgesCount: number;
+  completionPercent: number;
+  totalBadgeBonusPoints: number;
+  consecutiveGoalDays: number;
+  helpfulNotesCount: number;
+  streakCount: number;
+}
+
+export function computeConsecutiveGoalDays(
+  days: Array<{
+    dateKey?: string;
+    goalReached?: boolean;
+    focusMinutes?: number;
+    targetMinutes?: number;
+  }>
+): {
+  currentConsecutiveDays: number;
+  maxConsecutiveDays: number;
+} {
+  if (!Array.isArray(days) || days.length === 0) {
+    return { currentConsecutiveDays: 0, maxConsecutiveDays: 0 };
+  }
+
+  let running = 0;
+  let maxRun = 0;
+
+  for (const day of days) {
+    if (!day) continue;
+    const isHit =
+      typeof day.goalReached === 'boolean'
+        ? day.goalReached
+        : typeof day.focusMinutes === 'number' &&
+          typeof day.targetMinutes === 'number' &&
+          day.targetMinutes > 0
+        ? day.focusMinutes >= day.targetMinutes
+        : false;
+
+    if (isHit) {
+      running += 1;
+      if (running > maxRun) {
+        maxRun = running;
+      }
+    } else {
+      running = 0;
+    }
+  }
+
+  return {
+    currentConsecutiveDays: running,
+    maxConsecutiveDays: maxRun,
+  };
+}
+
+export function countUserHelpfulNotes(
+  notes:
+    | Array<{
+        authorUid?: string;
+        authorName?: string;
+        positiveNote?: string;
+        note?: string;
+        subject?: string;
+        focusMinutes?: number;
+      }>
+    | undefined,
+  userUid?: string,
+  explicitCount?: number
+): number {
+  const safeExplicit =
+    typeof explicitCount === 'number' && Number.isFinite(explicitCount)
+      ? Math.max(0, Math.round(explicitCount))
+      : 0;
+
+  if (!Array.isArray(notes) || notes.length === 0) {
+    return safeExplicit;
+  }
+
+  const cleanUid = String(userUid || '').trim();
+  let matchedCount = 0;
+
+  for (const item of notes) {
+    if (!item) continue;
+    if (cleanUid && item.authorUid && String(item.authorUid).trim() !== cleanUid) {
+      continue;
+    }
+    const textContent = String(item.positiveNote ?? item.note ?? '').trim();
+    if (textContent.length > 0) {
+      matchedCount += 1;
+    }
+  }
+
+  return Math.max(safeExplicit, matchedCount);
+}
+
+export function inferPeerBadgeMetrics(candidate: {
+  uid?: string;
+  streakCount?: number;
+  participationPoints?: number;
+  bio?: string;
+  currentMode?: string;
+  consecutiveGoalDays?: number;
+  helpfulNotesCount?: number;
+}): {
+  consecutiveGoalDays: number;
+  helpfulNotesCount: number;
+} {
+  const safeStreak = Math.max(1, Math.round(Number(candidate.streakCount) || 1));
+  const safePoints = Math.max(0, Math.round(Number(candidate.participationPoints) || 0));
+
+  const consecutiveGoalDays =
+    typeof candidate.consecutiveGoalDays === 'number' &&
+    Number.isFinite(candidate.consecutiveGoalDays)
+      ? Math.max(0, Math.round(candidate.consecutiveGoalDays))
+      : safeStreak >= 4 && safePoints >= 140
+      ? 3
+      : safeStreak >= 2 && safePoints >= 80
+      ? 2
+      : safePoints >= 50
+      ? 1
+      : 0;
+
+  const bioText = String(candidate.bio || '').toLowerCase();
+  const modeText = String(candidate.currentMode || '').toLowerCase();
+  const helpfulNotesCount =
+    typeof candidate.helpfulNotesCount === 'number' &&
+    Number.isFinite(candidate.helpfulNotesCount)
+      ? Math.max(0, Math.round(candidate.helpfulNotesCount))
+      : safePoints >= 130 ||
+        modeText.includes('study') ||
+        bioText.includes('study') ||
+        bioText.includes('notes') ||
+        bioText.includes('research')
+      ? Math.max(1, Math.floor(safePoints / 90))
+      : 0;
+
+  return {
+    consecutiveGoalDays,
+    helpfulNotesCount,
+  };
+}
+
+export interface UserBadgeEvaluationInput {
+  uid?: string;
+  streakCount?: number;
+  consecutiveGoalDays?: number;
+  weeklyDays?: Array<{
+    dateKey?: string;
+    goalReached?: boolean;
+    focusMinutes?: number;
+    targetMinutes?: number;
+  }>;
+  helpfulNotesCount?: number;
+  studyNotes?: Array<{
+    authorUid?: string;
+    authorName?: string;
+    positiveNote?: string;
+    note?: string;
+    subject?: string;
+    focusMinutes?: number;
+  }>;
+}
+
+export function evaluateUserBadges(
+  input: UserBadgeEvaluationInput
+): UserBadgeEvaluationSummary {
+  const safeStreak = Math.max(0, Math.round(Number(input.streakCount) || 0));
+
+  const computedFromDays = input.weeklyDays
+    ? computeConsecutiveGoalDays(input.weeklyDays).maxConsecutiveDays
+    : 0;
+  const explicitGoalDays =
+    typeof input.consecutiveGoalDays === 'number' &&
+    Number.isFinite(input.consecutiveGoalDays)
+      ? Math.max(0, Math.round(input.consecutiveGoalDays))
+      : 0;
+  const effectiveGoalDays = Math.max(computedFromDays, explicitGoalDays);
+
+  const effectiveNotesCount = countUserHelpfulNotes(
+    input.studyNotes,
+    input.uid,
+    input.helpfulNotesCount
+  );
+
+  const badges: EvaluatedUserBadge[] = USER_BADGE_DEFINITIONS.map((def) => {
+    let currentValue = 0;
+    if (def.id === 'streak_5_day') {
+      currentValue = safeStreak;
+    } else if (def.id === 'goal_3_day') {
+      currentValue = effectiveGoalDays;
+    } else if (def.id === 'helpful_notes') {
+      currentValue = effectiveNotesCount;
+    }
+
+    const unlocked = currentValue >= def.targetValue;
+    const progressPercent = Math.min(
+      100,
+      Math.max(0, Math.round((currentValue / Math.max(1, def.targetValue)) * 100))
+    );
+    const remainingToUnlock = Math.max(0, def.targetValue - currentValue);
+
+    const statusLabel = unlocked
+      ? `Unlocked · ${currentValue}/${def.targetValue} ${def.unit}`
+      : `${currentValue}/${def.targetValue} ${def.unit} (${remainingToUnlock} more to unlock)`;
+
+    return {
+      ...def,
+      unlocked,
+      currentValue,
+      progressPercent,
+      remainingToUnlock,
+      statusLabel,
+    };
+  });
+
+  const unlockedBadges = badges.filter((b) => b.unlocked);
+  const lockedBadges = badges.filter((b) => !b.unlocked);
+  const totalBadgesCount = badges.length;
+  const unlockedCount = unlockedBadges.length;
+  const completionPercent =
+    totalBadgesCount > 0 ? Math.round((unlockedCount / totalBadgesCount) * 100) : 0;
+  const totalBadgeBonusPoints = unlockedBadges.reduce(
+    (sum, b) => sum + b.pointsReward,
+    0
+  );
+
+  return {
+    badges,
+    unlockedBadges,
+    lockedBadges,
+    unlockedCount,
+    totalBadgesCount,
+    completionPercent,
+    totalBadgeBonusPoints,
+    consecutiveGoalDays: effectiveGoalDays,
+    helpfulNotesCount: effectiveNotesCount,
+    streakCount: safeStreak,
+  };
+}
+
+export function recordConsecutiveGoalHitDay(params: {
+  todayDateKey: string;
+  dailyTargetMinutes: number;
+  storedHistory?: Record<string, StoredDailyActivityRecord>;
+  daysToEnsure?: number;
+}): {
+  updatedHistory: Record<string, StoredDailyActivityRecord>;
+  todayCompletedMinutes: number;
+  consecutiveDaysHit: number;
+} {
+  const safeTarget = clampProductivityTarget(params.dailyTargetMinutes);
+  const history: Record<string, StoredDailyActivityRecord> = {
+    ...(params.storedHistory || {}),
+  };
+  const desiredDays = Math.max(
+    1,
+    Math.min(7, Math.round(Number(params.daysToEnsure) || 1))
+  );
+
+  // Count how many consecutive days ending yesterday already hit goal
+  let existingRecentRun = 0;
+  for (let i = 1; i <= 6; i++) {
+    const pastKey = getPastDateKey(params.todayDateKey, i);
+    const rec = history[pastKey];
+    const recTarget = clampProductivityTarget(rec?.targetMinutes || safeTarget);
+    if (rec && rec.focusMinutes >= recTarget) {
+      existingRecentRun += 1;
+    } else {
+      break;
+    }
+  }
+
+  const todayRec = history[params.todayDateKey];
+  const todayAlreadyHit = Boolean(todayRec && todayRec.focusMinutes >= safeTarget);
+  const targetRunLength =
+    params.daysToEnsure !== undefined
+      ? desiredDays
+      : Math.min(7, existingRecentRun + (todayAlreadyHit ? 1 : 0) + 1);
+
+  for (let offset = 0; offset < targetRunLength; offset++) {
+    const dKey = getPastDateKey(params.todayDateKey, offset);
+    const prev = history[dKey];
+    const dayTarget = clampProductivityTarget(prev?.targetMinutes || safeTarget);
+    const focusMinutes = Math.max(dayTarget, prev?.focusMinutes || 0);
+    const pointsEarned = Math.max(60, prev?.pointsEarned || 0);
+    history[dKey] = {
+      focusMinutes,
+      pointsEarned,
+      targetMinutes: dayTarget,
+    };
+  }
+
+  const todayCompletedMinutes = Math.max(
+    safeTarget,
+    history[params.todayDateKey]?.focusMinutes || safeTarget
+  );
+
+  // Compute consecutive run across the 7-day window
+  const orderedDays: Array<{ goalReached: boolean }> = [];
+  for (let i = 6; i >= 0; i--) {
+    const dKey = getPastDateKey(params.todayDateKey, i);
+    const r = history[dKey];
+    const t = clampProductivityTarget(r?.targetMinutes || safeTarget);
+    orderedDays.push({
+      goalReached: Boolean(r && r.focusMinutes >= t),
+    });
+  }
+  const consecutiveDaysHit = computeConsecutiveGoalDays(orderedDays).maxConsecutiveDays;
+
+  return {
+    updatedHistory: history,
+    todayCompletedMinutes,
+    consecutiveDaysHit,
+  };
+}
+
+export function validateAndBuildHelpfulNoteContribution(params: {
+  authorUid: string;
+  authorName: string;
+  roomCode?: string;
+  subject?: string;
+  rawNote: string;
+  focusMinutes?: number;
+  nowMs?: number;
+}): {
+  valid: boolean;
+  error: string;
+  noteRecord: {
+    id: string;
+    authorUid: string;
+    authorName: string;
+    roomCode: string;
+    subject: string;
+    positiveNote: string;
+    focusMinutes: number;
+  } | null;
+} {
+  const cleanUid = String(params.authorUid || '').trim();
+  if (!cleanUid) {
+    return {
+      valid: false,
+      error: 'Please sign in to contribute a helpful study note.',
+      noteRecord: null,
+    };
+  }
+
+  const trimmedNote = String(params.rawNote || '').trim();
+  if (trimmedNote.length < 4) {
+    return {
+      valid: false,
+      error: 'Please enter a helpful study note (at least 4 characters).',
+      noteRecord: null,
+    };
+  }
+
+  const threat = detectSecurityThreat(trimmedNote);
+  if (!threat.safe) {
+    return {
+      valid: false,
+      error: threat.reason,
+      noteRecord: null,
+    };
+  }
+
+  const subjectRaw = String(params.subject || 'Deep Work & Study Summary').trim();
+  const subjectThreat = detectSecurityThreat(subjectRaw);
+  if (!subjectThreat.safe) {
+    return {
+      valid: false,
+      error: subjectThreat.reason,
+      noteRecord: null,
+    };
+  }
+
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0 ? params.nowMs : Date.now();
+  const safeName =
+    sanitizeSafeText(params.authorName || 'Verified Scholar', 64) || 'Verified Scholar';
+  const safeRoom =
+    normalizeStudyRoomCode(params.roomCode || 'STUDY-GLOBAL') || 'STUDY-GLOBAL';
+  const safeSubject =
+    sanitizeSafeText(subjectRaw, 80) || 'Deep Work & Study Summary';
+  const safeNote = sanitizeSafeText(trimmedNote, 280);
+  const safeMinutes = Math.max(15, Math.min(720, Math.round(Number(params.focusMinutes) || 25)));
+
+  return {
+    valid: true,
+    error: '',
+    noteRecord: {
+      id: `note_${nowMs}_${cleanUid}`,
+      authorUid: cleanUid,
+      authorName: safeName,
+      roomCode: safeRoom,
+      subject: safeSubject,
+      positiveNote: safeNote,
+      focusMinutes: safeMinutes,
+    },
+  };
+}
+

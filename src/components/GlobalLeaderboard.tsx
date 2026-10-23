@@ -22,6 +22,7 @@ import {
   computeLeaderboardTrends,
   getTopContributorBadge,
 } from '../utils/rules';
+import { AchievementBadgeChip } from './UserProfileBadgesCard';
 
 interface GlobalLeaderboardProps {
   currentUid: string;
@@ -394,45 +395,71 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
 
       {/* Platform-Wide KPI Strip */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="p-3.5 rounded-md border border-zinc-800/80 bg-[#050505] flex items-center justify-between gap-2">
-          <div className="space-y-1">
-            <div className="text-[11px] text-zinc-400">Your Platform Standing</div>
-            <div className="flex flex-wrap items-center gap-2">
-              <div
-                className="text-base font-bold font-mono tabular-nums text-white"
-                data-testid="leaderboard-your-rank"
-              >
-                #{myRankedEntry ? myRankedEntry.rank : 1} of {rankedEntries.length}
+        <div className="p-3.5 rounded-md border border-zinc-800/80 bg-[#050505] flex flex-col justify-between gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="space-y-1">
+              <div className="text-[11px] text-zinc-400">Your Platform Standing</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div
+                  className="text-base font-bold font-mono tabular-nums text-white"
+                  data-testid="leaderboard-your-rank"
+                >
+                  #{myRankedEntry ? myRankedEntry.rank : 1} of {rankedEntries.length}
+                </div>
+                {myRankedEntry && myRankedEntry.isTopContributor && (
+                  <TopContributorBadge
+                    rank={myRankedEntry.rank}
+                    testId="leaderboard-kpi-top-contributor-badge"
+                    iconTestId="leaderboard-kpi-top-contributor-icon"
+                  />
+                )}
               </div>
-              {myRankedEntry && myRankedEntry.isTopContributor && (
-                <TopContributorBadge
-                  rank={myRankedEntry.rank}
-                  testId="leaderboard-kpi-top-contributor-badge"
-                  iconTestId="leaderboard-kpi-top-contributor-icon"
+            </div>
+            <div className="text-right font-mono tabular-nums text-xs text-zinc-300 space-y-0.5 shrink-0">
+              <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
+                <span>{currentUserCandidate.participationPoints} pts</span>
+                <RankTrendIndicator
+                  direction={myTrend.pointsTrend}
+                  delta={myTrend.pointsRankDelta}
+                  metricLabel="participationPoints"
+                  testId="leaderboard-kpi-my-points-trend"
                 />
+              </div>
+              <div className="flex items-center justify-end gap-1.5 text-amber-400 whitespace-nowrap">
+                <span>{currentUserCandidate.streakCount}d streak</span>
+                <RankTrendIndicator
+                  direction={myTrend.streakTrend}
+                  delta={myTrend.streakRankDelta}
+                  metricLabel="streakCount"
+                  testId="leaderboard-kpi-my-streak-trend"
+                />
+              </div>
+            </div>
+          </div>
+          {myRankedEntry && (
+            <div
+              className="flex flex-wrap items-center gap-1.5 pt-2 border-t border-zinc-800/80"
+              data-testid="leaderboard-my-badges"
+            >
+              <span className="text-[10px] font-mono text-zinc-400 mr-0.5">
+                Your Badges:
+              </span>
+              {myRankedEntry.unlockedBadges.length > 0 ? (
+                myRankedEntry.unlockedBadges.map((b) => (
+                  <AchievementBadgeChip
+                    key={b.id}
+                    badge={b}
+                    compact={true}
+                    testId={`leaderboard-my-badge-${b.id}`}
+                  />
+                ))
+              ) : (
+                <span className="text-[10px] font-mono text-zinc-500">
+                  0/3 Unlocked (5d Streak · 3d Goal · Helpful Notes)
+                </span>
               )}
             </div>
-          </div>
-          <div className="text-right font-mono tabular-nums text-xs text-zinc-300 space-y-0.5 shrink-0">
-            <div className="flex items-center justify-end gap-1.5 whitespace-nowrap">
-              <span>{currentUserCandidate.participationPoints} pts</span>
-              <RankTrendIndicator
-                direction={myTrend.pointsTrend}
-                delta={myTrend.pointsRankDelta}
-                metricLabel="participationPoints"
-                testId="leaderboard-kpi-my-points-trend"
-              />
-            </div>
-            <div className="flex items-center justify-end gap-1.5 text-amber-400 whitespace-nowrap">
-              <span>{currentUserCandidate.streakCount}d streak</span>
-              <RankTrendIndicator
-                direction={myTrend.streakTrend}
-                delta={myTrend.streakRankDelta}
-                metricLabel="streakCount"
-                testId="leaderboard-kpi-my-streak-trend"
-              />
-            </div>
-          </div>
+          )}
         </div>
 
         <div className="p-3.5 rounded-md border border-zinc-800/80 bg-[#050505] flex items-center justify-between">
@@ -496,9 +523,10 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
       <div className="overflow-x-auto border border-zinc-800/80 rounded-md bg-[#050505]">
         <table className="w-full text-left border-collapse" data-testid="global-leaderboard-table">
           <thead>
-            <tr className="border-b border-zinc-800/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 bg-[#0A0A0C]">
+            <tr className="border-b border-zinc-800/80 text-[11px] font-semibold uppercase tracking-wider text-zinc-400 bg-[#0A0A0C] whitespace-nowrap">
               <th className="py-2.5 px-4 w-16">Rank</th>
               <th className="py-2.5 px-4">Member</th>
+              <th className="py-2.5 px-4">Achievement Badges</th>
               <th className="py-2.5 px-4">Status / Mode</th>
               <th className="py-2.5 px-4 text-right">Streak</th>
               <th className="py-2.5 px-4 text-right">Participation</th>
@@ -570,6 +598,34 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
                     <div className="text-[11px] text-zinc-500 truncate max-w-[260px] mt-0.5">
                       {entry.bio}
                     </div>
+                  </td>
+
+                  <td
+                    className="py-3 px-4 min-w-[270px]"
+                    data-testid={`leaderboard-entry-badges-${entry.rank}`}
+                  >
+                    {entry.unlockedBadges && entry.unlockedBadges.length > 0 ? (
+                      <div
+                        className="flex flex-wrap items-center gap-1.5"
+                        data-testid={isMe ? 'leaderboard-my-row-badges' : undefined}
+                      >
+                        {entry.unlockedBadges.map((badge) => (
+                          <AchievementBadgeChip
+                            key={badge.id}
+                            badge={badge}
+                            compact={true}
+                            testId={`leaderboard-row-${entry.rank}-badge-${badge.id}`}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <span
+                        className="text-[11px] font-mono text-zinc-500 whitespace-nowrap"
+                        data-testid={isMe ? 'leaderboard-my-row-badges' : undefined}
+                      >
+                        In Progress ({entry.streakCount}/5d streak)
+                      </span>
+                    )}
                   </td>
 
                   <td className="py-3 px-4 font-mono whitespace-nowrap">
@@ -647,7 +703,7 @@ export const GlobalLeaderboard: React.FC<GlobalLeaderboardProps> = ({
 
             {filteredEntries.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-6 px-4 text-center text-xs text-zinc-500">
+                <td colSpan={8} className="py-6 px-4 text-center text-xs text-zinc-500">
                   No members match your current leaderboard filter.
                 </td>
               </tr>
