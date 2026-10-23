@@ -96,6 +96,14 @@ import {
   clampLightboxZoomScale,
   openMomentLightbox,
   updateMomentLightboxZoom,
+  TWITTER_COMMUNITY_CHANNELS,
+  deriveTwitterHandle,
+  extractTweetHashtags,
+  computeTrendingTwitterTopics,
+  toggleTweetReaction,
+  toggleFollowUser,
+  filterTwitterFeedMoments,
+  validateAndBuildTwitterChatMessage,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -1832,5 +1840,159 @@ test('Full-screen Moment image lightbox zoom state opens at 100%, increments/dec
   assert.equal(lb.zoomPercent, 100);
   assert.equal(lb.isZoomed, false);
 });
+
+test('Twitter social section helpers derive handles, extract hashtags, rank trending topics, toggle reactions/follows, filter feeds, and validate Twitter chat', () => {
+  // 1. Twitter handle derivation
+  assert.equal(deriveTwitterHandle('Mahit Saxena', 'usr_1'), '@mahit_saxena');
+  assert.equal(deriveTwitterHandle('  A  ', 'usr_99'), '@usr99');
+
+  // 2. Hashtag extraction (deduplicated, case-insensitive)
+  const tags = extractTweetHashtags(
+    'Shipping distributed consensus today! #DeepWork #RustLang #deepwork #SystemsDesign'
+  );
+  assert.deepEqual(tags, ['#DeepWork', '#RustLang', '#SystemsDesign']);
+
+  // 3. Trending topics computation
+  const trends = computeTrendingTwitterTopics(
+    [
+      { caption: 'Working on #RustLang and #DeepWork' },
+      { caption: 'Another sprint on #RustLang' },
+    ],
+    [{ text: 'Loving #RustLang performance!' }]
+  );
+  assert.ok(trends.length >= 5);
+  assert.equal(trends[0].tag, '#DeepWork');
+  assert.equal(trends[0].tweetCount, 49);
+  assert.equal(trends[0].isLive, true);
+
+  // 4. Like / Retweet / Bookmark reaction toggling
+  let likesMap: Record<string, string[]> = {};
+  let r1 = toggleTweetReaction(likesMap, 'moment_1', 'usr_alice');
+  assert.equal(r1.active, true);
+  assert.equal(r1.count, 1);
+  likesMap = r1.updatedMap;
+
+  let r2 = toggleTweetReaction(likesMap, 'moment_1', 'usr_bob');
+  assert.equal(r2.active, true);
+  assert.equal(r2.count, 2);
+  likesMap = r2.updatedMap;
+
+  // Alice unlikes
+  let r3 = toggleTweetReaction(likesMap, 'moment_1', 'usr_alice');
+  assert.equal(r3.active, false);
+  assert.equal(r3.count, 1);
+
+  // 5. Follow / Unfollow user toggling (blocks self-follow)
+  const selfFollow = toggleFollowUser([], 'usr_alice', 'usr_alice');
+  assert.equal(selfFollow.isFollowing, false);
+  const followBob = toggleFollowUser([], 'usr_bob', 'usr_alice');
+  assert.equal(followBob.isFollowing, true);
+  assert.deepEqual(followBob.updatedFollows, ['usr_bob']);
+  const unfollowBob = toggleFollowUser(followBob.updatedFollows, 'usr_bob', 'usr_alice');
+  assert.equal(unfollowBob.isFollowing, false);
+  assert.deepEqual(unfollowBob.updatedFollows, []);
+
+  // 6. Twitter feed filtering (all, following,bookmarks, liked, hashtag, searchQuery)
+  const sampleMoments = [
+    {
+      id: 'm_1',
+      authorUid: 'usr_alice',
+      authorName: 'Alice Vance',
+      caption: 'Building Raft replication #SystemsDesign',
+      visibility: 'public' as const,
+    },
+    {
+      id: 'm_2',
+      authorUid: 'usr_bob',
+      authorName: 'Bob Chen',
+      caption: 'Late night Pomodoro block #DeepWork',
+      visibility: 'connections' as const,
+    },
+    {
+      id: 'm_3',
+      authorUid: 'usr_charlie',
+      authorName: 'Charlie Patel',
+      caption: 'Morning coffee and notes #StudyWithMe',
+      visibility: 'public' as const,
+    },
+  ];
+
+  const followingFeed = filterTwitterFeedMoments({
+    moments: sampleMoments,
+    filter: 'following',
+    currentUid: 'usr_alice',
+    followedUids: ['usr_bob'],
+  });
+  assert.deepEqual(
+    followingFeed.map((m) => m.id),
+    ['m_1', 'm_2']
+  );
+
+  const hashtagFeed = filterTwitterFeedMoments({
+    moments: sampleMoments,
+    filter: 'all',
+    currentUid: 'usr_alice',
+    activeHashtag: '#deepwork',
+  });
+  assert.deepEqual(
+    hashtagFeed.map((m) => m.id),
+    ['m_2']
+  );
+
+  const searchFeed = filterTwitterFeedMoments({
+    moments: sampleMoments,
+    filter: 'all',
+    currentUid: 'usr_alice',
+    searchQuery: '@charlie_patel',
+  });
+  assert.deepEqual(
+    searchFeed.map((m) => m.id),
+    ['m_3']
+  );
+
+  const bookmarkedFeed = filterTwitterFeedMoments({
+    moments: sampleMoments,
+    filter: 'bookmarks',
+    currentUid: 'usr_alice',
+    bookmarkedByMomentId: { m_3: ['usr_alice'] },
+  });
+  assert.deepEqual(
+    bookmarkedFeed.map((m) => m.id),
+    ['m_3']
+  );
+
+  // 7. Twitter chat message validation and creation
+  assert.ok(TWITTER_COMMUNITY_CHANNELS.length >= 3);
+  const badChat = validateAndBuildTwitterChatMessage({
+    channelId: 'global_townsquare',
+    senderUid: 'usr_alice',
+    senderName: 'Alice Vance',
+    rawText: '   ',
+  });
+  assert.equal(badChat.valid, false);
+
+  const xssChat = validateAndBuildTwitterChatMessage({
+    channelId: 'global_townsquare',
+    senderUid: 'usr_alice',
+    senderName: 'Alice Vance',
+    rawText: '<script>alert(1)</script>',
+  });
+  assert.equal(xssChat.valid, false);
+
+  const goodChat = validateAndBuildTwitterChatMessage({
+    channelId: 'global_townsquare',
+    senderUid: 'usr_alice',
+    senderName: 'Alice Vance',
+    rawText: 'Hey Twitter fam! Sharing my study setup photo.',
+    photoDataUrl: CURATED_STUDY_MOMENT_IMAGES[0].photoDataUrl,
+    nowMs: 1_761_200_000_000,
+  });
+  assert.equal(goodChat.valid, true);
+  assert.ok(goodChat.message);
+  assert.equal(goodChat.message.senderHandle, '@alice_vance');
+  assert.equal(goodChat.message.channelId, 'global_townsquare');
+  assert.equal(goodChat.message.photoDataUrl, CURATED_STUDY_MOMENT_IMAGES[0].photoDataUrl);
+});
+
 
 

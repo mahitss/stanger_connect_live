@@ -108,6 +108,11 @@ import {
   openMomentLightbox,
   updateMomentLightboxZoom,
   MOMENT_LIGHTBOX_ZOOM_PRESETS,
+  TwitterFeedFilter,
+  TwitterChatMessage,
+  toggleTweetReaction,
+  toggleFollowUser,
+  validateAndBuildTwitterChatMessage,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -122,6 +127,7 @@ import { GlobalLeaderboard } from './components/GlobalLeaderboard';
 import { WeeklyActivityOverview } from './components/WeeklyActivityOverview';
 import { WeeklyProductivityDistribution } from './components/WeeklyProductivityDistribution';
 import { PopularMoods24hSummary } from './components/PopularMoods24hSummary';
+import { TwitterSocialSection } from './components/TwitterSocialSection';
 import type { OnlinePeer } from '../server';
 
 type SidebarPage =
@@ -162,6 +168,7 @@ interface MomentPostDoc {
   caption: string;
   photoDataUrl: string;
   visibility: 'public' | 'connections';
+  createdAtMs?: number;
 }
 
 interface AccountIdentity {
@@ -286,7 +293,7 @@ export default function App() {
   >(null);
   const [momentVisibility, setMomentVisibility] = useState<'public' | 'connections'>('public');
   const [momentError, setMomentError] = useState('');
-  const [momentFilter, setMomentFilter] = useState<'all' | 'public' | 'connections' | 'mine'>('all');
+  const [momentFilter, setMomentFilter] = useState<TwitterFeedFilter>('all');
   const [momentCommentInputs, setMomentCommentInputs] = useState<Record<string, string>>({});
   const [momentReplyInputs, setMomentReplyInputs] = useState<Record<string, string>>({});
   const [activeReplyTargetByMoment, setActiveReplyTargetByMoment] = useState<
@@ -298,6 +305,71 @@ export default function App() {
   const [copiedMomentShare, setCopiedMomentShare] = useState<MomentSharePayload | null>(null);
   const [momentLightbox, setMomentLightbox] = useState<MomentLightboxZoomState | null>(null);
   const shareResetTimerRef = useRef<number | null>(null);
+
+  // Twitter / X Social Section State (Likes, Retweets, Bookmarks, Follows, & Live Twitter Chat)
+  const [twitterLikes, setTwitterLikes] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_twitter_likes_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+  const [twitterRetweets, setTwitterRetweets] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_twitter_retweets_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+  const [twitterBookmarks, setTwitterBookmarks] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_twitter_bookmarks_v1');
+      if (saved) return JSON.parse(saved);
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+  const [followedUids, setFollowedUids] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_twitter_follows_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return ['tw_elenavostok'];
+  });
+  const [twitterChats, setTwitterChats] = useState<TwitterChatMessage[]>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_twitter_chats_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [
+      {
+        id: 'twchat_seed_1',
+        channelId: 'global_townsquare',
+        senderUid: 'tw_elenavostok',
+        senderName: 'Elena Rostova',
+        senderHandle: '@elena_rostova',
+        recipientUid: null,
+        text: 'Welcome to Twitter / X inside Mr. Stranger! Drop your study setups, #DeepWork updates, or chat live here.',
+        photoDataUrl: null,
+        createdAtMs: Date.now() - 180_000,
+      },
+    ];
+  });
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -939,6 +1011,60 @@ export default function App() {
               return next;
             });
           }
+          if (msg.twitterLikes && typeof msg.twitterLikes === 'object') {
+            setTwitterLikes((prev) => {
+              const next: Record<string, string[]> = { ...prev };
+              for (const [k, v] of Object.entries(msg.twitterLikes)) {
+                if (Array.isArray(v)) {
+                  const merged = new Set([...(next[k] || []), ...v.map(String)]);
+                  next[k] = Array.from(merged);
+                }
+              }
+              localStorage.setItem('mr_stranger_twitter_likes_v1', JSON.stringify(next));
+              return next;
+            });
+          }
+          if (msg.twitterRetweets && typeof msg.twitterRetweets === 'object') {
+            setTwitterRetweets((prev) => {
+              const next: Record<string, string[]> = { ...prev };
+              for (const [k, v] of Object.entries(msg.twitterRetweets)) {
+                if (Array.isArray(v)) {
+                  const merged = new Set([...(next[k] || []), ...v.map(String)]);
+                  next[k] = Array.from(merged);
+                }
+              }
+              localStorage.setItem('mr_stranger_twitter_retweets_v1', JSON.stringify(next));
+              return next;
+            });
+          }
+          if (Array.isArray(msg.twitterChats)) {
+            setTwitterChats((prev) => {
+              const map = new Map<string, TwitterChatMessage>();
+              prev.forEach((c) => {
+                if (c && c.id) map.set(c.id, c);
+              });
+              for (const raw of msg.twitterChats) {
+                if (raw && raw.id && raw.channelId && raw.senderUid) {
+                  map.set(String(raw.id), {
+                    id: String(raw.id),
+                    channelId: String(raw.channelId),
+                    senderUid: String(raw.senderUid),
+                    senderName: String(raw.senderName || 'Member'),
+                    senderHandle: String(raw.senderHandle || '@member'),
+                    ...(raw.recipientUid ? { recipientUid: String(raw.recipientUid) } : {}),
+                    text: String(raw.text || ''),
+                    ...(raw.photoDataUrl ? { photoDataUrl: String(raw.photoDataUrl) } : {}),
+                    createdAtMs: Number(raw.createdAtMs) || Date.now(),
+                  });
+                }
+              }
+              const next = Array.from(map.values())
+                .sort((a, b) => a.createdAtMs - b.createdAtMs)
+                .slice(-250);
+              localStorage.setItem('mr_stranger_twitter_chats_v1', JSON.stringify(next));
+              return next;
+            });
+          }
         } else if (msg.type === 'moment:publish' && msg.moment) {
           const incomingMoment: MomentPostDoc = {
             id: String(msg.moment.id),
@@ -987,6 +1113,40 @@ export default function App() {
           setMomentComments((prev) => {
             const next = prev.filter((c) => c.id !== String(msg.commentId));
             localStorage.setItem('mr_stranger_moment_comments_v1', JSON.stringify(next));
+            return next;
+          });
+        } else if (msg.type === 'twitter:reaction' && msg.momentId && Array.isArray(msg.uids)) {
+          const mId = String(msg.momentId);
+          const uids = msg.uids.map((u: unknown) => String(u));
+          if (msg.reactionType === 'retweet') {
+            setTwitterRetweets((prev) => {
+              const next = { ...prev, [mId]: uids };
+              localStorage.setItem('mr_stranger_twitter_retweets_v1', JSON.stringify(next));
+              return next;
+            });
+          } else {
+            setTwitterLikes((prev) => {
+              const next = { ...prev, [mId]: uids };
+              localStorage.setItem('mr_stranger_twitter_likes_v1', JSON.stringify(next));
+              return next;
+            });
+          }
+        } else if (msg.type === 'twitter:chat' && msg.message) {
+          const incomingChat: TwitterChatMessage = {
+            id: String(msg.message.id),
+            channelId: String(msg.message.channelId || 'global_townsquare'),
+            senderUid: String(msg.message.senderUid || ''),
+            senderName: String(msg.message.senderName || 'Member'),
+            senderHandle: String(msg.message.senderHandle || '@member'),
+            recipientUid: msg.message.recipientUid ? String(msg.message.recipientUid) : null,
+            text: String(msg.message.text || ''),
+            photoDataUrl: msg.message.photoDataUrl ? String(msg.message.photoDataUrl) : null,
+            createdAtMs: Number(msg.message.createdAtMs) || Date.now(),
+          };
+          setTwitterChats((prev) => {
+            if (prev.some((c) => c.id === incomingChat.id)) return prev;
+            const next = [...prev, incomingChat];
+            localStorage.setItem('mr_stranger_twitter_chats_v1', JSON.stringify(next));
             return next;
           });
         } else if (msg.type === 'chat:direct') {
@@ -1590,15 +1750,51 @@ export default function App() {
     awardParticipation(5);
   };
 
-  // Handle Real Photo Upload & Moment Creation
+  // Handle Real Photo Upload & Moment Creation (with client-side compression if >400KB)
   const handlePhotoFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === 'string') {
-        setMomentPhotoDataUrl(reader.result);
-        setSelectedMomentPlaceholderId(null);
+        const rawDataUrl = reader.result;
+        if (rawDataUrl.length <= 400_000 || rawDataUrl.startsWith('data:image/svg')) {
+          setMomentPhotoDataUrl(rawDataUrl);
+          setSelectedMomentPlaceholderId(null);
+          return;
+        }
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          const maxDim = 960;
+          let width = img.width || 800;
+          let height = img.height || 500;
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.drawImage(img, 0, 0, width, height);
+            const compressed = canvas.toDataURL('image/jpeg', 0.78);
+            setMomentPhotoDataUrl(compressed);
+          } else {
+            setMomentPhotoDataUrl(rawDataUrl);
+          }
+          setSelectedMomentPlaceholderId(null);
+        };
+        img.onerror = () => {
+          setMomentPhotoDataUrl(rawDataUrl);
+          setSelectedMomentPlaceholderId(null);
+        };
+        img.src = rawDataUrl;
       }
     };
     reader.readAsDataURL(file);
@@ -1991,6 +2187,109 @@ export default function App() {
         handleFirestoreError(err, OperationType.DELETE, `momentComments/${commentId}`);
       }
     }
+  };
+
+  // Twitter / X Section Handlers (Like, Retweet, Bookmark, Follow, & Live Twitter Chat)
+  const handleToggleTwitterLike = (momentId: string) => {
+    if (!currentIdentity) return;
+    setTwitterLikes((prev) => {
+      const res = toggleTweetReaction(prev, momentId, currentIdentity.uid);
+      localStorage.setItem('mr_stranger_twitter_likes_v1', JSON.stringify(res.updatedMap));
+      return res.updatedMap;
+    });
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'twitter:reaction',
+          momentId,
+          reactionType: 'like',
+        })
+      );
+    }
+  };
+
+  const handleToggleTwitterRetweet = (momentId: string) => {
+    if (!currentIdentity) return;
+    setTwitterRetweets((prev) => {
+      const res = toggleTweetReaction(prev, momentId, currentIdentity.uid);
+      localStorage.setItem(
+        'mr_stranger_twitter_retweets_v1',
+        JSON.stringify(res.updatedMap)
+      );
+      return res.updatedMap;
+    });
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'twitter:reaction',
+          momentId,
+          reactionType: 'retweet',
+        })
+      );
+    }
+  };
+
+  const handleToggleTwitterBookmark = (momentId: string) => {
+    if (!currentIdentity) return;
+    setTwitterBookmarks((prev) => {
+      const res = toggleTweetReaction(prev, momentId, currentIdentity.uid);
+      localStorage.setItem(
+        'mr_stranger_twitter_bookmarks_v1',
+        JSON.stringify(res.updatedMap)
+      );
+      return res.updatedMap;
+    });
+  };
+
+  const handleToggleTwitterFollow = (targetUid: string) => {
+    if (!currentIdentity) return;
+    setFollowedUids((prev) => {
+      const res = toggleFollowUser(prev, targetUid, currentIdentity.uid);
+      localStorage.setItem(
+        'mr_stranger_twitter_follows_v1',
+        JSON.stringify(res.updatedFollows)
+      );
+      return res.updatedFollows;
+    });
+  };
+
+  const handleSendTwitterChat = (params: {
+    channelId: string;
+    recipientUid?: string | null;
+    text: string;
+    photoDataUrl?: string | null;
+  }): { valid: boolean; error: string } => {
+    if (!currentIdentity) {
+      return { valid: false, error: 'Sign in required.' };
+    }
+    const check = validateAndBuildTwitterChatMessage({
+      channelId: params.channelId,
+      senderUid: currentIdentity.uid,
+      senderName: currentIdentity.displayName,
+      recipientUid: params.recipientUid,
+      rawText: params.text,
+      photoDataUrl: params.photoDataUrl,
+    });
+    if (!check.valid || !check.message) {
+      return { valid: false, error: check.error };
+    }
+    const newMsg = check.message;
+    setTwitterChats((prev) => {
+      const next = [...prev, newMsg];
+      localStorage.setItem('mr_stranger_twitter_chats_v1', JSON.stringify(next));
+      return next;
+    });
+    awardParticipation(5);
+
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'twitter:chat',
+          ...newMsg,
+        })
+      );
+    }
+    return { valid: true, error: '' };
   };
 
   // ==========================================================================
@@ -3958,971 +4257,58 @@ export default function App() {
           )}
 
           {/* ================================================================
-              PAGE 8: SEPARATED PHOTOS & SOCIAL MEDIA SYNC PAGE
+              PAGE 8: SEPARATED PHOTOS & SOCIAL MEDIA SYNC PAGE (TWITTER / X APP)
               ================================================================ */}
           {activePage === 'moments' && (
-            <section className="space-y-6" aria-label="Photos and Social Media Sync">
-              <div className="border-b border-zinc-800/80 pb-4 flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-white">
-                    Photos & Social Media Sync
-                  </h1>
-                  <p className="text-sm text-zinc-400">
-                    Upload real photos from your device, filter social activity by audience, and sync across Firestore & live sessions.
-                  </p>
-                </div>
-
-                {/* Interactive Filter Tabs for Social Sync & Activity */}
-                <div className="flex items-center gap-1 p-1 bg-[#0A0A0C] border border-zinc-800 rounded-md">
-                  {(
-                    [
-                      { id: 'all', label: `All (${moments.length})` },
-                      {
-                        id: 'public',
-                        label: `Public (${moments.filter((m) => m.visibility === 'public').length})`,
-                      },
-                      {
-                        id: 'connections',
-                        label: `Connections (${
-                          moments.filter((m) => m.visibility === 'connections').length
-                        })`,
-                      },
-                      {
-                        id: 'mine',
-                        label: `My Uploads (${
-                          moments.filter((m) => m.authorUid === currentIdentity.uid).length
-                        })`,
-                      },
-                    ] as const
-                  ).map((tab) => (
-                    <button
-                      key={tab.id}
-                      type="button"
-                      onClick={() => setMomentFilter(tab.id)}
-                      className={`px-3 py-1.5 text-xs font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
-                        momentFilter === tab.id
-                          ? 'bg-white text-black'
-                          : 'text-zinc-400 hover:text-white'
-                      }`}
-                    >
-                      {tab.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                <form
-                  onSubmit={handlePublishMoment}
-                  data-testid="publish-moment-form"
-                  className="lg:col-span-5 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4"
-                >
-                  <div className="space-y-0.5">
-                    <h2 className="text-base font-bold text-white">
-                      Publish a Study or Social Moment
-                    </h2>
-                    <p className="text-xs text-zinc-400">
-                      Upload your own device photo or pick from our curated study-aesthetic placeholders below.
-                    </p>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label htmlFor="moment-photo-file" className="block text-xs font-medium text-zinc-300">
-                      Option 1 · Upload Device Photo (PNG, JPG, WebP)
-                    </label>
-                    <input
-                      id="moment-photo-file"
-                      type="file"
-                      accept="image/*"
-                      onChange={handlePhotoFileSelect}
-                      className="w-full text-xs text-zinc-300 file:mr-3 file:py-2 file:px-3 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-zinc-900 file:text-zinc-100 hover:file:bg-zinc-800"
-                    />
-                  </div>
-
-                  {/* Curated Study-Related Aesthetic Placeholder Selector */}
-                  <div
-                    data-testid="moment-placeholder-gallery"
-                    className="space-y-2.5 pt-1 border-t border-zinc-800/80"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div>
-                        <span className="block text-xs font-medium text-zinc-300">
-                          Option 2 · Curated Study Aesthetic Placeholders
-                        </span>
-                        <span className="text-[11px] text-zinc-500">
-                          Pick an aesthetic study scene if you prefer not to upload a photo
-                        </span>
-                      </div>
-                      <span
-                        data-testid="moment-image-source-indicator"
-                        className="text-[11px] font-mono text-emerald-400 whitespace-nowrap"
-                      >
-                        {momentPhotoDataUrl
-                          ? 'Source: Uploaded Photo'
-                          : selectedMomentPlaceholderId
-                          ? `Selected: ${
-                              getStudyMomentPlaceholderById(selectedMomentPlaceholderId)
-                                ?.title || 'Study Scene'
-                            }`
-                          : `${CURATED_STUDY_MOMENT_IMAGES.length} Study Scenes`}
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2.5">
-                      {CURATED_STUDY_MOMENT_IMAGES.map((preset) => {
-                        const isSelected =
-                          !momentPhotoDataUrl &&
-                          selectedMomentPlaceholderId === preset.id;
-                        return (
-                          <button
-                            key={preset.id}
-                            type="button"
-                            onClick={() => {
-                              setMomentPhotoDataUrl('');
-                              setSelectedMomentPlaceholderId((prev) =>
-                                selectStudyMomentPlaceholder(prev, preset.id)
-                              );
-                            }}
-                            aria-pressed={isSelected}
-                            aria-label={`Select ${preset.title} (${preset.category}) placeholder image`}
-                            data-testid={`moment-placeholder-option-${preset.id}`}
-                            data-placeholder-id={preset.id}
-                            className={`group text-left rounded-md overflow-hidden border transition-all flex flex-col ${
-                              isSelected
-                                ? 'border-emerald-400 bg-emerald-500/10 ring-1 ring-emerald-400/50'
-                                : 'border-zinc-800 bg-[#050505] hover:border-zinc-600'
-                            }`}
-                          >
-                            <div className="relative h-16 w-full overflow-hidden bg-[#050505]">
-                              <img
-                                src={preset.photoDataUrl}
-                                alt={preset.title}
-                                referrerPolicy="no-referrer"
-                                className="w-full h-full object-cover"
-                              />
-                              {isSelected && (
-                                <span
-                                  data-testid={`moment-placeholder-selected-badge-${preset.id}`}
-                                  className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-4 h-4 rounded-full bg-emerald-400 text-black"
-                                >
-                                  <Check className="w-3 h-3 stroke-[2.5]" />
-                                </span>
-                              )}
-                            </div>
-                            <div className="p-2 space-y-0.5">
-                              <div className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 truncate">
-                                {preset.category}
-                              </div>
-                              <div className="text-[11px] font-semibold text-zinc-100 truncate">
-                                {preset.title}
-                              </div>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-
-                    {(momentPhotoDataUrl || selectedMomentPlaceholderId) &&
-                      (() => {
-                        const activePreset = !momentPhotoDataUrl
-                          ? getStudyMomentPlaceholderById(selectedMomentPlaceholderId)
-                          : null;
-                        const previewSrc =
-                          momentPhotoDataUrl || activePreset?.photoDataUrl || '';
-                        return (
-                          <div
-                            data-testid="moment-selected-image-preview"
-                            className="p-2.5 rounded-md bg-[#050505] border border-zinc-800 space-y-2"
-                          >
-                            <div className="flex items-center gap-3">
-                              <img
-                                src={previewSrc}
-                                alt={
-                                  activePreset
-                                    ? `Selected study aesthetic: ${activePreset.title}`
-                                    : 'Uploaded moment preview'
-                                }
-                                referrerPolicy="no-referrer"
-                                data-testid="moment-selected-preview-img"
-                                className="w-16 h-12 rounded object-cover border border-zinc-800 shrink-0"
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-xs font-semibold text-white truncate">
-                                  {activePreset
-                                    ? activePreset.title
-                                    : 'Custom Device Photo Ready'}
-                                </div>
-                                <div className="text-[11px] text-zinc-400 truncate">
-                                  {activePreset
-                                    ? activePreset.description
-                                    : 'Your uploaded image will be used for this Moment.'}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-zinc-900">
-                              {activePreset ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setMomentCaption(activePreset.suggestedCaption)
-                                  }
-                                  data-testid="moment-use-suggested-caption"
-                                  className="text-[11px] font-mono text-emerald-400 hover:text-emerald-300 transition-colors"
-                                >
-                                  + Use Suggested Study Caption
-                                </button>
-                              ) : (
-                                <span className="text-[11px] font-mono text-zinc-500">
-                                  Device Upload Active
-                                </span>
-                              )}
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setMomentPhotoDataUrl('');
-                                  setSelectedMomentPlaceholderId(null);
-                                }}
-                                data-testid="moment-clear-image-selection"
-                                className="text-[11px] font-mono text-zinc-400 hover:text-rose-400 transition-colors"
-                              >
-                                Clear Selection
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })()}
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label htmlFor="moment-visibility" className="block text-xs font-medium text-zinc-300">
-                      Audience Privacy
-                    </label>
-                    <select
-                      id="moment-visibility"
-                      value={momentVisibility}
-                      onChange={(e) =>
-                        setMomentVisibility(e.target.value as 'public' | 'connections')
-                      }
-                      className="w-full px-3.5 py-2 text-xs bg-[#050505] border border-zinc-800 rounded-md text-white"
-                    >
-                      <option value="public">Available to All Members</option>
-                      <option value="connections">Accepted Connections Only</option>
-                    </select>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label htmlFor="moment-caption" className="block text-xs font-medium text-zinc-300">
-                      Caption / Story Behind This Moment
-                    </label>
-                    <textarea
-                      id="moment-caption"
-                      rows={3}
-                      maxLength={500}
-                      value={momentCaption}
-                      onChange={(e) => setMomentCaption(e.target.value)}
-                      placeholder="Share what you are working on, studying, or experiencing right now..."
-                      className="w-full px-3.5 py-2 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-                    />
-                  </div>
-
-                  {momentError && <p className="text-xs text-rose-400">{momentError}</p>}
-
-                  <button
-                    type="submit"
-                    data-testid="publish-moment-submit-btn"
-                    className="w-full py-2.5 px-4 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
-                  >
-                    Publish Photo Moment
-                  </button>
-                </form>
-
-                <div className="lg:col-span-7 space-y-4">
-                  {filteredMoments.length === 0 ? (
-                    <div className="p-8 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] text-center space-y-2">
-                      <p className="text-sm font-semibold text-white">
-                        No Photos in This View Yet
-                      </p>
-                      <p className="text-xs text-zinc-400 max-w-md mx-auto">
-                        Mr. Stranger enforces a strict zero-fake-data policy. Upload a real photo on the left to share with the workspace.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {filteredMoments.map((item) => {
-                        const itemComments = commentsByMomentId[item.id] || [];
-                        const commentGate = canUserCommentOnMoment({
-                          momentAuthorUid: item.authorUid,
-                          momentVisibility: item.visibility,
-                          currentUid: currentIdentity.uid,
-                          acceptedPeerUids,
-                        });
-                        const itemCommentError = momentCommentErrors[item.id] || '';
-
-                        return (
-                          <article
-                            key={item.id}
-                            data-testid={`moment-card-${item.id}`}
-                            className="rounded-lg border border-zinc-800/80 bg-[#0A0A0C] overflow-hidden"
-                          >
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setMomentLightbox(
-                                  openMomentLightbox({
-                                    momentId: item.id,
-                                    photoDataUrl: item.photoDataUrl,
-                                    caption: item.caption,
-                                    authorName: item.authorName,
-                                    visibility: item.visibility,
-                                  })
-                                )
-                              }
-                              data-testid={`open-moment-lightbox-${item.id}`}
-                              aria-label={`View full-screen lightbox zoom for moment by ${item.authorName}`}
-                              className="group relative block w-full bg-[#050505] overflow-hidden cursor-zoom-in focus:outline-none"
-                            >
-                              <img
-                                src={item.photoDataUrl}
-                                alt={item.caption}
-                                referrerPolicy="no-referrer"
-                                className="w-full max-h-96 object-contain bg-[#050505] transition-transform duration-200 group-hover:scale-[1.01]"
-                              />
-                              <span className="absolute top-3 right-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050505]/90 border border-zinc-700/80 text-[11px] font-mono text-zinc-200 opacity-90 group-hover:opacity-100 group-hover:border-emerald-500/60 group-hover:text-emerald-300 transition-all">
-                                <Maximize2 className="w-3 h-3 text-emerald-400 shrink-0" />
-                                <span>Click to Zoom</span>
-                              </span>
-                            </button>
-                            <div className="p-5 space-y-3">
-                              <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div className="text-xs text-zinc-400">
-                                  <span className="font-semibold text-white">{item.authorName}</span>
-                                  <span aria-hidden="true"> · </span>
-                                  <span className="capitalize">{item.visibility} Moment</span>
-                                  <span aria-hidden="true"> · </span>
-                                  <span className="font-mono text-emerald-400">
-                                    {itemComments.length}{' '}
-                                    {itemComments.length === 1 ? 'Comment' : 'Comments'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 shrink-0">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setMomentLightbox(
-                                        openMomentLightbox({
-                                          momentId: item.id,
-                                          photoDataUrl: item.photoDataUrl,
-                                          caption: item.caption,
-                                          authorName: item.authorName,
-                                          visibility: item.visibility,
-                                        })
-                                      )
-                                    }
-                                    data-testid={`zoom-moment-btn-${item.id}`}
-                                    aria-label={`Zoom image for moment by ${item.authorName}`}
-                                    title="Open full-screen lightbox zoom"
-                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border bg-[#050505] border-zinc-800 text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors whitespace-nowrap shrink-0"
-                                  >
-                                    <ZoomIn className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                    <span>Zoom</span>
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleShareMoment(item)}
-                                    data-testid={`share-moment-btn-${item.id}`}
-                                    aria-label={`Share moment by ${item.authorName}`}
-                                    title="Copy moment caption and shareable URL to clipboard"
-                                    className={`inline-flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
-                                      copiedMomentShare?.momentId === item.id
-                                        ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
-                                        : 'bg-[#050505] border-zinc-800 text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-300'
-                                    }`}
-                                  >
-                                    {copiedMomentShare?.momentId === item.id ? (
-                                      <>
-                                        <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                        <span>Copied!</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Share2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                        <span>Share</span>
-                                      </>
-                                    )}
-                                  </button>
-                                  {item.authorUid === currentIdentity.uid && (
-                                    <button
-                                      type="button"
-                                      onClick={() => handleDeleteMoment(item.id)}
-                                      data-testid={`delete-moment-btn-${item.id}`}
-                                      className="px-3 py-1 text-xs text-rose-400 hover:text-rose-300 bg-[#050505] border border-zinc-800 rounded whitespace-nowrap shrink-0"
-                                    >
-                                      Delete
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-
-                              <p
-                                className="text-sm text-zinc-100 leading-relaxed break-words"
-                                data-testid={`moment-caption-${item.id}`}
-                              >
-                                {item.caption}
-                              </p>
-
-                              {copiedMomentShare?.momentId === item.id && (
-                                <div
-                                  data-testid={`moment-share-feedback-${item.id}`}
-                                  role="status"
-                                  className="rounded border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-200 flex flex-col gap-1"
-                                >
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <span className="font-semibold text-emerald-300">
-                                      Copied moment caption &amp; share link to clipboard
-                                    </span>
-                                    <span className="font-mono text-[11px] text-emerald-400 whitespace-nowrap">
-                                      Ready to paste
-                                    </span>
-                                  </div>
-                                  <p
-                                    className="font-mono text-[11px] text-zinc-300 truncate"
-                                    data-testid={`moment-share-copied-url-${item.id}`}
-                                  >
-                                    {copiedMomentShare.url}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Photo Moment Comment & Connection Discussion Section */}
-                            <div
-                              data-testid="moment-comments-section"
-                              data-moment-id={item.id}
-                              className="border-t border-zinc-800/80 bg-[#050505]/70 p-5 space-y-4"
-                            >
-                              {(() => {
-                                const threadGroups = buildMomentCommentThreadGroups(
-                                  itemComments,
-                                  collapsedCommentThreadIds
-                                );
-                                const threadsWithReplies = threadGroups.filter(
-                                  (g) => g.totalRepliesCount > 0
-                                );
-                                const allThreadsCollapsed =
-                                  threadsWithReplies.length > 0 &&
-                                  threadsWithReplies.every((g) => g.isCollapsed);
-
-                                const renderThreadedCommentNode = (
-                                  threadedItem: ThreadedMomentCommentItem,
-                                  replyAnim?: NestedThreadAnimationState,
-                                  threadGroup?: {
-                                    totalRepliesCount: number;
-                                    isCollapsed: boolean;
-                                  }
-                                ) => {
-                                  const {
-                                    comment: cmt,
-                                    depth,
-                                    isReply,
-                                    parentCommentId,
-                                    replyToAuthorName,
-                                  } = threadedItem;
-                                  const isCommentAuthor =
-                                    cmt.authorUid === currentIdentity.uid;
-                                  const isMomentOwner =
-                                    item.authorUid === currentIdentity.uid;
-                                  const relationLabel =
-                                    cmt.authorUid === item.authorUid
-                                      ? 'Author'
-                                      : acceptedPeerUids.has(cmt.authorUid)
-                                      ? 'Connected'
-                                      : isCommentAuthor
-                                      ? 'You'
-                                      : 'Member';
-                                  const activeReplyTarget =
-                                    activeReplyTargetByMoment[item.id] || null;
-                                  const isReplyingToThis =
-                                    activeReplyTarget?.commentId === cmt.id;
-                                  const indentClass =
-                                    depth === 0
-                                      ? ''
-                                      : depth === 1
-                                      ? 'ml-6 sm:ml-8'
-                                      : depth === 2
-                                      ? 'ml-10 sm:ml-14'
-                                      : 'ml-12 sm:ml-16';
-                                  const rootThreadAnim =
-                                    !isReply && threadGroup && threadGroup.totalRepliesCount > 0
-                                      ? getNestedThreadAnimationState(threadGroup.isCollapsed, 0)
-                                      : null;
-
-                                  return (
-                                    <div
-                                      key={cmt.id}
-                                      data-testid={
-                                        isReply
-                                          ? 'moment-thread-animated-reply'
-                                          : 'moment-thread-root-node'
-                                      }
-                                      data-thread-animation-state={
-                                        replyAnim ? replyAnim.state : undefined
-                                      }
-                                      style={
-                                        replyAnim && replyAnim.staggerDelayMs > 0
-                                          ? { animationDelay: `${replyAnim.staggerDelayMs}ms` }
-                                          : undefined
-                                      }
-                                      className={`space-y-2 ${indentClass} ${
-                                        replyAnim ? replyAnim.itemAnimationClassName : ''
-                                      }`}
-                                    >
-                                      <div
-                                        data-testid={
-                                          isReply
-                                            ? 'moment-comment-reply-item'
-                                            : 'moment-comment-item'
-                                        }
-                                        data-comment-id={cmt.id}
-                                        data-parent-comment-id={parentCommentId || ''}
-                                        data-comment-depth={depth}
-                                        data-is-reply={isReply ? 'true' : 'false'}
-                                        className={`p-3 rounded-md border space-y-1.5 ${
-                                          isReply
-                                            ? 'bg-[#08080A] border-zinc-800/70'
-                                            : 'bg-[#0A0A0C] border-zinc-800/80'
-                                        }`}
-                                      >
-                                        {isReply && replyToAuthorName && (
-                                          <div
-                                            data-testid="moment-comment-reply-context"
-                                            className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400"
-                                          >
-                                            <CornerDownRight
-                                              aria-hidden="true"
-                                              className="w-3 h-3 text-emerald-400 shrink-0"
-                                            />
-                                            <span>
-                                              Replying to{' '}
-                                              <strong className="text-zinc-200 font-semibold">
-                                                @{replyToAuthorName}
-                                              </strong>
-                                            </span>
-                                          </div>
-                                        )}
-
-                                        <div className="flex items-center justify-between gap-2 text-xs">
-                                          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
-                                            <span className="font-semibold text-white truncate">
-                                              {cmt.authorName}
-                                            </span>
-                                            <span
-                                              aria-hidden="true"
-                                              className="text-zinc-600"
-                                            >
-                                              ·
-                                            </span>
-                                            <span className="text-[11px] font-mono text-emerald-400">
-                                              {relationLabel}
-                                            </span>
-                                            <span
-                                              aria-hidden="true"
-                                              className="text-zinc-600"
-                                            >
-                                              ·
-                                            </span>
-                                            <time
-                                              dateTime={new Date(
-                                                cmt.createdAtMs
-                                              ).toISOString()}
-                                              title={new Date(
-                                                cmt.createdAtMs
-                                              ).toLocaleTimeString([], {
-                                                hour: '2-digit',
-                                                minute: '2-digit',
-                                              })}
-                                              data-testid="moment-comment-timestamp"
-                                              data-comment-id={cmt.id}
-                                              className="text-[11px] font-mono text-zinc-400 tabular-nums"
-                                            >
-                                              {formatRelativeCommentTimestamp(
-                                                cmt.createdAtMs,
-                                                commentClockNowMs
-                                              )}
-                                            </time>
-                                          </div>
-
-                                          <div className="flex items-center gap-2.5 shrink-0">
-                                            {rootThreadAnim && threadGroup && (
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  setCollapsedCommentThreadIds((prev) =>
-                                                    toggleCollapsedCommentThread(prev, cmt.id)
-                                                  )
-                                                }
-                                                aria-expanded={rootThreadAnim.ariaExpanded}
-                                                aria-controls={`moment-comment-thread-replies-${cmt.id}`}
-                                                data-testid={`toggle-comment-thread-${cmt.id}`}
-                                                className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-400 hover:text-emerald-300 transition-colors whitespace-nowrap shrink-0"
-                                              >
-                                                {threadGroup.isCollapsed ? (
-                                                  <ChevronDown
-                                                    aria-hidden="true"
-                                                    className="w-3 h-3 shrink-0"
-                                                  />
-                                                ) : (
-                                                  <ChevronUp
-                                                    aria-hidden="true"
-                                                    className="w-3 h-3 shrink-0"
-                                                  />
-                                                )}
-                                                <span>
-                                                  {rootThreadAnim.formatToggleLabel(
-                                                    threadGroup.totalRepliesCount
-                                                  )}
-                                                </span>
-                                              </button>
-                                            )}
-
-                                            {commentGate.allowed && (
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setMomentCommentErrors((prev) => ({
-                                                    ...prev,
-                                                    [item.id]: '',
-                                                  }));
-                                                  setActiveReplyTargetByMoment(
-                                                    (prev) => ({
-                                                      ...prev,
-                                                      [item.id]:
-                                                        prev[item.id]?.commentId ===
-                                                        cmt.id
-                                                          ? null
-                                                          : {
-                                                              commentId: cmt.id,
-                                                              authorName:
-                                                                cmt.authorName,
-                                                            },
-                                                    })
-                                                  );
-                                                }}
-                                                aria-label={
-                                                  isReplyingToThis
-                                                    ? `Cancel reply to ${cmt.authorName}`
-                                                    : `Reply to ${cmt.authorName}`
-                                                }
-                                                data-testid={`reply-moment-comment-${cmt.id}`}
-                                                className={`text-[11px] font-mono transition-colors whitespace-nowrap shrink-0 ${
-                                                  isReplyingToThis
-                                                    ? 'text-emerald-400 font-semibold'
-                                                    : 'text-zinc-400 hover:text-white'
-                                                }`}
-                                              >
-                                                {isReplyingToThis ? 'Cancel' : 'Reply'}
-                                              </button>
-                                            )}
-
-                                            {(isCommentAuthor || isMomentOwner) && (
-                                              <button
-                                                type="button"
-                                                onClick={() =>
-                                                  handleDeleteMomentComment(cmt.id)
-                                                }
-                                                aria-label={`Delete comment by ${cmt.authorName}`}
-                                                data-testid={`delete-moment-comment-${cmt.id}`}
-                                                className="text-[11px] text-zinc-500 hover:text-rose-400 font-mono transition-colors shrink-0"
-                                              >
-                                                Delete
-                                              </button>
-                                            )}
-                                          </div>
-                                        </div>
-                                        <p className="text-xs text-zinc-200 leading-relaxed break-words">
-                                          {cmt.text}
-                                        </p>
-                                      </div>
-
-                                      {commentGate.allowed && isReplyingToThis && (
-                                        <form
-                                          onSubmit={(e) =>
-                                            handleAddMomentComment(e, item, {
-                                              commentId: cmt.id,
-                                              authorName: cmt.authorName,
-                                            })
-                                          }
-                                          data-testid={`moment-reply-form-${cmt.id}`}
-                                          className="ml-6 sm:ml-8 p-2.5 rounded-md bg-[#08080A] border border-zinc-800/80 space-y-2"
-                                        >
-                                          <div className="flex items-center justify-between gap-2 text-[11px] font-mono text-zinc-400">
-                                            <span className="inline-flex items-center gap-1.5">
-                                              <CornerDownRight
-                                                aria-hidden="true"
-                                                className="w-3 h-3 text-emerald-400 shrink-0"
-                                              />
-                                              <span>
-                                                Replying to{' '}
-                                                <strong className="text-white">
-                                                  @{cmt.authorName}
-                                                </strong>
-                                              </span>
-                                            </span>
-                                            <button
-                                              type="button"
-                                              onClick={() =>
-                                                setActiveReplyTargetByMoment(
-                                                  (prev) => ({
-                                                    ...prev,
-                                                    [item.id]: null,
-                                                  })
-                                                )
-                                              }
-                                              data-testid={`cancel-reply-comment-${cmt.id}`}
-                                              className="text-zinc-500 hover:text-zinc-300 whitespace-nowrap"
-                                            >
-                                              Cancel
-                                            </button>
-                                          </div>
-                                          <div className="flex flex-col sm:flex-row gap-2">
-                                            <input
-                                              type="text"
-                                              maxLength={400}
-                                              value={momentReplyInputs[cmt.id] || ''}
-                                              onChange={(e) =>
-                                                setMomentReplyInputs((prev) => ({
-                                                  ...prev,
-                                                  [cmt.id]: e.target.value,
-                                                }))
-                                              }
-                                              placeholder={`Write a reply to ${cmt.authorName}...`}
-                                              aria-label={`Write a reply to ${cmt.authorName}`}
-                                              data-testid="moment-reply-input"
-                                              className="flex-1 px-3 py-1.5 text-xs bg-[#050505] border border-zinc-800 rounded text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-                                            />
-                                            <button
-                                              type="submit"
-                                              data-testid="moment-reply-submit"
-                                              className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
-                                            >
-                                              Post Reply
-                                            </button>
-                                          </div>
-                                        </form>
-                                      )}
-                                    </div>
-                                  );
-                                };
-
-                                return (
-                                  <>
-                                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-                                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
-                                        <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
-                                          <MessageSquare className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                                          <h3
-                                            className="font-bold text-white"
-                                            data-testid={`moment-comment-count-${item.id}`}
-                                          >
-                                            Discussion ({itemComments.length}{' '}
-                                            {itemComments.length === 1 ? 'Comment' : 'Comments'})
-                                          </h3>
-                                        </span>
-                                        <span aria-hidden="true" className="text-zinc-600">
-                                          ·
-                                        </span>
-                                        <span className="text-zinc-400 font-mono whitespace-nowrap">
-                                          {item.visibility === 'connections'
-                                            ? 'Accepted Connections Only'
-                                            : 'Connections & Verified Feed'}
-                                        </span>
-                                      </div>
-                                      <div className="flex items-center gap-3">
-                                        {threadsWithReplies.length > 0 && (
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              const momentRootIds = threadsWithReplies.map(
-                                                (g) => g.rootItem.comment.id
-                                              );
-                                              setCollapsedCommentThreadIds((prev) => {
-                                                const nextSet = new Set(prev);
-                                                if (allThreadsCollapsed) {
-                                                  for (const id of momentRootIds) {
-                                                    nextSet.delete(id);
-                                                  }
-                                                } else {
-                                                  for (const id of momentRootIds) {
-                                                    nextSet.add(id);
-                                                  }
-                                                }
-                                                return Array.from(nextSet);
-                                              });
-                                            }}
-                                            data-testid={`toggle-all-comment-threads-${item.id}`}
-                                            className="inline-flex items-center gap-1 text-[11px] font-mono text-zinc-300 hover:text-white transition-colors whitespace-nowrap shrink-0"
-                                          >
-                                            {allThreadsCollapsed ? (
-                                              <>
-                                                <ChevronDown
-                                                  aria-hidden="true"
-                                                  className="w-3 h-3 text-emerald-400 shrink-0"
-                                                />
-                                                <span>Expand Replies</span>
-                                              </>
-                                            ) : (
-                                              <>
-                                                <ChevronUp
-                                                  aria-hidden="true"
-                                                  className="w-3 h-3 text-emerald-400 shrink-0"
-                                                />
-                                                <span>Collapse Replies</span>
-                                              </>
-                                            )}
-                                          </button>
-                                        )}
-                                        <span className="text-[11px] font-mono text-zinc-500 whitespace-nowrap">
-                                          +5 pts per comment
-                                        </span>
-                                      </div>
-                                    </div>
-
-                                    {itemComments.length === 0 ? (
-                                      commentGate.allowed ? (
-                                        <p
-                                          className="text-xs text-zinc-400 py-1"
-                                          data-testid={`moment-comments-empty-${item.id}`}
-                                        >
-                                          No comments yet. Share a thought below to discuss this photo with{' '}
-                                          {item.authorUid === currentIdentity.uid
-                                            ? 'your connections'
-                                            : item.authorName}
-                                          .
-                                        </p>
-                                      ) : null
-                                    ) : (
-                                      <div
-                                        className="space-y-2.5"
-                                        data-testid={`moment-comments-list-${item.id}`}
-                                      >
-                                        {threadGroups.map((group) => {
-                                          const rootCmt = group.rootItem.comment;
-                                          const threadAnim = getNestedThreadAnimationState(
-                                            group.isCollapsed,
-                                            0
-                                          );
-                                          return (
-                                            <div
-                                              key={rootCmt.id}
-                                              data-testid={`moment-comment-thread-${rootCmt.id}`}
-                                              className="space-y-2"
-                                            >
-                                              {renderThreadedCommentNode(
-                                                group.rootItem,
-                                                undefined,
-                                                group
-                                              )}
-
-                                              {group.totalRepliesCount > 0 && (
-                                                <div
-                                                  id={`moment-comment-thread-replies-${rootCmt.id}`}
-                                                  data-testid={`moment-comment-thread-replies-${rootCmt.id}`}
-                                                  data-thread-state={threadAnim.state}
-                                                  aria-hidden={group.isCollapsed}
-                                                  className={threadAnim.wrapperClassName}
-                                                >
-                                                  <div className="overflow-hidden space-y-2 pt-0.5">
-                                                    {group.nestedReplies.map(
-                                                      (replyItem, replyIdx) => {
-                                                        const replyAnim =
-                                                          getNestedThreadAnimationState(
-                                                            group.isCollapsed,
-                                                            replyIdx
-                                                          );
-                                                        return renderThreadedCommentNode(
-                                                          replyItem,
-                                                          replyAnim
-                                                        );
-                                                      }
-                                                    )}
-                                                  </div>
-                                                </div>
-                                              )}
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </>
-                                );
-                              })()}
-
-                              {commentGate.allowed ? (
-                                <form
-                                  onSubmit={(e) => handleAddMomentComment(e, item)}
-                                  className="space-y-2 pt-1"
-                                  data-testid={`moment-comment-form-${item.id}`}
-                                >
-                                  {itemCommentError && (
-                                    <p
-                                      className="text-xs text-rose-400"
-                                      data-testid={`moment-comment-error-${item.id}`}
-                                    >
-                                      {itemCommentError}
-                                    </p>
-                                  )}
-                                  <div className="flex flex-col sm:flex-row gap-2">
-                                    <input
-                                      type="text"
-                                      maxLength={400}
-                                      value={momentCommentInputs[item.id] || ''}
-                                      onChange={(e) =>
-                                        setMomentCommentInputs((prev) => ({
-                                          ...prev,
-                                          [item.id]: e.target.value,
-                                        }))
-                                      }
-                                      placeholder={`Write a comment to discuss ${
-                                        item.authorUid === currentIdentity.uid
-                                          ? 'your'
-                                          : `${item.authorName}'s`
-                                      } photo...`}
-                                      aria-label={`Comment on ${item.authorName}'s photo moment`}
-                                      data-testid="moment-comment-input"
-                                      className="flex-1 px-3.5 py-2 text-xs bg-[#0A0A0C] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-                                    />
-                                    <button
-                                      type="submit"
-                                      data-testid="moment-comment-submit"
-                                      className="px-4 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
-                                    >
-                                      Post Comment
-                                    </button>
-                                  </div>
-                                </form>
-                              ) : (
-                                <div
-                                  className="p-3 rounded-md bg-[#0A0A0C] border border-zinc-800/80 text-xs text-zinc-400 flex flex-wrap items-center justify-between gap-2"
-                                  data-testid={`moment-comment-locked-${item.id}`}
-                                >
-                                  <span>{commentGate.reason}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setActivePage('hub')}
-                                    className="px-3 py-1 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded whitespace-nowrap shrink-0"
-                                  >
-                                    Connect in Directory
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                          </article>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              </div>
-            </section>
+            <TwitterSocialSection
+              currentIdentity={currentIdentity}
+              moments={moments}
+              momentComments={momentComments}
+              commentsByMomentId={commentsByMomentId}
+              momentFilter={momentFilter}
+              setMomentFilter={setMomentFilter}
+              momentCaption={momentCaption}
+              setMomentCaption={setMomentCaption}
+              momentPhotoDataUrl={momentPhotoDataUrl}
+              setMomentPhotoDataUrl={setMomentPhotoDataUrl}
+              selectedMomentPlaceholderId={selectedMomentPlaceholderId}
+              setSelectedMomentPlaceholderId={setSelectedMomentPlaceholderId}
+              momentVisibility={momentVisibility}
+              setMomentVisibility={setMomentVisibility}
+              momentError={momentError}
+              handlePhotoFileSelect={handlePhotoFileSelect}
+              handlePublishMoment={handlePublishMoment}
+              handleDeleteMoment={handleDeleteMoment}
+              handleShareMoment={handleShareMoment}
+              copiedMomentShare={copiedMomentShare}
+              setMomentLightbox={setMomentLightbox}
+              acceptedPeerUids={acceptedPeerUids}
+              momentCommentInputs={momentCommentInputs}
+              setMomentCommentInputs={setMomentCommentInputs}
+              momentReplyInputs={momentReplyInputs}
+              setMomentReplyInputs={setMomentReplyInputs}
+              activeReplyTargetByMoment={activeReplyTargetByMoment}
+              setActiveReplyTargetByMoment={setActiveReplyTargetByMoment}
+              collapsedCommentThreadIds={collapsedCommentThreadIds}
+              setCollapsedCommentThreadIds={setCollapsedCommentThreadIds}
+              momentCommentErrors={momentCommentErrors}
+              setMomentCommentErrors={setMomentCommentErrors}
+              commentClockNowMs={commentClockNowMs}
+              handleAddMomentComment={handleAddMomentComment}
+              handleDeleteMomentComment={handleDeleteMomentComment}
+              onNavigateToHub={() => setActivePage('hub')}
+              twitterLikes={twitterLikes}
+              twitterRetweets={twitterRetweets}
+              twitterBookmarks={twitterBookmarks}
+              followedUids={followedUids}
+              twitterChats={twitterChats}
+              onToggleLike={handleToggleTwitterLike}
+              onToggleRetweet={handleToggleTwitterRetweet}
+              onToggleBookmark={handleToggleTwitterBookmark}
+              onToggleFollow={handleToggleTwitterFollow}
+              onSendTwitterChat={handleSendTwitterChat}
+              onlinePeers={onlinePeers}
+            />
           )}
 
           {/* ================================================================

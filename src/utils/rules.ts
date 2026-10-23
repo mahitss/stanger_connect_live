@@ -4699,3 +4699,391 @@ export function updateMomentLightboxZoom(
   );
 }
 
+// --- Twitter / X Social Section Pure Logic (Handles, Hashtags, Reactions, Feed Filtering, & Twitter Chat) ---
+
+export type TwitterNavTab =
+  | 'home'
+  | 'explore'
+  | 'notifications'
+  | 'messages'
+  | 'bookmarks'
+  | 'profile';
+
+export type TwitterFeedFilter =
+  | 'all'
+  | 'following'
+  | 'public'
+  | 'connections'
+  | 'mine'
+  | 'bookmarks'
+  | 'liked';
+
+export interface TwitterTrendingTopic {
+  tag: string;
+  category: string;
+  tweetCount: number;
+  isLive: boolean;
+}
+
+export interface TwitterChatMessage {
+  id: string;
+  channelId: string;
+  senderUid: string;
+  senderName: string;
+  senderHandle: string;
+  recipientUid?: string | null;
+  text: string;
+  photoDataUrl?: string | null;
+  createdAtMs: number;
+}
+
+export interface TwitterCommunityChannel {
+  id: string;
+  name: string;
+  handle: string;
+  description: string;
+}
+
+export const TWITTER_COMMUNITY_CHANNELS: readonly TwitterCommunityChannel[] = [
+  {
+    id: 'global_townsquare',
+    name: 'Global Town Square',
+    handle: '#town-square',
+    description: 'Open Twitter chat for everyone online — share updates, images, and quick thoughts.',
+  },
+  {
+    id: 'study_builders',
+    name: 'Study & Deep Work Lounge',
+    handle: '#deep-work',
+    description: 'Live chat for scholars, engineers, and Pomodoro sprinters.',
+  },
+  {
+    id: 'media_showcase',
+    name: 'Photos & Desk Setups',
+    handle: '#desk-setups',
+    description: 'Share desk snapshots, whiteboard architectures, and aesthetic study photos.',
+  },
+] as const;
+
+export function deriveTwitterHandle(displayName: string, fallbackUid?: string): string {
+  const cleaned = String(displayName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .slice(0, 20);
+  if (cleaned.length >= 2) {
+    return `@${cleaned}`;
+  }
+  const fallback = String(fallbackUid || 'member')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+    .slice(0, 12);
+  return `@${fallback || 'member'}`;
+}
+
+export function extractTweetHashtags(text: string): string[] {
+  const raw = String(text || '');
+  const matches = raw.match(/#[a-zA-Z0-9_]{2,32}/g) || [];
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const tag of matches) {
+    const lower = tag.toLowerCase();
+    if (!seen.has(lower)) {
+      seen.add(lower);
+      result.push(tag);
+    }
+  }
+  return result;
+}
+
+const DEFAULT_TRENDING_TOPICS: ReadonlyArray<{
+  tag: string;
+  category: string;
+  baselineCount: number;
+}> = [
+  { tag: '#DeepWork', category: 'Productivity · Trending', baselineCount: 48 },
+  { tag: '#BuildInPublic', category: 'Engineering · Trending', baselineCount: 36 },
+  { tag: '#StudyWithMe', category: 'Study Sanctuary · Live', baselineCount: 29 },
+  { tag: '#SystemsDesign', category: 'Tech & Architecture', baselineCount: 22 },
+  { tag: '#PomodoroFlow', category: 'Focus Sprint', baselineCount: 19 },
+];
+
+export function computeTrendingTwitterTopics(
+  moments: ReadonlyArray<{ caption: string }>,
+  comments: ReadonlyArray<{ text: string }> = []
+): TwitterTrendingTopic[] {
+  const countsByLower = new Map<
+    string,
+    { displayTag: string; category: string; count: number; isLive: boolean }
+  >();
+
+  for (const preset of DEFAULT_TRENDING_TOPICS) {
+    countsByLower.set(preset.tag.toLowerCase(), {
+      displayTag: preset.tag,
+      category: preset.category,
+      count: preset.baselineCount,
+      isLive: false,
+    });
+  }
+
+  for (const m of moments) {
+    const tags = extractTweetHashtags(m?.caption || '');
+    for (const tag of tags) {
+      const key = tag.toLowerCase();
+      const existing = countsByLower.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.isLive = true;
+      } else {
+        countsByLower.set(key, {
+          displayTag: tag,
+          category: 'Community · Live Trend',
+          count: 1,
+          isLive: true,
+        });
+      }
+    }
+  }
+
+  for (const c of comments) {
+    const tags = extractTweetHashtags(c?.text || '');
+    for (const tag of tags) {
+      const key = tag.toLowerCase();
+      const existing = countsByLower.get(key);
+      if (existing) {
+        existing.count += 1;
+        existing.isLive = true;
+      } else {
+        countsByLower.set(key, {
+          displayTag: tag,
+          category: 'Threads · Live Trend',
+          count: 1,
+          isLive: true,
+        });
+      }
+    }
+  }
+
+  return Array.from(countsByLower.values())
+    .sort((a, b) => {
+      if (b.isLive !== a.isLive && b.count >= 2 && a.count >= 2) {
+        // Prioritize high-count trends, breaking ties with live status
+      }
+      if (b.count !== a.count) return b.count - a.count;
+      return a.displayTag.localeCompare(b.displayTag);
+    })
+    .slice(0, 6)
+    .map((entry) => ({
+      tag: entry.displayTag,
+      category: entry.category,
+      tweetCount: entry.count,
+      isLive: entry.isLive,
+    }));
+}
+
+export function toggleTweetReaction(
+  reactionMap: Record<string, string[]>,
+  momentId: string,
+  userUid: string
+): {
+  updatedMap: Record<string, string[]>;
+  active: boolean;
+  count: number;
+} {
+  const cleanMomentId = String(momentId || '').trim();
+  const cleanUid = String(userUid || '').trim();
+  if (!cleanMomentId || !cleanUid) {
+    return {
+      updatedMap: { ...reactionMap },
+      active: false,
+      count: 0,
+    };
+  }
+
+  const currentList = Array.isArray(reactionMap[cleanMomentId])
+    ? reactionMap[cleanMomentId]
+    : [];
+  const exists = currentList.includes(cleanUid);
+  const nextList = exists
+    ? currentList.filter((id) => id !== cleanUid)
+    : [...currentList, cleanUid];
+
+  return {
+    updatedMap: {
+      ...reactionMap,
+      [cleanMomentId]: nextList,
+    },
+    active: !exists,
+    count: nextList.length,
+  };
+}
+
+export function toggleFollowUser(
+  followedUids: string[],
+  targetUid: string,
+  currentUid: string
+): {
+  updatedFollows: string[];
+  isFollowing: boolean;
+} {
+  const cleanTarget = String(targetUid || '').trim();
+  const cleanCurrent = String(currentUid || '').trim();
+  if (!cleanTarget || cleanTarget === cleanCurrent) {
+    return {
+      updatedFollows: [...followedUids],
+      isFollowing: false,
+    };
+  }
+  const exists = followedUids.includes(cleanTarget);
+  const updatedFollows = exists
+    ? followedUids.filter((id) => id !== cleanTarget)
+    : [...followedUids, cleanTarget];
+  return {
+    updatedFollows,
+    isFollowing: !exists,
+  };
+}
+
+export function filterTwitterFeedMoments<
+  T extends {
+    id: string;
+    authorUid: string;
+    authorName: string;
+    caption: string;
+    visibility: 'public' | 'connections';
+  }
+>(params: {
+  moments: readonly T[];
+  filter: TwitterFeedFilter;
+  currentUid: string;
+  followedUids?: Iterable<string>;
+  acceptedPeerUids?: Iterable<string>;
+  likedByMomentId?: Record<string, string[]>;
+  bookmarkedByMomentId?: Record<string, string[]>;
+  searchQuery?: string;
+  activeHashtag?: string | null;
+}): T[] {
+  const {
+    moments,
+    filter,
+    currentUid,
+    followedUids,
+    acceptedPeerUids,
+    likedByMomentId = {},
+    bookmarkedByMomentId = {},
+    searchQuery = '',
+    activeHashtag = null,
+  } = params;
+
+  const followedSet = new Set<string>(followedUids || []);
+  const connectedSet = new Set<string>(acceptedPeerUids || []);
+  const cleanQuery = String(searchQuery || '').trim().toLowerCase();
+  const cleanHashtag = String(activeHashtag || '').trim().toLowerCase();
+
+  return moments.filter((item) => {
+    if (filter === 'public' && item.visibility !== 'public') return false;
+    if (filter === 'connections' && item.visibility !== 'connections') return false;
+    if (filter === 'mine' && item.authorUid !== currentUid) return false;
+    if (filter === 'following') {
+      const isFollowedOrConnected =
+        item.authorUid === currentUid ||
+        followedSet.has(item.authorUid) ||
+        connectedSet.has(item.authorUid);
+      if (!isFollowedOrConnected) return false;
+    }
+    if (filter === 'bookmarks') {
+      const savedList = bookmarkedByMomentId[item.id] || [];
+      if (!savedList.includes(currentUid)) return false;
+    }
+    if (filter === 'liked') {
+      const likedList = likedByMomentId[item.id] || [];
+      if (!likedList.includes(currentUid)) return false;
+    }
+
+    if (cleanHashtag) {
+      const itemTags = extractTweetHashtags(item.caption).map((t) => t.toLowerCase());
+      if (!itemTags.includes(cleanHashtag)) return false;
+    }
+
+    if (cleanQuery) {
+      const handle = deriveTwitterHandle(item.authorName, item.authorUid).toLowerCase();
+      const hay = `${item.caption} ${item.authorName} ${handle}`.toLowerCase();
+      if (!hay.includes(cleanQuery)) return false;
+    }
+
+    return true;
+  });
+}
+
+export function validateAndBuildTwitterChatMessage(params: {
+  channelId: string;
+  senderUid: string;
+  senderName: string;
+  recipientUid?: string | null;
+  rawText: string;
+  photoDataUrl?: string | null;
+  nowMs?: number;
+}): {
+  valid: boolean;
+  error: string;
+  message: TwitterChatMessage | null;
+} {
+  const cleanSenderUid = String(params.senderUid || '').trim();
+  const cleanSenderName = sanitizeSafeText(String(params.senderName || 'Member'), 64);
+  const cleanChannelId = sanitizeSafeText(
+    String(params.channelId || 'global_townsquare'),
+    64
+  );
+  const trimmedText = String(params.rawText || '').trim();
+  const cleanPhoto = String(params.photoDataUrl || '').trim();
+
+  if (!cleanSenderUid) {
+    return { valid: false, error: 'Sign in required to send messages.', message: null };
+  }
+  if (!trimmedText && !cleanPhoto) {
+    return {
+      valid: false,
+      error: 'Please enter a message or attach an image to chat.',
+      message: null,
+    };
+  }
+  if (trimmedText.length > 500) {
+    return {
+      valid: false,
+      error: 'Twitter chat message cannot exceed 500 characters.',
+      message: null,
+    };
+  }
+  if (trimmedText) {
+    const threat = detectSecurityThreat(trimmedText);
+    if (!threat.safe) {
+      return { valid: false, error: threat.reason, message: null };
+    }
+  }
+
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0 ? params.nowMs : Date.now();
+  const safeText = trimmedText
+    ? sanitizeSafeText(trimmedText, 500)
+    : 'Shared a photo in chat';
+
+  return {
+    valid: true,
+    error: '',
+    message: {
+      id: `twchat_${nowMs}_${cleanSenderUid.slice(0, 16)}`,
+      channelId: cleanChannelId,
+      senderUid: cleanSenderUid,
+      senderName: cleanSenderName,
+      senderHandle: deriveTwitterHandle(cleanSenderName, cleanSenderUid),
+      recipientUid: params.recipientUid ? String(params.recipientUid).trim() : null,
+      text: safeText,
+      photoDataUrl: cleanPhoto || null,
+      createdAtMs: nowMs,
+    },
+  };
+}
+
+

@@ -220,6 +220,22 @@ async function startServer() {
       replyToAuthorName?: string | null;
     }
   >();
+  const liveTwitterLikes = new Map<string, Set<string>>();
+  const liveTwitterRetweets = new Map<string, Set<string>>();
+  const liveTwitterChats = new Map<
+    string,
+    {
+      id: string;
+      channelId: string;
+      senderUid: string;
+      senderName: string;
+      senderHandle: string;
+      recipientUid: string | null;
+      text: string;
+      photoDataUrl: string | null;
+      createdAtMs: number;
+    }
+  >();
   const liveMoodEvents = new Map<string, PeerMoodHistoryEvent>();
   const lastRecordedMoodByUid = new Map<string, string>();
 
@@ -323,6 +339,13 @@ async function startServer() {
       gameScores: scores,
       moments: Array.from(liveMoments.values()),
       momentComments: Array.from(liveMomentComments.values()),
+      twitterLikes: Object.fromEntries(
+        Array.from(liveTwitterLikes.entries()).map(([k, v]) => [k, Array.from(v)])
+      ),
+      twitterRetweets: Object.fromEntries(
+        Array.from(liveTwitterRetweets.entries()).map(([k, v]) => [k, Array.from(v)])
+      ),
+      twitterChats: Array.from(liveTwitterChats.values()),
       moodEvents: Array.from(liveMoodEvents.values()),
       serverTimestamp: Date.now(),
     });
@@ -891,6 +914,85 @@ async function startServer() {
               if (clientWs.readyState === WebSocket.OPEN) {
                 clientWs.send(delFrame);
               }
+            }
+          }
+          return;
+        }
+
+        // Twitter / X Live Reactions (Like & Retweet) & Twitter Chat Sync
+        if (msg.type === 'twitter:reaction' && msg.momentId && msg.reactionType) {
+          const momentId = String(msg.momentId).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128);
+          const reactionType = msg.reactionType === 'retweet' ? 'retweet' : 'like';
+          if (!momentId) return;
+          const targetMap =
+            reactionType === 'retweet' ? liveTwitterRetweets : liveTwitterLikes;
+          const set = targetMap.get(momentId) || new Set<string>();
+          if (set.has(registeredUid)) {
+            set.delete(registeredUid);
+          } else {
+            set.add(registeredUid);
+          }
+          targetMap.set(momentId, set);
+          const reactionFrame = JSON.stringify({
+            type: 'twitter:reaction',
+            momentId,
+            reactionType,
+            uids: Array.from(set),
+          });
+          for (const { ws: clientWs } of clients.values()) {
+            if (clientWs.readyState === WebSocket.OPEN) {
+              clientWs.send(reactionFrame);
+            }
+          }
+          return;
+        }
+
+        if (msg.type === 'twitter:chat') {
+          const rawText = String(msg.text || '');
+          const photoDataUrl = String(msg.photoDataUrl || '');
+          if (!rawText.trim() && !photoDataUrl) return;
+          if (rawText && !detectSecurityThreat(rawText).safe) return;
+          if (
+            photoDataUrl &&
+            (!photoDataUrl.startsWith('data:image/') || photoDataUrl.length > 750000)
+          ) {
+            return;
+          }
+          const chatId = String(msg.id || `twchat_${Date.now()}_${registeredUid}`)
+            .replace(/[^a-zA-Z0-9_-]/g, '')
+            .slice(0, 128);
+          const channelId = sanitizeSafeText(
+            String(msg.channelId || 'global_townsquare'),
+            64
+          );
+          const senderName = sanitizeSafeText(String(msg.senderName || 'Member'), 64);
+          const senderHandle = sanitizeSafeText(String(msg.senderHandle || '@member'), 32);
+          const recipientUid = msg.recipientUid
+            ? String(msg.recipientUid).replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 128)
+            : null;
+          const chatRecord = {
+            id: chatId,
+            channelId,
+            senderUid: registeredUid,
+            senderName,
+            senderHandle,
+            recipientUid,
+            text: sanitizeSafeText(rawText || 'Shared a photo in chat', 500),
+            photoDataUrl: photoDataUrl || null,
+            createdAtMs: Number(msg.createdAtMs) || Date.now(),
+          };
+          liveTwitterChats.set(chatId, chatRecord);
+          if (liveTwitterChats.size > 200) {
+            const oldestKey = liveTwitterChats.keys().next().value;
+            if (oldestKey) liveTwitterChats.delete(oldestKey);
+          }
+          const chatFrame = JSON.stringify({
+            type: 'twitter:chat',
+            message: chatRecord,
+          });
+          for (const { ws: clientWs } of clients.values()) {
+            if (clientWs.readyState === WebSocket.OPEN) {
+              clientWs.send(chatFrame);
             }
           }
           return;
