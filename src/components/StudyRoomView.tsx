@@ -1,6 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   formatTimerMMSS,
+  formatStudyTimerHMS,
+  formatStudyDurationLabel,
+  parseAndClampCustomStudyDuration,
+  CUSTOM_STUDY_DURATION_PRESETS,
+  validateRealTimerStudyRecording,
+  RealTimerStudyVerificationResult,
+  CURATED_STUDY_BOOKS,
+  StudyBookItem,
+  BookStudyProgressRecord,
+  updateBookStudyProgress,
+  clampProductivityTarget,
   normalizeStudyRoomCode,
   generateStudyRoomCode,
   buildStudyRoomInviteUrl,
@@ -27,6 +38,7 @@ import {
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
+import { StudyBooksLibrary } from './StudyBooksLibrary';
 import {
   Volume2,
   VolumeX,
@@ -42,6 +54,12 @@ import {
   Video,
   VideoOff,
   ShieldCheck,
+  Clock,
+  BookOpen,
+  Lock,
+  CheckCircle2,
+  AlertTriangle,
+  Sliders,
 } from 'lucide-react';
 
 export interface StudyDeskItem {
@@ -103,6 +121,7 @@ interface StudyRoomViewProps {
   dailyTargetMinutes?: number;
   todayFocusMinutes?: number;
   onLogTopicFocusSession?: (topic: string, roomCode: string, minutes: number) => void;
+  onUpdateDailyTargetMinutes?: (nextTargetMinutes: number) => void;
   uiSoundPrefs?: UiSoundEffectPreferences;
   onUpdateUiSoundPrefs?: (nextPrefs: UiSoundEffectPreferences) => void;
 }
@@ -111,23 +130,23 @@ const STUDY_MODULES = [
   {
     id: 'pomodoro',
     title: '01. Pomodoro Deep Focus Protocol',
-    cadence: '25m Focus · 5m Recovery',
+    cadence: '25m Focus · 5m Recovery (0:25:00)',
     description: 'High-intensity single-task sprints with zero context switching.',
     minutes: 25,
   },
   {
     id: 'feynman',
-    title: '02. Deep Work & Feynman Synthesis',
-    cadence: '50m Synthesis · 10m Review',
-    description: 'Master complex engineering, math, or research topics by explaining them in plain prose.',
-    minutes: 50,
+    title: '02. Deep Work & Book Synthesis Block',
+    cadence: '2h 00m Marathon · 15m Review (2:00:00)',
+    description: 'Master complex textbooks, distributed systems, or math proofs in unbroken two-hour blocks.',
+    minutes: 120,
   },
   {
-    id: 'recall',
-    title: '03. Active Recall & Rapid Drill',
-    cadence: '15m Sprint · 3m Check',
-    description: 'High-frequency problem solving and memory retrieval practice.',
-    minutes: 15,
+    id: 'mastery',
+    title: '03. Extended Mastery Immersion',
+    cadence: '3h 00m Deep Immersion (3:00:00)',
+    description: 'Full three-hour deep study block verified second-by-second on the real room timer.',
+    minutes: 180,
   },
 ];
 
@@ -149,12 +168,110 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   dailyTargetMinutes = 120,
   todayFocusMinutes = 65,
   onLogTopicFocusSession,
+  onUpdateDailyTargetMinutes,
   uiSoundPrefs,
   onUpdateUiSoundPrefs,
 }) => {
-  const [durationMinutes, setDurationMinutes] = useState(25);
-  const [secondsLeft, setSecondsLeft] = useState(25 * 60);
+  // Full Custom Study Duration & Real-Timer Tracking State
+  const [durationMinutes, setDurationMinutes] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_custom_study_duration_v1');
+      if (saved) {
+        const parsed = Number(saved);
+        if (Number.isFinite(parsed) && parsed >= 1 && parsed <= 720) {
+          return Math.round(parsed);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return 120; // Default 2 hours (2:00:00) so multi-hour control is immediately visible
+  });
+  const [secondsLeft, setSecondsLeft] = useState<number>(() => durationMinutes * 60);
+  const [elapsedSessionSeconds, setElapsedSessionSeconds] = useState<number>(0);
+  const [alreadyRecordedSeconds, setAlreadyRecordedSeconds] = useState<number>(0);
   const [isRunning, setIsRunning] = useState(false);
+  const [timerDisplayMode, setTimerDisplayMode] = useState<'countdown' | 'stopwatch'>(
+    'countdown'
+  );
+
+  // Custom Duration Inputs (Hours + Minutes)
+  const [customHoursInput, setCustomHoursInput] = useState<string>(() =>
+    String(Math.floor(durationMinutes / 60))
+  );
+  const [customMinutesInput, setCustomMinutesInput] = useState<string>(() =>
+    String(durationMinutes % 60)
+  );
+  const [dailyGoalHoursInput, setDailyGoalHoursInput] = useState<string>(() =>
+    String(Math.floor(dailyTargetMinutes / 60))
+  );
+  const [dailyGoalMinsInput, setDailyGoalMinsInput] = useState<string>(() =>
+    String(dailyTargetMinutes % 60)
+  );
+
+  useEffect(() => {
+    setDailyGoalHoursInput(String(Math.floor(dailyTargetMinutes / 60)));
+    setDailyGoalMinsInput(String(dailyTargetMinutes % 60));
+  }, [dailyTargetMinutes]);
+
+  // Real-Timer Verification & Claim Guard State
+  const [claimHoursInput, setClaimHoursInput] = useState<string>('3');
+  const [claimMinutesInput, setClaimMinutesInput] = useState<string>('0');
+  const [verificationFeedback, setVerificationFeedback] =
+    useState<RealTimerStudyVerificationResult | null>(null);
+  const [verifiedSessionsLedger, setVerifiedSessionsLedger] = useState<
+    Array<{
+      id: string;
+      bookOrTopic: string;
+      conductedHMS: string;
+      minutesRecorded: number;
+      timestampLabel: string;
+    }>
+  >([]);
+
+  // Study Books Library & Progress State
+  const [studyBooks, setStudyBooks] = useState<StudyBookItem[]>(() => {
+    try {
+      const savedCustom = localStorage.getItem('mr_stranger_custom_study_books_v1');
+      if (savedCustom) {
+        const parsed = JSON.parse(savedCustom);
+        if (Array.isArray(parsed)) {
+          return [...CURATED_STUDY_BOOKS, ...parsed];
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [...CURATED_STUDY_BOOKS];
+  });
+  const [activeBookId, setActiveBookId] = useState<string>(CURATED_STUDY_BOOKS[0].id);
+  const [bookProgressMap, setBookProgressMap] = useState<
+    Record<string, BookStudyProgressRecord>
+  >(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_book_progress_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return {
+      book_ddia: {
+        bookId: 'book_ddia',
+        currentPage: 42,
+        completedChapterNumbers: [1],
+        verifiedSecondsStudied: 3600,
+        personalNotes:
+          'Chapter 1 synthesis: Tail latency (p99) governs perceived reliability in multi-tier services.',
+        lastStudiedAtMs: Date.now() - 86400_000,
+      },
+    };
+  });
+
+  const activeBook =
+    studyBooks.find((b) => b.id === activeBookId) || studyBooks[0];
 
   const [localStudySessions, setLocalStudySessions] = useState<TopicFocusSessionRecord[]>(() => {
     try {
@@ -195,7 +312,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     return DEFAULT_AMBIENT_WORKSPACE_STATE;
   });
 
-  // System & UI Sound Effects State (synced with Privacy Settings without needing to open it)
+  // System & UI Sound Effects State
   const [localUiSoundPrefs, setLocalUiSoundPrefs] = useState<UiSoundEffectPreferences>(() => {
     if (uiSoundPrefs) return uiSoundPrefs;
     try {
@@ -241,7 +358,9 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   const [newRoomTitle, setNewRoomTitle] = useState('Deep Work Study Room');
   const [copiedFeedback, setCopiedFeedback] = useState<'code' | 'link' | null>(null);
 
-  const [subject, setSubject] = useState('');
+  const [subject, setSubject] = useState<string>(
+    `Studying: ${CURATED_STUDY_BOOKS[0].title}`
+  );
   const [positiveNote, setPositiveNote] = useState('');
   const [formError, setFormError] = useState('');
   const [chatInput, setChatInput] = useState('');
@@ -249,8 +368,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   const [studyTasks, setStudyTasks] = useState<
     { id: string; title: string; completed: boolean }[]
   >([
-    { id: 'st-1', title: 'Complete 1 full Pomodoro sprint without distractions', completed: false },
-    { id: 'st-2', title: 'Post a positive study note for room peers', completed: false },
+    { id: 'st-1', title: 'Conduct a real timer-verified study block on selected book', completed: false },
+    { id: 'st-2', title: 'Complete chapter active recall & save synthesis notes', completed: false },
   ]);
   const [newTaskTitle, setNewTaskTitle] = useState('');
 
@@ -265,21 +384,100 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setStudyCamActive(false);
   };
 
+  // Commit real verified timer seconds to user history & active book progress
+  const commitVerifiedStudySeconds = (
+    verifiedSecs: number,
+    topicOrBookLabel: string
+  ) => {
+    const minsToRecord = Math.max(1, Math.round(verifiedSecs / 60));
+    const cleanTopic = sanitizeSafeText(
+      topicOrBookLabel || `Studying: ${activeBook.title}`,
+      80
+    );
+    const todayKey = formatDateKey(new Date());
+    const newSession: TopicFocusSessionRecord = {
+      id: `study_verified_${Date.now()}_${currentUid}`,
+      topic: cleanTopic,
+      roomCode: activeRoomCode,
+      focusMinutes: minsToRecord,
+      dateKey: todayKey,
+      createdAtMs: Date.now(),
+      authorUid: currentUid,
+    };
+
+    setLocalStudySessions((prev) => {
+      const next = [...prev, newSession];
+      try {
+        localStorage.setItem('mr_stranger_topic_sessions_v1', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    setLocalAddedTodayMinutes((prev) => prev + minsToRecord);
+
+    if (onLogTopicFocusSession) {
+      onLogTopicFocusSession(cleanTopic, activeRoomCode, minsToRecord);
+    } else {
+      onFocusMinutesLogged?.(minsToRecord);
+    }
+
+    // Also credit the active book with these verified seconds
+    setBookProgressMap((prevMap) => {
+      const res = updateBookStudyProgress({
+        progressMap: prevMap,
+        book: activeBook,
+        verifiedSecondsToAdd: verifiedSecs,
+      });
+      try {
+        localStorage.setItem(
+          'mr_stranger_book_progress_v1',
+          JSON.stringify(res.updatedMap)
+        );
+      } catch {
+        // ignore
+      }
+      return res.updatedMap;
+    });
+
+    setVerifiedSessionsLedger((prev) => [
+      {
+        id: `vled_${Date.now()}`,
+        bookOrTopic: cleanTopic,
+        conductedHMS: formatStudyTimerHMS(verifiedSecs, true),
+        minutesRecorded: minsToRecord,
+        timestampLabel: new Date().toLocaleTimeString([], {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+        }),
+      },
+      ...prev.slice(0, 9),
+    ]);
+  };
+
+  // Authoritative 1-second real timer tick
   useEffect(() => {
     if (!isRunning) return;
     const timer = window.setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
+      setElapsedSessionSeconds((prevElapsed) => prevElapsed + 1);
+      setSecondsLeft((prevLeft) => {
+        if (prevLeft <= 1) {
           setIsRunning(false);
           soundEngine.playSfx('chime');
-          onFocusMinutesLogged?.(durationMinutes);
+          const totalTargetSecs = durationMinutes * 60;
+          commitVerifiedStudySeconds(
+            totalTargetSecs,
+            subject || `Studying: ${activeBook.title}`
+          );
+          setAlreadyRecordedSeconds(totalTargetSecs);
           return 0;
         }
-        return prev - 1;
+        return prevLeft - 1;
       });
     }, 1000);
     return () => window.clearInterval(timer);
-  }, [isRunning, durationMinutes, onFocusMinutesLogged]);
+  }, [isRunning, durationMinutes, activeBook.title, subject]);
 
   useEffect(() => {
     return () => {
@@ -316,7 +514,6 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       setStudyMicActive(true);
       setHardwareStatusNote('Study Room microphone open for active room peers.');
     } catch {
-      // Browser headless / hardware fallback after explicit permission gate
       setStudyMicActive(true);
       setHardwareStatusNote('Study Room microphone enabled (verified permission gate).');
     }
@@ -348,10 +545,99 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     }
   };
 
-  const handleSelectDuration = (mins: number) => {
-    setDurationMinutes(mins);
-    setSecondsLeft(mins * 60);
+  const applyCustomStudyMinutes = (mins: number) => {
+    const config = parseAndClampCustomStudyDuration({ totalMinutes: mins });
+    setDurationMinutes(config.totalMinutes);
+    setSecondsLeft(config.totalSeconds);
+    setElapsedSessionSeconds(0);
+    setAlreadyRecordedSeconds(0);
+    setCustomHoursInput(String(config.hours));
+    setCustomMinutesInput(String(config.minutes));
     setIsRunning(false);
+    setVerificationFeedback(null);
+    try {
+      localStorage.setItem(
+        'mr_stranger_custom_study_duration_v1',
+        String(config.totalMinutes)
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSelectDuration = (mins: number) => {
+    applyCustomStudyMinutes(mins);
+  };
+
+  const handleCustomDurationFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const config = parseAndClampCustomStudyDuration({
+      hours: customHoursInput,
+      minutes: customMinutesInput,
+    });
+    applyCustomStudyMinutes(config.totalMinutes);
+  };
+
+  const handleSaveDailyTargetFromStudyMode = (e: React.FormEvent) => {
+    e.preventDefault();
+    const config = parseAndClampCustomStudyDuration({
+      hours: dailyGoalHoursInput,
+      minutes: dailyGoalMinsInput,
+    });
+    const clamped = clampProductivityTarget(config.totalMinutes);
+    onUpdateDailyTargetMinutes?.(clamped);
+  };
+
+  // Record strictly the real elapsed time on the timer
+  const handleRecordRealElapsedTime = () => {
+    const check = validateRealTimerStudyRecording({
+      actualElapsedSeconds: elapsedSessionSeconds,
+      alreadyRecordedSeconds,
+    });
+    setVerificationFeedback(check);
+    if (check.allowed && check.verifiedSeconds > 0) {
+      commitVerifiedStudySeconds(
+        check.verifiedSeconds,
+        subject || `Studying: ${activeBook.title}`
+      );
+      setAlreadyRecordedSeconds(elapsedSessionSeconds);
+    }
+  };
+
+  // Verify a user-claimed duration against the real timer (blocks claiming 3:00:00 if timer only ran 2:00:00)
+  const handleVerifyClaimedDuration = (e: React.FormEvent) => {
+    e.preventDefault();
+    const claimedCfg = parseAndClampCustomStudyDuration({
+      hours: claimHoursInput,
+      minutes: claimMinutesInput,
+    });
+    const check = validateRealTimerStudyRecording({
+      actualElapsedSeconds: elapsedSessionSeconds,
+      alreadyRecordedSeconds,
+      claimedSeconds: claimedCfg.totalSeconds,
+    });
+    setVerificationFeedback(check);
+    if (check.allowed && check.verifiedSeconds > 0) {
+      commitVerifiedStudySeconds(
+        check.verifiedSeconds,
+        subject || `Studying: ${activeBook.title}`
+      );
+      setAlreadyRecordedSeconds((prev) => prev + check.verifiedSeconds);
+    }
+  };
+
+  // Interactive 1-click demonstration of the "2:00:00 conducted vs 3:00:00 claimed" rule
+  const handleCheck2HoursVs3HoursRule = () => {
+    setClaimHoursInput('3');
+    setClaimMinutesInput('0');
+    const simulatedActual =
+      elapsedSessionSeconds > 0 ? elapsedSessionSeconds : 7200; // 2 hours (2:00:00)
+    const check = validateRealTimerStudyRecording({
+      actualElapsedSeconds: simulatedActual,
+      alreadyRecordedSeconds: 0,
+      claimedSeconds: 10800, // 3 hours (3:00:00)
+    });
+    setVerificationFeedback(check);
   };
 
   const persistAmbientWorkspaceState = (next: AmbientWorkspaceState) => {
@@ -417,7 +703,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     onJoinDesk(
       generated,
       cleanTitle,
-      sanitizeSafeText(subject || 'Focused Study Block', 100),
+      sanitizeSafeText(subject || `Studying: ${activeBook.title}`, 100),
       sanitizeSafeText(positiveNote || 'Let us crush our goals together!', 400),
       durationMinutes
     );
@@ -431,7 +717,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     onJoinDesk(
       normalized,
       `Study Room ${normalized}`,
-      sanitizeSafeText(subject || 'Joined via Room Code', 100),
+      sanitizeSafeText(subject || `Studying: ${activeBook.title}`, 100),
       sanitizeSafeText(positiveNote || 'Studying live with friends.', 400),
       durationMinutes
     );
@@ -455,40 +741,48 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setFormError('');
     const safeSub = sanitizeSafeText(trimmedSubject, 100);
     const safeNote = sanitizeSafeText(trimmedNote, 400);
+
+    // Sit at the desk and start the real timer; only record focus minutes that have actually elapsed!
     onJoinDesk(activeRoomCode, newRoomTitle, safeSub, safeNote, durationMinutes);
-    await onSaveStudyNote(activeRoomCode, safeSub, safeNote, durationMinutes);
-    handleLogStudySessionFromChart(durationMinutes, safeSub);
-    setSubject('');
+    const verifiedMinutesSoFar = Math.max(
+      1,
+      Math.floor((elapsedSessionSeconds - alreadyRecordedSeconds) / 60)
+    );
+    await onSaveStudyNote(
+      activeRoomCode,
+      safeSub,
+      safeNote,
+      elapsedSessionSeconds >= 60 ? verifiedMinutesSoFar : durationMinutes
+    );
+    if (!isRunning) {
+      setIsRunning(true);
+    }
+    if (elapsedSessionSeconds - alreadyRecordedSeconds >= 60) {
+      const check = validateRealTimerStudyRecording({
+        actualElapsedSeconds: elapsedSessionSeconds,
+        alreadyRecordedSeconds,
+      });
+      if (check.allowed && check.verifiedSeconds > 0) {
+        commitVerifiedStudySeconds(check.verifiedSeconds, safeSub);
+        setAlreadyRecordedSeconds(elapsedSessionSeconds);
+      }
+    }
     setPositiveNote('');
   };
 
-  const handleLogStudySessionFromChart = (minutesToAdd: number, topicLabel: string) => {
-    const added = Math.max(1, Math.round(minutesToAdd));
-    const todayKey = formatDateKey(new Date());
-    const newSession: TopicFocusSessionRecord = {
-      id: `study_d3_${Date.now()}_${currentUid}`,
-      topic: sanitizeSafeText(topicLabel || 'Pomodoro Deep Focus Protocol', 80),
-      roomCode: activeRoomCode,
-      focusMinutes: added,
-      dateKey: todayKey,
-      createdAtMs: Date.now(),
-      authorUid: currentUid,
-    };
-    setLocalStudySessions((prev) => {
-      const next = [...prev, newSession];
-      try {
-        localStorage.setItem('mr_stranger_topic_sessions_v1', JSON.stringify(next));
-      } catch {
-        // ignore
-      }
-      return next;
+  // Guard chart quick-log buttons with strict real-timer verification
+  const handleLogStudySessionFromChart = (minutesToClaim: number, topicLabel: string) => {
+    const check = validateRealTimerStudyRecording({
+      actualElapsedSeconds: elapsedSessionSeconds,
+      alreadyRecordedSeconds,
+      claimedMinutes: minutesToClaim,
     });
-    setLocalAddedTodayMinutes((prev) => prev + added);
-    if (onLogTopicFocusSession) {
-      onLogTopicFocusSession(newSession.topic, activeRoomCode, added);
-    } else {
-      onFocusMinutesLogged?.(added);
+    setVerificationFeedback(check);
+    if (!check.allowed) {
+      return;
     }
+    commitVerifiedStudySeconds(check.verifiedSeconds, topicLabel);
+    setAlreadyRecordedSeconds((prev) => prev + check.verifiedSeconds);
   };
 
   const handleAddStudyTask = (e: React.FormEvent) => {
@@ -509,6 +803,72 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     if (!detectSecurityThreat(trimmed).safe) return;
     onSendStudyChat(activeRoomCode, sanitizeSafeText(trimmed, 500));
     setChatInput('');
+  };
+
+  const handleSelectActiveBook = (
+    book: StudyBookItem,
+    applyRecommendedDuration = false
+  ) => {
+    setActiveBookId(book.id);
+    setSubject(`Studying: ${book.title}`);
+    if (applyRecommendedDuration) {
+      applyCustomStudyMinutes(book.recommendedMinutes);
+    }
+  };
+
+  const handleAddCustomBook = (newBook: StudyBookItem) => {
+    setStudyBooks((prev) => {
+      const next = [newBook, ...prev];
+      const customOnly = next.filter((b) => b.isCustom);
+      try {
+        localStorage.setItem(
+          'mr_stranger_custom_study_books_v1',
+          JSON.stringify(customOnly)
+        );
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const handleUpdateBookProgress = (params: {
+    book: StudyBookItem;
+    currentPage?: number;
+    toggleChapterNumber?: number;
+    verifiedSecondsToAdd?: number;
+    personalNotes?: string;
+  }) => {
+    setBookProgressMap((prev) => {
+      const res = updateBookStudyProgress({
+        progressMap: prev,
+        ...params,
+      });
+      try {
+        localStorage.setItem(
+          'mr_stranger_book_progress_v1',
+          JSON.stringify(res.updatedMap)
+        );
+      } catch {
+        // ignore
+      }
+      return res.updatedMap;
+    });
+  };
+
+  const handleStartTimerWithBook = (book: StudyBookItem, customMinutes?: number) => {
+    setActiveBookId(book.id);
+    setSubject(`Studying: ${book.title}`);
+    if (typeof customMinutes === 'number' && customMinutes > 0) {
+      const config = parseAndClampCustomStudyDuration({ totalMinutes: customMinutes });
+      setDurationMinutes(config.totalMinutes);
+      setSecondsLeft(config.totalSeconds);
+      setElapsedSessionSeconds(0);
+      setAlreadyRecordedSeconds(0);
+      setCustomHoursInput(String(config.hours));
+      setCustomMinutesInput(String(config.minutes));
+    }
+    setIsRunning(true);
   };
 
   const renderSoundscapeIcon = (id: AmbientPresetId) => {
@@ -553,6 +913,24 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     activeRoomCode,
   });
 
+  const targetTotalSeconds = durationMinutes * 60;
+  const unrecordedElapsedSeconds = Math.max(
+    0,
+    elapsedSessionSeconds - alreadyRecordedSeconds
+  );
+  const timerProgressPercent = Math.min(
+    100,
+    Math.round((elapsedSessionSeconds / Math.max(1, targetTotalSeconds)) * 100)
+  );
+
+  // Format primary timer display: H:MM:SS when >= 1 hour or in stopwatch mode, MM:SS when < 1 hour
+  const primaryTimerText =
+    timerDisplayMode === 'stopwatch'
+      ? formatStudyTimerHMS(elapsedSessionSeconds, true)
+      : secondsLeft >= 3600 || durationMinutes >= 60
+      ? formatStudyTimerHMS(secondsLeft, true)
+      : formatTimerMMSS(secondsLeft);
+
   return (
     <section className="space-y-8" aria-label="Study Mode and Shareable Study Room">
       {/* Top Header & Shareable Room Invite Strip */}
@@ -561,7 +939,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
               <h1 className="text-2xl font-bold tracking-tight text-white">
-                Study Mode & Live Study Room
+                Study Mode & Live Study Sanctuary
               </h1>
               <span aria-hidden="true" className="text-xs text-zinc-600">
                 ·
@@ -578,7 +956,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               </span>
             </div>
             <p className="text-sm text-zinc-400">
-              Invite friends via room code or shareable link, synchronize focus timers, and toggle studio-synthesized ambient soundscapes.
+              Full custom control over your study hours & minutes, strict real-timer verified recording, and interactive Study Books library.
             </p>
           </div>
 
@@ -627,8 +1005,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                   onJoinDesk(
                     activeRoomCode,
                     newRoomTitle,
-                    'Deep Focus Session',
-                    'Every focused minute compounds.',
+                    subject || `Studying: ${activeBook.title}`,
+                    'Every real timer-verified minute compounds.',
                     durationMinutes
                   )
                 }
@@ -795,6 +1173,490 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         </div>
       </div>
 
+      {/* ====================================================================
+          FULL CUSTOM STUDY TIMER CONTROL & STRICT REAL-TIMER RECORDING LEDGER
+          ==================================================================== */}
+      <div
+        className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-6"
+        data-testid="study-custom-timer-panel"
+        aria-label="Custom Study Timer Control and Strict Real-Timer Recording"
+      >
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-4">
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <Sliders className="w-4 h-4 text-emerald-400 shrink-0" />
+              <h2 className="text-lg font-bold text-white">
+                Custom Study Time Controller & Real-Timer Verification Ledger
+              </h2>
+              <span aria-hidden="true" className="text-xs text-zinc-600">
+                ·
+              </span>
+              <span className="inline-flex items-center gap-1 text-xs font-mono text-emerald-400">
+                <Lock className="w-3 h-3" />
+                <span>Strict Real-Timer Recording Enforced</span>
+              </span>
+            </div>
+            <p className="text-xs text-zinc-400">
+              Set the exact hours and minutes you want to study. Study sessions are strictly recorded from the real running timer — if you study 2 hours (2:00:00), you cannot record 3 hours (3:00:00) without the timer going until 3:00:00.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() =>
+                setTimerDisplayMode((prev) =>
+                  prev === 'countdown' ? 'stopwatch' : 'countdown'
+                )
+              }
+              data-testid="study-timer-mode-toggle"
+              className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-100 border border-zinc-800 rounded-md whitespace-nowrap"
+            >
+              {timerDisplayMode === 'countdown'
+                ? 'Mode: Countdown (Switch to Count-Up 0:00:00 → 3:00:00)'
+                : 'Mode: Count-Up Stopwatch (Switch to Countdown)'}
+            </button>
+          </div>
+        </div>
+
+        {/* Main 12-Col Grid: Left 7 Cols = Custom Duration & Live Clock, Right 5 Cols = Real-Timer Verification Guard */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Left 7 Cols: Custom Hours/Minutes Setter, Presets & Dual Clock */}
+          <div className="lg:col-span-7 space-y-5">
+            {/* Custom Duration Presets (15m up to 4 Hours) */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-zinc-300">
+                  Choose Any Study Duration Preset or Enter Custom Hours & Minutes:
+                </span>
+                <span className="font-mono text-emerald-400" data-testid="study-active-target-label">
+                  Target: {formatStudyDurationLabel(durationMinutes)} ({formatStudyTimerHMS(targetTotalSeconds, true)})
+                </span>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {CUSTOM_STUDY_DURATION_PRESETS.map((preset) => {
+                  const isCurrent = durationMinutes === preset.minutes;
+                  return (
+                    <button
+                      key={preset.minutes}
+                      type="button"
+                      onClick={() => handleSelectDuration(preset.minutes)}
+                      data-testid={`study-preset-${preset.minutes}m`}
+                      className={`p-2.5 rounded-md border text-left transition-colors ${
+                        isCurrent
+                          ? 'bg-white text-black border-white font-bold'
+                          : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-mono font-bold">{preset.hmsLabel}</div>
+                      <div
+                        className={`text-[11px] ${
+                          isCurrent ? 'text-zinc-800' : 'text-zinc-400'
+                        }`}
+                      >
+                        {preset.fullLabel}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Custom Hours & Minutes Input Form + Daily Goal Setter */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <form
+                onSubmit={handleCustomDurationFormSubmit}
+                className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3"
+                data-testid="study-custom-duration-form"
+              >
+                <div className="text-xs font-bold text-white">
+                  Set Custom Session Duration (Hours & Minutes)
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="study-custom-hours"
+                      className="block text-[11px] font-mono text-zinc-400"
+                    >
+                      Hours (0–12h)
+                    </label>
+                    <input
+                      id="study-custom-hours"
+                      type="number"
+                      min={0}
+                      max={12}
+                      value={customHoursInput}
+                      onChange={(e) => setCustomHoursInput(e.target.value)}
+                      data-testid="study-custom-hours-input"
+                      className="w-full px-3 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="study-custom-minutes"
+                      className="block text-[11px] font-mono text-zinc-400"
+                    >
+                      Minutes (0–59m)
+                    </label>
+                    <input
+                      id="study-custom-minutes"
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={customMinutesInput}
+                      onChange={(e) => setCustomMinutesInput(e.target.value)}
+                      data-testid="study-custom-minutes-input"
+                      className="w-full px-3 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  data-testid="study-apply-custom-duration-btn"
+                  className="w-full py-2 px-3 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded transition-colors"
+                >
+                  Apply Custom Study Time
+                </button>
+              </form>
+
+              <form
+                onSubmit={handleSaveDailyTargetFromStudyMode}
+                className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3"
+                data-testid="study-daily-goal-form"
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-white">
+                    Daily Study Goal Target
+                  </span>
+                  <span className="text-[11px] font-mono text-emerald-400">
+                    {formatStudyDurationLabel(dailyTargetMinutes)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 gap-2.5">
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="study-daily-goal-hours"
+                      className="block text-[11px] font-mono text-zinc-400"
+                    >
+                      Daily Goal Hours
+                    </label>
+                    <input
+                      id="study-daily-goal-hours"
+                      type="number"
+                      min={0}
+                      max={12}
+                      value={dailyGoalHoursInput}
+                      onChange={(e) => setDailyGoalHoursInput(e.target.value)}
+                      data-testid="study-daily-goal-hours-input"
+                      className="w-full px-3 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label
+                      htmlFor="study-daily-goal-mins"
+                      className="block text-[11px] font-mono text-zinc-300"
+                    >
+                      Daily Goal Mins
+                    </label>
+                    <input
+                      id="study-daily-goal-mins"
+                      type="number"
+                      min={0}
+                      max={59}
+                      value={dailyGoalMinsInput}
+                      onChange={(e) => setDailyGoalMinsInput(e.target.value)}
+                      data-testid="study-daily-goal-mins-input"
+                      className="w-full px-3 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white"
+                    />
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  data-testid="study-daily-goal-save-btn"
+                  className="w-full py-2 px-3 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-white border border-zinc-800 rounded transition-colors"
+                >
+                  Save Daily Study Goal
+                </button>
+              </form>
+            </div>
+
+            {/* Live Dual Clock Display (Target Countdown + Real Elapsed Timer 0:00:00 -> 3:00:00) */}
+            <div className="p-6 rounded-lg bg-[#050505] border border-zinc-800/80 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+                <span className="text-zinc-400">
+                  Active Subject / Book:{' '}
+                  <strong className="text-white" data-testid="study-timer-active-subject">
+                    {subject || `Studying: ${activeBook.title}`}
+                  </strong>
+                </span>
+                <span className="text-emerald-400">
+                  Target Clock: {formatStudyTimerHMS(targetTotalSeconds, true)}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center py-2">
+                <div className="text-center sm:text-left space-y-1">
+                  <div className="text-[11px] font-mono uppercase text-zinc-400">
+                    {timerDisplayMode === 'stopwatch'
+                      ? 'Live Stopwatch Clock (H:MM:SS)'
+                      : 'Session Timer Display'}
+                  </div>
+                  <div
+                    className="text-5xl sm:text-6xl font-bold font-mono tabular-nums tracking-tight text-white"
+                    data-testid="study-timer-display"
+                  >
+                    {primaryTimerText}
+                  </div>
+                  <div
+                    className="text-xs font-mono text-zinc-400"
+                    data-testid="study-timer-hms-display"
+                  >
+                    Remaining: {formatStudyTimerHMS(secondsLeft, true)} / Target:{' '}
+                    {formatStudyTimerHMS(targetTotalSeconds, true)}
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-md bg-[#0A0A0C] border border-zinc-800 text-center sm:text-right space-y-1">
+                  <div className="text-[11px] font-mono uppercase text-emerald-400">
+                    Real Timer Conducted (Verified)
+                  </div>
+                  <div
+                    className="text-3xl sm:text-4xl font-bold font-mono tabular-nums text-emerald-400"
+                    data-testid="study-real-elapsed-display"
+                  >
+                    {formatStudyTimerHMS(elapsedSessionSeconds, true)}
+                  </div>
+                  <div className="text-[11px] font-mono text-zinc-400">
+                    Unrecorded Elapsed: {formatStudyTimerHMS(unrecordedElapsedSeconds, true)} ({timerProgressPercent}% of target)
+                  </div>
+                </div>
+              </div>
+
+              {/* Real Elapsed Progress Bar toward Target */}
+              <div className="space-y-1.5">
+                <div className="w-full h-2.5 bg-[#0A0A0C] border border-zinc-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-emerald-400 transition-all duration-300"
+                    style={{ width: `${timerProgressPercent}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-mono text-zinc-500">
+                  <span>0:00:00 Start</span>
+                  <span>
+                    {isRunning
+                      ? `Conducting live in ${activeRoomCode}...`
+                      : `Ready for ${formatStudyDurationLabel(durationMinutes)}`}
+                  </span>
+                  <span>{formatStudyTimerHMS(targetTotalSeconds, true)} Target</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsRunning((prev) => !prev)}
+                  data-testid="study-start-pause-timer-btn"
+                  className="flex-1 py-2.5 px-4 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0"
+                >
+                  {isRunning ? 'Pause Focus Timer' : 'Start Focus Timer'}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRecordRealElapsedTime}
+                  data-testid="study-record-conducted-time-btn"
+                  className="py-2.5 px-4 text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 rounded-md transition-colors whitespace-nowrap shrink-0"
+                >
+                  Record Real Conducted Time ({formatStudyTimerHMS(unrecordedElapsedSeconds, true)})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsRunning(false);
+                    setSecondsLeft(durationMinutes * 60);
+                    setElapsedSessionSeconds(0);
+                    setAlreadyRecordedSeconds(0);
+                    setVerificationFeedback(null);
+                  }}
+                  data-testid="study-reset-timer-btn"
+                  className="py-2.5 px-4 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md transition-colors whitespace-nowrap shrink-0"
+                >
+                  Reset
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right 5 Cols: Strict Real-Timer Recording Enforcement & Claim Verifier */}
+          <div
+            className="lg:col-span-5 p-5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-4"
+            data-testid="study-real-timer-recorder-panel"
+          >
+            <div className="space-y-1 border-b border-zinc-800/80 pb-3">
+              <div className="flex items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-white flex items-center gap-1.5">
+                  <Lock className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>Real-Timer Integrity & Recording Guard</span>
+                </h3>
+                <span className="text-[11px] font-mono text-emerald-400">
+                  Anti-Inflation Active
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Recorded study values are locked to your real elapsed timer. If you study 2 hours (<span className="font-mono text-white">2:00:00</span>), you cannot make it 3 hours (<span className="font-mono text-white">3:00:00</span>) without the timer going until <span className="font-mono text-white">3:00:00</span>.
+              </p>
+            </div>
+
+            {/* Claim Verification Form */}
+            <form
+              onSubmit={handleVerifyClaimedDuration}
+              className="space-y-3"
+              data-testid="study-claim-verifier-panel"
+            >
+              <div className="text-xs font-semibold text-zinc-200">
+                Verify & Record Study Duration Against Real Timer:
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="space-y-1">
+                  <label
+                    htmlFor="claim-study-hours"
+                    className="block text-[11px] font-mono text-zinc-400"
+                  >
+                    Claim Hours
+                  </label>
+                  <input
+                    id="claim-study-hours"
+                    type="number"
+                    min={0}
+                    max={12}
+                    value={claimHoursInput}
+                    onChange={(e) => setClaimHoursInput(e.target.value)}
+                    data-testid="study-claim-hours-input"
+                    className="w-full px-3 py-1.5 text-xs font-mono bg-[#0A0A0C] border border-zinc-800 rounded text-white"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label
+                    htmlFor="claim-study-minutes"
+                    className="block text-[11px] font-mono text-zinc-400"
+                  >
+                    Claim Minutes
+                  </label>
+                  <input
+                    id="claim-study-minutes"
+                    type="number"
+                    min={0}
+                    max={59}
+                    value={claimMinutesInput}
+                    onChange={(e) => setClaimMinutesInput(e.target.value)}
+                    data-testid="study-claim-minutes-input"
+                    className="w-full px-3 py-1.5 text-xs font-mono bg-[#0A0A0C] border border-zinc-800 rounded text-white"
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="submit"
+                  data-testid="study-verify-claim-btn"
+                  className="flex-1 py-2 px-3 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded transition-colors whitespace-nowrap"
+                >
+                  Verify & Record Claimed Time
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCheck2HoursVs3HoursRule}
+                  data-testid="study-check-2h-vs-3h-rule-btn"
+                  className="py-2 px-3 text-xs font-mono font-semibold bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-800 rounded transition-colors whitespace-nowrap"
+                >
+                  Test 2:00:00 vs 3:00:00 Rule
+                </button>
+              </div>
+            </form>
+
+            {/* Verification Result Banner */}
+            {verificationFeedback && (
+              <div
+                data-testid="study-timer-verification-alert"
+                role="status"
+                className={`p-3.5 rounded-md border text-xs space-y-1.5 ${
+                  verificationFeedback.allowed
+                    ? 'bg-emerald-950/30 border-emerald-500/40 text-emerald-200'
+                    : 'bg-amber-950/40 border-amber-500/40 text-amber-200'
+                }`}
+              >
+                <div className="flex items-center justify-between font-mono font-bold">
+                  <span className="flex items-center gap-1.5">
+                    {verificationFeedback.allowed ? (
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    ) : (
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
+                    )}
+                    <span>
+                      {verificationFeedback.allowed
+                        ? 'REAL-TIMER VERIFIED'
+                        : 'UNVERIFIED TIME BLOCKED'}
+                    </span>
+                  </span>
+                  <span>
+                    Timer: {verificationFeedback.actualElapsedFormattedHMS} / Claimed:{' '}
+                    {verificationFeedback.claimedFormattedHMS}
+                  </span>
+                </div>
+                <p className="leading-relaxed">{verificationFeedback.reason}</p>
+              </div>
+            )}
+
+            {/* Verified Sessions Ledger */}
+            <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-zinc-300">
+                  Real-Timer Verified Sessions Ledger
+                </span>
+                <span className="font-mono text-zinc-500">
+                  {verifiedSessionsLedger.length} logged this session
+                </span>
+              </div>
+              {verifiedSessionsLedger.length === 0 ? (
+                <p className="text-[11px] text-zinc-500">
+                  Run the focus timer and click "Record Real Conducted Time" to log verified study time.
+                </p>
+              ) : (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto">
+                  {verifiedSessionsLedger.map((entry) => (
+                    <div
+                      key={entry.id}
+                      className="p-2 rounded bg-[#0A0A0C] border border-zinc-800 flex items-center justify-between text-[11px] font-mono"
+                    >
+                      <span className="text-zinc-200 truncate max-w-[180px]">
+                        {entry.bookOrTopic}
+                      </span>
+                      <span className="text-emerald-400 font-bold">
+                        {entry.conductedHMS} ({entry.minutesRecorded}m)
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ====================================================================
+          COMPLETE STUDY BOOKS & INTERACTIVE READING SANCTUARY
+          ==================================================================== */}
+      <StudyBooksLibrary
+        books={studyBooks}
+        activeBookId={activeBook.id}
+        onSelectActiveBook={handleSelectActiveBook}
+        onAddCustomBook={handleAddCustomBook}
+        bookProgressMap={bookProgressMap}
+        onUpdateBookProgress={handleUpdateBookProgress}
+        isTimerRunning={isRunning}
+        currentSessionElapsedSeconds={unrecordedElapsedSeconds}
+        onStartTimerWithBook={handleStartTimerWithBook}
+      />
+
       {/* Dedicated Ambient Soundscapes Panel (Rain, Cafe, White Noise, Binaural, Lo-Fi) */}
       <div
         className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-5"
@@ -937,7 +1799,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           </div>
         </div>
 
-        {/* Sound Profile Selector Cards (Rain, Cafe, White Noise, 432Hz Alpha Focus, Lo-Fi Study Chords) */}
+        {/* Sound Profile Selector Cards */}
         <div
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3"
           role="group"
@@ -1029,7 +1891,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                     : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800'
                 }`}
               >
-                Load {mod.minutes}m Module Timer
+                Load {formatStudyDurationLabel(mod.minutes).split(' (')[0]} Module Timer
               </button>
             </div>
           );
@@ -1037,66 +1899,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        {/* Left Column: Timer, Study Checklist & Positive Note Form (5 cols) */}
+        {/* Left Column: Study Checklist & Positive Note Form (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
-          <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-5">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold uppercase tracking-wider text-zinc-400">
-                Room Synchronized Focus Timer
-              </span>
-              <div className="flex items-center gap-1 bg-[#050505] p-1 rounded-md border border-zinc-800">
-                {[25, 50, 15, 5].map((mins) => (
-                  <button
-                    key={mins}
-                    type="button"
-                    onClick={() => handleSelectDuration(mins)}
-                    className={`px-2.5 py-1 text-xs font-mono font-medium rounded transition-colors whitespace-nowrap shrink-0 ${
-                      durationMinutes === mins
-                        ? 'bg-white text-black font-bold'
-                        : 'text-zinc-400 hover:text-white'
-                    }`}
-                  >
-                    {mins}m
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="py-7 text-center bg-[#050505] rounded-lg border border-zinc-800/80">
-              <div
-                className="text-6xl font-bold font-mono tabular-nums tracking-tight text-white"
-                data-testid="study-timer-display"
-              >
-                {formatTimerMMSS(secondsLeft)}
-              </div>
-              <p className="mt-2 text-xs text-zinc-400">
-                {isRunning
-                  ? `Studying live in room ${activeRoomCode}`
-                  : `Ready to start ${durationMinutes}-minute module`}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={() => setIsRunning((prev) => !prev)}
-                className="flex-1 py-2.5 px-4 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0"
-              >
-                {isRunning ? 'Pause Timer' : 'Start Focus Timer'}
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRunning(false);
-                  setSecondsLeft(durationMinutes * 60);
-                }}
-                className="py-2.5 px-4 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md transition-colors whitespace-nowrap shrink-0"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-
           {/* Study Session Checklist Module */}
           <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
             <h2 className="text-base font-bold text-white">Study Module Checklist</h2>
@@ -1152,7 +1956,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
             </h2>
             <div className="space-y-1.5">
               <label htmlFor="study-subject" className="block text-xs font-medium text-zinc-300">
-                Study Subject / Module Topic
+                Study Subject / Active Book Topic
               </label>
               <input
                 id="study-subject"
@@ -1160,7 +1964,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 maxLength={100}
                 value={subject}
                 onChange={(e) => setSubject(e.target.value)}
-                placeholder="e.g., Distributed Systems & Consensus"
+                placeholder="e.g., Studying: Designing Data-Intensive Applications"
                 className="w-full px-3.5 py-2 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
               />
             </div>
@@ -1219,7 +2023,9 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                   >
                     <div className="flex items-center justify-between text-xs text-zinc-400">
                       <span className="font-semibold text-white">{desk.displayName}</span>
-                      <span className="font-mono tabular-nums">{desk.timerMinutes}m block</span>
+                      <span className="font-mono tabular-nums">
+                        {formatStudyDurationLabel(desk.timerMinutes)} block
+                      </span>
                     </div>
                     <div className="text-xs font-medium text-emerald-400">{desk.subject}</div>
                     <p className="text-xs text-zinc-300 leading-relaxed">"{desk.positiveNote}"</p>
@@ -1253,7 +2059,9 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                       <span aria-hidden="true">·</span>
                       <span className="font-mono tabular-nums">Room {note.roomCode}</span>
                       <span aria-hidden="true">·</span>
-                      <span className="font-mono tabular-nums">{note.focusMinutes}m</span>
+                      <span className="font-mono tabular-nums">
+                        {formatStudyDurationLabel(note.focusMinutes)}
+                      </span>
                     </div>
                     <p className="text-sm text-zinc-100">{note.positiveNote}</p>
                   </div>

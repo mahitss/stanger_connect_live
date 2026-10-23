@@ -5086,4 +5086,913 @@ export function validateAndBuildTwitterChatMessage(params: {
   };
 }
 
+// ============================================================================
+// STUDY MODE: FULL CUSTOM TIMER CONTROL, STRICT REAL-TIMER RECORDING GUARD,
+// AND COMPLETE STUDY BOOKS & READING LIBRARY
+// ============================================================================
+
+export const CUSTOM_STUDY_MIN_MINUTES = 1;
+export const CUSTOM_STUDY_MAX_MINUTES = 720; // Up to 12 hours continuous study block
+
+export interface CustomStudyDurationPreset {
+  minutes: number;
+  shortLabel: string;
+  fullLabel: string;
+  hmsLabel: string;
+}
+
+export const CUSTOM_STUDY_DURATION_PRESETS: readonly CustomStudyDurationPreset[] = [
+  { minutes: 15, shortLabel: '15m', fullLabel: '15m Sprint', hmsLabel: '0:15:00' },
+  { minutes: 25, shortLabel: '25m', fullLabel: '25m Pomodoro', hmsLabel: '0:25:00' },
+  { minutes: 45, shortLabel: '45m', fullLabel: '45m Focus', hmsLabel: '0:45:00' },
+  { minutes: 60, shortLabel: '1h 00m', fullLabel: '1 Hour Block', hmsLabel: '1:00:00' },
+  { minutes: 90, shortLabel: '1h 30m', fullLabel: '1.5 Hours Deep Work', hmsLabel: '1:30:00' },
+  { minutes: 120, shortLabel: '2h 00m', fullLabel: '2 Hours Marathon', hmsLabel: '2:00:00' },
+  { minutes: 180, shortLabel: '3h 00m', fullLabel: '3 Hours Mastery', hmsLabel: '3:00:00' },
+  { minutes: 240, shortLabel: '4h 00m', fullLabel: '4 Hours Immersion', hmsLabel: '4:00:00' },
+] as const;
+
+/**
+ * Formats seconds into H:MM:SS (e.g. 2:00:00 for 2 hours, 3:00:00 for 3 hours)
+ * or MM:SS when under 1 hour unless alwaysShowHours is true.
+ */
+export function formatStudyTimerHMS(
+  totalSeconds: number,
+  alwaysShowHours: boolean = true
+): string {
+  const clamped = Math.max(0, Math.floor(Number(totalSeconds) || 0));
+  const hours = Math.floor(clamped / 3600);
+  const minutes = Math.floor((clamped % 3600) / 60);
+  const seconds = clamped % 60;
+
+  const paddedMins = String(minutes).padStart(2, '0');
+  const paddedSecs = String(seconds).padStart(2, '0');
+
+  if (alwaysShowHours || hours > 0) {
+    return `${hours}:${paddedMins}:${paddedSecs}`;
+  }
+  return `${paddedMins}:${paddedSecs}`;
+}
+
+export function formatStudyDurationLabel(totalMinutes: number): string {
+  const safeMins = Math.max(
+    0,
+    Math.round(Number.isFinite(totalMinutes) ? totalMinutes : 0)
+  );
+  const hours = Math.floor(safeMins / 60);
+  const remMins = safeMins % 60;
+  if (hours === 0) {
+    return `${remMins}m`;
+  }
+  const paddedMins = String(remMins).padStart(2, '0');
+  return `${hours}h ${paddedMins}m (${safeMins}m)`;
+}
+
+export interface CustomStudyDurationConfig {
+  totalMinutes: number;
+  hours: number;
+  minutes: number;
+  totalSeconds: number;
+  formattedTargetHMS: string;
+  formattedLabel: string;
+}
+
+export function parseAndClampCustomStudyDuration(params: {
+  hours?: number | string;
+  minutes?: number | string;
+  totalMinutes?: number | string;
+}): CustomStudyDurationConfig {
+  let rawTotalMinutes: number;
+
+  if (
+    params.totalMinutes !== undefined &&
+    params.totalMinutes !== null &&
+    String(params.totalMinutes).trim() !== ''
+  ) {
+    rawTotalMinutes = Number(params.totalMinutes);
+  } else {
+    const h = Math.max(0, Math.floor(Number(params.hours) || 0));
+    const m = Math.max(0, Math.floor(Number(params.minutes) || 0));
+    rawTotalMinutes = h * 60 + m;
+  }
+
+  if (!Number.isFinite(rawTotalMinutes) || rawTotalMinutes <= 0) {
+    rawTotalMinutes = 25;
+  }
+
+  const clampedMinutes = Math.min(
+    CUSTOM_STUDY_MAX_MINUTES,
+    Math.max(CUSTOM_STUDY_MIN_MINUTES, Math.round(rawTotalMinutes))
+  );
+  const hours = Math.floor(clampedMinutes / 60);
+  const minutes = clampedMinutes % 60;
+  const totalSeconds = clampedMinutes * 60;
+
+  return {
+    totalMinutes: clampedMinutes,
+    hours,
+    minutes,
+    totalSeconds,
+    formattedTargetHMS: formatStudyTimerHMS(totalSeconds, true),
+    formattedLabel: formatStudyDurationLabel(clampedMinutes),
+  };
+}
+
+export interface RealTimerStudyVerificationResult {
+  allowed: boolean;
+  status: 'verified' | 'rejected_inflation' | 'no_elapsed_time';
+  actualElapsedSeconds: number;
+  actualElapsedFormattedHMS: string;
+  unrecordedElapsedSeconds: number;
+  unrecordedFormattedHMS: string;
+  claimedSeconds: number;
+  claimedFormattedHMS: string;
+  verifiedSeconds: number;
+  verifiedMinutes: number;
+  verifiedFormattedHMS: string;
+  deficitSeconds: number;
+  deficitFormattedHMS: string;
+  reason: string;
+}
+
+/**
+ * Strictly enforces that recorded study time is backed by the real elapsed timer.
+ * Rule: "If they study 2 hours they cannot make it 3 hours without the timer going till 3:00."
+ */
+export function validateRealTimerStudyRecording(params: {
+  actualElapsedSeconds: number;
+  alreadyRecordedSeconds?: number;
+  claimedSeconds?: number;
+  claimedMinutes?: number;
+}): RealTimerStudyVerificationResult {
+  const actualElapsedSeconds = Math.max(
+    0,
+    Math.floor(Number(params.actualElapsedSeconds) || 0)
+  );
+  const alreadyRecordedSeconds = Math.max(
+    0,
+    Math.floor(Number(params.alreadyRecordedSeconds) || 0)
+  );
+  const unrecordedElapsedSeconds = Math.max(
+    0,
+    actualElapsedSeconds - alreadyRecordedSeconds
+  );
+
+  let claimedSeconds: number;
+  if (typeof params.claimedSeconds === 'number' && Number.isFinite(params.claimedSeconds)) {
+    claimedSeconds = Math.max(0, Math.floor(params.claimedSeconds));
+  } else if (
+    typeof params.claimedMinutes === 'number' &&
+    Number.isFinite(params.claimedMinutes)
+  ) {
+    claimedSeconds = Math.max(0, Math.round(params.claimedMinutes * 60));
+  } else {
+    claimedSeconds = unrecordedElapsedSeconds;
+  }
+
+  const actualElapsedFormattedHMS = formatStudyTimerHMS(actualElapsedSeconds, true);
+  const unrecordedFormattedHMS = formatStudyTimerHMS(unrecordedElapsedSeconds, true);
+  const claimedFormattedHMS = formatStudyTimerHMS(claimedSeconds, true);
+
+  // Case 1: User tries to claim more study time than the real timer has reached
+  if (claimedSeconds > actualElapsedSeconds) {
+    const deficitSeconds = claimedSeconds - actualElapsedSeconds;
+    const deficitFormattedHMS = formatStudyTimerHMS(deficitSeconds, true);
+    const verifiedMinutes = Math.floor(unrecordedElapsedSeconds / 60);
+    return {
+      allowed: false,
+      status: 'rejected_inflation',
+      actualElapsedSeconds,
+      actualElapsedFormattedHMS,
+      unrecordedElapsedSeconds,
+      unrecordedFormattedHMS,
+      claimedSeconds,
+      claimedFormattedHMS,
+      verifiedSeconds: unrecordedElapsedSeconds,
+      verifiedMinutes,
+      verifiedFormattedHMS: unrecordedFormattedHMS,
+      deficitSeconds,
+      deficitFormattedHMS,
+      reason: `Strict Real-Timer Enforcement: Timer has only reached ${actualElapsedFormattedHMS}. You cannot record ${claimedFormattedHMS} without the timer running until ${claimedFormattedHMS} (${deficitFormattedHMS} more required on the timer).`,
+    };
+  }
+
+  // Case 2: User tries to record more than their unrecorded elapsed time
+  if (claimedSeconds > unrecordedElapsedSeconds) {
+    const deficitSeconds = claimedSeconds - unrecordedElapsedSeconds;
+    const deficitFormattedHMS = formatStudyTimerHMS(deficitSeconds, true);
+    const verifiedMinutes = Math.floor(unrecordedElapsedSeconds / 60);
+    return {
+      allowed: false,
+      status: 'rejected_inflation',
+      actualElapsedSeconds,
+      actualElapsedFormattedHMS,
+      unrecordedElapsedSeconds,
+      unrecordedFormattedHMS,
+      claimedSeconds,
+      claimedFormattedHMS,
+      verifiedSeconds: unrecordedElapsedSeconds,
+      verifiedMinutes,
+      verifiedFormattedHMS: unrecordedFormattedHMS,
+      deficitSeconds,
+      deficitFormattedHMS,
+      reason: `Strict Real-Timer Enforcement: Only ${unrecordedFormattedHMS} of unrecorded timer time is available (Total timer: ${actualElapsedFormattedHMS}). Let the timer run for ${deficitFormattedHMS} more to record ${claimedFormattedHMS}.`,
+    };
+  }
+
+  // Case 3: Timer has 0 unrecorded seconds
+  if (claimedSeconds <= 0 || unrecordedElapsedSeconds <= 0) {
+    return {
+      allowed: false,
+      status: 'no_elapsed_time',
+      actualElapsedSeconds,
+      actualElapsedFormattedHMS,
+      unrecordedElapsedSeconds,
+      unrecordedFormattedHMS,
+      claimedSeconds,
+      claimedFormattedHMS,
+      verifiedSeconds: 0,
+      verifiedMinutes: 0,
+      verifiedFormattedHMS: '0:00:00',
+      deficitSeconds: 0,
+      deficitFormattedHMS: '0:00:00',
+      reason:
+        'Start the Focus Timer first — study time is strictly recorded from real elapsed timer values.',
+    };
+  }
+
+  // Case 4: Valid real-timer verified recording
+  const verifiedSeconds = claimedSeconds;
+  const verifiedMinutes = Math.max(1, Math.round(verifiedSeconds / 60));
+  const verifiedFormattedHMS = formatStudyTimerHMS(verifiedSeconds, true);
+
+  return {
+    allowed: true,
+    status: 'verified',
+    actualElapsedSeconds,
+    actualElapsedFormattedHMS,
+    unrecordedElapsedSeconds,
+    unrecordedFormattedHMS,
+    claimedSeconds,
+    claimedFormattedHMS,
+    verifiedSeconds,
+    verifiedMinutes,
+    verifiedFormattedHMS,
+    deficitSeconds: 0,
+    deficitFormattedHMS: '0:00:00',
+    reason: `Verified ${verifiedFormattedHMS} (${verifiedMinutes}m) conducted on the real study timer.`,
+  };
+}
+
+// --- Study Books & Academic Reading Library ---
+export type StudyBookCategory =
+  | 'Computer Science'
+  | 'Systems Design'
+  | 'Math & Physics'
+  | 'Deep Work & Focus'
+  | 'Philosophy'
+  | 'Custom';
+
+export interface StudyBookChapter {
+  chapterNumber: number;
+  title: string;
+  pageRange: string;
+  coreConcepts: string[];
+  detailedStudyText: string;
+  keyFormulaOrModel: string;
+  activeRecallPrompt: string;
+}
+
+export interface StudyBookItem {
+  id: string;
+  title: string;
+  author: string;
+  category: StudyBookCategory;
+  difficulty: 'Foundational' | 'Intermediate' | 'Advanced';
+  totalPages: number;
+  recommendedMinutes: number;
+  recommendedDurationLabel: string;
+  coverAccentHex: string;
+  summary: string;
+  chapters: StudyBookChapter[];
+  isCustom?: boolean;
+}
+
+export interface BookStudyProgressRecord {
+  bookId: string;
+  currentPage: number;
+  completedChapterNumbers: number[];
+  verifiedSecondsStudied: number;
+  personalNotes: string;
+  lastStudiedAtMs: number;
+}
+
+export const STUDY_BOOK_CATEGORIES: readonly ('All' | StudyBookCategory)[] = [
+  'All',
+  'Computer Science',
+  'Systems Design',
+  'Math & Physics',
+  'Deep Work & Focus',
+  'Philosophy',
+  'Custom',
+] as const;
+
+export const CURATED_STUDY_BOOKS: readonly StudyBookItem[] = [
+  {
+    id: 'book_ddia',
+    title: 'Designing Data-Intensive Applications',
+    author: 'Martin Kleppmann',
+    category: 'Systems Design',
+    difficulty: 'Advanced',
+    totalPages: 616,
+    recommendedMinutes: 120,
+    recommendedDurationLabel: '2h 00m (2:00:00)',
+    coverAccentHex: '#10b981',
+    summary:
+      'The definitive engineering guide to reliable, scalable, and maintainable distributed data systems, replication, partitioning, and consensus.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'Reliable, Scalable, and Maintainable Applications',
+        pageRange: 'pp. 1–22',
+        coreConcepts: ['Fault Tolerance vs Hardware Failure', 'Tail Latency (p95, p99, p999)', 'Operability & Evolvability'],
+        detailedStudyText:
+          'Reliability means continuing to work correctly even when faults occur. Faults are not the same as failures: a fault is one component deviating from spec, whereas a failure is when the system as a whole stops providing the required service. Scalability measures a system’s ability to cope with increased load—quantified via throughput and response time percentiles (p50 median, p95, p99 tail latency).',
+        keyFormulaOrModel: 'SLO Compliance: p99 Response Time < 200ms under 10x Peak Load Amplification',
+        activeRecallPrompt:
+          'Why is p99 tail latency more critical than average (arithmetic mean) response time in distributed services?',
+      },
+      {
+        chapterNumber: 2,
+        title: 'Replication & Leader-Follower Topologies',
+        pageRange: 'pp. 151–198',
+        coreConcepts: ['Synchronous vs Asynchronous Replication', 'Read-After-Write Consistency', 'Monotonic Reads & Sloppy Quorums'],
+        detailedStudyText:
+          'Replication keeps a copy of the same data on multiple machines connected via a network. Single-leader replication directs all writes to a designated leader node which streams the write-ahead replication log to followers. Multi-leader and leaderless (Dynamo-style) replication trade strict immediacy for availability using quorum reads and writes.',
+        keyFormulaOrModel: 'Strict Quorum Invariant: w + r > n (Write Quorum + Read Quorum > Total Replicas)',
+        activeRecallPrompt:
+          'How does a Dynamo-style leaderless system detect concurrent writes versus causally ordered updates?',
+      },
+      {
+        chapterNumber: 3,
+        title: 'Linearizability & Distributed Consensus (Raft / Paxos)',
+        pageRange: 'pp. 321–378',
+        coreConcepts: ['Linearizability (Atomic Consistency)', 'Total Order Broadcast', 'Two-Phase Commit vs Raft Consensus'],
+        detailedStudyText:
+          'Linearizability makes a replicated system appear as if there is only a single copy of the data and every operation takes effect atomically at a single point in time. Total order broadcast is equivalent to consensus: every node delivers the exact same messages in the exact same order, enabling fault-tolerant state machine replication.',
+        keyFormulaOrModel: 'Raft Safety: Leader Append-Only + Log Matching + Leader Completeness across > n/2 Quorum',
+        activeRecallPrompt:
+          'Explain why CAP theorem is more accurately framed as "Consistent or Available when Partitioned".',
+      },
+    ],
+  },
+  {
+    id: 'book_sicp',
+    title: 'Structure and Interpretation of Computer Programs (SICP)',
+    author: 'Harold Abelson & Gerald Jay Sussman',
+    category: 'Computer Science',
+    difficulty: 'Intermediate',
+    totalPages: 657,
+    recommendedMinutes: 120,
+    recommendedDurationLabel: '2h 00m (2:00:00)',
+    coverAccentHex: '#38bdf8',
+    summary:
+      'Foundational computer science text mastering procedural abstraction, data abstraction, lexical closures, streams, and metacircular evaluators.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'Building Abstractions with Procedures',
+        pageRange: 'pp. 1–78',
+        coreConcepts: ['Substitution Model', 'Linear Recursion vs Tail-Call Iteration', 'Higher-Order Procedures'],
+        detailedStudyText:
+          'Computational processes evolve inside a computer, manipulating data according to rules called procedures. A recursive procedure whose state is completely captured by its formal parameters generates a linear iterative process in constant O(1) space when tail-call optimized.',
+        keyFormulaOrModel: 'Time T(n) = O(n), Space S(n) = O(1) for Tail-Recursive State Accumulator',
+        activeRecallPrompt:
+          'Distinguish between a recursive procedure (syntactic definition) and a recursive process (runtime stack evolution).',
+      },
+      {
+        chapterNumber: 2,
+        title: 'Building Abstractions with Data & Closure Property',
+        pageRange: 'pp. 79–216',
+        coreConcepts: ['Wishful Thinking & Abstraction Barriers', 'Closure Property of Cons Pairs', 'Conventional Interfaces (Map/Filter/Fold)'],
+        detailedStudyText:
+          'Data abstraction isolates how a compound data object is used from the concrete representation of how it is constructed from primitive parts. An operation for combining data objects satisfies the closure property if the results of combining things with that operation can themselves be combined using the same operation.',
+        keyFormulaOrModel: 'accumulate(op, initial, sequence) -> Fold-Right Universal Reduction',
+        activeRecallPrompt:
+          'How do abstraction barriers allow you to swap underlying data representations without touching higher-level domain logic?',
+      },
+      {
+        chapterNumber: 3,
+        title: 'Metalinguistic Abstraction & The Metacircular Evaluator',
+        pageRange: 'pp. 359–490',
+        coreConcepts: ['Eval / Apply Yin-Yang Cycle', 'Lexical Environment Frames', 'Lazy Evaluation & Streams'],
+        detailedStudyText:
+          'The evaluator determines the meaning of expressions in a programming language. The core of evaluation is the mutual recursion between eval (which classifies expressions and looks up variables in lexical environment frames) and apply (which binds procedure arguments in a new frame and evaluates the body).',
+        keyFormulaOrModel: 'eval(expr, env) <-> apply(proc, args)',
+        activeRecallPrompt:
+          'Trace what happens when a lambda closure is created in one environment and applied in a different lexical scope.',
+      },
+    ],
+  },
+  {
+    id: 'book_clrs',
+    title: 'Introduction to Algorithms (CLRS)',
+    author: 'Cormen, Leiserson, Rivest & Stein',
+    category: 'Computer Science',
+    difficulty: 'Advanced',
+    totalPages: 1312,
+    recommendedMinutes: 180,
+    recommendedDurationLabel: '3h 00m (3:00:00)',
+    coverAccentHex: '#f59e0b',
+    summary:
+      'Rigorous analysis of asymptotic complexity, divide-and-conquer recurrences, dynamic programming, amortized data structures, and graph algorithms.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'Divide-and-Conquer & The Master Theorem',
+        pageRange: 'pp. 65–113',
+        coreConcepts: ['Asymptotic Notation (Θ, O, Ω)', 'Recurrence Trees', 'Master Theorem Cases 1, 2, 3'],
+        detailedStudyText:
+          'Divide-and-conquer breaks a problem into a subproblems each of size n/b, recursively solves them, and combines the solutions in f(n) time. Comparing f(n) against the watershed function n^(log_b a) determines whether cost is dominated by leaves, balanced across all tree levels, or dominated by the root.',
+        keyFormulaOrModel: 'T(n) = a·T(n/b) + f(n)  |  Watershed: n^(log_b a)',
+        activeRecallPrompt:
+          'Solve T(n) = 2T(n/2) + Θ(n) and explain why Merge Sort achieves optimal comparison-based sorting bounds.',
+      },
+      {
+        chapterNumber: 2,
+        title: 'Dynamic Programming & Optimal Substructure',
+        pageRange: 'pp. 359–413',
+        coreConcepts: ['Optimal Substructure', 'Overlapping Subproblems', 'Top-Down Memoization vs Bottom-Up Tabulation'],
+        detailedStudyText:
+          'Dynamic programming applies when subproblems overlap—meaning recursive algorithms solve the exact same subsubproblems repeatedly. By storing subproblem solutions in a table and building bottom-up along a topological DAG of dependencies, exponential brute-force search collapses into polynomial time.',
+        keyFormulaOrModel: 'Bellman Optimality Equation: dp[i][w] = max(dp[i-1][w], val[i] + dp[i-1][w - wt[i]])',
+        activeRecallPrompt:
+          'When should you choose a greedy choice property over full dynamic programming?',
+      },
+      {
+        chapterNumber: 3,
+        title: 'Shortest Paths, Minimum Spanning Trees & Network Flow',
+        pageRange: 'pp. 589–765',
+        coreConcepts: ['Edge Relaxation Invariant', 'Dijkstra vs Bellman-Ford', 'Max-Flow Min-Cut Theorem'],
+        detailedStudyText:
+          'Shortest-path algorithms rely on the relaxation technique: testing whether we can improve the shortest-path estimate d[v] to vertex v by going through u. Dijkstra greedily extracts the minimum-estimate vertex for non-negative weights, whereas Bellman-Ford relaxes all |E| edges |V|-1 times and detects negative-weight cycles.',
+        keyFormulaOrModel: 'Relax(u, v, w): if d[v] > d[u] + w(u,v) then d[v] = d[u] + w(u,v)',
+        activeRecallPrompt:
+          'Why does Dijkstra’s greedy invariant fail when an edge has a negative weight?',
+      },
+    ],
+  },
+  {
+    id: 'book_linear_algebra',
+    title: 'Linear Algebra Done Right',
+    author: 'Sheldon Axler',
+    category: 'Math & Physics',
+    difficulty: 'Intermediate',
+    totalPages: 340,
+    recommendedMinutes: 90,
+    recommendedDurationLabel: '1h 30m (1:30:00)',
+    coverAccentHex: '#a855f7',
+    summary:
+      'Pure geometric and operator-centric development of vector spaces, linear maps, eigenvalues, inner product spaces, and singular value decomposition.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'Vector Spaces, Span & Linear Independence',
+        pageRange: 'pp. 1–51',
+        coreConcepts: ['Subspaces & Direct Sums', 'Span & Linear Independence', 'Basis & Dimension Invariance'],
+        detailedStudyText:
+          'A list of vectors in V is linearly independent if the only choice of scalars making their linear combination zero is all zeros. Every spanning list in a finite-dimensional vector space can be reduced to a basis, and every linearly independent list can be extended to a basis of identical length.',
+        keyFormulaOrModel: 'dim(U + W) = dim(U) + dim(W) - dim(U ∩ W)',
+        activeRecallPrompt:
+          'Prove that any linearly independent list of vectors has length at most the length of any spanning list.',
+      },
+      {
+        chapterNumber: 2,
+        title: 'Linear Maps & The Fundamental Theorem of Linear Algebra',
+        pageRange: 'pp. 52–130',
+        coreConcepts: ['Null Space (Kernel) & Range (Image)', 'Injectivity vs Surjectivity', 'Rank-Nullity Theorem'],
+        detailedStudyText:
+          'For a linear map T: V -> W on a finite-dimensional vector space V, the dimension of the domain equals the dimension of the null space (kernel) plus the dimension of the range (image). Consequently, a linear operator on a finite-dimensional space is injective if and only if it is surjective.',
+        keyFormulaOrModel: 'dim(V) = dim null(T) + dim range(T)',
+        activeRecallPrompt:
+          'Why is injectivity equivalent to surjectivity for linear operators T: V -> V only when dim(V) is finite?',
+      },
+      {
+        chapterNumber: 3,
+        title: 'Eigenvalues, Spectral Theorem & Singular Value Decomposition',
+        pageRange: 'pp. 131–295',
+        coreConcepts: ['Invariant Subspaces', 'Self-Adjoint & Normal Operators', 'Orthonormal Eigenbasis & SVD'],
+        detailedStudyText:
+          'Every operator on a finite-dimensional non-zero complex vector space has at least one eigenvalue. Under the Spectral Theorem, normal operators on complex inner-product spaces (and self-adjoint operators on real inner-product spaces) possess an orthonormal basis of eigenvectors.',
+        keyFormulaOrModel: 'SVD: A = U Σ V*  where σ_i = sqrt(λ_i(A* A))',
+        activeRecallPrompt:
+          'How does Singular Value Decomposition generalize diagonalization to rectangular or non-square matrices?',
+      },
+    ],
+  },
+  {
+    id: 'book_feynman_physics',
+    title: 'The Feynman Lectures on Physics (Vol. I)',
+    author: 'Richard P. Feynman',
+    category: 'Math & Physics',
+    difficulty: 'Intermediate',
+    totalPages: 560,
+    recommendedMinutes: 120,
+    recommendedDurationLabel: '2h 00m (2:00:00)',
+    coverAccentHex: '#f43f5e',
+    summary:
+      'First-principles physical intuition covering conservation laws, classical mechanics, relativity, resonance, optics, and statistical thermodynamics.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'Conservation of Energy & Symmetry Laws',
+        pageRange: 'pp. 4-1 – 4-12',
+        coreConcepts: ['Invariance Under Time Translation', 'Gravitational Potential & Kinetic Energy', 'Noether Symmetry Principle'],
+        detailedStudyText:
+          'There is a numerical quantity, which we call energy, that does not change in the manifold changes which nature undergoes. Energy appears in gravitational, kinetic, elastic, thermal, radiant, and mass-energy forms, governed by deep spacetime symmetries.',
+        keyFormulaOrModel: 'E_total = K + U = ½mv² + U(x) = constant   |   E² = (pc)² + (m₀c²)²',
+        activeRecallPrompt:
+          'How can you deduce mechanical advantage of a frictionless machine using only virtual displacements and conservation of energy?',
+      },
+      {
+        chapterNumber: 2,
+        title: 'The Harmonic Oscillator & Resonance Transients',
+        pageRange: 'pp. 21-1 – 25-14',
+        coreConcepts: ['Simple Harmonic Motion', 'Damped Driven Oscillators', 'Q-Factor & Phase Lag'],
+        detailedStudyText:
+          'Any system near a stable equilibrium exhibits harmonic oscillation because the leading term in the Taylor expansion of restoring force is linear. When driven near its natural frequency ω₀, amplitude peaks sharply as controlled by the quality factor Q.',
+        keyFormulaOrModel: 'm(d²x/dt²) + γm(dx/dt) + mω₀²x = F₀ cos(ωt)',
+        activeRecallPrompt:
+          'Why do mechanical springs, LC electrical circuits, and optical cavities obey the exact same differential equation?',
+      },
+    ],
+  },
+  {
+    id: 'book_deep_work',
+    title: 'Deep Work: Rules for Focused Success in a Distracted World',
+    author: 'Cal Newport',
+    category: 'Deep Work & Focus',
+    difficulty: 'Foundational',
+    totalPages: 304,
+    recommendedMinutes: 90,
+    recommendedDurationLabel: '1h 30m (1:30:00)',
+    coverAccentHex: '#14b8a6',
+    summary:
+      'Cognitive science and operational rituals for training unbroken concentration, eliminating attention residue, and producing high-value mastery.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'The Law of Productivity & Attention Residue',
+        pageRange: 'pp. 21–71',
+        coreConcepts: ['Attention Residue (Sophie Leroy)', 'Myelination of Neural Circuits', 'High-Quality Work Produced Formula'],
+        detailedStudyText:
+          'Every time you switch from Task A to glance at an inbox or notification, a thick cognitive residue remains stuck on Task A for 15–25 minutes. True mastery requires uninterrupted blocks where myelin wraps around targeted neural pathways.',
+        keyFormulaOrModel: 'High-Quality Work Produced = (Time Spent) × (Intensity of Focus)',
+        activeRecallPrompt:
+          'Why does a single 3-hour uninterrupted block produce more breakthroughs than six fragmented 30-minute sessions?',
+      },
+      {
+        chapterNumber: 2,
+        title: 'Rhythmic Scheduling, Grand Gestures & Lead Measures',
+        pageRange: 'pp. 95–184',
+        coreConcepts: ['Monastic vs Bimodal vs Rhythmic Philosophy', 'Lead Measures vs Lag Measures', 'Shutdown Ritual'],
+        detailedStudyText:
+          'The rhythmic philosophy transforms deep work into a simple regular habit by fixing a daily starting time and tracking real timer-verified hours on a visible scoreboard (a lead measure) rather than vague outcomes.',
+        keyFormulaOrModel: 'Lead Measure Metric: Verified Unbroken Timer Hours Logged Per Day',
+        activeRecallPrompt:
+          'How does tracking verified timer hours act as a Lead Measure that drives long-term output?',
+      },
+    ],
+  },
+  {
+    id: 'book_smart_notes',
+    title: 'How to Take Smart Notes (The Zettelkasten Method)',
+    author: 'Sönke Ahrens',
+    category: 'Deep Work & Focus',
+    difficulty: 'Foundational',
+    totalPages: 178,
+    recommendedMinutes: 60,
+    recommendedDurationLabel: '1h 00m (1:00:00)',
+    coverAccentHex: '#fbbf24',
+    summary:
+      'Niklas Luhmann’s slip-box architecture for turning reading sessions into permanent atomic notes and interconnected synthesis.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'Fleeting Notes, Literature Notes & Permanent Notes',
+        pageRange: 'pp. 38–89',
+        coreConcepts: ['Rewrite in Your Own Words', 'Atomic Idea per Card', 'Bottom-Up Concept Clustering'],
+        detailedStudyText:
+          'Highlighting or copy-pasting creates an illusion of competence. True comprehension requires translating every chapter into concise Literature Notes in your own prose, then distilling atomic Permanent Notes linked to existing mental models.',
+        keyFormulaOrModel: 'Reading -> Literature Note (Own Prose) -> Atomic Permanent Note -> Graph Link',
+        activeRecallPrompt:
+          'Why must a Permanent Note be written so that it is understandable without opening the original source book?',
+      },
+    ],
+  },
+  {
+    id: 'book_clean_arch',
+    title: 'Clean Architecture: A Craftsman’s Guide to Software Structure',
+    author: 'Robert C. Martin',
+    category: 'Systems Design',
+    difficulty: 'Intermediate',
+    totalPages: 432,
+    recommendedMinutes: 90,
+    recommendedDurationLabel: '1h 30m (1:30:00)',
+    coverAccentHex: '#60a5fa',
+    summary:
+      'Decoupling pure domain rules from UI, databases, and external frameworks using the Dependency Rule and SOLID boundaries.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'The Dependency Rule & Pure Domain Entities',
+        pageRange: 'pp. 195–228',
+        coreConcepts: ['Inward-Pointing Dependencies', 'Pure Domain Logic Isolation', 'Humble Object Pattern'],
+        detailedStudyText:
+          'Source code dependencies must point only inward, toward higher-level policies. Inner circles containing pure business rules and mathematical invariants must know nothing at all about outer circles like UI components, databases, or web sockets.',
+        keyFormulaOrModel: 'UI / DB / Web -> Use Cases -> Pure Domain Rules (Zero Outward Imports)',
+        activeRecallPrompt:
+          'How does decoupling pure domain rules into a standalone module make unit testing 100x faster and deterministic?',
+      },
+    ],
+  },
+  {
+    id: 'book_jaynes_prob',
+    title: 'Probability Theory: The Logic of Science',
+    author: 'E. T. Jaynes',
+    category: 'Math & Physics',
+    difficulty: 'Advanced',
+    totalPages: 758,
+    recommendedMinutes: 180,
+    recommendedDurationLabel: '3h 00m (3:00:00)',
+    coverAccentHex: '#818cf8',
+    summary:
+      'Probability as extended logic for plausible inference under incomplete information, Cox’s theorems, and Bayesian updating.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'Plausible Reasoning & Cox’s Desiderata',
+        pageRange: 'pp. 1–50',
+        coreConcepts: ['Deductive vs Plausible Syllogisms', 'Product & Sum Rules of Probability', 'Bayesian Posterior Updating'],
+        detailedStudyText:
+          'Any set of rules for plausible reasoning that satisfies basic consistency desiderata is mathematically isomorphic to the sum and product rules of probability theory. Bayes’ theorem is the unique consistent rule for updating beliefs given new evidence.',
+        keyFormulaOrModel: 'P(H | D, I) = [P(H | I) · P(D | H, I)] / P(D | I)',
+        activeRecallPrompt:
+          'Explain why prior information I must always be explicitly conditioned on in every probability assignment.',
+      },
+    ],
+  },
+  {
+    id: 'book_meditations',
+    title: 'Meditations: On Stoic Discipline & Mental Clarity',
+    author: 'Marcus Aurelius',
+    category: 'Philosophy',
+    difficulty: 'Foundational',
+    totalPages: 254,
+    recommendedMinutes: 60,
+    recommendedDurationLabel: '1h 00m (1:00:00)',
+    coverAccentHex: '#34d399',
+    summary:
+      'Timeless reflections on governing attention, dichotomy of control, objective judgment, and steadfast execution.',
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: 'The Citadel of Attention & Objective Perception',
+        pageRange: 'Book IV · pp. 42–78',
+        coreConcepts: ['Dichotomy of Control', 'Stripping Away Subjective Value Judgments', 'Premeditatio Malorum'],
+        detailedStudyText:
+          'External things cannot touch the mind; they stand outside, stationary and inert. Disturbance comes solely from the judgment we form within. By directing 100% of attention to the present action with precision and calm, the mind becomes an unconquerable citadel.',
+        keyFormulaOrModel: 'Event (External) + Objective Framing (Internal) -> Deliberate Action',
+        activeRecallPrompt:
+          'How do you separate an objective observation of a difficult problem from your emotional reaction to it?',
+      },
+    ],
+  },
+] as const;
+
+export function filterStudyBooks(params: {
+  books: readonly StudyBookItem[];
+  category?: 'All' | StudyBookCategory | string;
+  searchQuery?: string;
+}): StudyBookItem[] {
+  const category = String(params.category || 'All').trim();
+  const query = String(params.searchQuery || '').trim().toLowerCase();
+
+  return params.books.filter((book) => {
+    if (category && category !== 'All') {
+      if (category === 'Custom') {
+        if (!book.isCustom && book.category !== 'Custom') return false;
+      } else if (book.category !== category) {
+        return false;
+      }
+    }
+
+    if (query) {
+      const chapterTitles = book.chapters.map((c) => c.title).join(' ');
+      const concepts = book.chapters.flatMap((c) => c.coreConcepts).join(' ');
+      const haystack = `${book.title} ${book.author} ${book.category} ${book.summary} ${chapterTitles} ${concepts}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+
+    return true;
+  });
+}
+
+export function validateAndCreateCustomStudyBook(params: {
+  title: string;
+  author: string;
+  category?: StudyBookCategory | string;
+  totalPages?: number | string;
+  recommendedMinutes?: number | string;
+  summary?: string;
+  firstChapterTitle?: string;
+  firstChapterNotes?: string;
+  nowMs?: number;
+}): {
+  valid: boolean;
+  error: string;
+  book: StudyBookItem | null;
+} {
+  const rawTitle = String(params.title || '').trim();
+  const rawAuthor = String(params.author || '').trim();
+  const rawSummary = String(params.summary || '').trim();
+  const rawChapterTitle = String(params.firstChapterTitle || '').trim();
+  const rawChapterNotes = String(params.firstChapterNotes || '').trim();
+
+  if (!rawTitle || rawTitle.length < 2) {
+    return {
+      valid: false,
+      error: 'Please enter a book title (at least 2 characters).',
+      book: null,
+    };
+  }
+  if (!rawAuthor || rawAuthor.length < 2) {
+    return {
+      valid: false,
+      error: 'Please enter the book author name.',
+      book: null,
+    };
+  }
+
+  for (const field of [rawTitle, rawAuthor, rawSummary, rawChapterTitle, rawChapterNotes]) {
+    if (field) {
+      const check = detectSecurityThreat(field);
+      if (!check.safe) {
+        return { valid: false, error: check.reason, book: null };
+      }
+    }
+  }
+
+  const safeTitle = sanitizeSafeText(rawTitle, 120);
+  const safeAuthor = sanitizeSafeText(rawAuthor, 80);
+  const safeSummary =
+    sanitizeSafeText(
+      rawSummary || `Custom study book added to your Study Mode library by ${safeAuthor}.`,
+      360
+    ) || 'Custom study volume.';
+
+  const validCategories: StudyBookCategory[] = [
+    'Computer Science',
+    'Systems Design',
+    'Math & Physics',
+    'Deep Work & Focus',
+    'Philosophy',
+    'Custom',
+  ];
+  const category: StudyBookCategory = validCategories.includes(
+    params.category as StudyBookCategory
+  )
+    ? (params.category as StudyBookCategory)
+    : 'Custom';
+
+  const parsedPages = Math.min(
+    3000,
+    Math.max(10, Math.round(Number(params.totalPages) || 250))
+  );
+  const durationConfig = parseAndClampCustomStudyDuration({
+    totalMinutes: params.recommendedMinutes ?? 120,
+  });
+
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0 ? params.nowMs : Date.now();
+
+  const chapter1Title =
+    sanitizeSafeText(rawChapterTitle || 'Chapter 1: Core Foundations & Study Notes', 120) ||
+    'Chapter 1: Core Foundations';
+  const chapter1Notes =
+    sanitizeSafeText(
+      rawChapterNotes ||
+        `Active study notes and synthesis for ${safeTitle} by ${safeAuthor}. Run the real focus timer while studying this volume to log verified reading hours.`,
+      800
+    ) || `Study notes for ${safeTitle}.`;
+
+  const book: StudyBookItem = {
+    id: `book_custom_${nowMs}`,
+    title: safeTitle,
+    author: safeAuthor,
+    category,
+    difficulty: 'Intermediate',
+    totalPages: parsedPages,
+    recommendedMinutes: durationConfig.totalMinutes,
+    recommendedDurationLabel: `${durationConfig.formattedLabel.split(' (')[0]} (${durationConfig.formattedTargetHMS})`,
+    coverAccentHex: '#10b981',
+    summary: safeSummary,
+    isCustom: true,
+    chapters: [
+      {
+        chapterNumber: 1,
+        title: chapter1Title,
+        pageRange: `pp. 1–${Math.min(50, parsedPages)}`,
+        coreConcepts: ['Core Thesis', 'Key Definitions', 'Active Synthesis'],
+        detailedStudyText: chapter1Notes,
+        keyFormulaOrModel: `${safeTitle} · Target Block: ${durationConfig.formattedTargetHMS}`,
+        activeRecallPrompt: `What are the three most important takeaways from ${chapter1Title}?`,
+      },
+    ],
+  };
+
+  return {
+    valid: true,
+    error: '',
+    book,
+  };
+}
+
+export function updateBookStudyProgress(params: {
+  progressMap: Record<string, BookStudyProgressRecord>;
+  book: StudyBookItem;
+  currentPage?: number;
+  toggleChapterNumber?: number;
+  verifiedSecondsToAdd?: number;
+  personalNotes?: string;
+  nowMs?: number;
+}): {
+  updatedMap: Record<string, BookStudyProgressRecord>;
+  record: BookStudyProgressRecord;
+  completionPercent: number;
+} {
+  const existing = params.progressMap[params.book.id] || {
+    bookId: params.book.id,
+    currentPage: 1,
+    completedChapterNumbers: [],
+    verifiedSecondsStudied: 0,
+    personalNotes: '',
+    lastStudiedAtMs: 0,
+  };
+
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0 ? params.nowMs : Date.now();
+
+  const nextPage =
+    typeof params.currentPage === 'number' && Number.isFinite(params.currentPage)
+      ? Math.min(params.book.totalPages, Math.max(1, Math.round(params.currentPage)))
+      : existing.currentPage;
+
+  let nextChapters = [...existing.completedChapterNumbers];
+  if (typeof params.toggleChapterNumber === 'number') {
+    const chNum = Math.round(params.toggleChapterNumber);
+    if (nextChapters.includes(chNum)) {
+      nextChapters = nextChapters.filter((n) => n !== chNum);
+    } else {
+      nextChapters = [...nextChapters, chNum].sort((a, b) => a - b);
+    }
+  }
+
+  const addedSeconds =
+    typeof params.verifiedSecondsToAdd === 'number' && params.verifiedSecondsToAdd > 0
+      ? Math.floor(params.verifiedSecondsToAdd)
+      : 0;
+
+  const nextNotes =
+    typeof params.personalNotes === 'string'
+      ? sanitizeSafeText(params.personalNotes, 1200)
+      : existing.personalNotes;
+
+  const record: BookStudyProgressRecord = {
+    bookId: params.book.id,
+    currentPage: nextPage,
+    completedChapterNumbers: nextChapters,
+    verifiedSecondsStudied: existing.verifiedSecondsStudied + addedSeconds,
+    personalNotes: nextNotes,
+    lastStudiedAtMs: nowMs,
+  };
+
+  const pagePct = Math.round((record.currentPage / Math.max(1, params.book.totalPages)) * 100);
+  const chapterPct =
+    params.book.chapters.length > 0
+      ? Math.round((record.completedChapterNumbers.length / params.book.chapters.length) * 100)
+      : 0;
+  const completionPercent = Math.min(100, Math.max(pagePct, chapterPct));
+
+  return {
+    updatedMap: {
+      ...params.progressMap,
+      [params.book.id]: record,
+    },
+    record,
+    completionPercent,
+  };
+}
+
+
 

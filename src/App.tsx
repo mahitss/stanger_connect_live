@@ -4201,6 +4201,9 @@ export default function App() {
               dailyTargetMinutes={dailyTargetMinutes}
               todayFocusMinutes={dailyCompletedMinutes}
               onLogTopicFocusSession={handleLogTopicFocusSession}
+              onUpdateDailyTargetMinutes={(nextTarget) =>
+                persistProductivityGoal(nextTarget, dailyCompletedMinutes)
+              }
               uiSoundPrefs={uiSoundPrefs}
               onUpdateUiSoundPrefs={(nextPrefs) => {
                 persistUiSoundPreferences(nextPrefs);

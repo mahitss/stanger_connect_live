@@ -104,6 +104,15 @@ import {
   toggleFollowUser,
   filterTwitterFeedMoments,
   validateAndBuildTwitterChatMessage,
+  CUSTOM_STUDY_DURATION_PRESETS,
+  formatStudyTimerHMS,
+  formatStudyDurationLabel,
+  parseAndClampCustomStudyDuration,
+  validateRealTimerStudyRecording,
+  CURATED_STUDY_BOOKS,
+  filterStudyBooks,
+  validateAndCreateCustomStudyBook,
+  updateBookStudyProgress,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -1993,6 +2002,136 @@ test('Twitter social section helpers derive handles, extract hashtags, rank tren
   assert.equal(goodChat.message.channelId, 'global_townsquare');
   assert.equal(goodChat.message.photoDataUrl, CURATED_STUDY_MOMENT_IMAGES[0].photoDataUrl);
 });
+
+test('Study Mode custom duration controls and H:MM:SS timer formatting support arbitrary hours and minutes (e.g. 2:00:00 and 3:00:00)', () => {
+  assert.equal(formatStudyTimerHMS(7200, true), '2:00:00');
+  assert.equal(formatStudyTimerHMS(10800, true), '3:00:00');
+  assert.equal(formatStudyTimerHMS(1500, true), '0:25:00');
+  assert.equal(formatStudyTimerHMS(1500, false), '25:00');
+  assert.equal(formatStudyDurationLabel(120), '2h 00m (120m)');
+  assert.equal(formatStudyDurationLabel(180), '3h 00m (180m)');
+  assert.equal(formatStudyDurationLabel(45), '45m');
+
+  const twoHours = parseAndClampCustomStudyDuration({ hours: 2, minutes: 0 });
+  assert.equal(twoHours.totalMinutes, 120);
+  assert.equal(twoHours.totalSeconds, 7200);
+  assert.equal(twoHours.formattedTargetHMS, '2:00:00');
+  assert.equal(twoHours.formattedLabel, '2h 00m (120m)');
+
+  const threeHours = parseAndClampCustomStudyDuration({ hours: 3, minutes: 0 });
+  assert.equal(threeHours.totalMinutes, 180);
+  assert.equal(threeHours.totalSeconds, 10800);
+  assert.equal(threeHours.formattedTargetHMS, '3:00:00');
+  assert.equal(threeHours.formattedLabel, '3h 00m (180m)');
+
+  assert.ok(CUSTOM_STUDY_DURATION_PRESETS.some((p) => p.minutes === 120 && p.hmsLabel === '2:00:00'));
+  assert.ok(CUSTOM_STUDY_DURATION_PRESETS.some((p) => p.minutes === 180 && p.hmsLabel === '3:00:00'));
+});
+
+test('Strict Real-Timer Study Recording blocks inflating 2 hours (2:00:00) into 3 hours (3:00:00) unless timer reaches 3:00:00', () => {
+  // 1. Timer at 0:00:00 -> cannot record anything without running the timer
+  const zeroCheck = validateRealTimerStudyRecording({
+    actualElapsedSeconds: 0,
+    claimedMinutes: 60,
+  });
+  assert.equal(zeroCheck.allowed, false);
+  assert.equal(zeroCheck.status, 'rejected_inflation');
+  assert.equal(zeroCheck.verifiedSeconds, 0);
+
+  // 2. User studied 2 hours (7200 seconds = 2:00:00) and tries to claim 3 hours (180m = 10800s = 3:00:00)
+  const inflatedCheck = validateRealTimerStudyRecording({
+    actualElapsedSeconds: 7200, // 2:00:00 real elapsed
+    claimedMinutes: 180, // 3:00:00 claimed
+  });
+  assert.equal(inflatedCheck.allowed, false);
+  assert.equal(inflatedCheck.status, 'rejected_inflation');
+  assert.equal(inflatedCheck.actualElapsedFormattedHMS, '2:00:00');
+  assert.equal(inflatedCheck.claimedFormattedHMS, '3:00:00');
+  assert.equal(inflatedCheck.deficitFormattedHMS, '1:00:00');
+  assert.equal(inflatedCheck.verifiedMinutes, 120); // Only 2 hours is verified, never 3 hours
+  assert.ok(inflatedCheck.reason.includes('2:00:00'));
+  assert.ok(inflatedCheck.reason.includes('3:00:00'));
+
+  // 3. User records the real 2 hours (2:00:00) conducted on the timer -> allowed!
+  const realTwoHourRecord = validateRealTimerStudyRecording({
+    actualElapsedSeconds: 7200,
+    claimedMinutes: 120,
+  });
+  assert.equal(realTwoHourRecord.allowed, true);
+  assert.equal(realTwoHourRecord.status, 'verified');
+  assert.equal(realTwoHourRecord.verifiedSeconds, 7200);
+  assert.equal(realTwoHourRecord.verifiedMinutes, 120);
+  assert.equal(realTwoHourRecord.verifiedFormattedHMS, '2:00:00');
+
+  // 4. Timer continues running until 3:00:00 (10800s) -> now 3:00:00 is verified!
+  const realThreeHourRecord = validateRealTimerStudyRecording({
+    actualElapsedSeconds: 10800,
+    alreadyRecordedSeconds: 0,
+    claimedMinutes: 180,
+  });
+  assert.equal(realThreeHourRecord.allowed, true);
+  assert.equal(realThreeHourRecord.status, 'verified');
+  assert.equal(realThreeHourRecord.verifiedSeconds, 10800);
+  assert.equal(realThreeHourRecord.verifiedMinutes, 180);
+  assert.equal(realThreeHourRecord.verifiedFormattedHMS, '3:00:00');
+});
+
+test('Study Books Library provides curated academic books, category/search filtering, custom book creation, and timer-verified book progress', () => {
+  assert.ok(CURATED_STUDY_BOOKS.length >= 10);
+
+  const csBooks = filterStudyBooks({
+    books: CURATED_STUDY_BOOKS,
+    category: 'Computer Science',
+  });
+  assert.ok(csBooks.length >= 2);
+  assert.ok(csBooks.some((b) => b.id === 'book_clrs'));
+
+  const searchRaft = filterStudyBooks({
+    books: CURATED_STUDY_BOOKS,
+    searchQuery: 'Linearizability',
+  });
+  assert.equal(searchRaft.length, 1);
+  assert.equal(searchRaft[0].id, 'book_ddia');
+
+  // Custom book creation & XSS guard
+  const badBook = validateAndCreateCustomStudyBook({
+    title: '<script>alert(1)</script>',
+    author: 'Attacker',
+  });
+  assert.equal(badBook.valid, false);
+
+  const customBookRes = validateAndCreateCustomStudyBook({
+    title: 'Operating Systems: Three Easy Pieces',
+    author: 'Remzi & Andrea Arpaci-Dusseau',
+    category: 'Computer Science',
+    totalPages: 710,
+    recommendedMinutes: 120,
+    firstChapterTitle: 'Virtualization of the CPU',
+    firstChapterNotes: 'Direct execution and context switching mechanisms.',
+    nowMs: 1_761_300_000_000,
+  });
+  assert.equal(customBookRes.valid, true);
+  assert.ok(customBookRes.book);
+  assert.equal(customBookRes.book.title, 'Operating Systems: Three Easy Pieces');
+  assert.equal(customBookRes.book.recommendedMinutes, 120);
+
+  // Book progress tracking with real timer seconds
+  const ddia = CURATED_STUDY_BOOKS[0];
+  const prog1 = updateBookStudyProgress({
+    progressMap: {},
+    book: ddia,
+    currentPage: 154,
+    toggleChapterNumber: 1,
+    verifiedSecondsToAdd: 7200, // 2 hours verified
+    personalNotes: 'Completed Chapter 1 tail latency notes.',
+    nowMs: 1_761_300_000_000,
+  });
+  assert.equal(prog1.record.currentPage, 154);
+  assert.deepEqual(prog1.record.completedChapterNumbers, [1]);
+  assert.equal(prog1.record.verifiedSecondsStudied, 7200);
+  assert.ok(prog1.completionPercent >= 25);
+});
+
 
 
 
