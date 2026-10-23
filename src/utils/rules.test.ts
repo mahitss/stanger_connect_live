@@ -90,6 +90,12 @@ import {
   getStudyMomentPlaceholderById,
   selectStudyMomentPlaceholder,
   resolveMomentPublishImageSource,
+  MOMENT_LIGHTBOX_MIN_ZOOM,
+  MOMENT_LIGHTBOX_MAX_ZOOM,
+  MOMENT_LIGHTBOX_ZOOM_PRESETS,
+  clampLightboxZoomScale,
+  openMomentLightbox,
+  updateMomentLightboxZoom,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -1771,6 +1777,60 @@ test('Curated study-related aesthetic placeholder images provide valid SVG data 
   });
   assert.equal(fromFallback.sourceType, 'fallback');
   assert.equal(fromFallback.photoDataUrl, 'data:image/svg+xml;utf8,custom_fallback');
+});
+
+test('Full-screen Moment image lightbox zoom state opens at 100%, increments/decrements, toggles 200% zoom, and clamps within bounds', () => {
+  assert.equal(clampLightboxZoomScale(0.2), MOMENT_LIGHTBOX_MIN_ZOOM);
+  assert.equal(clampLightboxZoomScale(5.5), MOMENT_LIGHTBOX_MAX_ZOOM);
+  assert.deepEqual(MOMENT_LIGHTBOX_ZOOM_PRESETS, [1, 1.5, 2, 2.5, 3]);
+
+  let lb = openMomentLightbox({
+    momentId: 'moment_101',
+    photoDataUrl: CURATED_STUDY_MOMENT_IMAGES[0].photoDataUrl,
+    caption: 'Late-night systems programming block.',
+    authorName: 'Alex Rivera',
+    visibility: 'public',
+  });
+
+  assert.equal(lb.isOpen, true);
+  assert.equal(lb.momentId, 'moment_101');
+  assert.equal(lb.zoomScale, 1);
+  assert.equal(lb.zoomPercent, 100);
+  assert.equal(lb.isZoomed, false);
+  assert.equal(lb.canZoomOut, false);
+  assert.equal(lb.canZoomIn, true);
+
+  // Zoom in (+50% -> 150%)
+  lb = updateMomentLightboxZoom(lb, 'in');
+  assert.equal(lb.zoomScale, 1.5);
+  assert.equal(lb.zoomPercent, 150);
+  assert.equal(lb.isZoomed, true);
+  assert.equal(lb.canZoomOut, true);
+  assert.equal(lb.canZoomIn, true);
+
+  // Set explicit 3x preset (300%)
+  lb = updateMomentLightboxZoom(lb, 3);
+  assert.equal(lb.zoomScale, 3);
+  assert.equal(lb.zoomPercent, 300);
+  assert.equal(lb.canZoomIn, false);
+  assert.equal(lb.canZoomOut, true);
+
+  // Reset returns to 100%
+  lb = updateMomentLightboxZoom(lb, 'reset');
+  assert.equal(lb.zoomScale, 1);
+  assert.equal(lb.zoomPercent, 100);
+  assert.equal(lb.isZoomed, false);
+
+  // Clicking image toggles between 100% and 200%
+  lb = updateMomentLightboxZoom(lb, 'toggle');
+  assert.equal(lb.zoomScale, 2);
+  assert.equal(lb.zoomPercent, 200);
+  assert.equal(lb.isZoomed, true);
+
+  lb = updateMomentLightboxZoom(lb, 'toggle');
+  assert.equal(lb.zoomScale, 1);
+  assert.equal(lb.zoomPercent, 100);
+  assert.equal(lb.isZoomed, false);
 });
 
 

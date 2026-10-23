@@ -4580,3 +4580,122 @@ export function resolveMomentPublishImageSource(params: {
   };
 }
 
+// --- Full-Screen Lightbox Zoom Feature for Moment Images ---
+export const MOMENT_LIGHTBOX_MIN_ZOOM = 1;
+export const MOMENT_LIGHTBOX_MAX_ZOOM = 3;
+export const MOMENT_LIGHTBOX_ZOOM_STEP = 0.5;
+export const MOMENT_LIGHTBOX_ZOOM_PRESETS: readonly number[] = [1, 1.5, 2, 2.5, 3];
+
+export interface MomentLightboxZoomState {
+  isOpen: boolean;
+  momentId: string | null;
+  photoDataUrl: string;
+  caption: string;
+  authorName: string;
+  visibility: 'public' | 'connections';
+  zoomScale: number;
+  minZoom: number;
+  maxZoom: number;
+  zoomStep: number;
+  zoomPercent: number;
+  canZoomIn: boolean;
+  canZoomOut: boolean;
+  isZoomed: boolean;
+}
+
+export function clampLightboxZoomScale(rawScale: number): number {
+  if (!Number.isFinite(rawScale)) return MOMENT_LIGHTBOX_MIN_ZOOM;
+  const clamped = Math.min(
+    MOMENT_LIGHTBOX_MAX_ZOOM,
+    Math.max(MOMENT_LIGHTBOX_MIN_ZOOM, rawScale)
+  );
+  return Math.round(clamped * 4) / 4;
+}
+
+function buildMomentLightboxState(
+  base: {
+    isOpen: boolean;
+    momentId: string | null;
+    photoDataUrl: string;
+    caption: string;
+    authorName: string;
+    visibility: 'public' | 'connections';
+  },
+  rawZoomScale: number
+): MomentLightboxZoomState {
+  const zoomScale = clampLightboxZoomScale(rawZoomScale);
+  return {
+    ...base,
+    zoomScale,
+    minZoom: MOMENT_LIGHTBOX_MIN_ZOOM,
+    maxZoom: MOMENT_LIGHTBOX_MAX_ZOOM,
+    zoomStep: MOMENT_LIGHTBOX_ZOOM_STEP,
+    zoomPercent: Math.round(zoomScale * 100),
+    canZoomIn: zoomScale < MOMENT_LIGHTBOX_MAX_ZOOM,
+    canZoomOut: zoomScale > MOMENT_LIGHTBOX_MIN_ZOOM,
+    isZoomed: zoomScale > MOMENT_LIGHTBOX_MIN_ZOOM,
+  };
+}
+
+export function openMomentLightbox(params: {
+  momentId: string;
+  photoDataUrl: string;
+  caption: string;
+  authorName: string;
+  visibility?: 'public' | 'connections';
+  initialZoom?: number;
+}): MomentLightboxZoomState {
+  const cleanId = String(params.momentId || '').trim() || 'moment_preview';
+  const cleanUrl = String(params.photoDataUrl || '').trim();
+  const cleanCaption = sanitizeSafeText(String(params.caption || ''), 500);
+  const cleanAuthor =
+    sanitizeSafeText(String(params.authorName || 'Member'), 64) || 'Member';
+  const visibility: 'public' | 'connections' =
+    params.visibility === 'connections' ? 'connections' : 'public';
+
+  return buildMomentLightboxState(
+    {
+      isOpen: Boolean(cleanUrl),
+      momentId: cleanId,
+      photoDataUrl: cleanUrl,
+      caption: cleanCaption,
+      authorName: cleanAuthor,
+      visibility,
+    },
+    typeof params.initialZoom === 'number'
+      ? params.initialZoom
+      : MOMENT_LIGHTBOX_MIN_ZOOM
+  );
+}
+
+export function updateMomentLightboxZoom(
+  state: MomentLightboxZoomState,
+  action: 'in' | 'out' | 'reset' | 'toggle' | number
+): MomentLightboxZoomState {
+  let nextScale = state.zoomScale;
+  if (typeof action === 'number') {
+    nextScale = clampLightboxZoomScale(action);
+  } else if (action === 'in') {
+    nextScale = clampLightboxZoomScale(state.zoomScale + MOMENT_LIGHTBOX_ZOOM_STEP);
+  } else if (action === 'out') {
+    nextScale = clampLightboxZoomScale(state.zoomScale - MOMENT_LIGHTBOX_ZOOM_STEP);
+  } else if (action === 'reset') {
+    nextScale = MOMENT_LIGHTBOX_MIN_ZOOM;
+  } else if (action === 'toggle') {
+    nextScale =
+      state.zoomScale > MOMENT_LIGHTBOX_MIN_ZOOM ? MOMENT_LIGHTBOX_MIN_ZOOM : 2;
+  }
+
+  return buildMomentLightboxState(
+    {
+      isOpen: state.isOpen,
+      momentId: state.momentId,
+      photoDataUrl: state.photoDataUrl,
+      caption: state.caption,
+      authorName: state.authorName,
+      visibility: state.visibility,
+    },
+    nextScale
+  );
+}
+

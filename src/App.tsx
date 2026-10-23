@@ -37,6 +37,11 @@ import {
   CornerDownRight,
   ChevronDown,
   ChevronUp,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  RotateCcw,
+  X,
 } from 'lucide-react';
 import {
   auth,
@@ -99,6 +104,10 @@ import {
   getStudyMomentPlaceholderById,
   selectStudyMomentPlaceholder,
   resolveMomentPublishImageSource,
+  MomentLightboxZoomState,
+  openMomentLightbox,
+  updateMomentLightboxZoom,
+  MOMENT_LIGHTBOX_ZOOM_PRESETS,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -287,6 +296,7 @@ export default function App() {
   const [momentCommentErrors, setMomentCommentErrors] = useState<Record<string, string>>({});
   const [commentClockNowMs, setCommentClockNowMs] = useState<number>(() => Date.now());
   const [copiedMomentShare, setCopiedMomentShare] = useState<MomentSharePayload | null>(null);
+  const [momentLightbox, setMomentLightbox] = useState<MomentLightboxZoomState | null>(null);
   const shareResetTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -295,6 +305,33 @@ export default function App() {
     }, 15_000);
     return () => window.clearInterval(intervalId);
   }, []);
+
+  useEffect(() => {
+    if (!momentLightbox?.isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setMomentLightbox(null);
+      } else if (e.key === '+' || e.key === '=') {
+        e.preventDefault();
+        setMomentLightbox((prev) =>
+          prev ? updateMomentLightboxZoom(prev, 'in') : null
+        );
+      } else if (e.key === '-' || e.key === '_') {
+        e.preventDefault();
+        setMomentLightbox((prev) =>
+          prev ? updateMomentLightboxZoom(prev, 'out') : null
+        );
+      } else if (e.key === '0') {
+        e.preventDefault();
+        setMomentLightbox((prev) =>
+          prev ? updateMomentLightboxZoom(prev, 'reset') : null
+        );
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [momentLightbox?.isOpen]);
 
   // Daily Productivity Goal State (Target Focus Time & Completed Minutes for Today)
   const todayDateStr = formatDateKey(new Date());
@@ -4227,12 +4264,34 @@ export default function App() {
                             data-testid={`moment-card-${item.id}`}
                             className="rounded-lg border border-zinc-800/80 bg-[#0A0A0C] overflow-hidden"
                           >
-                            <img
-                              src={item.photoDataUrl}
-                              alt={item.caption}
-                              referrerPolicy="no-referrer"
-                              className="w-full max-h-96 object-contain bg-[#050505]"
-                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setMomentLightbox(
+                                  openMomentLightbox({
+                                    momentId: item.id,
+                                    photoDataUrl: item.photoDataUrl,
+                                    caption: item.caption,
+                                    authorName: item.authorName,
+                                    visibility: item.visibility,
+                                  })
+                                )
+                              }
+                              data-testid={`open-moment-lightbox-${item.id}`}
+                              aria-label={`View full-screen lightbox zoom for moment by ${item.authorName}`}
+                              className="group relative block w-full bg-[#050505] overflow-hidden cursor-zoom-in focus:outline-none"
+                            >
+                              <img
+                                src={item.photoDataUrl}
+                                alt={item.caption}
+                                referrerPolicy="no-referrer"
+                                className="w-full max-h-96 object-contain bg-[#050505] transition-transform duration-200 group-hover:scale-[1.01]"
+                              />
+                              <span className="absolute top-3 right-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050505]/90 border border-zinc-700/80 text-[11px] font-mono text-zinc-200 opacity-90 group-hover:opacity-100 group-hover:border-emerald-500/60 group-hover:text-emerald-300 transition-all">
+                                <Maximize2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                <span>Click to Zoom</span>
+                              </span>
+                            </button>
                             <div className="p-5 space-y-3">
                               <div className="flex flex-wrap items-center justify-between gap-3">
                                 <div className="text-xs text-zinc-400">
@@ -4246,6 +4305,27 @@ export default function App() {
                                   </span>
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setMomentLightbox(
+                                        openMomentLightbox({
+                                          momentId: item.id,
+                                          photoDataUrl: item.photoDataUrl,
+                                          caption: item.caption,
+                                          authorName: item.authorName,
+                                          visibility: item.visibility,
+                                        })
+                                      )
+                                    }
+                                    data-testid={`zoom-moment-btn-${item.id}`}
+                                    aria-label={`Zoom image for moment by ${item.authorName}`}
+                                    title="Open full-screen lightbox zoom"
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border bg-[#050505] border-zinc-800 text-zinc-200 hover:border-emerald-500/50 hover:text-emerald-300 transition-colors whitespace-nowrap shrink-0"
+                                  >
+                                    <ZoomIn className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                    <span>Zoom</span>
+                                  </button>
                                   <button
                                     type="button"
                                     onClick={() => handleShareMoment(item)}
@@ -5178,6 +5258,173 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Full-Screen Moment Image Lightbox Zoom Modal */}
+      {momentLightbox?.isOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Full-screen photo lightbox for moment by ${momentLightbox.authorName}`}
+          data-testid="moment-image-lightbox"
+          data-moment-id={momentLightbox.momentId || ''}
+          data-zoom-percent={momentLightbox.zoomPercent}
+          className="fixed inset-0 z-50 flex flex-col bg-[#050505]/95 backdrop-blur-md"
+        >
+          {/* Top Lightbox Toolbar */}
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-3.5 border-b border-zinc-800/90 bg-[#0A0A0C]">
+            <div className="flex flex-wrap items-center gap-2 text-xs min-w-0">
+              <span className="font-bold text-white truncate">
+                {momentLightbox.authorName}
+              </span>
+              <span aria-hidden="true" className="text-zinc-600">
+                ·
+              </span>
+              <span className="font-mono text-zinc-400 capitalize whitespace-nowrap">
+                {momentLightbox.visibility} Moment
+              </span>
+              <span aria-hidden="true" className="text-zinc-600">
+                ·
+              </span>
+              <span
+                data-testid="moment-lightbox-zoom-badge"
+                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 font-mono text-[11px] font-semibold text-emerald-300 tabular-nums whitespace-nowrap"
+              >
+                Zoom {momentLightbox.zoomPercent}%
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() =>
+                  setMomentLightbox((prev) =>
+                    prev ? updateMomentLightboxZoom(prev, 'out') : null
+                  )
+                }
+                disabled={!momentLightbox.canZoomOut}
+                aria-label="Zoom out Moment image"
+                data-testid="moment-lightbox-zoom-out"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-zinc-800 bg-[#050505] text-xs font-mono text-zinc-200 hover:border-zinc-600 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+              >
+                <ZoomOut className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>-</span>
+              </button>
+
+              {MOMENT_LIGHTBOX_ZOOM_PRESETS.map((presetScale) => {
+                const presetPct = Math.round(presetScale * 100);
+                const isActive = momentLightbox.zoomScale === presetScale;
+                return (
+                  <button
+                    key={presetScale}
+                    type="button"
+                    onClick={() =>
+                      setMomentLightbox((prev) =>
+                        prev ? updateMomentLightboxZoom(prev, presetScale) : null
+                      )
+                    }
+                    data-testid={`moment-lightbox-preset-${presetPct}`}
+                    className={`px-2.5 py-1.5 rounded border text-xs font-mono tabular-nums transition-colors ${
+                      isActive
+                        ? 'bg-white text-black border-white font-semibold'
+                        : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:text-white hover:border-zinc-600'
+                    }`}
+                  >
+                    {presetPct}%
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() =>
+                  setMomentLightbox((prev) =>
+                    prev ? updateMomentLightboxZoom(prev, 'in') : null
+                  )
+                }
+                disabled={!momentLightbox.canZoomIn}
+                aria-label="Zoom in Moment image"
+                data-testid="moment-lightbox-zoom-in"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-zinc-800 bg-[#050505] text-xs font-mono text-zinc-200 hover:border-zinc-600 disabled:opacity-40 disabled:pointer-events-none transition-colors"
+              >
+                <ZoomIn className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>+</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() =>
+                  setMomentLightbox((prev) =>
+                    prev ? updateMomentLightboxZoom(prev, 'reset') : null
+                  )
+                }
+                aria-label="Reset zoom to 100%"
+                data-testid="moment-lightbox-zoom-reset"
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded border border-zinc-800 bg-[#050505] text-xs font-mono text-zinc-300 hover:text-white hover:border-zinc-600 transition-colors"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span>Reset</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setMomentLightbox(null)}
+                aria-label="Close full-screen lightbox"
+                data-testid="moment-lightbox-close"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded bg-rose-600 hover:bg-rose-500 text-xs font-semibold text-white transition-colors ml-1"
+              >
+                <X className="w-3.5 h-3.5 shrink-0" />
+                <span>Close</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Interactive Center Viewport */}
+          <div
+            data-testid="moment-lightbox-viewport"
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                setMomentLightbox(null);
+              }
+            }}
+            className="relative flex-1 overflow-auto flex items-center justify-center p-6 select-none"
+          >
+            <img
+              src={momentLightbox.photoDataUrl}
+              alt={momentLightbox.caption}
+              referrerPolicy="no-referrer"
+              data-testid="moment-lightbox-image"
+              data-zoom-scale={momentLightbox.zoomScale}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMomentLightbox((prev) =>
+                  prev ? updateMomentLightboxZoom(prev, 'toggle') : null
+                );
+              }}
+              style={{
+                transform: `scale(${momentLightbox.zoomScale})`,
+                transformOrigin: 'center center',
+              }}
+              className={`max-w-[88vw] max-h-[72vh] object-contain rounded-lg border border-zinc-800/80 bg-[#0A0A0C] shadow-2xl transition-transform duration-200 ease-out ${
+                momentLightbox.isZoomed ? 'cursor-zoom-out' : 'cursor-zoom-in'
+              }`}
+            />
+          </div>
+
+          {/* Bottom Caption & Controls Footer */}
+          <div className="px-6 py-4 border-t border-zinc-800/90 bg-[#0A0A0C] flex flex-wrap items-center justify-between gap-4">
+            <p
+              data-testid="moment-lightbox-caption"
+              className="text-sm text-zinc-100 max-w-4xl leading-relaxed break-words"
+            >
+              {momentLightbox.caption}
+            </p>
+            <span className="text-[11px] font-mono text-zinc-400 whitespace-nowrap">
+              Click image to toggle 200% zoom · Keys: + / - / 0 / Esc
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+
