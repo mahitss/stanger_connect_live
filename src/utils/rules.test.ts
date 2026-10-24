@@ -2520,4 +2520,56 @@ test('Streak Freeze system allows users to spend participation points to equip f
   assert.equal(badgeEvalWithFreeze.unlockedCount, 3);
 });
 
+test('Daily Productivity Goal progress evaluates 50% and 100% visual milestone markers, celebratory headlines, and color shifts', () => {
+  // 1. Starter stage (< 50%): 30m out of 120m (25%)
+  const starter = computeProductivityGoalProgress(120, 30);
+  assert.equal(starter.progressPercent, 25);
+  assert.equal(starter.halfwayMinutes, 60);
+  assert.equal(starter.isHalfwayReached, false);
+  assert.equal(starter.isGoalReached, false);
+  assert.equal(starter.milestoneStage, 'starter');
+  assert.equal(starter.barFillColorClass, 'bg-white');
+  assert.equal(starter.percentTextColorClass, 'text-zinc-200');
+  assert.equal(starter.activeCelebrationHeadline, null);
+  assert.equal(starter.milestones[0].id, 'milestone_50');
+  assert.equal(starter.milestones[0].reached, false);
+  assert.equal(starter.milestones[0].remainingToMilestoneMinutes, 30);
+  assert.equal(starter.milestones[0].iconName, 'sparkles');
+  assert.equal(starter.milestones[1].id, 'milestone_100');
+  assert.equal(starter.milestones[1].reached, false);
+  assert.equal(starter.milestones[1].remainingToMilestoneMinutes, 90);
+  assert.equal(starter.milestones[1].iconName, 'trophy');
 
+  // 2. Halfway milestone reached (50% - 99%): 60m out of 120m (50%)
+  const halfway = computeProductivityGoalProgress(120, 60);
+  assert.equal(halfway.progressPercent, 50);
+  assert.equal(halfway.isHalfwayReached, true);
+  assert.equal(halfway.isGoalReached, false);
+  assert.equal(halfway.milestoneStage, 'halfway_50');
+  assert.equal(halfway.barFillColorClass, 'bg-amber-400');
+  assert.equal(halfway.percentTextColorClass, 'text-amber-400');
+  assert.equal(
+    halfway.activeCelebrationHeadline,
+    '50% Halfway Milestone Reached! Keep the Momentum Going'
+  );
+  assert.equal(halfway.milestones[0].reached, true);
+  assert.equal(halfway.milestones[0].remainingToMilestoneMinutes, 0);
+  assert.equal(halfway.milestones[1].reached, false);
+  assert.equal(halfway.milestones[1].remainingToMilestoneMinutes, 60);
+
+  // 3. Full target milestone reached (100%+): 125m out of 120m (clamped to 100%)
+  const completed = computeProductivityGoalProgress(120, 125);
+  assert.equal(completed.progressPercent, 100);
+  assert.equal(completed.isHalfwayReached, true);
+  assert.equal(completed.isGoalReached, true);
+  assert.equal(completed.milestoneStage, 'complete_100');
+  assert.equal(completed.barFillColorClass, 'bg-emerald-400');
+  assert.equal(completed.percentTextColorClass, 'text-emerald-400');
+  assert.equal(
+    completed.activeCelebrationHeadline,
+    '100% Daily Target Reached! Full Focus Milestone Unlocked'
+  );
+  assert.equal(completed.milestones[0].reached, true);
+  assert.equal(completed.milestones[1].reached, true);
+  assert.equal(completed.milestones[1].remainingToMilestoneMinutes, 0);
+});

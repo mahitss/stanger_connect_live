@@ -2373,13 +2373,35 @@ export function formatRelativeCommentTimestamp(
   return `${elapsedWeeks}w ago`;
 }
 
-// --- Daily Productivity Goal Pure Math ---
+// --- Daily Productivity Goal Pure Math & Milestone Markers ---
+export type DailyGoalMilestoneStage = 'starter' | 'halfway_50' | 'complete_100';
+
+export interface DailyGoalMilestoneMarker {
+  id: 'milestone_50' | 'milestone_100';
+  thresholdPercent: 50 | 100;
+  thresholdMinutes: number;
+  reached: boolean;
+  remainingToMilestoneMinutes: number;
+  label: string;
+  shortLabel: string;
+  iconName: 'sparkles' | 'trophy';
+  celebrationMessage: string;
+  tone: 'amber' | 'emerald';
+}
+
 export interface DailyProductivityProgress {
   targetMinutes: number;
   completedMinutes: number;
   progressPercent: number;
   remainingMinutes: number;
+  halfwayMinutes: number;
+  isHalfwayReached: boolean;
   isGoalReached: boolean;
+  milestoneStage: DailyGoalMilestoneStage;
+  barFillColorClass: string;
+  percentTextColorClass: string;
+  activeCelebrationHeadline: string | null;
+  milestones: [DailyGoalMilestoneMarker, DailyGoalMilestoneMarker];
 }
 
 export function clampProductivityTarget(rawTargetMinutes: number): number {
@@ -2395,12 +2417,70 @@ export function computeProductivityGoalProgress(
   const safeCompleted = Math.max(0, Math.round(Number(completedMinutes) || 0));
   const progressPercent = Math.min(100, Math.round((safeCompleted / safeTarget) * 100));
   const remainingMinutes = Math.max(0, safeTarget - safeCompleted);
+  const halfwayMinutes = Math.ceil(safeTarget / 2);
+  const isGoalReached = safeCompleted >= safeTarget || progressPercent >= 100;
+  const isHalfwayReached = isGoalReached || safeCompleted >= halfwayMinutes || progressPercent >= 50;
+
+  let milestoneStage: DailyGoalMilestoneStage = 'starter';
+  let barFillColorClass = 'bg-white';
+  let percentTextColorClass = 'text-zinc-200';
+  let activeCelebrationHeadline: string | null = null;
+
+  if (isGoalReached) {
+    milestoneStage = 'complete_100';
+    barFillColorClass = 'bg-emerald-400';
+    percentTextColorClass = 'text-emerald-400';
+    activeCelebrationHeadline = '100% Daily Target Reached! Full Focus Milestone Unlocked';
+  } else if (isHalfwayReached) {
+    milestoneStage = 'halfway_50';
+    barFillColorClass = 'bg-amber-400';
+    percentTextColorClass = 'text-amber-400';
+    activeCelebrationHeadline = '50% Halfway Milestone Reached! Keep the Momentum Going';
+  }
+
+  const milestone50: DailyGoalMilestoneMarker = {
+    id: 'milestone_50',
+    thresholdPercent: 50,
+    thresholdMinutes: halfwayMinutes,
+    reached: isHalfwayReached,
+    remainingToMilestoneMinutes: Math.max(0, halfwayMinutes - safeCompleted),
+    label: '50% Halfway Milestone',
+    shortLabel: '50% Halfway',
+    iconName: 'sparkles',
+    celebrationMessage: isHalfwayReached
+      ? `Halfway checkpoint unlocked (${halfwayMinutes}m+ logged)!`
+      : `${Math.max(0, halfwayMinutes - safeCompleted)}m to 50% milestone`,
+    tone: 'amber',
+  };
+
+  const milestone100: DailyGoalMilestoneMarker = {
+    id: 'milestone_100',
+    thresholdPercent: 100,
+    thresholdMinutes: safeTarget,
+    reached: isGoalReached,
+    remainingToMilestoneMinutes: remainingMinutes,
+    label: '100% Daily Target',
+    shortLabel: '100% Target',
+    iconName: 'trophy',
+    celebrationMessage: isGoalReached
+      ? `Daily target crushed (${safeTarget}m completed)!`
+      : `${remainingMinutes}m to 100% target`,
+    tone: 'emerald',
+  };
+
   return {
     targetMinutes: safeTarget,
     completedMinutes: safeCompleted,
     progressPercent,
     remainingMinutes,
-    isGoalReached: safeCompleted >= safeTarget,
+    halfwayMinutes,
+    isHalfwayReached,
+    isGoalReached,
+    milestoneStage,
+    barFillColorClass,
+    percentTextColorClass,
+    activeCelebrationHeadline,
+    milestones: [milestone50, milestone100],
   };
 }
 
