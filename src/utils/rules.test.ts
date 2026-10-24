@@ -168,6 +168,8 @@ import {
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
   getOnlineDirectoryQuickFilterMeta,
+  toggleMoodCategoryDrawerExpanded,
+  getMoodCategoryExpansionMotionSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -3249,4 +3251,34 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
     awayFiltered.map((p) => p.uid),
     ['usr_eva']
   );
+
+  // Staggered Framer Motion spec for Mood category headers and preset items
+  assert.equal(toggleMoodCategoryDrawerExpanded(true), false);
+  assert.equal(toggleMoodCategoryDrawerExpanded(false), true);
+
+  const staggerSpec = getMoodCategoryExpansionMotionSpec(true);
+  assert.equal(staggerSpec.isExpanded, true);
+  assert.equal(staggerSpec.staggerChildrenSec, 0.06);
+  assert.equal(staggerSpec.delayChildrenSec, 0.03);
+  assert.equal(staggerSpec.presetStaggerOffsetSec, 0.035);
+  assert.deepEqual(staggerSpec.containerInitial, { opacity: 0, y: -4 });
+  assert.deepEqual(staggerSpec.containerAnimate, { opacity: 1, y: 0 });
+
+  const header0 = staggerSpec.getCategoryHeaderMotion(0);
+  const header1 = staggerSpec.getCategoryHeaderMotion(1);
+  const header2 = staggerSpec.getCategoryHeaderMotion(2);
+  assert.deepEqual(header0.initial, { opacity: 0, y: -4 });
+  assert.deepEqual(header0.animate, { opacity: 1, y: 0 });
+  assert.equal(header0.transition.delay, 0.03);
+  assert.equal(header1.transition.delay, 0.09);
+  assert.equal(header2.transition.delay, 0.15);
+
+  const preset00 = staggerSpec.getPresetItemMotion(0, 0);
+  const preset01 = staggerSpec.getPresetItemMotion(0, 1);
+  const preset10 = staggerSpec.getPresetItemMotion(1, 0);
+  assert.deepEqual(preset00.initial, { opacity: 0, y: -3 });
+  assert.deepEqual(preset00.animate, { opacity: 1, y: 0 });
+  assert.equal(preset00.transition.delay, 0.05);
+  assert.equal(preset01.transition.delay, 0.085);
+  assert.equal(preset10.transition.delay, 0.11);
 });

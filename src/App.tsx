@@ -161,6 +161,8 @@ import {
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
   getOnlineDirectoryQuickFilterMeta,
+  toggleMoodCategoryDrawerExpanded,
+  getMoodCategoryExpansionMotionSpec,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -669,6 +671,7 @@ export default function App() {
   >(null);
   const [showOnlyInFocusPeers, setShowOnlyInFocusPeers] = useState<boolean>(false);
   const [directoryMoodFilter, setDirectoryMoodFilter] = useState<string>('all');
+  const [isMoodCategoriesExpanded, setIsMoodCategoriesExpanded] = useState<boolean>(true);
   const [directoryAudienceFilter, setDirectoryAudienceFilter] =
     useState<OnlineDirectoryAudienceFilter>('everyone');
   const [isQuickFilterHovered, setIsQuickFilterHovered] = useState<boolean>(false);
@@ -4460,48 +4463,82 @@ export default function App() {
                         )}
                       </div>
 
-                      <div
+                      <motion.div
+                        initial={
+                          getMoodCategoryExpansionMotionSpec(true).containerInitial
+                        }
+                        animate={
+                          getMoodCategoryExpansionMotionSpec(true).containerAnimate
+                        }
+                        transition={
+                          getMoodCategoryExpansionMotionSpec(true).containerTransition
+                        }
                         className="flex flex-wrap items-center gap-2.5"
                         role="group"
                         aria-label="Select your live Mood indicator grouped by category"
                         data-testid="mood-setter-category-groups"
                       >
-                        {directoryMoodSummary.groupedPresets.map((group) => (
-                          <div
-                            key={group.category}
-                            data-testid={`mood-setter-group-${group.category.toLowerCase()}`}
-                            data-mood-category={group.category}
-                            className="inline-flex flex-wrap items-center gap-1.5 px-2 py-1 rounded-md bg-[#0A0A0C] border border-zinc-800/90"
-                          >
-                            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 pr-1 border-r border-zinc-800">
-                              {group.label}
-                            </span>
-                            {group.presets.map((preset) => {
-                              const isSelected =
-                                myMoodMeta.hasMood &&
-                                myMoodMeta.label?.toLowerCase() === preset.label.toLowerCase();
-                              return (
-                                <button
-                                  key={preset.id}
-                                  type="button"
-                                  onClick={() => handleUpdateUserMood(preset.label)}
-                                  aria-pressed={isSelected}
-                                  data-testid={`mood-preset-${preset.id}`}
-                                  data-mood-category={preset.category}
-                                  title={`${group.label} · ${preset.description}`}
-                                  className={`px-2.5 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
-                                    isSelected
-                                      ? 'bg-white text-black border-white'
-                                      : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
-                                  }`}
-                                >
-                                  {preset.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        ))}
-                      </div>
+                        {directoryMoodSummary.groupedPresets.map((group, catIdx) => {
+                          const catHeaderMotion =
+                            getMoodCategoryExpansionMotionSpec(true).getCategoryHeaderMotion(
+                              catIdx
+                            );
+                          return (
+                            <motion.div
+                              key={group.category}
+                              initial={catHeaderMotion.initial}
+                              animate={catHeaderMotion.animate}
+                              transition={catHeaderMotion.transition}
+                              data-testid={`mood-setter-group-${group.category.toLowerCase()}`}
+                              data-mood-category={group.category}
+                              data-stagger-delay={catHeaderMotion.transition.delay}
+                              className="inline-flex flex-wrap items-center gap-1.5 px-2 py-1 rounded-md bg-[#0A0A0C] border border-zinc-800/90"
+                            >
+                              <motion.span
+                                initial={catHeaderMotion.initial}
+                                animate={catHeaderMotion.animate}
+                                transition={catHeaderMotion.transition}
+                                className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 pr-1 border-r border-zinc-800"
+                              >
+                                {group.label}
+                              </motion.span>
+                              {group.presets.map((preset, presetIdx) => {
+                                const presetMotion =
+                                  getMoodCategoryExpansionMotionSpec(true).getPresetItemMotion(
+                                    catIdx,
+                                    presetIdx
+                                  );
+                                const isSelected =
+                                  myMoodMeta.hasMood &&
+                                  myMoodMeta.label?.toLowerCase() ===
+                                    preset.label.toLowerCase();
+                                return (
+                                  <motion.button
+                                    key={preset.id}
+                                    type="button"
+                                    initial={presetMotion.initial}
+                                    animate={presetMotion.animate}
+                                    transition={presetMotion.transition}
+                                    onClick={() => handleUpdateUserMood(preset.label)}
+                                    aria-pressed={isSelected}
+                                    data-testid={`mood-preset-${preset.id}`}
+                                    data-mood-category={preset.category}
+                                    data-stagger-delay={presetMotion.transition.delay}
+                                    title={`${group.label} · ${preset.description}`}
+                                    className={`px-2.5 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
+                                      isSelected
+                                        ? 'bg-white text-black border-white'
+                                        : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                                    }`}
+                                  >
+                                    {preset.label}
+                                  </motion.button>
+                                );
+                              })}
+                            </motion.div>
+                          );
+                        })}
+                      </motion.div>
 
                       <form
                         onSubmit={handleCustomMoodSubmit}
@@ -4984,15 +5021,21 @@ export default function App() {
                           >
                             All Moods ({onlinePeers.length})
                           </button>
-                          {directoryMoodSummary.groupedPresets.map((group) => {
+                          {directoryMoodSummary.groupedPresets.map((group, catIdx) => {
+                            const headerMotion = getMoodCategoryExpansionMotionSpec(
+                              isMoodCategoriesExpanded
+                            ).getCategoryHeaderMotion(catIdx);
                             const isCatActive =
                               directoryMoodFilter === group.categoryFilterValue ||
                               directoryMoodFilter.toLowerCase() ===
                                 group.category.toLowerCase();
                             return (
-                              <button
+                              <motion.button
                                 key={group.category}
                                 type="button"
+                                initial={headerMotion.initial}
+                                animate={headerMotion.animate}
+                                transition={headerMotion.transition}
                                 onClick={() =>
                                   setDirectoryMoodFilter(
                                     isCatActive ? 'all' : group.categoryFilterValue
@@ -5005,6 +5048,7 @@ export default function App() {
                                 data-testid={`mood-category-filter-${group.category.toLowerCase()}`}
                                 data-mood-category={group.category}
                                 data-category-count={group.activeCount}
+                                data-stagger-delay={headerMotion.transition.delay}
                                 className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
                                   isCatActive
                                     ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/60'
@@ -5015,9 +5059,34 @@ export default function App() {
                                 <span className="font-mono text-[10px] opacity-80">
                                   ({group.activeCount})
                                 </span>
-                              </button>
+                              </motion.button>
                             );
                           })}
+                          <button
+                            id="online-directory-mood-category-expand-toggle"
+                            type="button"
+                            onClick={() =>
+                              setIsMoodCategoriesExpanded((prev) =>
+                                toggleMoodCategoryDrawerExpanded(prev)
+                              )
+                            }
+                            aria-expanded={isMoodCategoriesExpanded}
+                            aria-controls="online-directory-mood-category-drawer"
+                            data-testid="online-directory-mood-category-expand-btn"
+                            title={
+                              isMoodCategoriesExpanded
+                                ? 'Collapse Mood category preset groupings'
+                                : 'Expand Mood category preset groupings'
+                            }
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-mono text-zinc-400 hover:text-white rounded hover:bg-zinc-900 transition-colors whitespace-nowrap shrink-0"
+                          >
+                            {isMoodCategoriesExpanded ? (
+                              <ChevronUp className="w-3 h-3 shrink-0" />
+                            ) : (
+                              <ChevronDown className="w-3 h-3 shrink-0" />
+                            )}
+                            <span>{isMoodCategoriesExpanded ? 'Presets' : 'Expand Presets'}</span>
+                          </button>
                         </div>
 
                         <select
@@ -5089,6 +5158,119 @@ export default function App() {
                         </button>
                       </div>
                     </div>
+
+                    <AnimatePresence initial={true}>
+                      {isMoodCategoriesExpanded && (
+                        <motion.div
+                          key="online-directory-mood-category-drawer"
+                          id="online-directory-mood-category-drawer"
+                          data-testid="online-directory-mood-category-drawer"
+                          data-stagger-children={
+                            getMoodCategoryExpansionMotionSpec(true).staggerChildrenSec
+                          }
+                          initial={getMoodCategoryExpansionMotionSpec(true).containerInitial}
+                          animate={getMoodCategoryExpansionMotionSpec(true).containerAnimate}
+                          exit={getMoodCategoryExpansionMotionSpec(true).containerExit}
+                          transition={
+                            getMoodCategoryExpansionMotionSpec(true).containerTransition
+                          }
+                          className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1"
+                        >
+                          {directoryMoodSummary.groupedPresets.map((group, catIdx) => {
+                            const headerMotion =
+                              getMoodCategoryExpansionMotionSpec(true).getCategoryHeaderMotion(
+                                catIdx
+                              );
+                            const isCatActive =
+                              directoryMoodFilter === group.categoryFilterValue ||
+                              directoryMoodFilter.toLowerCase() ===
+                                group.category.toLowerCase();
+                            return (
+                              <motion.div
+                                key={group.category}
+                                initial={headerMotion.initial}
+                                animate={headerMotion.animate}
+                                exit={headerMotion.exit}
+                                transition={headerMotion.transition}
+                                data-testid={`mood-category-drawer-group-${group.category.toLowerCase()}`}
+                                data-mood-category={group.category}
+                                data-stagger-delay={headerMotion.transition.delay}
+                                className="p-2.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2"
+                              >
+                                <motion.button
+                                  type="button"
+                                  initial={headerMotion.initial}
+                                  animate={headerMotion.animate}
+                                  exit={headerMotion.exit}
+                                  transition={headerMotion.transition}
+                                  onClick={() =>
+                                    setDirectoryMoodFilter(
+                                      isCatActive ? 'all' : group.categoryFilterValue
+                                    )
+                                  }
+                                  aria-pressed={isCatActive}
+                                  data-testid={`mood-category-header-${group.category.toLowerCase()}`}
+                                  data-stagger-delay={headerMotion.transition.delay}
+                                  className={`w-full flex items-center justify-between gap-2 text-left text-xs font-semibold transition-colors ${
+                                    isCatActive
+                                      ? 'text-emerald-300'
+                                      : 'text-zinc-200 hover:text-white'
+                                  }`}
+                                >
+                                  <span>{group.label}</span>
+                                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
+                                    {group.activeCount} online
+                                  </span>
+                                </motion.button>
+
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  {group.presets.map((preset, presetIdx) => {
+                                    const presetMotion =
+                                      getMoodCategoryExpansionMotionSpec(
+                                        true
+                                      ).getPresetItemMotion(catIdx, presetIdx);
+                                    const isPresetActive =
+                                      directoryMoodFilter.toLowerCase() ===
+                                      preset.label.toLowerCase();
+                                    const presetCount =
+                                      directoryMoodSummary.countsByMood[preset.label] || 0;
+                                    return (
+                                      <motion.button
+                                        key={preset.id}
+                                        type="button"
+                                        initial={presetMotion.initial}
+                                        animate={presetMotion.animate}
+                                        exit={presetMotion.exit}
+                                        transition={presetMotion.transition}
+                                        onClick={() =>
+                                          setDirectoryMoodFilter(
+                                            isPresetActive ? 'all' : preset.label
+                                          )
+                                        }
+                                        aria-pressed={isPresetActive}
+                                        data-testid={`mood-category-preset-${preset.id}`}
+                                        data-mood-category={group.category}
+                                        data-stagger-delay={presetMotion.transition.delay}
+                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border transition-colors whitespace-nowrap shrink-0 ${
+                                          isPresetActive
+                                            ? 'bg-white text-black border-white'
+                                            : 'bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                                        }`}
+                                      >
+                                        <span>{preset.label}</span>
+                                        <span className="font-mono text-[10px] opacity-75">
+                                          ({presetCount})
+                                        </span>
+                                      </motion.button>
+                                    );
+                                  })}
+                                </div>
+                              </motion.div>
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   <div className="space-y-3">

@@ -8704,3 +8704,103 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     toggleHoverMotion: getQuickFilterToggleHoverMotionSpec(Boolean(params.isHovered)),
   };
 }
+
+export interface MoodCategoryItemMotionSpec {
+  initial: { opacity: number; y: number };
+  animate: { opacity: number; y: number };
+  exit: { opacity: number; y: number };
+  transition: {
+    duration: number;
+    delay: number;
+    ease: 'easeOut';
+  };
+}
+
+export interface MoodCategoryExpansionMotionSpec {
+  isExpanded: boolean;
+  staggerChildrenSec: number;
+  delayChildrenSec: number;
+  presetStaggerOffsetSec: number;
+  containerInitial: { opacity: number; y: number };
+  containerAnimate: { opacity: number; y: number };
+  containerExit: { opacity: number; y: number };
+  containerTransition: {
+    duration: number;
+    ease: 'easeOut';
+    staggerChildren: number;
+    delayChildren: number;
+  };
+  getCategoryHeaderMotion: (categoryIndex: number) => MoodCategoryItemMotionSpec;
+  getPresetItemMotion: (
+    categoryIndex: number,
+    presetIndex: number
+  ) => MoodCategoryItemMotionSpec;
+}
+
+export function toggleMoodCategoryDrawerExpanded(current: boolean): boolean {
+  return !current;
+}
+
+export function getMoodCategoryExpansionMotionSpec(
+  isExpanded: boolean = true
+): MoodCategoryExpansionMotionSpec {
+  const expanded = Boolean(isExpanded);
+  const staggerChildrenSec = 0.06;
+  const delayChildrenSec = 0.03;
+  const presetStaggerOffsetSec = 0.035;
+
+  return {
+    isExpanded: expanded,
+    staggerChildrenSec,
+    delayChildrenSec,
+    presetStaggerOffsetSec,
+    containerInitial: { opacity: 0, y: -4 },
+    containerAnimate: expanded ? { opacity: 1, y: 0 } : { opacity: 0, y: -4 },
+    containerExit: { opacity: 0, y: -4 },
+    containerTransition: {
+      duration: 0.2,
+      ease: 'easeOut',
+      staggerChildren: staggerChildrenSec,
+      delayChildren: delayChildrenSec,
+    },
+    getCategoryHeaderMotion: (categoryIndex: number) => {
+      const safeCatIdx = Math.max(0, Math.floor(Number(categoryIndex) || 0));
+      const delay = Number(
+        (delayChildrenSec + safeCatIdx * staggerChildrenSec).toFixed(3)
+      );
+      return {
+        initial: { opacity: 0, y: -4 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -3 },
+        transition: {
+          duration: 0.18,
+          delay,
+          ease: 'easeOut',
+        },
+      };
+    },
+    getPresetItemMotion: (categoryIndex: number, presetIndex: number) => {
+      const safeCatIdx = Math.max(0, Math.floor(Number(categoryIndex) || 0));
+      const safePresetIdx = Math.max(0, Math.floor(Number(presetIndex) || 0));
+      const delay = Number(
+        (
+          delayChildrenSec +
+          0.02 +
+          safeCatIdx * staggerChildrenSec +
+          safePresetIdx * presetStaggerOffsetSec
+        ).toFixed(3)
+      );
+      return {
+        initial: { opacity: 0, y: -3 },
+        animate: { opacity: 1, y: 0 },
+        exit: { opacity: 0, y: -2 },
+        transition: {
+          duration: 0.16,
+          delay,
+          ease: 'easeOut',
+        },
+      };
+    },
+  };
+}
+
