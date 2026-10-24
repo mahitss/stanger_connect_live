@@ -8136,3 +8136,116 @@ export function resolveOnlineDirectoryPeerDmShortcut(params: {
   };
 }
 
+// ============================================================================
+// 43. FRAMER MOTION DAILY PRODUCTIVITY PROGRESS BAR TRANSITION SPEC
+// ============================================================================
+
+export interface ProductivityProgressMotionSpec {
+  targetMinutes: number;
+  completedMinutes: number;
+  previousCompletedMinutes: number;
+  minutesDelta: number;
+  didMinutesIncrease: boolean;
+  progressPercent: number;
+  previousProgressPercent: number;
+  scaleX: number;
+  previousScaleX: number;
+  milestoneStage: DailyGoalMilestoneStage;
+  crossedMilestone: 'none' | 'halfway_50' | 'complete_100';
+  initial: {
+    scaleX: number;
+    opacity: number;
+  };
+  animate: {
+    scaleX: number;
+    opacity: number;
+  };
+  transition: {
+    type: 'spring';
+    stiffness: number;
+    damping: number;
+    mass: number;
+  };
+}
+
+/**
+ * Computes the Framer Motion transition specification for the Daily Productivity
+ * progress bar fill so it animates smoothly whenever dailyCompletedMinutes increases
+ * (or on initial mount).
+ */
+export function getProductivityProgressMotionSpec(params: {
+  targetMinutes: number;
+  completedMinutes: number;
+  previousCompletedMinutes?: number | null;
+}): ProductivityProgressMotionSpec {
+  const currentProgress = computeProductivityGoalProgress(
+    params.targetMinutes,
+    params.completedMinutes
+  );
+
+  const hasPrevious =
+    typeof params.previousCompletedMinutes === 'number' &&
+    Number.isFinite(params.previousCompletedMinutes);
+  const previousCompletedMinutes = hasPrevious
+    ? Math.max(0, Math.round(Number(params.previousCompletedMinutes)))
+    : 0;
+
+  const previousProgress = computeProductivityGoalProgress(
+    currentProgress.targetMinutes,
+    previousCompletedMinutes
+  );
+
+  const minutesDelta = currentProgress.completedMinutes - previousCompletedMinutes;
+  const didMinutesIncrease = hasPrevious
+    ? minutesDelta > 0
+    : currentProgress.completedMinutes > 0;
+
+  const scaleX = Number((currentProgress.progressPercent / 100).toFixed(4));
+  const previousScaleX = hasPrevious
+    ? Number((previousProgress.progressPercent / 100).toFixed(4))
+    : 0;
+
+  let crossedMilestone: 'none' | 'halfway_50' | 'complete_100' = 'none';
+  if (didMinutesIncrease) {
+    if (!previousProgress.isGoalReached && currentProgress.isGoalReached) {
+      crossedMilestone = 'complete_100';
+    } else if (!previousProgress.isHalfwayReached && currentProgress.isHalfwayReached) {
+      crossedMilestone = 'halfway_50';
+    }
+  }
+
+  return {
+    targetMinutes: currentProgress.targetMinutes,
+    completedMinutes: currentProgress.completedMinutes,
+    previousCompletedMinutes,
+    minutesDelta,
+    didMinutesIncrease,
+    progressPercent: currentProgress.progressPercent,
+    previousProgressPercent: hasPrevious ? previousProgress.progressPercent : 0,
+    scaleX,
+    previousScaleX,
+    milestoneStage: currentProgress.milestoneStage,
+    crossedMilestone,
+    initial: {
+      scaleX: previousScaleX,
+      opacity: previousScaleX > 0 ? 1 : 0.85,
+    },
+    animate: {
+      scaleX,
+      opacity: 1,
+    },
+    transition: didMinutesIncrease
+      ? {
+          type: 'spring',
+          stiffness: 180,
+          damping: 24,
+          mass: 0.85,
+        }
+      : {
+          type: 'spring',
+          stiffness: 220,
+          damping: 28,
+          mass: 0.8,
+        },
+  };
+}

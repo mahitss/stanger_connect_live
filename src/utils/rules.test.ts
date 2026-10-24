@@ -156,6 +156,7 @@ import {
   applyQuickStartPomodoroBlock,
   buildConnectionRequestStatusMap,
   resolveOnlineDirectoryPeerDmShortcut,
+  getProductivityProgressMotionSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -2928,4 +2929,51 @@ test('Online Directory connection request status map and Direct Message shortcut
   });
   assert.equal(selfShortcut.isSelf, true);
   assert.equal(selfShortcut.showDirectMessageShortcut, false);
+});
+
+test('Framer Motion Daily Productivity progress bar transition spec computes smooth spring scaleX animation and milestone crossings when dailyCompletedMinutes increases', () => {
+  // 1. Initial mount at 30 / 120 mins (25%)
+  const mountSpec = getProductivityProgressMotionSpec({
+    targetMinutes: 120,
+    completedMinutes: 30,
+    previousCompletedMinutes: null,
+  });
+  assert.equal(mountSpec.progressPercent, 25);
+  assert.equal(mountSpec.previousProgressPercent, 0);
+  assert.equal(mountSpec.scaleX, 0.25);
+  assert.equal(mountSpec.previousScaleX, 0);
+  assert.equal(mountSpec.didMinutesIncrease, true);
+  assert.deepEqual(mountSpec.initial, { scaleX: 0, opacity: 0.85 });
+  assert.deepEqual(mountSpec.animate, { scaleX: 0.25, opacity: 1 });
+  assert.equal(mountSpec.transition.type, 'spring');
+  assert.equal(mountSpec.transition.stiffness, 180);
+  assert.equal(mountSpec.crossedMilestone, 'none');
+
+  // 2. Increasing completedMinutes from 30 -> 65 mins (54%, crossing 50% halfway milestone)
+  const increaseHalfway = getProductivityProgressMotionSpec({
+    targetMinutes: 120,
+    completedMinutes: 65,
+    previousCompletedMinutes: 30,
+  });
+  assert.equal(increaseHalfway.didMinutesIncrease, true);
+  assert.equal(increaseHalfway.minutesDelta, 35);
+  assert.equal(increaseHalfway.previousScaleX, 0.25);
+  assert.equal(increaseHalfway.scaleX, 0.54);
+  assert.equal(increaseHalfway.milestoneStage, 'halfway_50');
+  assert.equal(increaseHalfway.crossedMilestone, 'halfway_50');
+  assert.deepEqual(increaseHalfway.initial, { scaleX: 0.25, opacity: 1 });
+  assert.deepEqual(increaseHalfway.animate, { scaleX: 0.54, opacity: 1 });
+
+  // 3. Increasing completedMinutes from 65 -> 125 mins (100%, crossing 100% target milestone)
+  const increaseComplete = getProductivityProgressMotionSpec({
+    targetMinutes: 120,
+    completedMinutes: 125,
+    previousCompletedMinutes: 65,
+  });
+  assert.equal(increaseComplete.didMinutesIncrease, true);
+  assert.equal(increaseComplete.minutesDelta, 60);
+  assert.equal(increaseComplete.scaleX, 1);
+  assert.equal(increaseComplete.milestoneStage, 'complete_100');
+  assert.equal(increaseComplete.crossedMilestone, 'complete_100');
+  assert.deepEqual(increaseComplete.animate, { scaleX: 1, opacity: 1 });
 });

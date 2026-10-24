@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'motion/react';
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -145,6 +146,7 @@ import {
   applyQuickStartPomodoroBlock,
   buildConnectionRequestStatusMap,
   resolveOnlineDirectoryPeerDmShortcut,
+  getProductivityProgressMotionSpec,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -550,6 +552,16 @@ export default function App() {
     }
     return 30;
   });
+  const prevCompletedMinutesRef = useRef<number | null>(null);
+  const [lastCompletedMinutesSnapshot, setLastCompletedMinutesSnapshot] = useState<
+    number | null
+  >(null);
+  useEffect(() => {
+    if (prevCompletedMinutesRef.current !== dailyCompletedMinutes) {
+      setLastCompletedMinutesSnapshot(prevCompletedMinutesRef.current);
+      prevCompletedMinutesRef.current = dailyCompletedMinutes;
+    }
+  }, [dailyCompletedMinutes]);
   const [targetInputMinutes, setTargetInputMinutes] = useState<string>(() =>
     String(dailyTargetMinutes)
   );
@@ -2780,6 +2792,14 @@ export default function App() {
     dailyTargetMinutes,
     dailyCompletedMinutes
   );
+  const progressMotionSpec = getProductivityProgressMotionSpec({
+    targetMinutes: dailyTargetMinutes,
+    completedMinutes: dailyCompletedMinutes,
+    previousCompletedMinutes:
+      prevCompletedMinutesRef.current !== dailyCompletedMinutes
+        ? prevCompletedMinutesRef.current
+        : lastCompletedMinutesSnapshot,
+  });
   const weeklyActivitySummary = buildWeeklyActivityOverview({
     todayDateKey: todayDateStr,
     todayFocusMinutes: dailyCompletedMinutes,
@@ -3869,7 +3889,11 @@ export default function App() {
                     </span>
                     <div className="flex items-center gap-2">
                       {goalProgress.activeCelebrationHeadline && (
-                        <span
+                        <motion.span
+                          key={goalProgress.milestoneStage}
+                          initial={{ opacity: 0, scale: 0.85, y: 2 }}
+                          animate={{ opacity: 1, scale: 1, y: 0 }}
+                          transition={{ type: 'spring', stiffness: 360, damping: 22 }}
                           data-testid="daily-goal-celebration-badge"
                           className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[11px] font-sans font-semibold ${
                             goalProgress.isGoalReached
@@ -3885,7 +3909,7 @@ export default function App() {
                           <span>
                             {goalProgress.isGoalReached ? '100% Target Hit!' : '50% Halfway Hit!'}
                           </span>
-                        </span>
+                        </motion.span>
                       )}
                       <span
                         className={`text-sm font-bold transition-colors duration-200 ${goalProgress.percentTextColorClass}`}
@@ -3967,13 +3991,20 @@ export default function App() {
                             : 'border-zinc-800'
                       }`}
                     >
-                      <div
+                      <motion.div
                         data-testid="daily-productivity-progress-fill"
                         data-milestone-stage={goalProgress.milestoneStage}
-                        className={`h-full transition-all duration-200 origin-left ${goalProgress.barFillColorClass}`}
-                        style={{
-                          transform: `scaleX(${goalProgress.progressPercent / 100})`,
-                        }}
+                        data-motion-animated="true"
+                        data-progress-scale={progressMotionSpec.scaleX.toFixed(2)}
+                        data-minutes-increased={
+                          progressMotionSpec.didMinutesIncrease ? 'true' : 'false'
+                        }
+                        data-crossed-milestone={progressMotionSpec.crossedMilestone}
+                        initial={progressMotionSpec.initial}
+                        animate={progressMotionSpec.animate}
+                        transition={progressMotionSpec.transition}
+                        style={{ transformOrigin: 'left center' }}
+                        className={`w-full h-full transition-colors duration-300 origin-left ${goalProgress.barFillColorClass}`}
                       />
 
                       {/* 50% Tick Line Overlay on the Progress Bar */}
