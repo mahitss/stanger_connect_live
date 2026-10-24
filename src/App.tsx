@@ -153,6 +153,7 @@ import {
   OnlineDirectoryAudienceFilter,
   toggleOnlineDirectoryAudienceFilter,
   clearOnlineDirectoryAudienceFilter,
+  getQuickFilterToggleHoverMotionSpec,
   getOnlineDirectoryQuickFilterMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
@@ -4553,9 +4554,25 @@ export default function App() {
                           onMouseLeave={() => setIsQuickFilterHovered(false)}
                         >
                           <div className="inline-flex items-center gap-1.5">
-                            <button
+                            <motion.button
                               id="online-directory-mood-filter"
                               type="button"
+                              whileHover={
+                                getQuickFilterToggleHoverMotionSpec(isQuickFilterHovered)
+                                  .whileHover
+                              }
+                              whileTap={
+                                getQuickFilterToggleHoverMotionSpec(isQuickFilterHovered)
+                                  .whileTap
+                              }
+                              animate={
+                                getQuickFilterToggleHoverMotionSpec(isQuickFilterHovered)
+                                  .animate
+                              }
+                              transition={
+                                getQuickFilterToggleHoverMotionSpec(isQuickFilterHovered)
+                                  .transition
+                              }
                               onClick={() =>
                                 setDirectoryAudienceFilter((prev) =>
                                   toggleOnlineDirectoryAudienceFilter(prev)
@@ -4572,7 +4589,14 @@ export default function App() {
                               data-testid="online-directory-quick-filter-btn"
                               data-filter-mode={directoryQuickFilterMeta.mode}
                               data-tooltip-title={directoryQuickFilterMeta.tooltipTitle}
-                              className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors whitespace-nowrap shrink-0 ${
+                              data-hovered={isQuickFilterHovered ? 'true' : 'false'}
+                              data-hover-scale={
+                                directoryQuickFilterMeta.toggleHoverMotion.hoverScale
+                              }
+                              data-hover-brightness={
+                                directoryQuickFilterMeta.toggleHoverMotion.hoverBrightness
+                              }
+                              className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
                                 directoryQuickFilterMeta.isMyConnectionsOnly
                                   ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
                                   : 'bg-[#050505] text-zinc-200 border-zinc-800 hover:border-zinc-600 hover:text-white'
@@ -4629,7 +4653,7 @@ export default function App() {
                                 </span>
                                 <span>{directoryQuickFilterMeta.toggleStateIndicator}</span>
                               </span>
-                            </button>
+                            </motion.button>
 
                             <AnimatePresence initial={false}>
                               {directoryQuickFilterMeta.showClearButton && (

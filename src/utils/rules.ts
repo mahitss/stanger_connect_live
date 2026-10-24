@@ -8306,6 +8306,48 @@ export function getQuickFilterClearButtonMotionSpec(
   };
 }
 
+export interface QuickFilterToggleHoverMotionSpec {
+  isHovered: boolean;
+  hoverScale: number;
+  tapScale: number;
+  hoverBrightness: string;
+  restBrightness: string;
+  whileHover: { scale: number; filter: string };
+  whileTap: { scale: number };
+  animate: { scale: number; filter: string };
+  transition: {
+    duration: number;
+    ease: 'easeOut';
+  };
+}
+
+export function getQuickFilterToggleHoverMotionSpec(
+  isHovered = false
+): QuickFilterToggleHoverMotionSpec {
+  const hovered = Boolean(isHovered);
+  return {
+    isHovered: hovered,
+    hoverScale: 1.03,
+    tapScale: 0.98,
+    hoverBrightness: 'brightness(1.12)',
+    restBrightness: 'brightness(1)',
+    whileHover: {
+      scale: 1.03,
+      filter: 'brightness(1.12)',
+    },
+    whileTap: {
+      scale: 0.98,
+    },
+    animate: hovered
+      ? { scale: 1.03, filter: 'brightness(1.12)' }
+      : { scale: 1, filter: 'brightness(1)' },
+    transition: {
+      duration: 0.16,
+      ease: 'easeOut',
+    },
+  };
+}
+
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
@@ -8328,6 +8370,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   clearButtonLabel: 'Clear';
   clearButtonAriaLabel: string;
   clearButtonMotion: QuickFilterClearButtonMotionSpec;
+  toggleHoverMotion: QuickFilterToggleHoverMotionSpec;
 }
 
 export function toggleOnlineDirectoryAudienceFilter(
@@ -8346,6 +8389,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   currentUid?: string;
   acceptedPeerUids?: Iterable<string>;
   connectionStatusMap?: Record<string, ConnectionRequestStatusValue>;
+  isHovered?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -8417,5 +8461,6 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     clearButtonLabel: 'Clear',
     clearButtonAriaLabel,
     clearButtonMotion: getQuickFilterClearButtonMotionSpec(isMyConnectionsOnly),
+    toggleHoverMotion: getQuickFilterToggleHoverMotionSpec(Boolean(params.isHovered)),
   };
 }

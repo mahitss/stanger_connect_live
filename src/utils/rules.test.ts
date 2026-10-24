@@ -160,6 +160,7 @@ import {
   toggleOnlineDirectoryAudienceFilter,
   clearOnlineDirectoryAudienceFilter,
   getQuickFilterClearButtonMotionSpec,
+  getQuickFilterToggleHoverMotionSpec,
   getOnlineDirectoryQuickFilterMeta,
 } from './rules.ts';
 
@@ -3065,6 +3066,23 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
     getQuickFilterClearButtonMotionSpec(false).exit.scale,
     0.85
   );
+  assert.deepEqual(everyoneMeta.toggleHoverMotion.whileHover, {
+    scale: 1.03,
+    filter: 'brightness(1.12)',
+  });
+  assert.deepEqual(everyoneMeta.toggleHoverMotion.whileTap, { scale: 0.98 });
+  assert.deepEqual(everyoneMeta.toggleHoverMotion.animate, {
+    scale: 1,
+    filter: 'brightness(1)',
+  });
+  const hoveredSpec = getQuickFilterToggleHoverMotionSpec(true);
+  assert.equal(hoveredSpec.isHovered, true);
+  assert.equal(hoveredSpec.hoverScale, 1.03);
+  assert.equal(hoveredSpec.hoverBrightness, 'brightness(1.12)');
+  assert.deepEqual(hoveredSpec.animate, {
+    scale: 1.03,
+    filter: 'brightness(1.12)',
+  });
 
   // Filtering with 'everyone' returns all 4 peers
   const allFiltered = filterOnlinePeersByDirectoryCriteria(peers, [], {
