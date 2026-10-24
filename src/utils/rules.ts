@@ -8359,7 +8359,10 @@ export interface OnlineDirectoryQuickFilterMeta {
   matchingCount: number;
   everyoneCount: number;
   myConnectionsCount: number;
-  iconName: 'user-check' | 'globe';
+  iconName: 'users' | 'filter';
+  stateIconName: 'users' | 'filter';
+  secondaryStateIconName: 'link' | 'globe';
+  stateIconLabel: 'My Connections (Users & Chain)' | 'All Online (Filter)';
   filterIconName: 'filter';
   toggleStateIndicator: 'ON · My Connections' | 'ALL · Everyone';
   statusDotTone: 'emerald' | 'zinc';
@@ -8448,7 +8451,12 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     matchingCount,
     everyoneCount,
     myConnectionsCount,
-    iconName: isMyConnectionsOnly ? 'user-check' : 'globe',
+    iconName: isMyConnectionsOnly ? 'users' : 'filter',
+    stateIconName: isMyConnectionsOnly ? 'users' : 'filter',
+    secondaryStateIconName: isMyConnectionsOnly ? 'link' : 'globe',
+    stateIconLabel: isMyConnectionsOnly
+      ? 'My Connections (Users & Chain)'
+      : 'All Online (Filter)',
     filterIconName: 'filter',
     toggleStateIndicator: isMyConnectionsOnly
       ? 'ON · My Connections'
