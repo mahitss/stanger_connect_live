@@ -161,6 +161,9 @@ import {
   clearOnlineDirectoryAudienceFilter,
   getQuickFilterClearButtonMotionSpec,
   getQuickFilterToggleHoverMotionSpec,
+  getOnlineDirectoryClearFilterModalMeta,
+  resolveOnlineDirectoryFilterToggleAction,
+  confirmOnlineDirectoryClearFilterReset,
   getOnlineDirectoryQuickFilterMeta,
 } from './rules.ts';
 
@@ -3120,4 +3123,48 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
     myConnInFocus.map((p) => p.uid),
     ['usr_bob']
   );
+
+  // Clear Filter confirmation modal metadata & toggle action prevents accidental data shifts
+  assert.equal(everyoneMeta.hiddenPeersCount, 2);
+  assert.equal(everyoneMeta.requiresClearConfirmationModal, false);
+  assert.equal(everyoneMeta.clearModalMeta.isOpen, false);
+  assert.equal(everyoneMeta.clearModalMeta.hiddenPeersCount, 2);
+
+  assert.equal(connectionsMeta.hiddenPeersCount, 2);
+  assert.equal(connectionsMeta.requiresClearConfirmationModal, true);
+  assert.equal(connectionsMeta.clearModalMeta.hiddenPeersCount, 2);
+  assert.equal(connectionsMeta.clearModalMeta.visiblePeersCount, 2);
+  assert.equal(connectionsMeta.clearModalMeta.totalEveryoneCount, 4);
+  assert.equal(
+    connectionsMeta.clearModalMeta.hiddenPeersSummaryText,
+    '2 peers are currently hidden by the active My Connections filter.'
+  );
+  assert.equal(connectionsMeta.clearModalMeta.confirmActionLabel, 'Confirm Reset');
+  assert.equal(connectionsMeta.clearModalMeta.cancelActionLabel, 'Keep Filter Active');
+  assert.equal(connectionsMeta.clearModalMeta.triggerButtonLabel, 'Clear Filter');
+
+  const openModalMeta = getOnlineDirectoryClearFilterModalMeta({
+    isOpen: true,
+    everyoneCount: 4,
+    myConnectionsCount: 3,
+  });
+  assert.equal(openModalMeta.isOpen, true);
+  assert.equal(openModalMeta.hiddenPeersCount, 1);
+  assert.equal(
+    openModalMeta.hiddenPeersSummaryText,
+    '1 peer is currently hidden by the active My Connections filter.'
+  );
+
+  assert.deepEqual(resolveOnlineDirectoryFilterToggleAction('everyone'), {
+    nextMode: 'my_connections',
+    shouldOpenClearModal: false,
+  });
+  assert.deepEqual(resolveOnlineDirectoryFilterToggleAction('my_connections'), {
+    nextMode: 'my_connections',
+    shouldOpenClearModal: true,
+  });
+  assert.deepEqual(confirmOnlineDirectoryClearFilterReset(), {
+    nextMode: 'everyone',
+    isModalOpen: false,
+  });
 });

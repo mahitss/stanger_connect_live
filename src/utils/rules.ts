@@ -8348,6 +8348,77 @@ export function getQuickFilterToggleHoverMotionSpec(
   };
 }
 
+export interface OnlineDirectoryClearFilterModalMeta {
+  isOpen: boolean;
+  hiddenPeersCount: number;
+  hiddenPeersSummaryText: string;
+  visiblePeersCount: number;
+  totalEveryoneCount: number;
+  modalTitle: string;
+  modalDescription: string;
+  confirmActionLabel: 'Confirm Reset';
+  cancelActionLabel: 'Keep Filter Active';
+  triggerButtonLabel: 'Clear Filter';
+  triggerButtonAriaLabel: string;
+}
+
+export function getOnlineDirectoryClearFilterModalMeta(params: {
+  isOpen: boolean;
+  everyoneCount: number;
+  myConnectionsCount: number;
+}): OnlineDirectoryClearFilterModalMeta {
+  const everyoneCount = Math.max(0, Math.floor(Number(params.everyoneCount) || 0));
+  const myConnectionsCount = Math.max(
+    0,
+    Math.min(everyoneCount, Math.floor(Number(params.myConnectionsCount) || 0))
+  );
+  const hiddenPeersCount = Math.max(0, everyoneCount - myConnectionsCount);
+  const peerNoun = hiddenPeersCount === 1 ? 'peer' : 'peers';
+  const verb = hiddenPeersCount === 1 ? 'is' : 'are';
+
+  return {
+    isOpen: Boolean(params.isOpen),
+    hiddenPeersCount,
+    hiddenPeersSummaryText: `${hiddenPeersCount} ${peerNoun} ${verb} currently hidden by the active My Connections filter.`,
+    visiblePeersCount: myConnectionsCount,
+    totalEveryoneCount: everyoneCount,
+    modalTitle: 'Clear Filter & Reset Online Directory?',
+    modalDescription: `Resetting the filter to Everyone will reveal ${hiddenPeersCount} currently hidden ${peerNoun} (${everyoneCount} total online) and update the directory view.`,
+    confirmActionLabel: 'Confirm Reset',
+    cancelActionLabel: 'Keep Filter Active',
+    triggerButtonLabel: 'Clear Filter',
+    triggerButtonAriaLabel: `Open Clear Filter confirmation modal (${hiddenPeersCount} ${peerNoun} currently hidden)`,
+  };
+}
+
+export function resolveOnlineDirectoryFilterToggleAction(
+  current: OnlineDirectoryAudienceFilter
+): {
+  nextMode: OnlineDirectoryAudienceFilter;
+  shouldOpenClearModal: boolean;
+} {
+  if (current === 'my_connections') {
+    return {
+      nextMode: 'my_connections',
+      shouldOpenClearModal: true,
+    };
+  }
+  return {
+    nextMode: 'my_connections',
+    shouldOpenClearModal: false,
+  };
+}
+
+export function confirmOnlineDirectoryClearFilterReset(): {
+  nextMode: OnlineDirectoryAudienceFilter;
+  isModalOpen: boolean;
+} {
+  return {
+    nextMode: 'everyone',
+    isModalOpen: false,
+  };
+}
+
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
@@ -8359,6 +8430,9 @@ export interface OnlineDirectoryQuickFilterMeta {
   matchingCount: number;
   everyoneCount: number;
   myConnectionsCount: number;
+  hiddenPeersCount: number;
+  requiresClearConfirmationModal: boolean;
+  clearModalMeta: OnlineDirectoryClearFilterModalMeta;
   iconName: 'users' | 'filter';
   stateIconName: 'users' | 'filter';
   secondaryStateIconName: 'link' | 'globe';
@@ -8393,6 +8467,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   acceptedPeerUids?: Iterable<string>;
   connectionStatusMap?: Record<string, ConnectionRequestStatusValue>;
   isHovered?: boolean;
+  isClearModalOpen?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -8416,6 +8491,12 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   }
 
   const isMyConnectionsOnly = mode === 'my_connections';
+  const hiddenPeersCount = Math.max(0, everyoneCount - myConnectionsCount);
+  const clearModalMeta = getOnlineDirectoryClearFilterModalMeta({
+    isOpen: Boolean(params.isClearModalOpen) && isMyConnectionsOnly,
+    everyoneCount,
+    myConnectionsCount,
+  });
   const activeLabel = isMyConnectionsOnly ? 'My Connections' : 'Everyone';
   const nextModeLabel = isMyConnectionsOnly ? 'Everyone' : 'My Connections';
   const matchingCount = isMyConnectionsOnly ? myConnectionsCount : everyoneCount;
@@ -8451,6 +8532,9 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     matchingCount,
     everyoneCount,
     myConnectionsCount,
+    hiddenPeersCount,
+    requiresClearConfirmationModal: isMyConnectionsOnly,
+    clearModalMeta,
     iconName: isMyConnectionsOnly ? 'users' : 'filter',
     stateIconName: isMyConnectionsOnly ? 'users' : 'filter',
     secondaryStateIconName: isMyConnectionsOnly ? 'link' : 'globe',

@@ -155,6 +155,8 @@ import {
   toggleOnlineDirectoryAudienceFilter,
   clearOnlineDirectoryAudienceFilter,
   getQuickFilterToggleHoverMotionSpec,
+  resolveOnlineDirectoryFilterToggleAction,
+  confirmOnlineDirectoryClearFilterReset,
   getOnlineDirectoryQuickFilterMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
@@ -667,6 +669,18 @@ export default function App() {
   const [directoryAudienceFilter, setDirectoryAudienceFilter] =
     useState<OnlineDirectoryAudienceFilter>('everyone');
   const [isQuickFilterHovered, setIsQuickFilterHovered] = useState<boolean>(false);
+  const [isClearFilterModalOpen, setIsClearFilterModalOpen] = useState<boolean>(false);
+  useEffect(() => {
+    if (!isClearFilterModalOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setIsClearFilterModalOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isClearFilterModalOpen]);
   const [userMood, setUserMood] = useState<string | null>(() => {
     try {
       const saved = localStorage.getItem('mr_stranger_user_mood_v1');
@@ -2840,6 +2854,7 @@ export default function App() {
     currentUid: currentIdentity.uid,
     acceptedPeerUids,
     connectionStatusMap: connectionRequestStatusMap,
+    isClearModalOpen: isClearFilterModalOpen,
   });
   const displayedOnlinePeers = filterOnlinePeersByDirectoryCriteria(
     onlinePeers,
@@ -4574,11 +4589,17 @@ export default function App() {
                                 getQuickFilterToggleHoverMotionSpec(isQuickFilterHovered)
                                   .transition
                               }
-                              onClick={() =>
-                                setDirectoryAudienceFilter((prev) =>
-                                  toggleOnlineDirectoryAudienceFilter(prev)
-                                )
-                              }
+                              onClick={() => {
+                                const action = resolveOnlineDirectoryFilterToggleAction(
+                                  directoryAudienceFilter
+                                );
+                                if (action.shouldOpenClearModal) {
+                                  setIsClearFilterModalOpen(true);
+                                } else {
+                                  setDirectoryAudienceFilter(action.nextMode);
+                                  setIsClearFilterModalOpen(false);
+                                }
+                              }}
                               onMouseEnter={() => setIsQuickFilterHovered(true)}
                               onMouseLeave={() => setIsQuickFilterHovered(false)}
                               onFocus={() => setIsQuickFilterHovered(true)}
@@ -4586,9 +4607,25 @@ export default function App() {
                               title={directoryQuickFilterMeta.tooltipDetail}
                               aria-describedby="online-directory-quick-filter-tooltip"
                               aria-pressed={directoryQuickFilterMeta.ariaPressed}
+                              aria-haspopup={
+                                directoryQuickFilterMeta.requiresClearConfirmationModal
+                                  ? 'dialog'
+                                  : undefined
+                              }
+                              aria-expanded={
+                                directoryQuickFilterMeta.requiresClearConfirmationModal
+                                  ? isClearFilterModalOpen
+                                  : undefined
+                              }
                               aria-label={directoryQuickFilterMeta.ariaLabel}
                               data-testid="online-directory-quick-filter-btn"
                               data-filter-mode={directoryQuickFilterMeta.mode}
+                              data-hidden-peers-count={directoryQuickFilterMeta.hiddenPeersCount}
+                              data-requires-clear-modal={
+                                directoryQuickFilterMeta.requiresClearConfirmationModal
+                                  ? 'true'
+                                  : 'false'
+                              }
                               data-tooltip-title={directoryQuickFilterMeta.tooltipTitle}
                               data-hovered={isQuickFilterHovered ? 'true' : 'false'}
                               data-hover-scale={
@@ -4680,25 +4717,183 @@ export default function App() {
                                   animate={directoryQuickFilterMeta.clearButtonMotion.animate}
                                   exit={directoryQuickFilterMeta.clearButtonMotion.exit}
                                   transition={directoryQuickFilterMeta.clearButtonMotion.transition}
-                                  onClick={() =>
-                                    setDirectoryAudienceFilter(
-                                      clearOnlineDirectoryAudienceFilter()
-                                    )
-                                  }
-                                  title={directoryQuickFilterMeta.clearButtonAriaLabel}
-                                  aria-label={directoryQuickFilterMeta.clearButtonAriaLabel}
+                                  onClick={() => setIsClearFilterModalOpen(true)}
+                                  title={directoryQuickFilterMeta.clearModalMeta.triggerButtonAriaLabel}
+                                  aria-label={directoryQuickFilterMeta.clearModalMeta.triggerButtonAriaLabel}
+                                  aria-haspopup="dialog"
+                                  aria-expanded={isClearFilterModalOpen}
                                   data-testid="online-directory-quick-filter-clear-btn"
+                                  data-hidden-peers-count={directoryQuickFilterMeta.hiddenPeersCount}
                                   data-motion-exit-scale={
                                     directoryQuickFilterMeta.clearButtonMotion.exit.scale
                                   }
-                                  className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-md border border-zinc-700/90 bg-zinc-900/90 text-zinc-200 hover:bg-zinc-800 hover:text-white hover:border-zinc-500 whitespace-nowrap shrink-0 origin-center"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-zinc-700/90 bg-zinc-900/90 text-zinc-200 hover:bg-zinc-800 hover:text-white hover:border-zinc-500 whitespace-nowrap shrink-0 origin-center"
                                 >
-                                  <X className="w-3 h-3 shrink-0" />
-                                  <span>{directoryQuickFilterMeta.clearButtonLabel}</span>
+                                  <RotateCcw className="w-3 h-3 shrink-0 text-amber-400" />
+                                  <span>{directoryQuickFilterMeta.clearModalMeta.triggerButtonLabel}</span>
+                                  <span
+                                    data-testid="clear-filter-trigger-hidden-badge"
+                                    className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-amber-300"
+                                  >
+                                    {directoryQuickFilterMeta.hiddenPeersCount} hidden
+                                  </span>
                                 </motion.button>
                               )}
                             </AnimatePresence>
                           </div>
+
+                          <AnimatePresence>
+                            {isClearFilterModalOpen && directoryQuickFilterMeta.isMyConnectionsOnly && (
+                              <motion.div
+                                key="online-directory-clear-filter-modal-backdrop"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.16, ease: 'easeOut' }}
+                                onClick={() => setIsClearFilterModalOpen(false)}
+                                data-testid="online-directory-clear-filter-modal-overlay"
+                                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm"
+                              >
+                                <motion.div
+                                  id="online-directory-clear-filter-modal"
+                                  role="dialog"
+                                  aria-modal="true"
+                                  aria-labelledby="online-directory-clear-filter-modal-title"
+                                  aria-describedby="online-directory-clear-filter-modal-desc"
+                                  data-testid="online-directory-clear-filter-modal"
+                                  data-hidden-peers-count={directoryQuickFilterMeta.hiddenPeersCount}
+                                  initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                                  transition={{ duration: 0.16, ease: 'easeOut' }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full max-w-md rounded-xl bg-[#0A0A0C] border border-zinc-800 shadow-2xl p-5 space-y-4 text-left"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-400/40 text-amber-300 shrink-0">
+                                        <Filter className="w-4 h-4" />
+                                      </span>
+                                      <div>
+                                        <h4
+                                          id="online-directory-clear-filter-modal-title"
+                                          data-testid="clear-filter-modal-title"
+                                          className="text-sm font-bold text-white"
+                                        >
+                                          {directoryQuickFilterMeta.clearModalMeta.modalTitle}
+                                        </h4>
+                                        <p className="text-[11px] font-mono text-zinc-400">
+                                          Prevent accidental directory shifts
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsClearFilterModalOpen(false)}
+                                      aria-label="Close Clear Filter modal"
+                                      data-testid="clear-filter-modal-close-btn"
+                                      className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+
+                                  <div
+                                    id="online-directory-clear-filter-hidden-count"
+                                    data-testid="clear-filter-modal-hidden-count"
+                                    data-hidden-count={directoryQuickFilterMeta.hiddenPeersCount}
+                                    className="p-3.5 rounded-lg bg-[#050505] border border-amber-500/30 space-y-2.5"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <span className="text-xs font-semibold text-amber-300">
+                                        Currently Hidden Peers
+                                      </span>
+                                      <span
+                                        data-testid="clear-filter-modal-hidden-badge"
+                                        className="px-2 py-0.5 rounded bg-amber-500/15 border border-amber-400/40 text-xs font-mono font-bold text-amber-200"
+                                      >
+                                        {directoryQuickFilterMeta.hiddenPeersCount} hidden
+                                      </span>
+                                    </div>
+                                    <p className="text-xs text-zinc-300 leading-relaxed">
+                                      {directoryQuickFilterMeta.clearModalMeta.hiddenPeersSummaryText}
+                                    </p>
+                                    <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                                      <div className="p-2 rounded bg-zinc-900/90 border border-zinc-800">
+                                        <div className="text-[10px] font-mono text-zinc-400">
+                                          Showing Now
+                                        </div>
+                                        <div
+                                          data-testid="clear-filter-modal-visible-count"
+                                          className="text-sm font-bold text-emerald-300 font-mono"
+                                        >
+                                          {directoryQuickFilterMeta.myConnectionsCount}
+                                        </div>
+                                      </div>
+                                      <div className="p-2 rounded bg-amber-500/10 border border-amber-500/30">
+                                        <div className="text-[10px] font-mono text-amber-300">
+                                          Hidden Peers
+                                        </div>
+                                        <div
+                                          data-testid="clear-filter-modal-hidden-metric"
+                                          className="text-sm font-bold text-amber-200 font-mono"
+                                        >
+                                          {directoryQuickFilterMeta.hiddenPeersCount}
+                                        </div>
+                                      </div>
+                                      <div className="p-2 rounded bg-zinc-900/90 border border-zinc-800">
+                                        <div className="text-[10px] font-mono text-zinc-400">
+                                          After Reset
+                                        </div>
+                                        <div
+                                          data-testid="clear-filter-modal-total-count"
+                                          className="text-sm font-bold text-white font-mono"
+                                        >
+                                          {directoryQuickFilterMeta.everyoneCount}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <p
+                                    id="online-directory-clear-filter-modal-desc"
+                                    data-testid="clear-filter-modal-description"
+                                    className="text-xs text-zinc-400 leading-relaxed"
+                                  >
+                                    {directoryQuickFilterMeta.clearModalMeta.modalDescription}
+                                  </p>
+
+                                  <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-800/80">
+                                    <button
+                                      id="online-directory-cancel-reset-btn"
+                                      type="button"
+                                      onClick={() => setIsClearFilterModalOpen(false)}
+                                      data-testid="online-directory-cancel-reset-btn"
+                                      className="px-3.5 py-2 text-xs font-semibold rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 transition-colors whitespace-nowrap"
+                                    >
+                                      {directoryQuickFilterMeta.clearModalMeta.cancelActionLabel}
+                                    </button>
+                                    <button
+                                      id="online-directory-confirm-reset-btn"
+                                      type="button"
+                                      onClick={() => {
+                                        const reset = confirmOnlineDirectoryClearFilterReset();
+                                        setDirectoryAudienceFilter(reset.nextMode);
+                                        setIsClearFilterModalOpen(reset.isModalOpen);
+                                      }}
+                                      data-testid="online-directory-confirm-reset-btn"
+                                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-md bg-white hover:bg-zinc-200 text-black transition-colors whitespace-nowrap"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                                      <span>
+                                        {directoryQuickFilterMeta.clearModalMeta.confirmActionLabel}
+                                      </span>
+                                    </button>
+                                  </div>
+                                </motion.div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
 
                           <span
                             data-testid="online-directory-quick-filter-hint"
