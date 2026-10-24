@@ -61,7 +61,10 @@ import {
   buildWeeklyProductivityDistribution,
   APP_LOGO_URL,
   APP_BRAND_NAME,
+  ONLINE_MOOD_CATEGORIES,
   ONLINE_MOOD_PRESETS,
+  groupOnlineMoodPresetsByCategory,
+  parseOnlineDirectoryMoodFilterSelection,
   normalizeAndValidatePeerMood,
   getOnlinePeerMoodMeta,
   summarizeOnlineDirectoryMoods,
@@ -3169,4 +3172,81 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
     nextMode: 'everyone',
     isModalOpen: false,
   });
+
+  // Mood presets are grouped into 'Productive', 'Social', and 'Away' categories
+  assert.deepEqual(ONLINE_MOOD_CATEGORIES, ['Productive', 'Social', 'Away']);
+  const moodSummary = summarizeOnlineDirectoryMoods([
+    ...peers,
+    { uid: 'usr_eva', mood: 'Coffee Break' },
+  ]);
+  assert.deepEqual(moodSummary.countsByCategory, {
+    Productive: 3, // Alice (Deep Work), Bob (Pair Programming), Dave (Deep Work)
+    Social: 1, // Carol (Brainstorming)
+    Away: 1, // Eva (Coffee Break)
+  });
+  assert.equal(moodSummary.groupedPresets.length, 3);
+  assert.equal(moodSummary.groupedPresets[0].category, 'Productive');
+  assert.deepEqual(
+    moodSummary.groupedPresets[0].presets.map((p) => p.label),
+    ['Deep Work', 'Pair Programming']
+  );
+  assert.equal(moodSummary.groupedPresets[0].activeCount, 3);
+  assert.equal(moodSummary.groupedPresets[1].category, 'Social');
+  assert.deepEqual(
+    moodSummary.groupedPresets[1].presets.map((p) => p.label),
+    ['Brainstorming', 'Quick Questions']
+  );
+  assert.equal(moodSummary.groupedPresets[1].activeCount, 1);
+  assert.equal(moodSummary.groupedPresets[2].category, 'Away');
+  assert.deepEqual(
+    moodSummary.groupedPresets[2].presets.map((p) => p.label),
+    ['Coffee Break']
+  );
+  assert.equal(moodSummary.groupedPresets[2].activeCount, 1);
+
+  assert.deepEqual(parseOnlineDirectoryMoodFilterSelection('category:Productive'), {
+    type: 'category',
+    category: 'Productive',
+    presetLabel: null,
+  });
+  assert.deepEqual(parseOnlineDirectoryMoodFilterSelection('Social'), {
+    type: 'category',
+    category: 'Social',
+    presetLabel: null,
+  });
+  assert.deepEqual(parseOnlineDirectoryMoodFilterSelection('Deep Work'), {
+    type: 'preset',
+    category: null,
+    presetLabel: 'Deep Work',
+  });
+
+  const productiveFiltered = filterOnlinePeersByDirectoryCriteria(
+    [...peers, { uid: 'usr_eva', currentMode: 'hub', mood: 'Coffee Break' }],
+    [],
+    { moodFilter: 'category:Productive' }
+  );
+  assert.deepEqual(
+    productiveFiltered.map((p) => p.uid),
+    ['usr_alice', 'usr_bob', 'usr_dave']
+  );
+
+  const socialFiltered = filterOnlinePeersByDirectoryCriteria(
+    [...peers, { uid: 'usr_eva', currentMode: 'hub', mood: 'Coffee Break' }],
+    [],
+    { moodFilter: 'category:Social' }
+  );
+  assert.deepEqual(
+    socialFiltered.map((p) => p.uid),
+    ['usr_carol']
+  );
+
+  const awayFiltered = filterOnlinePeersByDirectoryCriteria(
+    [...peers, { uid: 'usr_eva', currentMode: 'hub', mood: 'Coffee Break' }],
+    [],
+    { moodFilter: 'category:Away' }
+  );
+  assert.deepEqual(
+    awayFiltered.map((p) => p.uid),
+    ['usr_eva']
+  );
 });

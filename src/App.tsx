@@ -88,7 +88,10 @@ import {
   getOnlinePeerFocusStatus,
   summarizeOnlineDirectoryFocus,
   filterOnlinePeersByFocus,
+  ONLINE_MOOD_CATEGORIES,
   ONLINE_MOOD_PRESETS,
+  groupOnlineMoodPresetsByCategory,
+  parseOnlineDirectoryMoodFilterSelection,
   normalizeAndValidatePeerMood,
   getOnlinePeerMoodMeta,
   summarizeOnlineDirectoryMoods,
@@ -4458,32 +4461,46 @@ export default function App() {
                       </div>
 
                       <div
-                        className="flex flex-wrap items-center gap-1.5"
+                        className="flex flex-wrap items-center gap-2.5"
                         role="group"
-                        aria-label="Select your live Mood indicator"
+                        aria-label="Select your live Mood indicator grouped by category"
+                        data-testid="mood-setter-category-groups"
                       >
-                        {ONLINE_MOOD_PRESETS.map((preset) => {
-                          const isSelected =
-                            myMoodMeta.hasMood &&
-                            myMoodMeta.label?.toLowerCase() === preset.label.toLowerCase();
-                          return (
-                            <button
-                              key={preset.id}
-                              type="button"
-                              onClick={() => handleUpdateUserMood(preset.label)}
-                              aria-pressed={isSelected}
-                              data-testid={`mood-preset-${preset.id}`}
-                              title={preset.description}
-                              className={`px-2.5 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
-                                isSelected
-                                  ? 'bg-white text-black border-white'
-                                  : 'bg-[#0A0A0C] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
-                              }`}
-                            >
-                              {preset.label}
-                            </button>
-                          );
-                        })}
+                        {directoryMoodSummary.groupedPresets.map((group) => (
+                          <div
+                            key={group.category}
+                            data-testid={`mood-setter-group-${group.category.toLowerCase()}`}
+                            data-mood-category={group.category}
+                            className="inline-flex flex-wrap items-center gap-1.5 px-2 py-1 rounded-md bg-[#0A0A0C] border border-zinc-800/90"
+                          >
+                            <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400 pr-1 border-r border-zinc-800">
+                              {group.label}
+                            </span>
+                            {group.presets.map((preset) => {
+                              const isSelected =
+                                myMoodMeta.hasMood &&
+                                myMoodMeta.label?.toLowerCase() === preset.label.toLowerCase();
+                              return (
+                                <button
+                                  key={preset.id}
+                                  type="button"
+                                  onClick={() => handleUpdateUserMood(preset.label)}
+                                  aria-pressed={isSelected}
+                                  data-testid={`mood-preset-${preset.id}`}
+                                  data-mood-category={preset.category}
+                                  title={`${group.label} · ${preset.description}`}
+                                  className={`px-2.5 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
+                                    isSelected
+                                      ? 'bg-white text-black border-white'
+                                      : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                                  }`}
+                                >
+                                  {preset.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        ))}
                       </div>
 
                       <form
@@ -4947,20 +4964,87 @@ export default function App() {
                           </div>
                         </div>
 
+                        <div
+                          id="online-directory-mood-category-filter"
+                          role="group"
+                          aria-label="Filter online peers by Mood category (Productive, Social, Away)"
+                          data-testid="online-directory-mood-category-groups"
+                          className="inline-flex flex-wrap items-center gap-1 p-1 bg-[#050505] border border-zinc-800 rounded-md"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setDirectoryMoodFilter('all')}
+                            aria-pressed={directoryMoodFilter === 'all'}
+                            data-testid="mood-category-filter-all"
+                            className={`px-2 py-1 text-[11px] font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                              directoryMoodFilter === 'all'
+                                ? 'bg-white text-black'
+                                : 'text-zinc-400 hover:text-white'
+                            }`}
+                          >
+                            All Moods ({onlinePeers.length})
+                          </button>
+                          {directoryMoodSummary.groupedPresets.map((group) => {
+                            const isCatActive =
+                              directoryMoodFilter === group.categoryFilterValue ||
+                              directoryMoodFilter.toLowerCase() ===
+                                group.category.toLowerCase();
+                            return (
+                              <button
+                                key={group.category}
+                                type="button"
+                                onClick={() =>
+                                  setDirectoryMoodFilter(
+                                    isCatActive ? 'all' : group.categoryFilterValue
+                                  )
+                                }
+                                aria-pressed={isCatActive}
+                                title={`${group.label}: ${group.presets
+                                  .map((p) => p.label)
+                                  .join(', ')} — ${group.description}`}
+                                data-testid={`mood-category-filter-${group.category.toLowerCase()}`}
+                                data-mood-category={group.category}
+                                data-category-count={group.activeCount}
+                                className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
+                                  isCatActive
+                                    ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/60'
+                                    : 'text-zinc-300 hover:text-white hover:bg-zinc-900'
+                                }`}
+                              >
+                                <span>{group.label}</span>
+                                <span className="font-mono text-[10px] opacity-80">
+                                  ({group.activeCount})
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+
                         <select
                           id="online-directory-mood-select"
-                          aria-label="Filter online peers by Mood indicator"
+                          aria-label="Filter online peers by Mood indicator or category"
                           data-testid="online-directory-mood-filter"
                           value={directoryMoodFilter}
                           onChange={(e) => setDirectoryMoodFilter(e.target.value)}
                           className="px-2.5 py-1.5 text-xs font-semibold bg-[#050505] border border-zinc-800 rounded-md text-zinc-200 focus:outline-none focus:border-zinc-500"
                         >
                           <option value="all">All Moods ({onlinePeers.length})</option>
-                          {ONLINE_MOOD_PRESETS.map((preset) => (
-                            <option key={preset.id} value={preset.label}>
-                              Mood: {preset.label} (
-                              {directoryMoodSummary.countsByMood[preset.label] || 0})
-                            </option>
+                          {directoryMoodSummary.groupedPresets.map((group) => (
+                            <optgroup
+                              key={group.category}
+                              label={`${group.label} (${group.activeCount})`}
+                              data-testid={`mood-filter-optgroup-${group.category.toLowerCase()}`}
+                            >
+                              <option value={group.categoryFilterValue}>
+                                All {group.label} Moods ({group.activeCount})
+                              </option>
+                              {group.presets.map((preset) => (
+                                <option key={preset.id} value={preset.label}>
+                                  {group.label} · {preset.label} (
+                                  {directoryMoodSummary.countsByMood[preset.label] || 0})
+                                </option>
+                              ))}
+                            </optgroup>
                           ))}
                         </select>
                       </div>

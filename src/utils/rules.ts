@@ -632,12 +632,20 @@ export function filterOnlinePeersByFocus<T extends OnlinePeerFocusInput>(
 
 // --- Online Directory 'Mood' Indicator Logic (Real-Time Peer Status) ---
 export type OnlineMoodTone = 'emerald' | 'amber' | 'sky' | 'violet' | 'zinc';
+export type OnlineMoodCategory = 'Productive' | 'Social' | 'Away';
+
+export const ONLINE_MOOD_CATEGORIES: readonly OnlineMoodCategory[] = [
+  'Productive',
+  'Social',
+  'Away',
+] as const;
 
 export interface OnlinePeerMoodOption {
   id: string;
   label: string;
   description: string;
   tone: OnlineMoodTone;
+  category: OnlineMoodCategory;
 }
 
 export const ONLINE_MOOD_PRESETS: readonly OnlinePeerMoodOption[] = [
@@ -646,32 +654,108 @@ export const ONLINE_MOOD_PRESETS: readonly OnlinePeerMoodOption[] = [
     label: 'Deep Work',
     description: 'Heads-down execution — minimal interruptions',
     tone: 'emerald',
+    category: 'Productive',
   },
   {
     id: 'brainstorming',
     label: 'Brainstorming',
     description: 'Open to creative ideas & architecture discussions',
     tone: 'amber',
+    category: 'Social',
   },
   {
     id: 'quick_questions',
     label: 'Quick Questions',
     description: 'Available for fast unblocking & short pings',
     tone: 'sky',
+    category: 'Social',
   },
   {
     id: 'pair_programming',
     label: 'Pair Programming',
     description: 'Looking to collaborate on code or problem solving',
     tone: 'violet',
+    category: 'Productive',
   },
   {
     id: 'coffee_break',
     label: 'Coffee Break',
     description: 'Recharging — open to casual conversation',
     tone: 'zinc',
+    category: 'Away',
   },
 ] as const;
+
+export interface OnlineMoodCategoryGroup {
+  category: OnlineMoodCategory;
+  categoryFilterValue: `category:${OnlineMoodCategory}`;
+  label: string;
+  description: string;
+  presets: OnlinePeerMoodOption[];
+  activeCount: number;
+}
+
+export function resolveMoodCategoryForText(rawLabel: string | null | undefined): OnlineMoodCategory {
+  const lower = String(rawLabel || '').trim().toLowerCase();
+  const preset = ONLINE_MOOD_PRESETS.find(
+    (p) => p.label.toLowerCase() === lower || p.id === lower
+  );
+  if (preset) return preset.category;
+  if (
+    lower.includes('break') ||
+    lower.includes('away') ||
+    lower.includes('afk') ||
+    lower.includes('lunch') ||
+    lower.includes('offline') ||
+    lower.includes('rest')
+  ) {
+    return 'Away';
+  }
+  if (
+    lower.includes('work') ||
+    lower.includes('focus') ||
+    lower.includes('study') ||
+    lower.includes('code') ||
+    lower.includes('pair') ||
+    lower.includes('debug')
+  ) {
+    return 'Productive';
+  }
+  return 'Social';
+}
+
+export function groupOnlineMoodPresetsByCategory(
+  countsByMood: Record<string, number> = {},
+  countsByCategory: Partial<Record<OnlineMoodCategory, number>> = {}
+): OnlineMoodCategoryGroup[] {
+  const categoryDescriptions: Record<OnlineMoodCategory, string> = {
+    Productive: 'Focused execution & technical collaboration',
+    Social: 'Open discussions, brainstorming & quick unblocking',
+    Away: 'Recharging, stepping away & coffee breaks',
+  };
+
+  return ONLINE_MOOD_CATEGORIES.map((category) => {
+    const presets = ONLINE_MOOD_PRESETS.filter((p) => p.category === category);
+    const presetSum = presets.reduce(
+      (sum, p) => sum + (Number(countsByMood[p.label]) || 0),
+      0
+    );
+    const explicitCategoryCount = countsByCategory[category];
+    const activeCount =
+      typeof explicitCategoryCount === 'number'
+        ? Math.max(presetSum, explicitCategoryCount)
+        : presetSum;
+
+    return {
+      category,
+      categoryFilterValue: `category:${category}`,
+      label: category,
+      description: categoryDescriptions[category],
+      presets,
+      activeCount,
+    };
+  });
+}
 
 export const MAX_PEER_MOOD_LENGTH = 36;
 
@@ -724,6 +808,7 @@ export interface OnlinePeerMoodMeta {
   description: string;
   tone: OnlineMoodTone;
   isPreset: boolean;
+  category: OnlineMoodCategory | null;
 }
 
 export function getOnlinePeerMoodMeta(rawMood?: string | null): OnlinePeerMoodMeta {
@@ -735,6 +820,7 @@ export function getOnlinePeerMoodMeta(rawMood?: string | null): OnlinePeerMoodMe
       description: 'No active mood set',
       tone: 'zinc',
       isPreset: false,
+      category: null,
     };
   }
 
@@ -748,6 +834,7 @@ export function getOnlinePeerMoodMeta(rawMood?: string | null): OnlinePeerMoodMe
       description: preset.description,
       tone: preset.tone,
       isPreset: true,
+      category: preset.category,
     };
   }
 
@@ -757,6 +844,7 @@ export function getOnlinePeerMoodMeta(rawMood?: string | null): OnlinePeerMoodMe
     description: 'Custom status mood shared with online peers',
     tone: 'sky',
     isPreset: false,
+    category: resolveMoodCategoryForText(check.mood),
   };
 }
 
@@ -765,9 +853,16 @@ export function summarizeOnlineDirectoryMoods(
 ): {
   activeMoodCount: number;
   countsByMood: Record<string, number>;
+  countsByCategory: Record<OnlineMoodCategory, number>;
+  groupedPresets: OnlineMoodCategoryGroup[];
   byUid: Record<string, OnlinePeerMoodMeta>;
 } {
   const countsByMood: Record<string, number> = {};
+  const countsByCategory: Record<OnlineMoodCategory, number> = {
+    Productive: 0,
+    Social: 0,
+    Away: 0,
+  };
   const byUid: Record<string, OnlinePeerMoodMeta> = {};
   let activeMoodCount = 0;
 
@@ -779,17 +874,51 @@ export function summarizeOnlineDirectoryMoods(
     if (meta.hasMood && meta.label) {
       activeMoodCount += 1;
       countsByMood[meta.label] = (countsByMood[meta.label] || 0) + 1;
+      if (meta.category) {
+        countsByCategory[meta.category] = (countsByCategory[meta.category] || 0) + 1;
+      }
     }
   }
+
+  const groupedPresets = groupOnlineMoodPresetsByCategory(
+    countsByMood,
+    countsByCategory
+  );
 
   return {
     activeMoodCount,
     countsByMood,
+    countsByCategory,
+    groupedPresets,
     byUid,
   };
 }
 
 export type OnlineDirectoryAudienceFilter = 'everyone' | 'my_connections';
+
+export function parseOnlineDirectoryMoodFilterSelection(
+  rawFilter?: string | null
+): {
+  type: 'all' | 'category' | 'preset';
+  category: OnlineMoodCategory | null;
+  presetLabel: string | null;
+} {
+  const trimmed = String(rawFilter || '').trim();
+  if (!trimmed || trimmed.toLowerCase() === 'all') {
+    return { type: 'all', category: null, presetLabel: null };
+  }
+  const lower = trimmed.toLowerCase();
+  const categoryPrefix = lower.startsWith('category:')
+    ? lower.slice('category:'.length).trim()
+    : lower;
+  const matchedCategory = ONLINE_MOOD_CATEGORIES.find(
+    (c) => c.toLowerCase() === categoryPrefix
+  );
+  if (matchedCategory) {
+    return { type: 'category', category: matchedCategory, presetLabel: null };
+  }
+  return { type: 'preset', category: null, presetLabel: trimmed };
+}
 
 export function filterOnlinePeersByDirectoryCriteria<
   T extends OnlinePeerFocusInput & { mood?: string | null }
@@ -799,6 +928,7 @@ export function filterOnlinePeersByDirectoryCriteria<
   options: {
     onlyInFocus?: boolean;
     moodFilter?: string | null;
+    moodCategoryFilter?: OnlineMoodCategory | 'all' | null;
     audienceFilter?: OnlineDirectoryAudienceFilter;
     currentUid?: string;
     acceptedPeerUids?: Iterable<string>;
@@ -808,12 +938,15 @@ export function filterOnlinePeersByDirectoryCriteria<
   const {
     onlyInFocus = false,
     moodFilter = null,
+    moodCategoryFilter = null,
     audienceFilter = 'everyone',
     currentUid = '',
     acceptedPeerUids,
     connectionStatusMap,
   } = options;
-  const normalizedMoodFilter = moodFilter ? String(moodFilter).trim().toLowerCase() : '';
+  const parsedMoodFilter = parseOnlineDirectoryMoodFilterSelection(moodFilter);
+  const explicitCategory =
+    moodCategoryFilter && moodCategoryFilter !== 'all' ? moodCategoryFilter : null;
   const cleanCurrentUid = String(currentUid || '').trim();
   const acceptedSet = acceptedPeerUids ? new Set(acceptedPeerUids) : new Set<string>();
 
@@ -832,10 +965,21 @@ export function filterOnlinePeersByDirectoryCriteria<
     if (onlyInFocus && !getOnlinePeerFocusStatus(peer, studyDesks).isInFocus) {
       return false;
     }
-    if (normalizedMoodFilter && normalizedMoodFilter !== 'all') {
+    if (explicitCategory) {
+      const peerMood = getOnlinePeerMoodMeta(peer.mood);
+      if (!peerMood.hasMood || peerMood.category !== explicitCategory) return false;
+    }
+    if (parsedMoodFilter.type === 'category' && parsedMoodFilter.category) {
+      const peerMood = getOnlinePeerMoodMeta(peer.mood);
+      if (!peerMood.hasMood || peerMood.category !== parsedMoodFilter.category) {
+        return false;
+      }
+    } else if (parsedMoodFilter.type === 'preset' && parsedMoodFilter.presetLabel) {
       const peerMood = getOnlinePeerMoodMeta(peer.mood);
       if (!peerMood.hasMood || !peerMood.label) return false;
-      if (peerMood.label.toLowerCase() !== normalizedMoodFilter) return false;
+      if (peerMood.label.toLowerCase() !== parsedMoodFilter.presetLabel.toLowerCase()) {
+        return false;
+      }
     }
     return true;
   });
