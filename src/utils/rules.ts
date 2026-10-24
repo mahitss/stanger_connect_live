@@ -8296,6 +8296,8 @@ export interface OnlineDirectoryQuickFilterMeta {
   toggleStateIndicator: 'ON · My Connections' | 'ALL · Everyone';
   statusDotTone: 'emerald' | 'zinc';
   toggleThumbPosition: 'right' | 'left';
+  tooltipTitle: 'Currently showing only my connections' | 'Currently showing everyone';
+  tooltipDetail: string;
 }
 
 export function toggleOnlineDirectoryAudienceFilter(
@@ -8345,6 +8347,16 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     ? `Quick Filter active: My Connections (${myConnectionsCount}). Activate to switch to Everyone (${everyoneCount}).`
     : `Quick Filter active: Everyone (${everyoneCount}). Activate to filter to My Connections (${myConnectionsCount}).`;
 
+  const tooltipTitle = isMyConnectionsOnly
+    ? 'Currently showing only my connections'
+    : 'Currently showing everyone';
+
+  const tooltipDetail = isMyConnectionsOnly
+    ? `Currently showing only my connections (${myConnectionsCount} accepted ${
+        myConnectionsCount === 1 ? 'peer' : 'peers'
+      }). Click to switch to Everyone (${everyoneCount}).`
+    : `Currently showing everyone (${everyoneCount} online). Click to filter to My Connections (${myConnectionsCount}).`;
+
   return {
     mode,
     isMyConnectionsOnly,
@@ -8363,6 +8375,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       : 'ALL · Everyone',
     statusDotTone: isMyConnectionsOnly ? 'emerald' : 'zinc',
     toggleThumbPosition: isMyConnectionsOnly ? 'right' : 'left',
+    tooltipTitle,
+    tooltipDetail,
   };
 }
-

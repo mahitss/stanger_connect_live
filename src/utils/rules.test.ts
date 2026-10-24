@@ -3013,6 +3013,11 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
   assert.equal(everyoneMeta.toggleStateIndicator, 'ALL · Everyone');
   assert.equal(everyoneMeta.statusDotTone, 'zinc');
   assert.equal(everyoneMeta.toggleThumbPosition, 'left');
+  assert.equal(everyoneMeta.tooltipTitle, 'Currently showing everyone');
+  assert.equal(
+    everyoneMeta.tooltipDetail,
+    'Currently showing everyone (4 online). Click to filter to My Connections (2).'
+  );
 
   const connectionsMeta = getOnlineDirectoryQuickFilterMeta({
     mode: 'my_connections',
@@ -3030,6 +3035,11 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
   assert.equal(connectionsMeta.toggleStateIndicator, 'ON · My Connections');
   assert.equal(connectionsMeta.statusDotTone, 'emerald');
   assert.equal(connectionsMeta.toggleThumbPosition, 'right');
+  assert.equal(connectionsMeta.tooltipTitle, 'Currently showing only my connections');
+  assert.equal(
+    connectionsMeta.tooltipDetail,
+    'Currently showing only my connections (2 accepted peers). Click to switch to Everyone (4).'
+  );
 
   // Filtering with 'everyone' returns all 4 peers
   const allFiltered = filterOnlinePeersByDirectoryCriteria(peers, [], {
