@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { motion } from 'motion/react';
 import {
   Flame,
   Target,
@@ -16,10 +17,15 @@ import {
   EvaluatedUserBadge,
   StreakFreezeStatusSummary,
   UserBadgeEvaluationSummary,
+  detectNewlyUnlockedBadgeIds,
+  getBadgeEntranceMotionSpec,
 } from '../utils/rules';
 
 export interface AchievementBadgeChipProps {
   badge: EvaluatedUserBadge;
+  index?: number;
+  previouslyUnlockedIds?: readonly BadgeId[] | null;
+  newlyUnlockedOverride?: boolean;
   compact?: boolean;
   showProgressWhenLocked?: boolean;
   testId?: string;
@@ -49,6 +55,9 @@ export const AchievementBadgeIcon: React.FC<{
 
 export const AchievementBadgeChip: React.FC<AchievementBadgeChipProps> = ({
   badge,
+  index = 0,
+  previouslyUnlockedIds = null,
+  newlyUnlockedOverride,
   compact = false,
   showProgressWhenLocked = false,
   testId,
@@ -56,6 +65,14 @@ export const AchievementBadgeChip: React.FC<AchievementBadgeChipProps> = ({
   if (!badge.unlocked && !showProgressWhenLocked) {
     return null;
   }
+
+  const motionSpec = getBadgeEntranceMotionSpec({
+    badgeId: badge.id,
+    index,
+    unlocked: badge.unlocked,
+    previouslyUnlockedIds,
+    newlyUnlockedOverride,
+  });
 
   const toneClasses = !badge.unlocked
     ? 'border-zinc-800 bg-[#050505] text-zinc-500'
@@ -66,13 +83,20 @@ export const AchievementBadgeChip: React.FC<AchievementBadgeChipProps> = ({
     : 'border-sky-500/40 bg-sky-500/10 text-sky-300';
 
   return (
-    <span
+    <motion.span
+      key={motionSpec.motionKey}
+      initial={motionSpec.initial}
+      animate={motionSpec.animate}
+      transition={motionSpec.transition}
+      whileHover={{ scale: 1.04 }}
       data-testid={testId || `achievement-badge-${badge.id}`}
       data-badge-id={badge.id}
       data-unlocked={badge.unlocked ? 'true' : 'false'}
+      data-motion-mode={motionSpec.animationMode}
+      data-motion-key={motionSpec.motionKey}
       title={`${badge.title}: ${badge.description} (${badge.statusLabel})`}
       aria-label={`${badge.title} badge — ${badge.unlocked ? 'Unlocked' : 'Locked'}: ${badge.statusLabel}`}
-      className={`inline-flex items-center gap-1 rounded border font-mono font-semibold whitespace-nowrap shrink-0 ${
+      className={`inline-flex items-center gap-1 rounded border font-mono font-semibold whitespace-nowrap shrink-0 origin-center ${
         compact ? 'px-1.5 py-0.5 text-[10px]' : 'px-2 py-0.5 text-[11px]'
       } ${toneClasses}`}
     >
@@ -87,7 +111,7 @@ export const AchievementBadgeChip: React.FC<AchievementBadgeChipProps> = ({
           ({badge.currentValue}/{badge.targetValue})
         </span>
       )}
-    </span>
+    </motion.span>
   );
 };
 
@@ -145,6 +169,27 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
     message: string;
   } | null>(null);
   const [showNoteComposer, setShowNoteComposer] = useState(false);
+
+  // Track previously unlocked badges so newly unlocked badges trigger celebratory Framer Motion scale-in
+  const prevUnlockedIdsRef = useRef<BadgeId[]>(
+    badgeSummary.badges.filter((b) => b.unlocked).map((b) => b.id)
+  );
+  const [newlyUnlockedBadgeIds, setNewlyUnlockedBadgeIds] = useState<BadgeId[]>([]);
+
+  useEffect(() => {
+    const freshlyUnlocked = detectNewlyUnlockedBadgeIds(
+      prevUnlockedIdsRef.current,
+      badgeSummary.badges
+    );
+    if (freshlyUnlocked.length > 0) {
+      setNewlyUnlockedBadgeIds((prev) =>
+        Array.from(new Set([...prev, ...freshlyUnlocked]))
+      );
+    }
+    prevUnlockedIdsRef.current = badgeSummary.badges
+      .filter((b) => b.unlocked)
+      .map((b) => b.id);
+  }, [badgeSummary.badges]);
 
   const handleNoteFormSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -237,10 +282,14 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
           className="flex flex-wrap items-center gap-2"
           data-testid="profile-earned-badges-strip"
         >
-          {badgeSummary.badges.map((badge) => (
+          {badgeSummary.badges.map((badge, index) => (
             <AchievementBadgeChip
-              key={badge.id}
+              key={`${badge.id}-${badge.unlocked ? 'unlocked' : 'locked'}`}
               badge={badge}
+              index={index}
+              newlyUnlockedOverride={
+                badge.unlocked && newlyUnlockedBadgeIds.includes(badge.id)
+              }
               showProgressWhenLocked={true}
               testId={`profile-badge-chip-${badge.id}`}
             />
@@ -396,8 +445,17 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
 
       {/* 3 Achievement Cards Grid: 5-Day Streak, 3-Day Goal Hit, Helpful Notes */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {badgeSummary.badges.map((badge) => {
+        {badgeSummary.badges.map((badge, index) => {
           const isUnlocked = badge.unlocked;
+          const isNewlyUnlocked =
+            isUnlocked && newlyUnlockedBadgeIds.includes(badge.id);
+          const cardMotionSpec = getBadgeEntranceMotionSpec({
+            badgeId: badge.id,
+            index,
+            unlocked: isUnlocked,
+            newlyUnlockedOverride: isNewlyUnlocked,
+          });
+
           const borderClass = isUnlocked
             ? badge.tone === 'amber'
               ? 'border-amber-500/50 bg-[#0D0E12]'
@@ -414,16 +472,30 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
               : 'bg-sky-400';
 
           return (
-            <div
-              key={badge.id}
+            <motion.div
+              key={cardMotionSpec.motionKey}
+              initial={cardMotionSpec.initial}
+              animate={cardMotionSpec.animate}
+              transition={cardMotionSpec.transition}
               data-testid={`profile-badge-card-${badge.id}`}
               data-unlocked={isUnlocked ? 'true' : 'false'}
-              className={`p-4 rounded-md border flex flex-col justify-between gap-4 transition-colors ${borderClass}`}
+              data-motion-mode={cardMotionSpec.animationMode}
+              data-motion-key={cardMotionSpec.motionKey}
+              className={`p-4 rounded-md border flex flex-col justify-between gap-4 transition-colors origin-center ${borderClass}`}
             >
               <div className="space-y-2.5">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 min-w-0">
-                    <div
+                    <motion.div
+                      initial={{ scale: isNewlyUnlocked ? 0.6 : 0.85, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{
+                        type: 'spring',
+                        stiffness: isNewlyUnlocked ? 440 : 350,
+                        damping: 20,
+                        delay: cardMotionSpec.transition.delay,
+                      }}
+                      data-testid={`profile-badge-icon-box-${badge.id}`}
                       className={`w-8 h-8 rounded-md border flex items-center justify-center shrink-0 ${
                         isUnlocked
                           ? badge.tone === 'amber'
@@ -439,7 +511,7 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
                         unlocked={isUnlocked}
                         className="w-4 h-4"
                       />
-                    </div>
+                    </motion.div>
                     <div className="min-w-0">
                       <h3 className="text-sm font-bold text-white truncate">
                         {badge.title}
@@ -459,7 +531,7 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
                     {isUnlocked ? (
                       <>
                         <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        <span>Unlocked</span>
+                        <span>{isNewlyUnlocked ? 'Newly Unlocked!' : 'Unlocked'}</span>
                       </>
                     ) : (
                       <>
@@ -576,7 +648,7 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>

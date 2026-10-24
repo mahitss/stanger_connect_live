@@ -149,6 +149,8 @@ import {
   DEFAULT_STREAK_REMINDER_PREFERENCES,
   parseReminderTimeMinutes,
   evaluateStreakFocusReminder,
+  detectNewlyUnlockedBadgeIds,
+  getBadgeEntranceMotionSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -2767,5 +2769,61 @@ test('Streak Focus Reminder evaluates cutoff time (e.g. 10:00 AM), shows subtle 
   assert.equal(dismissedYesterdayOnly.shouldShowToast, true);
   assert.equal(dismissedYesterdayOnly.reason, 'active_reminder');
 });
+
+test('Framer Motion achievement badge entrance specs compute staggered scale-in on page load and spring scale-in when a new badge is unlocked', () => {
+  // 1. Page load with 1 unlocked badge and 2 locked badges (no prior session diff)
+  const loadUnlocked0 = getBadgeEntranceMotionSpec({
+    badgeId: 'streak_5_day',
+    index: 0,
+    unlocked: true,
+    previouslyUnlockedIds: null,
+  });
+  assert.equal(loadUnlocked0.animationMode, 'page_load_unlocked');
+  assert.equal(loadUnlocked0.newlyUnlocked, false);
+  assert.equal(loadUnlocked0.motionKey, 'streak_5_day-unlocked');
+  assert.deepEqual(loadUnlocked0.initial, { opacity: 0, scale: 0.84, y: 6 });
+  assert.deepEqual(loadUnlocked0.animate, { opacity: 1, scale: 1, y: 0 });
+  assert.equal(loadUnlocked0.transition.type, 'spring');
+  assert.equal(loadUnlocked0.transition.delay, 0);
+
+  const loadLocked1 = getBadgeEntranceMotionSpec({
+    badgeId: 'goal_3_day',
+    index: 1,
+    unlocked: false,
+    previouslyUnlockedIds: null,
+  });
+  assert.equal(loadLocked1.animationMode, 'page_load_locked');
+  assert.equal(loadLocked1.newlyUnlocked, false);
+  assert.equal(loadLocked1.motionKey, 'goal_3_day-locked');
+  assert.deepEqual(loadLocked1.initial, { opacity: 0, scale: 0.92, y: 4 });
+  assert.equal(loadLocked1.transition.delay, 0.07);
+
+  // 2. Detecting newly unlocked badges when user earns goal_3_day and helpful_notes
+  const newlyUnlocked = detectNewlyUnlockedBadgeIds(
+    ['streak_5_day'],
+    [
+      { id: 'streak_5_day', unlocked: true },
+      { id: 'goal_3_day', unlocked: true },
+      { id: 'helpful_notes', unlocked: false },
+    ]
+  );
+  assert.deepEqual(newlyUnlocked, ['goal_3_day']);
+
+  // 3. Newly unlocked badge gets celebratory spring entrance scale-in (0.72 -> 1) and new motionKey
+  const newlyUnlockedSpec = getBadgeEntranceMotionSpec({
+    badgeId: 'goal_3_day',
+    index: 1,
+    unlocked: true,
+    previouslyUnlockedIds: ['streak_5_day'],
+  });
+  assert.equal(newlyUnlockedSpec.animationMode, 'newly_unlocked');
+  assert.equal(newlyUnlockedSpec.newlyUnlocked, true);
+  assert.equal(newlyUnlockedSpec.motionKey, 'goal_3_day-unlocked');
+  assert.notEqual(newlyUnlockedSpec.motionKey, loadLocked1.motionKey);
+  assert.deepEqual(newlyUnlockedSpec.initial, { opacity: 0, scale: 0.72, y: 8 });
+  assert.deepEqual(newlyUnlockedSpec.animate, { opacity: 1, scale: 1, y: 0 });
+  assert.equal(newlyUnlockedSpec.transition.stiffness, 420);
+});
+
 
 

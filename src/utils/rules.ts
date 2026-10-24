@@ -7775,5 +7775,164 @@ export function evaluateStreakFocusReminder(params: {
   };
 }
 
+// ============================================================================
+// FRAMER MOTION ACHIEVEMENT BADGE ENTRANCE ANIMATION SPECS
+// ============================================================================
+
+export type BadgeEntranceAnimationMode =
+  | 'newly_unlocked'
+  | 'page_load_unlocked'
+  | 'page_load_locked';
+
+export interface BadgeEntranceMotionSpec {
+  badgeId: BadgeId;
+  index: number;
+  unlocked: boolean;
+  newlyUnlocked: boolean;
+  animationMode: BadgeEntranceAnimationMode;
+  motionKey: string;
+  initial: {
+    opacity: number;
+    scale: number;
+    y: number;
+  };
+  animate: {
+    opacity: number;
+    scale: number;
+    y: number;
+  };
+  transition: {
+    type: 'spring';
+    stiffness: number;
+    damping: number;
+    delay: number;
+  };
+}
+
+export function detectNewlyUnlockedBadgeIds(
+  previousUnlockedIds: readonly BadgeId[] | null | undefined,
+  currentBadges: ReadonlyArray<{ id: BadgeId; unlocked: boolean }>
+): BadgeId[] {
+  if (!Array.isArray(previousUnlockedIds)) {
+    return [];
+  }
+  const prevSet = new Set<BadgeId>(previousUnlockedIds);
+  const newlyUnlocked: BadgeId[] = [];
+  for (const badge of currentBadges) {
+    if (badge && badge.unlocked && !prevSet.has(badge.id)) {
+      newlyUnlocked.push(badge.id);
+    }
+  }
+  return newlyUnlocked;
+}
+
+export function getBadgeEntranceMotionSpec(params: {
+  badgeId: BadgeId;
+  index?: number;
+  unlocked: boolean;
+  previouslyUnlockedIds?: readonly BadgeId[] | null;
+  newlyUnlockedOverride?: boolean;
+}): BadgeEntranceMotionSpec {
+  const safeIndex = Math.max(0, Math.floor(Number(params.index) || 0));
+  const staggerDelay = Number((safeIndex * 0.07).toFixed(2));
+
+  const isNewlyUnlocked =
+    typeof params.newlyUnlockedOverride === 'boolean'
+      ? params.unlocked && params.newlyUnlockedOverride
+      : Boolean(
+          params.unlocked &&
+            Array.isArray(params.previouslyUnlockedIds) &&
+            !params.previouslyUnlockedIds.includes(params.badgeId)
+        );
+
+  const animationMode: BadgeEntranceAnimationMode = isNewlyUnlocked
+    ? 'newly_unlocked'
+    : params.unlocked
+      ? 'page_load_unlocked'
+      : 'page_load_locked';
+
+  const motionKey = `${params.badgeId}-${params.unlocked ? 'unlocked' : 'locked'}`;
+
+  if (animationMode === 'newly_unlocked') {
+    return {
+      badgeId: params.badgeId,
+      index: safeIndex,
+      unlocked: true,
+      newlyUnlocked: true,
+      animationMode,
+      motionKey,
+      initial: {
+        opacity: 0,
+        scale: 0.72,
+        y: 8,
+      },
+      animate: {
+        opacity: 1,
+        scale: 1,
+        y: 0,
+      },
+      transition: {
+        type: 'spring',
+        stiffness: 420,
+        damping: 20,
+        delay: 0.03,
+      },
+    };
+  }
+
+  if (animationMode === 'page_load_unlocked') {
+    return {
+      badgeId: params.badgeId,
+      index: safeIndex,
+      unlocked: true,
+      newlyUnlocked: false,
+      animationMode,
+      motionKey,
+      initial: {
+        opacity: 0,
+        scale: 0.84,
+        y: 6,
+      },
+      animate: {
+        opacity: 1,
+        scale: 1,
+        y: 0,
+      },
+      transition: {
+        type: 'spring',
+        stiffness: 360,
+        damping: 24,
+        delay: staggerDelay,
+      },
+    };
+  }
+
+  return {
+    badgeId: params.badgeId,
+    index: safeIndex,
+    unlocked: false,
+    newlyUnlocked: false,
+    animationMode: 'page_load_locked',
+    motionKey,
+    initial: {
+      opacity: 0,
+      scale: 0.92,
+      y: 4,
+    },
+    animate: {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+    },
+    transition: {
+      type: 'spring',
+      stiffness: 320,
+      damping: 26,
+      delay: staggerDelay,
+    },
+  };
+}
+
+
 
 
