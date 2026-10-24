@@ -151,6 +151,9 @@ import {
   evaluateStreakFocusReminder,
   detectNewlyUnlockedBadgeIds,
   getBadgeEntranceMotionSpec,
+  QUICK_START_POMODORO_MINUTES,
+  QUICK_START_PARTICIPATION_POINTS,
+  applyQuickStartPomodoroBlock,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -2824,6 +2827,43 @@ test('Framer Motion achievement badge entrance specs compute staggered scale-in 
   assert.deepEqual(newlyUnlockedSpec.animate, { opacity: 1, scale: 1, y: 0 });
   assert.equal(newlyUnlockedSpec.transition.stiffness, 420);
 });
+
+test('Daily Productivity Quick Start button logs a 25-minute Pomodoro block, increments participation points, and updates milestone progress', () => {
+  assert.equal(QUICK_START_POMODORO_MINUTES, 25);
+  assert.equal(QUICK_START_PARTICIPATION_POINTS, 15);
+
+  // 1. First Quick Start from 30m / 120m and 100 pts -> 55m / 120m (46%) and 115 pts
+  const qs1 = applyQuickStartPomodoroBlock({
+    targetMinutes: 120,
+    currentCompletedMinutes: 30,
+    currentParticipationPoints: 100,
+  });
+  assert.equal(qs1.addedMinutes, 25);
+  assert.equal(qs1.previousCompletedMinutes, 30);
+  assert.equal(qs1.nextCompletedMinutes, 55);
+  assert.equal(qs1.pointsAwarded, 15);
+  assert.equal(qs1.previousParticipationPoints, 100);
+  assert.equal(qs1.nextParticipationPoints, 115);
+  assert.equal(qs1.progress.progressPercent, 46);
+  assert.equal(qs1.progress.isHalfwayReached, false);
+  assert.equal(
+    qs1.feedbackMessage,
+    'Quick Start: Logged 25m Pomodoro block (+15 participation pts) · 55m / 120m (46%)'
+  );
+
+  // 2. Second Quick Start from 55m / 120m and 115 pts -> 80m / 120m (67%, crosses 50% milestone!) and 130 pts
+  const qs2 = applyQuickStartPomodoroBlock({
+    targetMinutes: 120,
+    currentCompletedMinutes: qs1.nextCompletedMinutes,
+    currentParticipationPoints: qs1.nextParticipationPoints,
+  });
+  assert.equal(qs2.nextCompletedMinutes, 80);
+  assert.equal(qs2.nextParticipationPoints, 130);
+  assert.equal(qs2.progress.progressPercent, 67);
+  assert.equal(qs2.progress.isHalfwayReached, true);
+  assert.equal(qs2.progress.milestoneStage, 'halfway_50');
+});
+
 
 
 

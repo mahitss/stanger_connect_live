@@ -7933,6 +7933,73 @@ export function getBadgeEntranceMotionSpec(params: {
   };
 }
 
+// ============================================================================
+// DAILY PRODUCTIVITY QUICK START (25-MINUTE POMODORO + PARTICIPATION POINTS)
+// ============================================================================
+
+export const QUICK_START_POMODORO_MINUTES = 25;
+export const QUICK_START_PARTICIPATION_POINTS = 15;
+
+export interface QuickStartPomodoroResult {
+  addedMinutes: number;
+  previousCompletedMinutes: number;
+  nextCompletedMinutes: number;
+  targetMinutes: number;
+  pointsAwarded: number;
+  previousParticipationPoints: number;
+  nextParticipationPoints: number;
+  progress: DailyProductivityProgress;
+  feedbackMessage: string;
+}
+
+export function applyQuickStartPomodoroBlock(params: {
+  targetMinutes: number;
+  currentCompletedMinutes: number;
+  currentParticipationPoints: number;
+  minutesToAdd?: number;
+  pointsToAward?: number;
+}): QuickStartPomodoroResult {
+  const addedMinutes = Math.max(
+    1,
+    Math.round(Number(params.minutesToAdd) || QUICK_START_POMODORO_MINUTES)
+  );
+  const pointsAwarded = Math.max(
+    1,
+    Math.round(Number(params.pointsToAward) || QUICK_START_PARTICIPATION_POINTS)
+  );
+  const previousCompletedMinutes = Math.max(
+    0,
+    Math.round(Number(params.currentCompletedMinutes) || 0)
+  );
+  const nextCompletedMinutes = previousCompletedMinutes + addedMinutes;
+
+  const previousParticipationPoints = Math.max(
+    0,
+    Math.round(Number(params.currentParticipationPoints) || 0)
+  );
+  const nextParticipationPoints = previousParticipationPoints + pointsAwarded;
+
+  const progress = computeProductivityGoalProgress(
+    params.targetMinutes,
+    nextCompletedMinutes
+  );
+
+  const feedbackMessage = `Quick Start: Logged ${addedMinutes}m Pomodoro block (+${pointsAwarded} participation pts) · ${progress.completedMinutes}m / ${progress.targetMinutes}m (${progress.progressPercent}%)`;
+
+  return {
+    addedMinutes,
+    previousCompletedMinutes,
+    nextCompletedMinutes,
+    targetMinutes: progress.targetMinutes,
+    pointsAwarded,
+    previousParticipationPoints,
+    nextParticipationPoints,
+    progress,
+    feedbackMessage,
+  };
+}
+
+
 
 
 

@@ -48,6 +48,7 @@ import {
   Trophy,
   Bell,
   Clock,
+  Zap,
 } from 'lucide-react';
 import {
   auth,
@@ -139,6 +140,9 @@ import {
   STREAK_REMINDER_TIME_PRESETS,
   parseReminderTimeMinutes,
   evaluateStreakFocusReminder,
+  QUICK_START_POMODORO_MINUTES,
+  QUICK_START_PARTICIPATION_POINTS,
+  applyQuickStartPomodoroBlock,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -613,6 +617,7 @@ export default function App() {
     return () => window.clearInterval(timer);
   }, []);
   const [securityNotice, setSecurityNotice] = useState<string>('');
+  const [quickStartFeedback, setQuickStartFeedback] = useState<string>('');
   const [sharedDailyGoalSummary, setSharedDailyGoalSummary] = useState<
     (DailyGoalMomentShareSummary & { momentId: string; copied: boolean }) | null
   >(null);
@@ -1545,6 +1550,18 @@ export default function App() {
     persistProductivityGoal(dailyTargetMinutes, dailyCompletedMinutes + added);
     markFocusSessionStartedToday();
     awardParticipation(Math.max(5, Math.round(added / 2)));
+  };
+
+  const handleQuickStartPomodoro = () => {
+    const result = applyQuickStartPomodoroBlock({
+      targetMinutes: dailyTargetMinutes,
+      currentCompletedMinutes: dailyCompletedMinutes,
+      currentParticipationPoints: currentIdentity?.participationPoints ?? 25,
+    });
+    persistProductivityGoal(dailyTargetMinutes, result.nextCompletedMinutes);
+    markFocusSessionStartedToday();
+    awardParticipation(result.pointsAwarded);
+    setQuickStartFeedback(result.feedbackMessage);
   };
 
   const handleLogTopicFocusSession = (
@@ -3697,6 +3714,18 @@ export default function App() {
                   <div className="flex flex-wrap items-center gap-2">
                     <button
                       type="button"
+                      onClick={handleQuickStartPomodoro}
+                      data-testid="daily-goal-quick-start-btn"
+                      title={`Instantly log a ${QUICK_START_POMODORO_MINUTES}-minute Pomodoro block and earn +${QUICK_START_PARTICIPATION_POINTS} participation points`}
+                      className="px-3.5 py-1.5 text-xs font-semibold bg-amber-400 hover:bg-amber-300 text-black rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 shadow-sm"
+                    >
+                      <Zap className="w-3.5 h-3.5 text-black shrink-0" />
+                      <span>
+                        Quick Start (+{QUICK_START_POMODORO_MINUTES}m · +{QUICK_START_PARTICIPATION_POINTS} pts)
+                      </span>
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => handleLogFocusMinutes(15)}
                       data-testid="log-focus-15m-btn"
                       className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
@@ -3723,6 +3752,27 @@ export default function App() {
                     </button>
                   </div>
                 </div>
+
+                {quickStartFeedback && (
+                  <div
+                    role="status"
+                    aria-live="polite"
+                    data-testid="daily-goal-quick-start-feedback"
+                    className="px-3.5 py-2 rounded-md bg-amber-400/10 border border-amber-400/35 text-xs font-mono text-amber-200 flex items-center justify-between gap-3"
+                  >
+                    <span className="inline-flex items-center gap-2 min-w-0 truncate">
+                      <Zap className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                      <span className="truncate">{quickStartFeedback}</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setQuickStartFeedback('')}
+                      className="text-[11px] text-amber-300 hover:text-white underline underline-offset-2 shrink-0"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                )}
 
                 {sharedDailyGoalSummary && (
                   <div
