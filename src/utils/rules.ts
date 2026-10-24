@@ -8291,6 +8291,11 @@ export interface OnlineDirectoryQuickFilterMeta {
   matchingCount: number;
   everyoneCount: number;
   myConnectionsCount: number;
+  iconName: 'user-check' | 'globe';
+  filterIconName: 'filter';
+  toggleStateIndicator: 'ON · My Connections' | 'ALL · Everyone';
+  statusDotTone: 'emerald' | 'zinc';
+  toggleThumbPosition: 'right' | 'left';
 }
 
 export function toggleOnlineDirectoryAudienceFilter(
@@ -8351,5 +8356,13 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     matchingCount,
     everyoneCount,
     myConnectionsCount,
+    iconName: isMyConnectionsOnly ? 'user-check' : 'globe',
+    filterIconName: 'filter',
+    toggleStateIndicator: isMyConnectionsOnly
+      ? 'ON · My Connections'
+      : 'ALL · Everyone',
+    statusDotTone: isMyConnectionsOnly ? 'emerald' : 'zinc',
+    toggleThumbPosition: isMyConnectionsOnly ? 'right' : 'left',
   };
 }
+
