@@ -152,6 +152,7 @@ import {
   getProductivityProgressMotionSpec,
   OnlineDirectoryAudienceFilter,
   toggleOnlineDirectoryAudienceFilter,
+  clearOnlineDirectoryAudienceFilter,
   getOnlineDirectoryQuickFilterMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
@@ -4546,87 +4547,109 @@ export default function App() {
                         </div>
 
                         <div
+                          data-testid="online-directory-quick-filter-area"
                           className="relative inline-flex flex-wrap items-center gap-2"
                           onMouseEnter={() => setIsQuickFilterHovered(true)}
                           onMouseLeave={() => setIsQuickFilterHovered(false)}
                         >
-                          <button
-                            id="online-directory-mood-filter"
-                            type="button"
-                            onClick={() =>
-                              setDirectoryAudienceFilter((prev) =>
-                                toggleOnlineDirectoryAudienceFilter(prev)
-                              )
-                            }
-                            onMouseEnter={() => setIsQuickFilterHovered(true)}
-                            onMouseLeave={() => setIsQuickFilterHovered(false)}
-                            onFocus={() => setIsQuickFilterHovered(true)}
-                            onBlur={() => setIsQuickFilterHovered(false)}
-                            title={directoryQuickFilterMeta.tooltipDetail}
-                            aria-describedby="online-directory-quick-filter-tooltip"
-                            aria-pressed={directoryQuickFilterMeta.ariaPressed}
-                            aria-label={directoryQuickFilterMeta.ariaLabel}
-                            data-testid="online-directory-quick-filter-btn"
-                            data-filter-mode={directoryQuickFilterMeta.mode}
-                            data-tooltip-title={directoryQuickFilterMeta.tooltipTitle}
-                            className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors whitespace-nowrap shrink-0 ${
-                              directoryQuickFilterMeta.isMyConnectionsOnly
-                                ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
-                                : 'bg-[#050505] text-zinc-200 border-zinc-800 hover:border-zinc-600 hover:text-white'
-                            }`}
-                          >
-                            <span
-                              data-testid="online-directory-quick-filter-icon"
-                              data-icon-mode={directoryQuickFilterMeta.iconName}
-                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${
+                          <div className="inline-flex items-center gap-1.5">
+                            <button
+                              id="online-directory-mood-filter"
+                              type="button"
+                              onClick={() =>
+                                setDirectoryAudienceFilter((prev) =>
+                                  toggleOnlineDirectoryAudienceFilter(prev)
+                                )
+                              }
+                              onMouseEnter={() => setIsQuickFilterHovered(true)}
+                              onMouseLeave={() => setIsQuickFilterHovered(false)}
+                              onFocus={() => setIsQuickFilterHovered(true)}
+                              onBlur={() => setIsQuickFilterHovered(false)}
+                              title={directoryQuickFilterMeta.tooltipDetail}
+                              aria-describedby="online-directory-quick-filter-tooltip"
+                              aria-pressed={directoryQuickFilterMeta.ariaPressed}
+                              aria-label={directoryQuickFilterMeta.ariaLabel}
+                              data-testid="online-directory-quick-filter-btn"
+                              data-filter-mode={directoryQuickFilterMeta.mode}
+                              data-tooltip-title={directoryQuickFilterMeta.tooltipTitle}
+                              className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors whitespace-nowrap shrink-0 ${
                                 directoryQuickFilterMeta.isMyConnectionsOnly
-                                  ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
-                                  : 'bg-zinc-900 border-zinc-700/80 text-zinc-300'
-                              }`}
-                            >
-                              <Filter className="w-3 h-3 shrink-0" />
-                              {directoryQuickFilterMeta.isMyConnectionsOnly ? (
-                                <UserCheck className="w-3.5 h-3.5 shrink-0" />
-                              ) : (
-                                <Globe className="w-3.5 h-3.5 shrink-0" />
-                              )}
-                            </span>
-
-                            <span>
-                              {directoryQuickFilterMeta.isMyConnectionsOnly
-                                ? `My Connections (${directoryQuickFilterMeta.myConnectionsCount})`
-                                : `Everyone (${directoryQuickFilterMeta.everyoneCount})`}
-                            </span>
-
-                            <span
-                              data-testid="online-directory-quick-filter-indicator"
-                              data-toggle-state={directoryQuickFilterMeta.mode}
-                              data-thumb-position={directoryQuickFilterMeta.toggleThumbPosition}
-                              className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono border ${
-                                directoryQuickFilterMeta.isMyConnectionsOnly
-                                  ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/50'
-                                  : 'bg-zinc-900 text-zinc-300 border-zinc-800'
+                                  ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
+                                  : 'bg-[#050505] text-zinc-200 border-zinc-800 hover:border-zinc-600 hover:text-white'
                               }`}
                             >
                               <span
-                                aria-hidden="true"
-                                className={`relative inline-flex items-center w-6 h-3.5 rounded-full p-0.5 transition-colors ${
+                                data-testid="online-directory-quick-filter-icon"
+                                data-icon-mode={directoryQuickFilterMeta.iconName}
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border ${
                                   directoryQuickFilterMeta.isMyConnectionsOnly
-                                    ? 'bg-emerald-400/40'
-                                    : 'bg-zinc-700'
+                                    ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
+                                    : 'bg-zinc-900 border-zinc-700/80 text-zinc-300'
+                                }`}
+                              >
+                                <Filter className="w-3 h-3 shrink-0" />
+                                {directoryQuickFilterMeta.isMyConnectionsOnly ? (
+                                  <UserCheck className="w-3.5 h-3.5 shrink-0" />
+                                ) : (
+                                  <Globe className="w-3.5 h-3.5 shrink-0" />
+                                )}
+                              </span>
+
+                              <span>
+                                {directoryQuickFilterMeta.isMyConnectionsOnly
+                                  ? `My Connections (${directoryQuickFilterMeta.myConnectionsCount})`
+                                  : `Everyone (${directoryQuickFilterMeta.everyoneCount})`}
+                              </span>
+
+                              <span
+                                data-testid="online-directory-quick-filter-indicator"
+                                data-toggle-state={directoryQuickFilterMeta.mode}
+                                data-thumb-position={directoryQuickFilterMeta.toggleThumbPosition}
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono border ${
+                                  directoryQuickFilterMeta.isMyConnectionsOnly
+                                    ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/50'
+                                    : 'bg-zinc-900 text-zinc-300 border-zinc-800'
                                 }`}
                               >
                                 <span
-                                  className={`w-2.5 h-2.5 rounded-full transition-transform ${
+                                  aria-hidden="true"
+                                  className={`relative inline-flex items-center w-6 h-3.5 rounded-full p-0.5 transition-colors ${
                                     directoryQuickFilterMeta.isMyConnectionsOnly
-                                      ? 'translate-x-2.5 bg-emerald-300'
-                                      : 'translate-x-0 bg-zinc-300'
+                                      ? 'bg-emerald-400/40'
+                                      : 'bg-zinc-700'
                                   }`}
-                                />
+                                >
+                                  <span
+                                    className={`w-2.5 h-2.5 rounded-full transition-transform ${
+                                      directoryQuickFilterMeta.isMyConnectionsOnly
+                                        ? 'translate-x-2.5 bg-emerald-300'
+                                        : 'translate-x-0 bg-zinc-300'
+                                    }`}
+                                  />
+                                </span>
+                                <span>{directoryQuickFilterMeta.toggleStateIndicator}</span>
                               </span>
-                              <span>{directoryQuickFilterMeta.toggleStateIndicator}</span>
-                            </span>
-                          </button>
+                            </button>
+
+                            {directoryQuickFilterMeta.showClearButton && (
+                              <button
+                                id="online-directory-mood-filter-clear"
+                                type="button"
+                                onClick={() =>
+                                  setDirectoryAudienceFilter(
+                                    clearOnlineDirectoryAudienceFilter()
+                                  )
+                                }
+                                title={directoryQuickFilterMeta.clearButtonAriaLabel}
+                                aria-label={directoryQuickFilterMeta.clearButtonAriaLabel}
+                                data-testid="online-directory-quick-filter-clear-btn"
+                                className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-md border border-zinc-700/90 bg-zinc-900/90 text-zinc-200 hover:bg-zinc-800 hover:text-white hover:border-zinc-500 transition-colors whitespace-nowrap shrink-0"
+                              >
+                                <X className="w-3 h-3 shrink-0" />
+                                <span>{directoryQuickFilterMeta.clearButtonLabel}</span>
+                              </button>
+                            )}
+                          </div>
 
                           <span
                             data-testid="online-directory-quick-filter-hint"

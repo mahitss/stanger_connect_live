@@ -8298,12 +8298,19 @@ export interface OnlineDirectoryQuickFilterMeta {
   toggleThumbPosition: 'right' | 'left';
   tooltipTitle: 'Currently showing only my connections' | 'Currently showing everyone';
   tooltipDetail: string;
+  showClearButton: boolean;
+  clearButtonLabel: 'Clear';
+  clearButtonAriaLabel: string;
 }
 
 export function toggleOnlineDirectoryAudienceFilter(
   current: OnlineDirectoryAudienceFilter
 ): OnlineDirectoryAudienceFilter {
   return current === 'my_connections' ? 'everyone' : 'my_connections';
+}
+
+export function clearOnlineDirectoryAudienceFilter(): OnlineDirectoryAudienceFilter {
+  return 'everyone';
 }
 
 export function getOnlineDirectoryQuickFilterMeta(params: {
@@ -8357,6 +8364,8 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       }). Click to switch to Everyone (${everyoneCount}).`
     : `Currently showing everyone (${everyoneCount} online). Click to filter to My Connections (${myConnectionsCount}).`;
 
+  const clearButtonAriaLabel = `Clear My Connections filter and reset to Everyone (${everyoneCount})`;
+
   return {
     mode,
     isMyConnectionsOnly,
@@ -8377,5 +8386,8 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     toggleThumbPosition: isMyConnectionsOnly ? 'right' : 'left',
     tooltipTitle,
     tooltipDetail,
+    showClearButton: isMyConnectionsOnly,
+    clearButtonLabel: 'Clear',
+    clearButtonAriaLabel,
   };
 }

@@ -158,6 +158,7 @@ import {
   resolveOnlineDirectoryPeerDmShortcut,
   getProductivityProgressMotionSpec,
   toggleOnlineDirectoryAudienceFilter,
+  clearOnlineDirectoryAudienceFilter,
   getOnlineDirectoryQuickFilterMeta,
 } from './rules.ts';
 
@@ -2983,6 +2984,7 @@ test('Framer Motion Daily Productivity progress bar transition spec computes smo
 test('Online Directory Quick Filter toggles cleanly between Everyone and My Connections and filters online peers by accepted connection status', () => {
   assert.equal(toggleOnlineDirectoryAudienceFilter('everyone'), 'my_connections');
   assert.equal(toggleOnlineDirectoryAudienceFilter('my_connections'), 'everyone');
+  assert.equal(clearOnlineDirectoryAudienceFilter(), 'everyone');
 
   const peers = [
     { uid: 'usr_alice', currentMode: 'hub', mood: 'Deep Work' },
@@ -3018,6 +3020,12 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
     everyoneMeta.tooltipDetail,
     'Currently showing everyone (4 online). Click to filter to My Connections (2).'
   );
+  assert.equal(everyoneMeta.showClearButton, false);
+  assert.equal(everyoneMeta.clearButtonLabel, 'Clear');
+  assert.equal(
+    everyoneMeta.clearButtonAriaLabel,
+    'Clear My Connections filter and reset to Everyone (4)'
+  );
 
   const connectionsMeta = getOnlineDirectoryQuickFilterMeta({
     mode: 'my_connections',
@@ -3039,6 +3047,12 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
   assert.equal(
     connectionsMeta.tooltipDetail,
     'Currently showing only my connections (2 accepted peers). Click to switch to Everyone (4).'
+  );
+  assert.equal(connectionsMeta.showClearButton, true);
+  assert.equal(connectionsMeta.clearButtonLabel, 'Clear');
+  assert.equal(
+    connectionsMeta.clearButtonAriaLabel,
+    'Clear My Connections filter and reset to Everyone (4)'
   );
 
   // Filtering with 'everyone' returns all 4 peers
