@@ -28,10 +28,17 @@ function getOrCreateAudioContext(): AudioContext | null {
 
 /**
  * Plays a subtle, warm two-note harmonic chime using the Web Audio API.
- * Designed for non-intrusive feedback on incoming messages and connection requests,
- * especially when the workspace is in the background or another mode is active.
+ * Supports both pre-computed UiSoundChimeSpec objects and direct event keys ('start', 'end', 'incoming_message', 'connection_request').
  */
-export function playSubtleUiChime(chime: UiSoundChimeSpec): boolean {
+export function playSubtleUiChime(
+  chimeOrEvent: UiSoundChimeSpec | UiSoundAlertEvent,
+  volumePercent = 65
+): boolean {
+  const chime: UiSoundChimeSpec =
+    typeof chimeOrEvent === 'string'
+      ? getUiSoundChimeSpec(chimeOrEvent, false, volumePercent)
+      : chimeOrEvent;
+
   const ctx = getOrCreateAudioContext();
   if (!ctx) return false;
 

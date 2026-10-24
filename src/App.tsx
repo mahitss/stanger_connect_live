@@ -75,6 +75,7 @@ import {
   UiSoundAlertEvent,
   DEFAULT_UI_SOUND_PREFERENCES,
   toggleUiSoundEffects,
+  resolveQuickFocusDeskSoundTrigger,
   shouldPlayUiNotificationSound,
   getOnlinePeerFocusStatus,
   summarizeOnlineDirectoryFocus,
@@ -633,6 +634,9 @@ export default function App() {
 
   const [lastSoundFeedback, setLastSoundFeedback] = useState<string>(
     'Background & live chimes active (Messages & Requests)'
+  );
+  const [lastFocusDeskChime, setLastFocusDeskChime] = useState<'start' | 'end' | null>(
+    null
   );
   const seenIncomingRequestIdsRef = useRef<Set<string>>(new Set());
   const initialRequestsLoadedRef = useRef<boolean>(false);
@@ -3034,22 +3038,51 @@ export default function App() {
   };
 
   const handleToggleQuickFocusDesk = () => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
     const hasMyDesk = studyDesks.some((d) => d.uid === currentIdentity.uid);
+    const soundTrigger = resolveQuickFocusDeskSoundTrigger({
+      isCurrentlyAtDesk: hasMyDesk,
+      preferences: uiSoundPrefs,
+    });
+
+    if (soundTrigger.shouldPlay) {
+      playSubtleUiChime(soundTrigger.chime);
+    }
+    setLastFocusDeskChime(soundTrigger.chimeType);
+    setLastSoundFeedback(soundTrigger.feedbackMessage);
+
     if (hasMyDesk) {
-      wsRef.current.send(JSON.stringify({ type: 'study:leave' }));
+      setStudyDesks((prev) => prev.filter((d) => d.uid !== currentIdentity.uid));
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(JSON.stringify({ type: 'study:leave' }));
+      }
     } else {
-      wsRef.current.send(
-        JSON.stringify({
-          type: 'study:join',
-          roomCode: activeStudyRoomCode,
-          roomName: `Study Room ${activeStudyRoomCode}`,
-          displayName: currentIdentity.displayName,
-          subject: 'Deep Work & Problem Solving',
-          positiveNote: 'Focused in Study Room — join me for a Pomodoro block!',
-          timerMinutes: 25,
-        })
-      );
+      const nextDesk: StudyDeskItem = {
+        uid: currentIdentity.uid,
+        displayName: currentIdentity.displayName,
+        roomCode: activeStudyRoomCode,
+        roomName: `Study Room ${activeStudyRoomCode}`,
+        subject: 'Deep Work & Problem Solving',
+        positiveNote: 'Focused in Study Room — join me for a Pomodoro block!',
+        timerMinutes: 25,
+        startedAt: Date.now(),
+      };
+      setStudyDesks((prev) => [
+        ...prev.filter((d) => d.uid !== currentIdentity.uid),
+        nextDesk,
+      ]);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: 'study:join',
+            roomCode: activeStudyRoomCode,
+            roomName: `Study Room ${activeStudyRoomCode}`,
+            displayName: currentIdentity.displayName,
+            subject: 'Deep Work & Problem Solving',
+            positiveNote: 'Focused in Study Room — join me for a Pomodoro block!',
+            timerMinutes: 25,
+          })
+        );
+      }
       awardParticipation(15);
     }
   };
@@ -4157,24 +4190,45 @@ export default function App() {
                         </select>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={handleToggleQuickFocusDesk}
-                        aria-pressed={myFocusStatus.isInFocus}
-                        data-testid="hub-quick-focus-desk-toggle"
-                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                          myFocusStatus.isInFocus
-                            ? 'bg-[#050505] border-emerald-500/50 text-emerald-400 hover:border-emerald-400'
-                            : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-200'
-                        }`}
-                      >
-                        <BookOpen className="w-3.5 h-3.5 shrink-0" />
-                        <span>
-                          {myFocusStatus.isInFocus
-                            ? 'Leave Focus Desk'
-                            : 'Set Status: In Focus'}
-                        </span>
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {lastFocusDeskChime && (
+                          <span
+                            data-testid="quick-focus-desk-chime-status"
+                            data-chime-type={lastFocusDeskChime}
+                            className={`inline-flex items-center gap-1 px-2 py-1 rounded border text-[11px] font-mono ${
+                              lastFocusDeskChime === 'start'
+                                ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-300'
+                                : 'bg-zinc-900 border-zinc-700 text-zinc-300'
+                            }`}
+                          >
+                            <Volume2 className="w-3 h-3 shrink-0" />
+                            <span>
+                              {lastFocusDeskChime === 'start'
+                                ? 'Start Chime (C5→E5)'
+                                : 'End Chime (E5→B4)'}
+                            </span>
+                          </span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={handleToggleQuickFocusDesk}
+                          aria-pressed={myFocusStatus.isInFocus}
+                          data-testid="hub-quick-focus-desk-toggle"
+                          data-last-chime={lastFocusDeskChime || 'none'}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                            myFocusStatus.isInFocus
+                              ? 'bg-[#050505] border-emerald-500/50 text-emerald-400 hover:border-emerald-400'
+                              : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-zinc-200'
+                          }`}
+                        >
+                          <BookOpen className="w-3.5 h-3.5 shrink-0" />
+                          <span>
+                            {myFocusStatus.isInFocus
+                              ? 'Leave Focus Desk'
+                              : 'Set Status: In Focus'}
+                          </span>
+                        </button>
+                      </div>
                     </div>
                   </div>
 

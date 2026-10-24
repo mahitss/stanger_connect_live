@@ -244,8 +244,12 @@ export function formatAmbientWorkspaceStatus(
   return `Playing: ${preset.label} · ${effectivePercent}% Background Volume`;
 }
 
-// --- Subtle UI Sound Effect Toggle for Incoming Messages & Connection Requests ---
-export type UiSoundAlertEvent = 'incoming_message' | 'connection_request';
+// --- Subtle UI Sound Effect Toggle for Incoming Messages, Connection Requests & Quick Focus Desk ---
+export type UiSoundAlertEvent =
+  | 'incoming_message'
+  | 'connection_request'
+  | 'start'
+  | 'end';
 
 export interface UiSoundEffectPreferences {
   enabled: boolean;
@@ -375,6 +379,28 @@ export function getUiSoundChimeSpec(
     (isAppInBackground ? Math.min(0.22, baseGain * 1.25) : baseGain).toFixed(4)
   );
 
+  if (eventType === 'start') {
+    return {
+      eventType: 'start',
+      label: 'Focus Desk Start Chime',
+      frequenciesHz: [523.25, 659.25],
+      noteNames: 'C5 → E5 Focus Start',
+      durationMs: isAppInBackground ? 300 : 240,
+      gainScalar,
+    };
+  }
+
+  if (eventType === 'end') {
+    return {
+      eventType: 'end',
+      label: 'Focus Desk End Chime',
+      frequenciesHz: [659.25, 493.88],
+      noteNames: 'E5 → B4 Focus End',
+      durationMs: isAppInBackground ? 300 : 240,
+      gainScalar,
+    };
+  }
+
   if (eventType === 'connection_request') {
     return {
       eventType: 'connection_request',
@@ -393,6 +419,39 @@ export function getUiSoundChimeSpec(
     noteNames: 'C5 → G5 Soft Fifth',
     durationMs: isAppInBackground ? 300 : 220,
     gainScalar,
+  };
+}
+
+export function resolveQuickFocusDeskSoundTrigger(params: {
+  isCurrentlyAtDesk: boolean;
+  preferences?: UiSoundEffectPreferences;
+}): {
+  action: 'join' | 'leave';
+  chimeType: 'start' | 'end';
+  shouldPlay: boolean;
+  chime: UiSoundChimeSpec;
+  feedbackMessage: string;
+} {
+  const prefs = params.preferences ?? DEFAULT_UI_SOUND_PREFERENCES;
+  const isJoining = !params.isCurrentlyAtDesk;
+  const chimeType: 'start' | 'end' = isJoining ? 'start' : 'end';
+  const chime = getUiSoundChimeSpec(chimeType, false, prefs.volumePercent);
+  const shouldPlay = Boolean(prefs.enabled);
+
+  const feedbackMessage = isJoining
+    ? shouldPlay
+      ? `Start chime played: Joined Focus Desk (${chime.noteNames})`
+      : 'Joined Focus Desk (Sound alerts muted)'
+    : shouldPlay
+      ? `End chime played: Left Focus Desk (${chime.noteNames})`
+      : 'Left Focus Desk (Sound alerts muted)';
+
+  return {
+    action: isJoining ? 'join' : 'leave',
+    chimeType,
+    shouldPlay,
+    chime,
+    feedbackMessage,
   };
 }
 

@@ -43,6 +43,7 @@ import {
   isStudyRoomAllAudioMuted,
   toggleStudyRoomAllAudioMute,
   getUiSoundChimeSpec,
+  resolveQuickFocusDeskSoundTrigger,
   shouldPlayUiNotificationSound,
   getOnlinePeerFocusStatus,
   summarizeOnlineDirectoryFocus,
@@ -2573,3 +2574,61 @@ test('Daily Productivity Goal progress evaluates 50% and 100% visual milestone m
   assert.equal(completed.milestones[1].reached, true);
   assert.equal(completed.milestones[1].remainingToMilestoneMinutes, 0);
 });
+
+test('Quick Focus Desk toggle resolves ascending start chime when joining a desk and descending end chime when leaving', () => {
+  // 1. Joining a Focus Desk (isCurrentlyAtDesk: false) -> 'start' chime
+  const joinTrigger = resolveQuickFocusDeskSoundTrigger({
+    isCurrentlyAtDesk: false,
+    preferences: {
+      ...DEFAULT_UI_SOUND_PREFERENCES,
+      enabled: true,
+      volumePercent: 70,
+    },
+  });
+  assert.equal(joinTrigger.action, 'join');
+  assert.equal(joinTrigger.chimeType, 'start');
+  assert.equal(joinTrigger.shouldPlay, true);
+  assert.equal(joinTrigger.chime.eventType, 'start');
+  assert.equal(joinTrigger.chime.label, 'Focus Desk Start Chime');
+  assert.deepEqual(joinTrigger.chime.frequenciesHz, [523.25, 659.25]); // ascending C5 -> E5
+  assert.ok(joinTrigger.chime.frequenciesHz[1] > joinTrigger.chime.frequenciesHz[0]);
+  assert.equal(
+    joinTrigger.feedbackMessage,
+    'Start chime played: Joined Focus Desk (C5 → E5 Focus Start)'
+  );
+
+  // 2. Leaving a Focus Desk (isCurrentlyAtDesk: true) -> 'end' chime
+  const leaveTrigger = resolveQuickFocusDeskSoundTrigger({
+    isCurrentlyAtDesk: true,
+    preferences: {
+      ...DEFAULT_UI_SOUND_PREFERENCES,
+      enabled: true,
+      volumePercent: 70,
+    },
+  });
+  assert.equal(leaveTrigger.action, 'leave');
+  assert.equal(leaveTrigger.chimeType, 'end');
+  assert.equal(leaveTrigger.shouldPlay, true);
+  assert.equal(leaveTrigger.chime.eventType, 'end');
+  assert.equal(leaveTrigger.chime.label, 'Focus Desk End Chime');
+  assert.deepEqual(leaveTrigger.chime.frequenciesHz, [659.25, 493.88]); // descending E5 -> B4
+  assert.ok(leaveTrigger.chime.frequenciesHz[1] < leaveTrigger.chime.frequenciesHz[0]);
+  assert.equal(
+    leaveTrigger.feedbackMessage,
+    'End chime played: Left Focus Desk (E5 → B4 Focus End)'
+  );
+
+  // 3. Respects muted UI sound preferences
+  const mutedJoin = resolveQuickFocusDeskSoundTrigger({
+    isCurrentlyAtDesk: false,
+    preferences: {
+      ...DEFAULT_UI_SOUND_PREFERENCES,
+      enabled: false,
+    },
+  });
+  assert.equal(mutedJoin.action, 'join');
+  assert.equal(mutedJoin.chimeType, 'start');
+  assert.equal(mutedJoin.shouldPlay, false);
+  assert.equal(mutedJoin.feedbackMessage, 'Joined Focus Desk (Sound alerts muted)');
+});
+
