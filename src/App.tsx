@@ -147,6 +147,9 @@ import {
   buildConnectionRequestStatusMap,
   resolveOnlineDirectoryPeerDmShortcut,
   getProductivityProgressMotionSpec,
+  OnlineDirectoryAudienceFilter,
+  toggleOnlineDirectoryAudienceFilter,
+  getOnlineDirectoryQuickFilterMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -655,6 +658,8 @@ export default function App() {
   >(null);
   const [showOnlyInFocusPeers, setShowOnlyInFocusPeers] = useState<boolean>(false);
   const [directoryMoodFilter, setDirectoryMoodFilter] = useState<string>('all');
+  const [directoryAudienceFilter, setDirectoryAudienceFilter] =
+    useState<OnlineDirectoryAudienceFilter>('everyone');
   const [userMood, setUserMood] = useState<string | null>(() => {
     try {
       const saved = localStorage.getItem('mr_stranger_user_mood_v1');
@@ -2822,12 +2827,23 @@ export default function App() {
     onlinePeers,
     moodEvents,
   });
+  const directoryQuickFilterMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: directoryAudienceFilter,
+    onlinePeers,
+    currentUid: currentIdentity.uid,
+    acceptedPeerUids,
+    connectionStatusMap: connectionRequestStatusMap,
+  });
   const displayedOnlinePeers = filterOnlinePeersByDirectoryCriteria(
     onlinePeers,
     studyDesks,
     {
       onlyInFocus: showOnlyInFocusPeers,
       moodFilter: directoryMoodFilter === 'all' ? null : directoryMoodFilter,
+      audienceFilter: directoryAudienceFilter,
+      currentUid: currentIdentity.uid,
+      acceptedPeerUids,
+      connectionStatusMap: connectionRequestStatusMap,
     }
   );
   const myFocusStatus =
@@ -4525,7 +4541,45 @@ export default function App() {
                           </button>
                         </div>
 
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDirectoryAudienceFilter((prev) =>
+                              toggleOnlineDirectoryAudienceFilter(prev)
+                            )
+                          }
+                          aria-pressed={directoryQuickFilterMeta.ariaPressed}
+                          aria-label={directoryQuickFilterMeta.ariaLabel}
+                          data-testid="online-directory-quick-filter-btn"
+                          data-filter-mode={directoryQuickFilterMeta.mode}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors whitespace-nowrap shrink-0 ${
+                            directoryQuickFilterMeta.isMyConnectionsOnly
+                              ? 'bg-white text-black border-white'
+                              : 'bg-[#050505] text-zinc-200 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                          }`}
+                        >
+                          <Users className="w-3.5 h-3.5 shrink-0" />
+                          <span>
+                            Quick Filter:{' '}
+                            {directoryQuickFilterMeta.isMyConnectionsOnly
+                              ? `My Connections (${directoryQuickFilterMeta.myConnectionsCount})`
+                              : `Everyone (${directoryQuickFilterMeta.everyoneCount})`}
+                          </span>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${
+                              directoryQuickFilterMeta.isMyConnectionsOnly
+                                ? 'bg-black/15 text-black'
+                                : 'bg-zinc-900 text-emerald-400 border border-zinc-800'
+                            }`}
+                          >
+                            {directoryQuickFilterMeta.isMyConnectionsOnly
+                              ? 'Switch to Everyone'
+                              : `My Connections (${directoryQuickFilterMeta.myConnectionsCount})`}
+                          </span>
+                        </button>
+
                         <select
+                          id="online-directory-mood-filter"
                           aria-label="Filter online peers by Mood indicator"
                           data-testid="online-directory-mood-filter"
                           value={directoryMoodFilter}
@@ -4761,18 +4815,32 @@ export default function App() {
                       );
                     })}
 
-                    {(showOnlyInFocusPeers || directoryMoodFilter !== 'all') &&
+                    {(showOnlyInFocusPeers ||
+                      directoryMoodFilter !== 'all' ||
+                      directoryAudienceFilter === 'my_connections') &&
                       displayedOnlinePeers.length === 0 && (
                         <div
                           className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs text-zinc-400 flex flex-wrap items-center justify-between gap-3"
                           data-testid="online-directory-empty-focus"
                         >
                           <span>
-                            {directoryMoodFilter !== 'all'
-                              ? `No online users currently have their Mood set to "${directoryMoodFilter}".`
-                              : 'No online users are currently in a Study Room. Start a Focus Desk to let others see you are productive!'}
+                            {directoryAudienceFilter === 'my_connections'
+                              ? 'None of your accepted connections are currently online matching the active filters.'
+                              : directoryMoodFilter !== 'all'
+                                ? `No online users currently have their Mood set to "${directoryMoodFilter}".`
+                                : 'No online users are currently in a Study Room. Start a Focus Desk to let others see you are productive!'}
                           </span>
                           <div className="flex items-center gap-2">
+                            {directoryAudienceFilter === 'my_connections' && (
+                              <button
+                                type="button"
+                                onClick={() => setDirectoryAudienceFilter('everyone')}
+                                data-testid="online-directory-reset-audience-filter-btn"
+                                className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                              >
+                                Show Everyone
+                              </button>
+                            )}
                             {directoryMoodFilter !== 'all' && (
                               <button
                                 type="button"

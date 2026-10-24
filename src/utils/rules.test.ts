@@ -157,6 +157,8 @@ import {
   buildConnectionRequestStatusMap,
   resolveOnlineDirectoryPeerDmShortcut,
   getProductivityProgressMotionSpec,
+  toggleOnlineDirectoryAudienceFilter,
+  getOnlineDirectoryQuickFilterMeta,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -2976,4 +2978,77 @@ test('Framer Motion Daily Productivity progress bar transition spec computes smo
   assert.equal(increaseComplete.milestoneStage, 'complete_100');
   assert.equal(increaseComplete.crossedMilestone, 'complete_100');
   assert.deepEqual(increaseComplete.animate, { scaleX: 1, opacity: 1 });
+});
+
+test('Online Directory Quick Filter toggles cleanly between Everyone and My Connections and filters online peers by accepted connection status', () => {
+  assert.equal(toggleOnlineDirectoryAudienceFilter('everyone'), 'my_connections');
+  assert.equal(toggleOnlineDirectoryAudienceFilter('my_connections'), 'everyone');
+
+  const peers = [
+    { uid: 'usr_alice', currentMode: 'hub', mood: 'Deep Work' },
+    { uid: 'usr_bob', currentMode: 'study', activeStudyRoomCode: 'STUDY-1', mood: 'Deep Work' },
+    { uid: 'usr_carol', currentMode: 'hub', mood: 'Brainstorming' },
+    { uid: 'usr_dave', currentMode: 'hub', mood: 'Deep Work' },
+  ];
+  const statusMap = buildConnectionRequestStatusMap('usr_alice', [
+    { id: 'r1', fromUid: 'usr_alice', toUid: 'usr_bob', status: 'accepted' },
+    { id: 'r2', fromUid: 'usr_carol', toUid: 'usr_alice', status: 'pending' },
+    { id: 'r3', fromUid: 'usr_dave', toUid: 'usr_alice', status: 'accepted' },
+  ]);
+
+  const everyoneMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: peers,
+    currentUid: 'usr_alice',
+    connectionStatusMap: statusMap,
+  });
+  assert.equal(everyoneMeta.mode, 'everyone');
+  assert.equal(everyoneMeta.isMyConnectionsOnly, false);
+  assert.equal(everyoneMeta.ariaPressed, false);
+  assert.equal(everyoneMeta.everyoneCount, 4);
+  assert.equal(everyoneMeta.myConnectionsCount, 2);
+  assert.equal(everyoneMeta.matchingCount, 4);
+
+  const connectionsMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: peers,
+    currentUid: 'usr_alice',
+    connectionStatusMap: statusMap,
+  });
+  assert.equal(connectionsMeta.mode, 'my_connections');
+  assert.equal(connectionsMeta.isMyConnectionsOnly, true);
+  assert.equal(connectionsMeta.ariaPressed, true);
+  assert.equal(connectionsMeta.myConnectionsCount, 2);
+  assert.equal(connectionsMeta.matchingCount, 2);
+
+  // Filtering with 'everyone' returns all 4 peers
+  const allFiltered = filterOnlinePeersByDirectoryCriteria(peers, [], {
+    audienceFilter: 'everyone',
+    currentUid: 'usr_alice',
+    connectionStatusMap: statusMap,
+  });
+  assert.equal(allFiltered.length, 4);
+
+  // Filtering with 'my_connections' returns only accepted connections (Bob & Dave, excluding self Alice and pending Carol)
+  const myConnFiltered = filterOnlinePeersByDirectoryCriteria(peers, [], {
+    audienceFilter: 'my_connections',
+    currentUid: 'usr_alice',
+    connectionStatusMap: statusMap,
+  });
+  assert.deepEqual(
+    myConnFiltered.map((p) => p.uid),
+    ['usr_bob', 'usr_dave']
+  );
+
+  // Combining 'my_connections' + onlyInFocus returns only Bob
+  const myConnInFocus = filterOnlinePeersByDirectoryCriteria(peers, [], {
+    audienceFilter: 'my_connections',
+    onlyInFocus: true,
+    currentUid: 'usr_alice',
+    connectionStatusMap: statusMap,
+  });
+  assert.deepEqual(
+    myConnInFocus.map((p) => p.uid),
+    ['usr_bob']
+  );
 });

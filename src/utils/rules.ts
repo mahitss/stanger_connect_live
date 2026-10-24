@@ -789,6 +789,8 @@ export function summarizeOnlineDirectoryMoods(
   };
 }
 
+export type OnlineDirectoryAudienceFilter = 'everyone' | 'my_connections';
+
 export function filterOnlinePeersByDirectoryCriteria<
   T extends OnlinePeerFocusInput & { mood?: string | null }
 >(
@@ -797,12 +799,36 @@ export function filterOnlinePeersByDirectoryCriteria<
   options: {
     onlyInFocus?: boolean;
     moodFilter?: string | null;
+    audienceFilter?: OnlineDirectoryAudienceFilter;
+    currentUid?: string;
+    acceptedPeerUids?: Iterable<string>;
+    connectionStatusMap?: Record<string, 'pending' | 'accepted' | 'declined'>;
   } = {}
 ): T[] {
-  const { onlyInFocus = false, moodFilter = null } = options;
+  const {
+    onlyInFocus = false,
+    moodFilter = null,
+    audienceFilter = 'everyone',
+    currentUid = '',
+    acceptedPeerUids,
+    connectionStatusMap,
+  } = options;
   const normalizedMoodFilter = moodFilter ? String(moodFilter).trim().toLowerCase() : '';
+  const cleanCurrentUid = String(currentUid || '').trim();
+  const acceptedSet = acceptedPeerUids ? new Set(acceptedPeerUids) : new Set<string>();
 
   return peers.filter((peer) => {
+    if (audienceFilter === 'my_connections') {
+      const peerUid = String(peer.uid || '').trim();
+      if (!peerUid || (cleanCurrentUid && peerUid === cleanCurrentUid)) {
+        return false;
+      }
+      const isAccepted =
+        acceptedSet.has(peerUid) || connectionStatusMap?.[peerUid] === 'accepted';
+      if (!isAccepted) {
+        return false;
+      }
+    }
     if (onlyInFocus && !getOnlinePeerFocusStatus(peer, studyDesks).isInFocus) {
       return false;
     }
@@ -8247,5 +8273,83 @@ export function getProductivityProgressMotionSpec(params: {
           damping: 28,
           mass: 0.8,
         },
+  };
+}
+
+// ============================================================================
+// 44. ONLINE DIRECTORY QUICK FILTER ('MY CONNECTIONS' <-> 'EVERYONE')
+// ============================================================================
+
+export interface OnlineDirectoryQuickFilterMeta {
+  mode: OnlineDirectoryAudienceFilter;
+  isMyConnectionsOnly: boolean;
+  activeLabel: string;
+  buttonLabel: string;
+  nextModeLabel: string;
+  ariaLabel: string;
+  ariaPressed: boolean;
+  matchingCount: number;
+  everyoneCount: number;
+  myConnectionsCount: number;
+}
+
+export function toggleOnlineDirectoryAudienceFilter(
+  current: OnlineDirectoryAudienceFilter
+): OnlineDirectoryAudienceFilter {
+  return current === 'my_connections' ? 'everyone' : 'my_connections';
+}
+
+export function getOnlineDirectoryQuickFilterMeta(params: {
+  mode: OnlineDirectoryAudienceFilter;
+  onlinePeers: Array<{ uid: string }>;
+  currentUid?: string;
+  acceptedPeerUids?: Iterable<string>;
+  connectionStatusMap?: Record<string, ConnectionRequestStatusValue>;
+}): OnlineDirectoryQuickFilterMeta {
+  const mode: OnlineDirectoryAudienceFilter =
+    params.mode === 'my_connections' ? 'my_connections' : 'everyone';
+  const peers = Array.isArray(params.onlinePeers) ? params.onlinePeers : [];
+  const cleanCurrentUid = String(params.currentUid || '').trim();
+  const acceptedSet = params.acceptedPeerUids
+    ? new Set(params.acceptedPeerUids)
+    : new Set<string>();
+
+  const everyoneCount = peers.length;
+  let myConnectionsCount = 0;
+  for (const peer of peers) {
+    const peerUid = String(peer?.uid || '').trim();
+    if (!peerUid || (cleanCurrentUid && peerUid === cleanCurrentUid)) continue;
+    if (
+      acceptedSet.has(peerUid) ||
+      params.connectionStatusMap?.[peerUid] === 'accepted'
+    ) {
+      myConnectionsCount += 1;
+    }
+  }
+
+  const isMyConnectionsOnly = mode === 'my_connections';
+  const activeLabel = isMyConnectionsOnly ? 'My Connections' : 'Everyone';
+  const nextModeLabel = isMyConnectionsOnly ? 'Everyone' : 'My Connections';
+  const matchingCount = isMyConnectionsOnly ? myConnectionsCount : everyoneCount;
+
+  const buttonLabel = isMyConnectionsOnly
+    ? `Quick Filter: My Connections (${myConnectionsCount})`
+    : `Quick Filter: Everyone (${everyoneCount})`;
+
+  const ariaLabel = isMyConnectionsOnly
+    ? `Quick Filter active: My Connections (${myConnectionsCount}). Activate to switch to Everyone (${everyoneCount}).`
+    : `Quick Filter active: Everyone (${everyoneCount}). Activate to filter to My Connections (${myConnectionsCount}).`;
+
+  return {
+    mode,
+    isMyConnectionsOnly,
+    activeLabel,
+    buttonLabel,
+    nextModeLabel,
+    ariaLabel,
+    ariaPressed: isMyConnectionsOnly,
+    matchingCount,
+    everyoneCount,
+    myConnectionsCount,
   };
 }
