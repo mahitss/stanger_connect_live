@@ -143,6 +143,8 @@ import {
   QUICK_START_POMODORO_MINUTES,
   QUICK_START_PARTICIPATION_POINTS,
   applyQuickStartPomodoroBlock,
+  buildConnectionRequestStatusMap,
+  resolveOnlineDirectoryPeerDmShortcut,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -336,7 +338,25 @@ export default function App() {
   } | null>(null);
 
   // Firestore & Real-Time Synchronized Collections
-  const [requests, setRequests] = useState<ConnectionRequestDoc[]>([]);
+  const [requests, setRequests] = useState<ConnectionRequestDoc[]>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_requests_v1');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem('mr_stranger_requests_v1', JSON.stringify(requests));
+    } catch {
+      // ignore
+    }
+  }, [requests]);
   const [messages, setMessages] = useState<DirectMessageDoc[]>([]);
   const [moments, setMoments] = useState<MomentPostDoc[]>(() => {
     try {
@@ -2731,6 +2751,10 @@ export default function App() {
     );
   }
 
+  const connectionRequestStatusMap = buildConnectionRequestStatusMap(
+    currentIdentity.uid,
+    requests
+  );
   const acceptedPeerUids = new Set(
     requests
       .filter((r) => r.status === 'accepted')
@@ -4543,11 +4567,18 @@ export default function App() {
                           (r.fromUid === currentIdentity.uid && r.toUid === peer.uid) ||
                           (r.fromUid === peer.uid && r.toUid === currentIdentity.uid)
                       );
+                      const peerDmShortcut = resolveOnlineDirectoryPeerDmShortcut({
+                        currentUid: currentIdentity.uid,
+                        peerUid: peer.uid,
+                        peerDisplayName: peer.displayName,
+                        connectionStatusMap: connectionRequestStatusMap,
+                      });
 
                       return (
                         <div
                           key={peer.uid}
                           data-testid={`online-directory-peer-row-${peer.uid}`}
+                          data-connection-status={peerDmShortcut.status}
                           className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3"
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
@@ -4556,6 +4587,16 @@ export default function App() {
                                 <span className="text-sm font-bold text-white truncate">
                                   {peer.displayName} {isMe ? '(You — Online)' : ''}
                                 </span>
+
+                                {peerDmShortcut.isAcceptedConnection && (
+                                  <span
+                                    data-testid={`online-directory-connected-badge-${peer.uid}`}
+                                    className="inline-flex items-center gap-1 text-xs font-mono font-semibold text-emerald-400 whitespace-nowrap shrink-0"
+                                  >
+                                    <Check className="w-3 h-3 shrink-0" />
+                                    <span>{peerDmShortcut.connectionBadgeLabel}</span>
+                                  </span>
+                                )}
 
                                 {focusStatus.isInFocus && (
                                   <span
@@ -4640,7 +4681,21 @@ export default function App() {
 
                             {!isMe && (
                               <div className="flex items-center gap-2 shrink-0">
-                                {!existingReq ? (
+                                {peerDmShortcut.showDirectMessageShortcut ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setActiveChatPeerUid(peer.uid);
+                                      setActivePage('chat');
+                                    }}
+                                    aria-label={peerDmShortcut.shortcutAriaLabel}
+                                    data-testid={`online-directory-dm-shortcut-${peer.uid}`}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded transition-colors whitespace-nowrap shrink-0"
+                                  >
+                                    <MessageSquare className="w-3.5 h-3.5 shrink-0" />
+                                    <span>{peerDmShortcut.shortcutLabel}</span>
+                                  </button>
+                                ) : !existingReq && peerDmShortcut.status === 'none' ? (
                                   <>
                                     <input
                                       type="text"
@@ -4663,20 +4718,9 @@ export default function App() {
                                       Send Request
                                     </button>
                                   </>
-                                ) : existingReq.status === 'accepted' ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      setActiveChatPeerUid(peer.uid);
-                                      setActivePage('chat');
-                                    }}
-                                    className="px-3 py-1 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
-                                  >
-                                    Message Now
-                                  </button>
                                 ) : (
                                   <span className="text-xs text-amber-400 font-mono">
-                                    Request {existingReq.status}
+                                    Request {existingReq?.status || peerDmShortcut.status}
                                   </span>
                                 )}
                               </div>

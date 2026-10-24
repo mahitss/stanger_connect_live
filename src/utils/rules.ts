@@ -7999,7 +7999,140 @@ export function applyQuickStartPomodoroBlock(params: {
   };
 }
 
+// ============================================================================
+// 42. ONLINE DIRECTORY CONNECTION STATUS MAP & DIRECT MESSAGE SHORTCUT
+// ============================================================================
 
+export type ConnectionRequestStatusValue = 'pending' | 'accepted' | 'declined';
 
+export interface ConnectionRequestMapRecord {
+  id?: string;
+  fromUid: string;
+  toUid: string;
+  status: ConnectionRequestStatusValue;
+}
 
+export interface OnlineDirectoryPeerDmShortcutMeta {
+  peerUid: string;
+  isSelf: boolean;
+  status: 'none' | ConnectionRequestStatusValue;
+  isAcceptedConnection: boolean;
+  showDirectMessageShortcut: boolean;
+  shortcutLabel: string;
+  shortcutAriaLabel: string;
+  connectionBadgeLabel: string;
+}
+
+const CONNECTION_STATUS_PRIORITY: Record<ConnectionRequestStatusValue, number> = {
+  accepted: 3,
+  pending: 2,
+  declined: 1,
+};
+
+/**
+ * Builds a deterministic peerUid -> ConnectionRequestStatusValue lookup map
+ * for the given currentUid across all connection requests.
+ * If multiple request records exist for the same peer pair, 'accepted' takes
+ * highest precedence over 'pending' and 'declined'.
+ */
+export function buildConnectionRequestStatusMap(
+  currentUid: string,
+  requests: ConnectionRequestMapRecord[]
+): Record<string, ConnectionRequestStatusValue> {
+  const cleanCurrentUid = String(currentUid || '').trim();
+  const map: Record<string, ConnectionRequestStatusValue> = {};
+  if (!cleanCurrentUid || !Array.isArray(requests)) {
+    return map;
+  }
+
+  for (const req of requests) {
+    if (!req || typeof req !== 'object') continue;
+    const fromUid = String(req.fromUid || '').trim();
+    const toUid = String(req.toUid || '').trim();
+    const rawStatus = req.status;
+    if (
+      rawStatus !== 'accepted' &&
+      rawStatus !== 'pending' &&
+      rawStatus !== 'declined'
+    ) {
+      continue;
+    }
+
+    let peerUid = '';
+    if (fromUid === cleanCurrentUid && toUid && toUid !== cleanCurrentUid) {
+      peerUid = toUid;
+    } else if (toUid === cleanCurrentUid && fromUid && fromUid !== cleanCurrentUid) {
+      peerUid = fromUid;
+    }
+
+    if (!peerUid) continue;
+
+    const existing = map[peerUid];
+    if (
+      !existing ||
+      CONNECTION_STATUS_PRIORITY[rawStatus] > CONNECTION_STATUS_PRIORITY[existing]
+    ) {
+      map[peerUid] = rawStatus;
+    }
+  }
+
+  return map;
+}
+
+/**
+ * Resolves the connection request status and Direct Message shortcut metadata
+ * for a peer row in the Online Directory.
+ */
+export function resolveOnlineDirectoryPeerDmShortcut(params: {
+  currentUid: string;
+  peerUid: string;
+  peerDisplayName?: string;
+  connectionStatusMap: Record<string, ConnectionRequestStatusValue>;
+}): OnlineDirectoryPeerDmShortcutMeta {
+  const cleanCurrentUid = String(params.currentUid || '').trim();
+  const cleanPeerUid = String(params.peerUid || '').trim();
+  const cleanName =
+    sanitizeSafeText(String(params.peerDisplayName || 'Peer'), 64) || 'Peer';
+  const isSelf = Boolean(
+    cleanCurrentUid && cleanPeerUid && cleanCurrentUid === cleanPeerUid
+  );
+
+  if (!cleanCurrentUid || !cleanPeerUid || isSelf) {
+    return {
+      peerUid: cleanPeerUid,
+      isSelf,
+      status: 'none',
+      isAcceptedConnection: false,
+      showDirectMessageShortcut: false,
+      shortcutLabel: 'Direct Message',
+      shortcutAriaLabel: `Direct Message ${cleanName}`,
+      connectionBadgeLabel: '',
+    };
+  }
+
+  const rawStatus = params.connectionStatusMap?.[cleanPeerUid];
+  const status: 'none' | ConnectionRequestStatusValue =
+    rawStatus === 'accepted' || rawStatus === 'pending' || rawStatus === 'declined'
+      ? rawStatus
+      : 'none';
+
+  const isAcceptedConnection = status === 'accepted';
+
+  return {
+    peerUid: cleanPeerUid,
+    isSelf: false,
+    status,
+    isAcceptedConnection,
+    showDirectMessageShortcut: isAcceptedConnection,
+    shortcutLabel: 'Direct Message',
+    shortcutAriaLabel: `Direct Message ${cleanName}`,
+    connectionBadgeLabel: isAcceptedConnection
+      ? 'Connected'
+      : status === 'pending'
+      ? 'Request pending'
+      : status === 'declined'
+      ? 'Request declined'
+      : '',
+  };
+}
 

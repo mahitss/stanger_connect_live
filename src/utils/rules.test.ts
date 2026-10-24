@@ -154,6 +154,8 @@ import {
   QUICK_START_POMODORO_MINUTES,
   QUICK_START_PARTICIPATION_POINTS,
   applyQuickStartPomodoroBlock,
+  buildConnectionRequestStatusMap,
+  resolveOnlineDirectoryPeerDmShortcut,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -2864,6 +2866,66 @@ test('Daily Productivity Quick Start button logs a 25-minute Pomodoro block, inc
   assert.equal(qs2.progress.milestoneStage, 'halfway_50');
 });
 
+test('Online Directory connection request status map and Direct Message shortcut resolve accepted, pending, declined, and self peer states', () => {
+  const statusMap = buildConnectionRequestStatusMap('usr_alice', [
+    { id: 'r1', fromUid: 'usr_alice', toUid: 'usr_bob', status: 'accepted' },
+    { id: 'r2', fromUid: 'usr_carol', toUid: 'usr_alice', status: 'pending' },
+    { id: 'r3', fromUid: 'usr_alice', toUid: 'usr_dave', status: 'declined' },
+    // Duplicate/older record for Bob should not downgrade 'accepted'
+    { id: 'r4', fromUid: 'usr_bob', toUid: 'usr_alice', status: 'pending' },
+    // Unrelated users should be ignored
+    { id: 'r5', fromUid: 'usr_eve', toUid: 'usr_frank', status: 'accepted' },
+  ]);
 
+  assert.deepEqual(statusMap, {
+    usr_bob: 'accepted',
+    usr_carol: 'pending',
+    usr_dave: 'declined',
+  });
 
+  // Accepted peer -> Direct Message shortcut enabled
+  const bobShortcut = resolveOnlineDirectoryPeerDmShortcut({
+    currentUid: 'usr_alice',
+    peerUid: 'usr_bob',
+    peerDisplayName: 'Bob Vance',
+    connectionStatusMap: statusMap,
+  });
+  assert.equal(bobShortcut.status, 'accepted');
+  assert.equal(bobShortcut.isAcceptedConnection, true);
+  assert.equal(bobShortcut.showDirectMessageShortcut, true);
+  assert.equal(bobShortcut.shortcutLabel, 'Direct Message');
+  assert.equal(bobShortcut.shortcutAriaLabel, 'Direct Message Bob Vance');
+  assert.equal(bobShortcut.connectionBadgeLabel, 'Connected');
 
+  // Pending peer -> Direct Message shortcut not shown
+  const carolShortcut = resolveOnlineDirectoryPeerDmShortcut({
+    currentUid: 'usr_alice',
+    peerUid: 'usr_carol',
+    peerDisplayName: 'Carol Peletier',
+    connectionStatusMap: statusMap,
+  });
+  assert.equal(carolShortcut.status, 'pending');
+  assert.equal(carolShortcut.isAcceptedConnection, false);
+  assert.equal(carolShortcut.showDirectMessageShortcut, false);
+  assert.equal(carolShortcut.connectionBadgeLabel, 'Request pending');
+
+  // Stranger with no request -> status 'none', shortcut not shown
+  const strangerShortcut = resolveOnlineDirectoryPeerDmShortcut({
+    currentUid: 'usr_alice',
+    peerUid: 'usr_stranger',
+    peerDisplayName: 'Stranger',
+    connectionStatusMap: statusMap,
+  });
+  assert.equal(strangerShortcut.status, 'none');
+  assert.equal(strangerShortcut.showDirectMessageShortcut, false);
+
+  // Self row -> never shows Direct Message shortcut
+  const selfShortcut = resolveOnlineDirectoryPeerDmShortcut({
+    currentUid: 'usr_alice',
+    peerUid: 'usr_alice',
+    peerDisplayName: 'Alice',
+    connectionStatusMap: statusMap,
+  });
+  assert.equal(selfShortcut.isSelf, true);
+  assert.equal(selfShortcut.showDirectMessageShortcut, false);
+});
