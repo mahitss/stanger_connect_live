@@ -8433,10 +8433,13 @@ export interface OnlineDirectoryQuickFilterMeta {
   hiddenPeersCount: number;
   requiresClearConfirmationModal: boolean;
   clearModalMeta: OnlineDirectoryClearFilterModalMeta;
-  iconName: 'users' | 'filter';
-  stateIconName: 'users' | 'filter';
+  iconName: 'user-check' | 'filter';
+  dynamicFilterIconComponent: 'UserCheck' | 'Filter';
+  stateIconName: 'user-check' | 'filter';
   secondaryStateIconName: 'link' | 'globe';
-  stateIconLabel: 'My Connections (Users & Chain)' | 'All Online (Filter)';
+  stateIconLabel:
+    | 'My Connections active (UserCheck icon)'
+    | 'Everyone active (Filter icon)';
   filterIconName: 'filter';
   toggleStateIndicator: 'ON · My Connections' | 'ALL · Everyone';
   statusDotTone: 'emerald' | 'zinc';
@@ -8535,12 +8538,13 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     hiddenPeersCount,
     requiresClearConfirmationModal: isMyConnectionsOnly,
     clearModalMeta,
-    iconName: isMyConnectionsOnly ? 'users' : 'filter',
-    stateIconName: isMyConnectionsOnly ? 'users' : 'filter',
+    iconName: isMyConnectionsOnly ? 'user-check' : 'filter',
+    dynamicFilterIconComponent: isMyConnectionsOnly ? 'UserCheck' : 'Filter',
+    stateIconName: isMyConnectionsOnly ? 'user-check' : 'filter',
     secondaryStateIconName: isMyConnectionsOnly ? 'link' : 'globe',
     stateIconLabel: isMyConnectionsOnly
-      ? 'My Connections (Users & Chain)'
-      : 'All Online (Filter)',
+      ? 'My Connections active (UserCheck icon)'
+      : 'Everyone active (Filter icon)',
     filterIconName: 'filter',
     toggleStateIndicator: isMyConnectionsOnly
       ? 'ON · My Connections'

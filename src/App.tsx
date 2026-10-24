@@ -4643,29 +4643,31 @@ export default function App() {
                               <span
                                 data-testid="online-directory-quick-filter-icon"
                                 data-icon-mode={directoryQuickFilterMeta.iconName}
+                                data-dynamic-icon={
+                                  directoryQuickFilterMeta.dynamicFilterIconComponent
+                                }
                                 data-state-icon={directoryQuickFilterMeta.stateIconName}
                                 data-secondary-icon={directoryQuickFilterMeta.secondaryStateIconName}
+                                role="img"
                                 aria-label={directoryQuickFilterMeta.stateIconLabel}
-                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border transition-colors ${
+                                className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded border transition-colors ${
                                   directoryQuickFilterMeta.isMyConnectionsOnly
                                     ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
                                     : 'bg-zinc-900 border-zinc-700/80 text-zinc-300'
                                 }`}
                               >
                                 {directoryQuickFilterMeta.isMyConnectionsOnly ? (
-                                  <>
-                                    <Users
-                                      data-testid="quick-filter-state-icon-users"
-                                      className="w-3.5 h-3.5 shrink-0 text-emerald-300"
-                                    />
-                                    <Link2
-                                      data-testid="quick-filter-state-icon-chain"
-                                      className="w-3 h-3 shrink-0 text-emerald-400/90"
-                                    />
-                                  </>
+                                  <UserCheck
+                                    aria-hidden="true"
+                                    data-testid="quick-filter-state-icon-usercheck"
+                                    data-icon-component="UserCheck"
+                                    className="w-3.5 h-3.5 shrink-0 text-emerald-300"
+                                  />
                                 ) : (
                                   <Filter
+                                    aria-hidden="true"
                                     data-testid="quick-filter-state-icon-filter"
+                                    data-icon-component="Filter"
                                     className="w-3.5 h-3.5 shrink-0 text-zinc-300"
                                   />
                                 )}
