@@ -8280,6 +8280,32 @@ export function getProductivityProgressMotionSpec(params: {
 // 44. ONLINE DIRECTORY QUICK FILTER ('MY CONNECTIONS' <-> 'EVERYONE')
 // ============================================================================
 
+export interface QuickFilterClearButtonMotionSpec {
+  isVisible: boolean;
+  initial: { opacity: number; scale: number };
+  animate: { opacity: number; scale: number };
+  exit: { opacity: number; scale: number };
+  transition: {
+    duration: number;
+    ease: 'easeOut';
+  };
+}
+
+export function getQuickFilterClearButtonMotionSpec(
+  isVisible: boolean
+): QuickFilterClearButtonMotionSpec {
+  return {
+    isVisible: Boolean(isVisible),
+    initial: { opacity: 0, scale: 0.85 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.85 },
+    transition: {
+      duration: 0.18,
+      ease: 'easeOut',
+    },
+  };
+}
+
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
@@ -8301,6 +8327,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   showClearButton: boolean;
   clearButtonLabel: 'Clear';
   clearButtonAriaLabel: string;
+  clearButtonMotion: QuickFilterClearButtonMotionSpec;
 }
 
 export function toggleOnlineDirectoryAudienceFilter(
@@ -8389,5 +8416,6 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     showClearButton: isMyConnectionsOnly,
     clearButtonLabel: 'Clear',
     clearButtonAriaLabel,
+    clearButtonMotion: getQuickFilterClearButtonMotionSpec(isMyConnectionsOnly),
   };
 }

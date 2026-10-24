@@ -159,6 +159,7 @@ import {
   getProductivityProgressMotionSpec,
   toggleOnlineDirectoryAudienceFilter,
   clearOnlineDirectoryAudienceFilter,
+  getQuickFilterClearButtonMotionSpec,
   getOnlineDirectoryQuickFilterMeta,
 } from './rules.ts';
 
@@ -3026,6 +3027,10 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
     everyoneMeta.clearButtonAriaLabel,
     'Clear My Connections filter and reset to Everyone (4)'
   );
+  assert.equal(everyoneMeta.clearButtonMotion.isVisible, false);
+  assert.deepEqual(everyoneMeta.clearButtonMotion.initial, { opacity: 0, scale: 0.85 });
+  assert.deepEqual(everyoneMeta.clearButtonMotion.animate, { opacity: 1, scale: 1 });
+  assert.deepEqual(everyoneMeta.clearButtonMotion.exit, { opacity: 0, scale: 0.85 });
 
   const connectionsMeta = getOnlineDirectoryQuickFilterMeta({
     mode: 'my_connections',
@@ -3053,6 +3058,12 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
   assert.equal(
     connectionsMeta.clearButtonAriaLabel,
     'Clear My Connections filter and reset to Everyone (4)'
+  );
+  assert.equal(connectionsMeta.clearButtonMotion.isVisible, true);
+  assert.deepEqual(connectionsMeta.clearButtonMotion.exit, { opacity: 0, scale: 0.85 });
+  assert.equal(
+    getQuickFilterClearButtonMotionSpec(false).exit.scale,
+    0.85
   );
 
   // Filtering with 'everyone' returns all 4 peers

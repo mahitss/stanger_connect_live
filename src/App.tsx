@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { motion } from 'motion/react';
+import { AnimatePresence, motion } from 'motion/react';
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -4631,24 +4631,34 @@ export default function App() {
                               </span>
                             </button>
 
-                            {directoryQuickFilterMeta.showClearButton && (
-                              <button
-                                id="online-directory-mood-filter-clear"
-                                type="button"
-                                onClick={() =>
-                                  setDirectoryAudienceFilter(
-                                    clearOnlineDirectoryAudienceFilter()
-                                  )
-                                }
-                                title={directoryQuickFilterMeta.clearButtonAriaLabel}
-                                aria-label={directoryQuickFilterMeta.clearButtonAriaLabel}
-                                data-testid="online-directory-quick-filter-clear-btn"
-                                className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-md border border-zinc-700/90 bg-zinc-900/90 text-zinc-200 hover:bg-zinc-800 hover:text-white hover:border-zinc-500 transition-colors whitespace-nowrap shrink-0"
-                              >
-                                <X className="w-3 h-3 shrink-0" />
-                                <span>{directoryQuickFilterMeta.clearButtonLabel}</span>
-                              </button>
-                            )}
+                            <AnimatePresence initial={false}>
+                              {directoryQuickFilterMeta.showClearButton && (
+                                <motion.button
+                                  key="online-directory-mood-filter-clear"
+                                  id="online-directory-mood-filter-clear"
+                                  type="button"
+                                  initial={directoryQuickFilterMeta.clearButtonMotion.initial}
+                                  animate={directoryQuickFilterMeta.clearButtonMotion.animate}
+                                  exit={directoryQuickFilterMeta.clearButtonMotion.exit}
+                                  transition={directoryQuickFilterMeta.clearButtonMotion.transition}
+                                  onClick={() =>
+                                    setDirectoryAudienceFilter(
+                                      clearOnlineDirectoryAudienceFilter()
+                                    )
+                                  }
+                                  title={directoryQuickFilterMeta.clearButtonAriaLabel}
+                                  aria-label={directoryQuickFilterMeta.clearButtonAriaLabel}
+                                  data-testid="online-directory-quick-filter-clear-btn"
+                                  data-motion-exit-scale={
+                                    directoryQuickFilterMeta.clearButtonMotion.exit.scale
+                                  }
+                                  className="inline-flex items-center gap-1 px-2 py-1.5 text-[11px] font-semibold rounded-md border border-zinc-700/90 bg-zinc-900/90 text-zinc-200 hover:bg-zinc-800 hover:text-white hover:border-zinc-500 whitespace-nowrap shrink-0 origin-center"
+                                >
+                                  <X className="w-3 h-3 shrink-0" />
+                                  <span>{directoryQuickFilterMeta.clearButtonLabel}</span>
+                                </motion.button>
+                              )}
+                            </AnimatePresence>
                           </div>
 
                           <span
