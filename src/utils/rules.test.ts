@@ -144,6 +144,11 @@ import {
   purchaseStreakFreeze,
   spendPointsToFreezeMissedDay,
   simulateMissedDayStreakEvaluation,
+  DEFAULT_STREAK_REMINDER_TIME,
+  STREAK_REMINDER_TIME_PRESETS,
+  DEFAULT_STREAK_REMINDER_PREFERENCES,
+  parseReminderTimeMinutes,
+  evaluateStreakFocusReminder,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -2631,4 +2636,136 @@ test('Quick Focus Desk toggle resolves ascending start chime when joining a desk
   assert.equal(mutedJoin.shouldPlay, false);
   assert.equal(mutedJoin.feedbackMessage, 'Joined Focus Desk (Sound alerts muted)');
 });
+
+test('Streak Focus Reminder evaluates cutoff time (e.g. 10:00 AM), shows subtle toast when focus has not started by cutoff, and suppresses toast when focus starts or is dismissed', () => {
+  assert.equal(DEFAULT_STREAK_REMINDER_TIME, '10:00');
+  assert.ok(STREAK_REMINDER_TIME_PRESETS.includes('10:00'));
+  assert.equal(DEFAULT_STREAK_REMINDER_PREFERENCES.enabled, true);
+  assert.equal(DEFAULT_STREAK_REMINDER_PREFERENCES.reminderTime24h, '10:00');
+
+  // 1. Time parsing (24h and 12h AM/PM formatting)
+  const tenAm = parseReminderTimeMinutes('10:00');
+  assert.equal(tenAm.hours, 10);
+  assert.equal(tenAm.minutes, 0);
+  assert.equal(tenAm.totalMinutes, 600);
+  assert.equal(tenAm.formatted24h, '10:00');
+  assert.equal(tenAm.formatted12h, '10:00 AM');
+
+  const twoThirtyPm = parseReminderTimeMinutes('14:30');
+  assert.equal(twoThirtyPm.hours, 14);
+  assert.equal(twoThirtyPm.minutes, 30);
+  assert.equal(twoThirtyPm.totalMinutes, 870);
+  assert.equal(twoThirtyPm.formatted24h, '14:30');
+  assert.equal(twoThirtyPm.formatted12h, '2:30 PM');
+
+  const invalidFallback = parseReminderTimeMinutes('invalid_time');
+  assert.equal(invalidFallback.formatted24h, '10:00');
+  assert.equal(invalidFallback.formatted12h, '10:00 AM');
+
+  // 2. Before reminder time (09:15 AM vs 10:00 AM cutoff) -> do NOT show toast
+  const beforeCutoff = evaluateStreakFocusReminder({
+    enabled: true,
+    reminderTime24h: '10:00',
+    currentHours: 9,
+    currentMinutes: 15,
+    todayDateKey: '2026-10-24',
+    hasStartedFocusSessionToday: false,
+    isInFocusDesk: false,
+    streakCount: 5,
+  });
+  assert.equal(beforeCutoff.shouldShowToast, false);
+  assert.equal(beforeCutoff.reason, 'before_reminder_time');
+  assert.equal(beforeCutoff.isPastReminderTime, false);
+  assert.equal(beforeCutoff.reminderTime12h, '10:00 AM');
+
+  // 3. At or past reminder time (10:00 AM and 11:30 AM) with NO focus session started -> SHOW toast!
+  const atTenAmNoFocus = evaluateStreakFocusReminder({
+    enabled: true,
+    reminderTime24h: '10:00',
+    currentHours: 10,
+    currentMinutes: 0,
+    todayDateKey: '2026-10-24',
+    hasStartedFocusSessionToday: false,
+    isInFocusDesk: false,
+    streakCount: 5,
+  });
+  assert.equal(atTenAmNoFocus.shouldShowToast, true);
+  assert.equal(atTenAmNoFocus.reason, 'active_reminder');
+  assert.equal(atTenAmNoFocus.isPastReminderTime, true);
+  assert.equal(atTenAmNoFocus.minutesPastReminder, 0);
+  assert.equal(atTenAmNoFocus.streakBadgeLabel, '5-Day Streak');
+  assert.ok(atTenAmNoFocus.title.includes('10:00 AM'));
+  assert.ok(atTenAmNoFocus.message.includes('10:00 AM'));
+  assert.ok(atTenAmNoFocus.message.includes('5-day streak'));
+
+  const pastCutoffNoFocus = evaluateStreakFocusReminder({
+    enabled: true,
+    reminderTime24h: '10:00',
+    currentHours: 11,
+    currentMinutes: 30,
+    todayDateKey: '2026-10-24',
+    hasStartedFocusSessionToday: false,
+    isInFocusDesk: false,
+    streakCount: 7,
+  });
+  assert.equal(pastCutoffNoFocus.shouldShowToast, true);
+  assert.equal(pastCutoffNoFocus.minutesPastReminder, 90);
+  assert.equal(pastCutoffNoFocus.streakBadgeLabel, '7-Day Streak');
+
+  // 4. Past cutoff, but user starts a focus session or joins a Focus Desk -> hides toast immediately
+  const startedDesk = evaluateStreakFocusReminder({
+    enabled: true,
+    reminderTime24h: '10:00',
+    currentHours: 11,
+    currentMinutes: 30,
+    todayDateKey: '2026-10-24',
+    hasStartedFocusSessionToday: false,
+    isInFocusDesk: true,
+    streakCount: 7,
+  });
+  assert.equal(startedDesk.shouldShowToast, false);
+  assert.equal(startedDesk.reason, 'focus_already_started');
+  assert.equal(startedDesk.hasStartedFocusToday, true);
+
+  const loggedFocusToday = evaluateStreakFocusReminder({
+    enabled: true,
+    reminderTime24h: '10:00',
+    currentHours: 11,
+    currentMinutes: 30,
+    todayDateKey: '2026-10-24',
+    startedFocusDateKey: '2026-10-24',
+    streakCount: 7,
+  });
+  assert.equal(loggedFocusToday.shouldShowToast, false);
+  assert.equal(loggedFocusToday.reason, 'focus_already_started');
+
+  // 5. Dismissed for todayDateKey -> hides toast for today, but shows again tomorrow
+  const dismissedToday = evaluateStreakFocusReminder({
+    enabled: true,
+    reminderTime24h: '10:00',
+    currentHours: 11,
+    currentMinutes: 30,
+    todayDateKey: '2026-10-24',
+    dismissedDateKey: '2026-10-24',
+    hasStartedFocusSessionToday: false,
+    streakCount: 7,
+  });
+  assert.equal(dismissedToday.shouldShowToast, false);
+  assert.equal(dismissedToday.reason, 'dismissed_today');
+  assert.equal(dismissedToday.isDismissedToday, true);
+
+  const dismissedYesterdayOnly = evaluateStreakFocusReminder({
+    enabled: true,
+    reminderTime24h: '10:00',
+    currentHours: 11,
+    currentMinutes: 30,
+    todayDateKey: '2026-10-24',
+    dismissedDateKey: '2026-10-23',
+    hasStartedFocusSessionToday: false,
+    streakCount: 7,
+  });
+  assert.equal(dismissedYesterdayOnly.shouldShowToast, true);
+  assert.equal(dismissedYesterdayOnly.reason, 'active_reminder');
+});
+
 

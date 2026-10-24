@@ -7583,4 +7583,197 @@ export function simulateMissedDayStreakEvaluation(params: {
   };
 }
 
+// ============================================================================
+// DAILY STREAK FOCUS SESSION REMINDER TOAST LOGIC
+// ============================================================================
+
+export const DEFAULT_STREAK_REMINDER_TIME = '10:00';
+
+export const STREAK_REMINDER_TIME_PRESETS = [
+  '08:00',
+  '09:00',
+  '10:00',
+  '12:00',
+  '14:00',
+  '18:00',
+] as const;
+
+export interface StreakFocusReminderPreferences {
+  enabled: boolean;
+  reminderTime24h: string;
+  dismissedDateKey: string | null;
+  startedFocusDateKey: string | null;
+  simulatedPastCutoff?: boolean;
+}
+
+export const DEFAULT_STREAK_REMINDER_PREFERENCES: StreakFocusReminderPreferences = {
+  enabled: true,
+  reminderTime24h: DEFAULT_STREAK_REMINDER_TIME,
+  dismissedDateKey: null,
+  startedFocusDateKey: null,
+  simulatedPastCutoff: false,
+};
+
+export interface ParsedReminderTime {
+  hours: number;
+  minutes: number;
+  totalMinutes: number;
+  formatted24h: string;
+  formatted12h: string;
+}
+
+export function parseReminderTimeMinutes(rawTime?: string | null): ParsedReminderTime {
+  const cleaned = typeof rawTime === 'string' ? rawTime.trim() : '';
+  const match = /^(\d{1,2}):(\d{2})$/.exec(cleaned);
+  let hours = 10;
+  let minutes = 0;
+
+  if (match) {
+    const parsedH = Number(match[1]);
+    const parsedM = Number(match[2]);
+    if (
+      Number.isFinite(parsedH) &&
+      Number.isFinite(parsedM) &&
+      parsedH >= 0 &&
+      parsedH <= 23 &&
+      parsedM >= 0 &&
+      parsedM <= 59
+    ) {
+      hours = parsedH;
+      minutes = parsedM;
+    }
+  }
+
+  const totalMinutes = hours * 60 + minutes;
+  const formatted24h = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+  const period = hours >= 12 ? 'PM' : 'AM';
+  const hour12 = hours % 12 === 0 ? 12 : hours % 12;
+  const formatted12h = `${hour12}:${String(minutes).padStart(2, '0')} ${period}`;
+
+  return {
+    hours,
+    minutes,
+    totalMinutes,
+    formatted24h,
+    formatted12h,
+  };
+}
+
+export type StreakFocusReminderReason =
+  | 'active_reminder'
+  | 'disabled'
+  | 'dismissed_today'
+  | 'focus_already_started'
+  | 'before_reminder_time';
+
+export interface StreakFocusReminderEvaluation {
+  shouldShowToast: boolean;
+  reason: StreakFocusReminderReason;
+  reminderTime24h: string;
+  reminderTime12h: string;
+  currentTime24h: string;
+  currentTime12h: string;
+  minutesPastReminder: number;
+  streakCount: number;
+  streakBadgeLabel: string;
+  title: string;
+  message: string;
+  statusSummary: string;
+  isDismissedToday: boolean;
+  hasStartedFocusToday: boolean;
+  isPastReminderTime: boolean;
+}
+
+export function evaluateStreakFocusReminder(params: {
+  enabled: boolean;
+  reminderTime24h?: string | null;
+  currentHours: number;
+  currentMinutes: number;
+  todayDateKey: string;
+  dismissedDateKey?: string | null;
+  startedFocusDateKey?: string | null;
+  hasStartedFocusSessionToday?: boolean;
+  isInFocusDesk?: boolean;
+  streakCount?: number;
+  simulatedPastCutoff?: boolean;
+}): StreakFocusReminderEvaluation {
+  const reminderParsed = parseReminderTimeMinutes(
+    params.reminderTime24h || DEFAULT_STREAK_REMINDER_TIME
+  );
+
+  const safeHours = Math.max(0, Math.min(23, Math.floor(Number(params.currentHours) || 0)));
+  const safeMinutes = Math.max(0, Math.min(59, Math.floor(Number(params.currentMinutes) || 0)));
+  const currentParsed = parseReminderTimeMinutes(
+    `${String(safeHours).padStart(2, '0')}:${String(safeMinutes).padStart(2, '0')}`
+  );
+
+  const safeStreak = Math.max(1, Math.round(Number(params.streakCount) || 1));
+  const streakBadgeLabel = `${safeStreak}-Day Streak`;
+
+  const hasStartedFocusToday = Boolean(
+    params.hasStartedFocusSessionToday ||
+      params.isInFocusDesk ||
+      (params.startedFocusDateKey && params.startedFocusDateKey === params.todayDateKey)
+  );
+
+  const isDismissedToday = Boolean(
+    params.dismissedDateKey && params.dismissedDateKey === params.todayDateKey
+  );
+
+  const isPastReminderTime = Boolean(
+    params.simulatedPastCutoff || currentParsed.totalMinutes >= reminderParsed.totalMinutes
+  );
+
+  const rawDiff = currentParsed.totalMinutes - reminderParsed.totalMinutes;
+  const minutesPastReminder = isPastReminderTime ? Math.max(0, rawDiff) : 0;
+
+  let reason: StreakFocusReminderReason = 'active_reminder';
+  if (!params.enabled) {
+    reason = 'disabled';
+  } else if (hasStartedFocusToday) {
+    reason = 'focus_already_started';
+  } else if (isDismissedToday) {
+    reason = 'dismissed_today';
+  } else if (!isPastReminderTime) {
+    reason = 'before_reminder_time';
+  }
+
+  const shouldShowToast = reason === 'active_reminder';
+
+  const title = `Focus Session Reminder · ${reminderParsed.formatted12h} Check-In`;
+  const message = `You haven't started a focus session by ${reminderParsed.formatted12h} today. Start a quick focus block or join a study desk to keep your ${safeStreak}-day streak going.`;
+
+  let statusSummary = '';
+  if (reason === 'disabled') {
+    statusSummary = `Reminder paused (scheduled for ${reminderParsed.formatted12h})`;
+  } else if (reason === 'focus_already_started') {
+    statusSummary = `Focus session started today · ${safeStreak}-day streak active`;
+  } else if (reason === 'dismissed_today') {
+    statusSummary = `Reminder dismissed for today (${reminderParsed.formatted12h} cutoff)`;
+  } else if (reason === 'before_reminder_time') {
+    statusSummary = `Scheduled for ${reminderParsed.formatted12h} if focus hasn't started`;
+  } else {
+    statusSummary = `Reminder active · Past ${reminderParsed.formatted12h} cutoff with no focus session started today`;
+  }
+
+  return {
+    shouldShowToast,
+    reason,
+    reminderTime24h: reminderParsed.formatted24h,
+    reminderTime12h: reminderParsed.formatted12h,
+    currentTime24h: currentParsed.formatted24h,
+    currentTime12h: currentParsed.formatted12h,
+    minutesPastReminder,
+    streakCount: safeStreak,
+    streakBadgeLabel,
+    title,
+    message,
+    statusSummary,
+    isDismissedToday,
+    hasStartedFocusToday,
+    isPastReminderTime,
+  };
+}
+
+
 

@@ -46,6 +46,8 @@ import {
   Moon,
   Sparkles,
   Trophy,
+  Bell,
+  Clock,
 } from 'lucide-react';
 import {
   auth,
@@ -132,6 +134,11 @@ import {
   purchaseStreakFreeze,
   spendPointsToFreezeMissedDay,
   simulateMissedDayStreakEvaluation,
+  StreakFocusReminderPreferences,
+  DEFAULT_STREAK_REMINDER_PREFERENCES,
+  STREAK_REMINDER_TIME_PRESETS,
+  parseReminderTimeMinutes,
+  evaluateStreakFocusReminder,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -563,6 +570,48 @@ export default function App() {
     }
     return 25;
   });
+  const [streakReminderPrefs, setStreakReminderPrefs] =
+    useState<StreakFocusReminderPreferences>(() => {
+      try {
+        const saved = localStorage.getItem('mr_stranger_streak_reminder_v1');
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed && typeof parsed === 'object') {
+            return {
+              enabled:
+                typeof parsed.enabled === 'boolean'
+                  ? parsed.enabled
+                  : DEFAULT_STREAK_REMINDER_PREFERENCES.enabled,
+              reminderTime24h: parseReminderTimeMinutes(parsed.reminderTime24h).formatted24h,
+              dismissedDateKey:
+                typeof parsed.dismissedDateKey === 'string' ? parsed.dismissedDateKey : null,
+              startedFocusDateKey:
+                typeof parsed.startedFocusDateKey === 'string'
+                  ? parsed.startedFocusDateKey
+                  : null,
+              simulatedPastCutoff: Boolean(parsed.simulatedPastCutoff),
+            };
+          }
+        }
+      } catch {
+        // ignore
+      }
+      return DEFAULT_STREAK_REMINDER_PREFERENCES;
+    });
+  const [clockHoursMinutes, setClockHoursMinutes] = useState<{
+    hours: number;
+    minutes: number;
+  }>(() => {
+    const now = new Date();
+    return { hours: now.getHours(), minutes: now.getMinutes() };
+  });
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const now = new Date();
+      setClockHoursMinutes({ hours: now.getHours(), minutes: now.getMinutes() });
+    }, 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [securityNotice, setSecurityNotice] = useState<string>('');
   const [sharedDailyGoalSummary, setSharedDailyGoalSummary] = useState<
     (DailyGoalMomentShareSummary & { momentId: string; copied: boolean }) | null
@@ -1462,9 +1511,39 @@ export default function App() {
     persistProductivityGoal(clamped, dailyCompletedMinutes);
   };
 
+  const persistStreakReminderPreferences = (
+    updater:
+      | StreakFocusReminderPreferences
+      | ((prev: StreakFocusReminderPreferences) => StreakFocusReminderPreferences)
+  ) => {
+    setStreakReminderPrefs((prev) => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      try {
+        localStorage.setItem('mr_stranger_streak_reminder_v1', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const markFocusSessionStartedToday = () => {
+    persistStreakReminderPreferences((prev) => {
+      if (prev.startedFocusDateKey === todayDateStr && !prev.simulatedPastCutoff) {
+        return prev;
+      }
+      return {
+        ...prev,
+        startedFocusDateKey: todayDateStr,
+        simulatedPastCutoff: false,
+      };
+    });
+  };
+
   const handleLogFocusMinutes = (minutesToAdd: number) => {
     const added = Math.max(1, Math.round(minutesToAdd));
     persistProductivityGoal(dailyTargetMinutes, dailyCompletedMinutes + added);
+    markFocusSessionStartedToday();
     awardParticipation(Math.max(5, Math.round(added / 2)));
   };
 
@@ -1494,6 +1573,7 @@ export default function App() {
       return next;
     });
     persistProductivityGoal(dailyTargetMinutes, dailyCompletedMinutes + added);
+    markFocusSessionStartedToday();
     awardParticipation(Math.max(5, Math.round(added / 2)));
   };
 
@@ -2729,6 +2809,61 @@ export default function App() {
     missedDateKey: streakFreezeState.missedDateKey,
   });
 
+  const hasExplicitFocusSessionToday = Boolean(
+    streakReminderPrefs.startedFocusDateKey === todayDateStr ||
+      myFocusStatus.isInFocus ||
+      topicFocusSessions.some((s) => s.dateKey === todayDateStr)
+  );
+
+  const streakReminderEvaluation = evaluateStreakFocusReminder({
+    enabled: streakReminderPrefs.enabled,
+    reminderTime24h: streakReminderPrefs.reminderTime24h,
+    currentHours: clockHoursMinutes.hours,
+    currentMinutes: clockHoursMinutes.minutes,
+    todayDateKey: todayDateStr,
+    dismissedDateKey: streakReminderPrefs.dismissedDateKey,
+    startedFocusDateKey: streakReminderPrefs.startedFocusDateKey,
+    hasStartedFocusSessionToday: hasExplicitFocusSessionToday,
+    isInFocusDesk: myFocusStatus.isInFocus,
+    streakCount: currentIdentity.streakCount,
+    simulatedPastCutoff: streakReminderPrefs.simulatedPastCutoff,
+  });
+
+  const handleDismissStreakReminderToday = () => {
+    persistStreakReminderPreferences((prev) => ({
+      ...prev,
+      dismissedDateKey: todayDateStr,
+      simulatedPastCutoff: false,
+    }));
+  };
+
+  const handleToggleStreakReminderEnabled = () => {
+    persistStreakReminderPreferences((prev) => ({
+      ...prev,
+      enabled: !prev.enabled,
+    }));
+  };
+
+  const handleUpdateStreakReminderTime = (nextTime24h: string) => {
+    const parsed = parseReminderTimeMinutes(nextTime24h);
+    persistStreakReminderPreferences((prev) => ({
+      ...prev,
+      enabled: true,
+      reminderTime24h: parsed.formatted24h,
+      dismissedDateKey: null,
+    }));
+  };
+
+  const handleTriggerStreakReminderPreview = () => {
+    persistStreakReminderPreferences((prev) => ({
+      ...prev,
+      enabled: true,
+      dismissedDateKey: null,
+      startedFocusDateKey: null,
+      simulatedPastCutoff: true,
+    }));
+  };
+
   const syncAccountPointsAndStreak = (nextStreak: number, nextPoints: number) => {
     setAccountSession((prev) => {
       const base = prev || currentIdentity;
@@ -3083,6 +3218,7 @@ export default function App() {
           })
         );
       }
+      markFocusSessionStartedToday();
       awardParticipation(15);
     }
   };
@@ -3905,6 +4041,117 @@ export default function App() {
                         {presetMins}m
                       </button>
                     ))}
+                  </div>
+                </div>
+
+                {/* Streak Focus Session Reminder Schedule Bar */}
+                <div
+                  data-testid="streak-reminder-settings-bar"
+                  className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-3"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span
+                      className={`w-7 h-7 rounded-md flex items-center justify-center border shrink-0 ${
+                        streakReminderEvaluation.shouldShowToast
+                          ? 'bg-amber-400/15 border-amber-400/40 text-amber-300'
+                          : streakReminderEvaluation.hasStartedFocusToday
+                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                            : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                      }`}
+                    >
+                      <Bell className="w-3.5 h-3.5" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold text-white">
+                          Streak Focus Check-In Reminder
+                        </span>
+                        <span
+                          data-testid="streak-reminder-cutoff-label"
+                          className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-amber-300 tabular-nums"
+                        >
+                          {streakReminderEvaluation.reminderTime12h}
+                        </span>
+                        <span
+                          data-testid="streak-reminder-status-badge"
+                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase tracking-wider ${
+                            streakReminderEvaluation.shouldShowToast
+                              ? 'bg-amber-400/15 text-amber-300 border border-amber-400/30'
+                              : streakReminderEvaluation.hasStartedFocusToday
+                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                          }`}
+                        >
+                          {streakReminderEvaluation.shouldShowToast
+                            ? 'Reminder Toast Active'
+                            : streakReminderEvaluation.hasStartedFocusToday
+                              ? 'Focus Started Today'
+                              : streakReminderEvaluation.isDismissedToday
+                                ? 'Dismissed Today'
+                                : streakReminderPrefs.enabled
+                                  ? 'Scheduled'
+                                  : 'Paused'}
+                        </span>
+                      </div>
+                      <p
+                        data-testid="streak-reminder-status-summary"
+                        className="text-[11px] text-zinc-400 truncate mt-0.5"
+                      >
+                        {streakReminderEvaluation.statusSummary}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5 text-zinc-500 shrink-0 mr-0.5" />
+                      {STREAK_REMINDER_TIME_PRESETS.slice(0, 4).map((presetTime) => {
+                        const parsedPreset = parseReminderTimeMinutes(presetTime);
+                        const isSelected =
+                          streakReminderEvaluation.reminderTime24h === parsedPreset.formatted24h;
+                        return (
+                          <button
+                            key={presetTime}
+                            type="button"
+                            data-testid={`streak-reminder-preset-${presetTime.replace(':', '')}`}
+                            onClick={() => handleUpdateStreakReminderTime(presetTime)}
+                            className={`px-2 py-1 text-[11px] font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
+                              isSelected
+                                ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 font-semibold'
+                                : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            {parsedPreset.formatted12h}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <button
+                      type="button"
+                      data-testid="streak-reminder-toggle-btn"
+                      aria-pressed={streakReminderPrefs.enabled}
+                      onClick={handleToggleStreakReminderEnabled}
+                      className={`px-2.5 py-1 text-[11px] font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
+                        streakReminderPrefs.enabled
+                          ? 'bg-zinc-900 text-emerald-300 border-emerald-500/40 hover:border-emerald-400'
+                          : 'bg-[#050505] text-zinc-500 border-zinc-800 hover:text-zinc-300'
+                      }`}
+                    >
+                      {streakReminderPrefs.enabled ? 'Reminder On' : 'Reminder Off'}
+                    </button>
+
+                    {!streakReminderEvaluation.shouldShowToast && (
+                      <button
+                        type="button"
+                        data-testid="streak-reminder-trigger-btn"
+                        onClick={handleTriggerStreakReminderPreview}
+                        className="px-2.5 py-1 text-[11px] font-mono rounded border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 transition-colors whitespace-nowrap shrink-0"
+                        title="Preview or re-check the daily streak focus reminder toast"
+                      >
+                        Check Reminder Toast
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -5532,7 +5779,98 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Subtle, Non-Intrusive Daily Streak Focus Reminder Toast */}
+      {streakReminderEvaluation.shouldShowToast && (
+        <aside
+          role="status"
+          aria-live="polite"
+          data-testid="streak-focus-reminder-toast"
+          data-reminder-cutoff={streakReminderEvaluation.reminderTime24h}
+          className="fixed bottom-5 right-5 z-40 w-[calc(100vw-2.5rem)] max-w-md rounded-xl border border-amber-400/35 bg-[#0A0A0C]/95 backdrop-blur-md p-4 shadow-2xl transition-all duration-200"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0">
+              <div className="w-9 h-9 rounded-lg bg-amber-400/15 border border-amber-400/35 flex items-center justify-center text-amber-300 shrink-0 mt-0.5">
+                <Flame className="w-4 h-4" />
+              </div>
+              <div className="min-w-0 space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    data-testid="streak-reminder-toast-title"
+                    className="text-xs font-bold text-white tracking-tight"
+                  >
+                    {streakReminderEvaluation.title}
+                  </span>
+                  <span
+                    data-testid="streak-reminder-toast-streak-badge"
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-400/15 border border-amber-400/35 text-[10px] font-mono font-semibold text-amber-300 tabular-nums"
+                  >
+                    <Flame className="w-3 h-3" />
+                    <span>{streakReminderEvaluation.streakBadgeLabel}</span>
+                  </span>
+                </div>
+                <p
+                  data-testid="streak-reminder-toast-message"
+                  className="text-xs text-zinc-300 leading-relaxed"
+                >
+                  {streakReminderEvaluation.message}
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleDismissStreakReminderToday}
+              data-testid="streak-reminder-close-btn"
+              aria-label="Dismiss focus reminder for today"
+              className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="mt-3 pt-2.5 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                data-testid="streak-reminder-start-desk-btn"
+                onClick={() => {
+                  if (!myFocusStatus.isInFocus) {
+                    handleToggleQuickFocusDesk();
+                  } else {
+                    markFocusSessionStartedToday();
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-amber-400 hover:bg-amber-300 text-black text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                <span>Start Focus Desk</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="streak-reminder-log-15m-btn"
+                onClick={() => handleLogFocusMinutes(15)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs font-mono font-semibold transition-colors whitespace-nowrap shrink-0"
+              >
+                <span>+15m Focus</span>
+              </button>
+            </div>
+
+            <button
+              type="button"
+              data-testid="streak-reminder-dismiss-btn"
+              onClick={handleDismissStreakReminderToday}
+              className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900 transition-colors whitespace-nowrap shrink-0"
+            >
+              Dismiss for Today
+            </button>
+          </div>
+        </aside>
+      )}
     </div>
   );
 }
+
 
