@@ -8804,3 +8804,40 @@ export function getMoodCategoryExpansionMotionSpec(
   };
 }
 
+export interface WorkspaceSidebarScrollSpec {
+  isHovered: boolean;
+  isSticky: true;
+  independentMainScroll: true;
+  preventLayoutFluctuation: true;
+  scrollMode: 'hover-scroll' | 'locked';
+  layoutMode: 'side-by-side-sticky';
+  shellClassName: string;
+  sidebarPositionClass: string;
+  sidebarScrollAreaClass: string;
+  mainViewportClass: string;
+}
+
+export function getWorkspaceSidebarScrollSpec(
+  isSidebarHovered: boolean = false
+): WorkspaceSidebarScrollSpec {
+  const isHovered = Boolean(isSidebarHovered);
+  return {
+    isHovered,
+    isSticky: true,
+    independentMainScroll: true,
+    preventLayoutFluctuation: true,
+    scrollMode: isHovered ? 'hover-scroll' : 'locked',
+    layoutMode: 'side-by-side-sticky',
+    shellClassName:
+      'min-h-screen md:h-screen md:max-h-screen md:overflow-hidden flex flex-col md:flex-row',
+    sidebarPositionClass:
+      'md:sticky md:top-0 md:h-screen md:max-h-screen md:w-64 md:min-w-[16rem] md:max-w-[16rem] shrink-0 self-start',
+    sidebarScrollAreaClass: isHovered
+      ? 'overflow-y-auto overscroll-contain sidebar-stable-scroll'
+      : 'overflow-y-hidden overscroll-contain sidebar-stable-scroll',
+    mainViewportClass:
+      'flex-1 flex flex-col min-w-0 md:h-screen md:max-h-screen md:overflow-y-auto overscroll-contain main-viewport-stable-scroll',
+  };
+}
+
+

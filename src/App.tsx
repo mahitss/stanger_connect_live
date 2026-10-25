@@ -163,6 +163,7 @@ import {
   getOnlineDirectoryQuickFilterMeta,
   toggleMoodCategoryDrawerExpanded,
   getMoodCategoryExpansionMotionSpec,
+  getWorkspaceSidebarScrollSpec,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -675,6 +676,7 @@ export default function App() {
   const [directoryAudienceFilter, setDirectoryAudienceFilter] =
     useState<OnlineDirectoryAudienceFilter>('everyone');
   const [isQuickFilterHovered, setIsQuickFilterHovered] = useState<boolean>(false);
+  const [isSidebarHovered, setIsSidebarHovered] = useState<boolean>(false);
   const [isClearFilterModalOpen, setIsClearFilterModalOpen] = useState<boolean>(false);
   useEffect(() => {
     if (!isClearFilterModalOpen) return;
@@ -3328,22 +3330,44 @@ export default function App() {
     }
   };
 
+  const sidebarScrollSpec = getWorkspaceSidebarScrollSpec(isSidebarHovered);
+
+  const handleSidebarQuickJump = (targetTestId: string) => {
+    setActivePage('hub');
+    window.requestAnimationFrame(() => {
+      const targetEl = document.querySelector(`[data-testid="${targetTestId}"]`);
+      if (targetEl && typeof targetEl.scrollIntoView === 'function') {
+        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    });
+  };
+
   // ==========================================================================
   // MNC-LEVEL WORKSPACE CANVAS: SIDEBAR + VIEWPORT (Supports Dark & Light)
   // ==========================================================================
   return (
     <div
+      id="workspace-shell"
+      data-testid="workspace-shell"
       data-theme={themeMode}
-      className={`min-h-screen flex flex-col md:flex-row transition-colors ${themeMeta.rootClassName} bg-slate-50 text-slate-900 dark:bg-[#050505] dark:text-zinc-100`}
+      data-layout-mode={sidebarScrollSpec.layoutMode}
+      className={`${sidebarScrollSpec.shellClassName} transition-colors ${themeMeta.rootClassName} bg-slate-50 text-slate-900 dark:bg-[#050505] dark:text-zinc-100`}
     >
-      {/* Persistent Left Sidebar Navigation (260px on desktop) */}
+      {/* Persistent Left Sidebar Navigation (Stuck in place; scrolls remaining items only when hovered) */}
       <aside
-        className="w-full md:w-64 bg-white dark:bg-[#0A0A0C] border-b md:border-b-0 md:border-r border-slate-200 dark:border-zinc-800/80 flex flex-col justify-between shrink-0"
+        id="workspace-sidebar"
+        data-testid="workspace-sidebar"
+        data-sidebar-sticky="true"
+        data-sidebar-hovered={sidebarScrollSpec.isHovered ? 'true' : 'false'}
+        data-sidebar-scroll-mode={sidebarScrollSpec.scrollMode}
+        onMouseEnter={() => setIsSidebarHovered(true)}
+        onMouseLeave={() => setIsSidebarHovered(false)}
+        className={`w-full ${sidebarScrollSpec.sidebarPositionClass} bg-white dark:bg-[#0A0A0C] border-b md:border-b-0 md:border-r border-slate-200 dark:border-zinc-800/80 flex flex-col overflow-hidden`}
         aria-label="Workspace Sidebar Navigation"
       >
-        <div className="p-5 space-y-6">
-          {/* Brand & Live Streak Badge */}
-          <div className="flex items-center justify-between border-b border-slate-200 dark:border-zinc-800/80 pb-4">
+        {/* Pinned Brand & Live Streak Header */}
+        <div className="px-5 pt-5 pb-4 border-b border-slate-200 dark:border-zinc-800/80 shrink-0 bg-white dark:bg-[#0A0A0C]">
+          <div className="flex items-center justify-between">
             <button
               type="button"
               onClick={() => setActivePage('hub')}
@@ -3366,12 +3390,27 @@ export default function App() {
               <span>{currentIdentity.streakCount}d</span>
             </div>
           </div>
+        </div>
 
-          {/* Primary Communication & Study Modes */}
-          <div className="space-y-1">
-            <div className="px-3 pb-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500">
-              Core Modes
-            </div>
+        {/* Hover-Scrollable Sidebar Items Container (Stuck when not hovered, scrolls smoothly for remaining items on mouse hover without width fluctuation) */}
+        <div
+          id="workspace-sidebar-scroll-area"
+          data-testid="workspace-sidebar-scroll-area"
+          data-scroll-mode={sidebarScrollSpec.scrollMode}
+          data-sidebar-hovered={sidebarScrollSpec.isHovered ? 'true' : 'false'}
+          onWheel={(e) => {
+            if (!isSidebarHovered) {
+              e.preventDefault();
+            }
+          }}
+          className={`flex-1 min-h-0 flex flex-col justify-between ${sidebarScrollSpec.sidebarScrollAreaClass}`}
+        >
+          <div className="p-5 space-y-6">
+            {/* Primary Communication & Study Modes */}
+            <div className="space-y-1">
+              <div className="px-3 pb-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500">
+                Core Modes
+              </div>
             <button
               type="button"
               onClick={() => setActivePage('hub')}
@@ -3530,54 +3569,139 @@ export default function App() {
               </span>
             </button>
           </div>
+
+          {/* Remaining Workspace Sections (Scrollable when hovering over sidebar) */}
+          <div className="space-y-1.5" data-testid="sidebar-remaining-sections">
+            <div className="px-3 pb-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500">
+              Hub Quick Jump
+            </div>
+            <button
+              type="button"
+              onClick={() => handleSidebarQuickJump('daily-productivity-goal-card')}
+              data-testid="sidebar-jump-daily-goal"
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+            >
+              <span className="flex items-center gap-2.5">
+                <Zap className="w-3.5 h-3.5 text-amber-400" />
+                <span>Daily Focus Goal</span>
+              </span>
+              <span className="font-mono text-[11px] tabular-nums">{goalProgress.progressPercent}%</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSidebarQuickJump('streak-reminder-settings-bar')}
+              data-testid="sidebar-jump-streak-reminder"
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+            >
+              <span className="flex items-center gap-2.5">
+                <Bell className="w-3.5 h-3.5 text-amber-300" />
+                <span>Streak Check-In</span>
+              </span>
+              <span className="font-mono text-[11px] tabular-nums">{streakReminderEvaluation.reminderTime12h}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSidebarQuickJump('weekly-activity-overview-card')}
+              data-testid="sidebar-jump-weekly-activity"
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+            >
+              <span className="flex items-center gap-2.5">
+                <Clock className="w-3.5 h-3.5 text-sky-400" />
+                <span>7-Day Activity</span>
+              </span>
+              <span className="font-mono text-[11px] tabular-nums">{dailyCompletedMinutes}m</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSidebarQuickJump('global-leaderboard-card')}
+              data-testid="sidebar-jump-leaderboard"
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+            >
+              <span className="flex items-center gap-2.5">
+                <Trophy className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Global Leaderboard</span>
+              </span>
+              <span className="font-mono text-[11px] tabular-nums">{currentIdentity.participationPoints}p</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSidebarQuickJump('hub-online-directory')}
+              data-testid="sidebar-jump-mood-directory"
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+            >
+              <span className="flex items-center gap-2.5">
+                <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                <span>Mood Directory</span>
+              </span>
+              <span className="font-mono text-[11px] tabular-nums">{onlinePeers.length}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSidebarQuickJump('online-directory-mood-category-filter')}
+              data-testid="sidebar-jump-mood-categories"
+              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+            >
+              <span className="flex items-center gap-2.5">
+                <Filter className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Mood Categories</span>
+              </span>
+              <span className="font-mono text-[11px] tabular-nums">{ONLINE_MOOD_CATEGORIES.length}</span>
+            </button>
+          </div>
         </div>
 
-        {/* Bottom Sidebar Account Card & Sign-Out Page Trigger */}
-        <div className="p-4 border-t border-slate-200 dark:border-zinc-800/80 bg-slate-50 dark:bg-[#050505] space-y-3">
-          <div className="min-w-0 space-y-1.5">
-            <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-              {currentIdentity.displayName}
+          {/* Bottom Sidebar Account Card & Sign-Out Page Trigger */}
+          <div className="p-4 border-t border-slate-200 dark:border-zinc-800/80 bg-slate-50 dark:bg-[#050505] space-y-3 shrink-0">
+            <div className="min-w-0 space-y-1.5">
+              <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                {currentIdentity.displayName}
+              </div>
+              <div className="text-[11px] text-slate-500 dark:text-zinc-500 font-mono truncate">
+                {currentIdentity.email}
+              </div>
+              <div
+                className="flex flex-wrap items-center gap-1 pt-0.5"
+                data-testid="sidebar-profile-badges"
+              >
+                {userBadgeSummary.unlockedBadges.length > 0 ? (
+                  userBadgeSummary.unlockedBadges.map((b) => (
+                    <AchievementBadgeChip
+                      key={b.id}
+                      badge={b}
+                      compact={true}
+                      testId={`sidebar-badge-${b.id}`}
+                    />
+                  ))
+                ) : (
+                  <span className="text-[10px] font-mono text-zinc-500">
+                    Badges: 0/{userBadgeSummary.totalBadgesCount} unlocked
+                  </span>
+                )}
+              </div>
             </div>
-            <div className="text-[11px] text-slate-500 dark:text-zinc-500 font-mono truncate">
-              {currentIdentity.email}
-            </div>
-            <div
-              className="flex flex-wrap items-center gap-1 pt-0.5"
-              data-testid="sidebar-profile-badges"
+            <button
+              type="button"
+              onClick={() => setActivePage('signout')}
+              className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                activePage === 'signout'
+                  ? 'bg-rose-600 text-white'
+                  : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800'
+              }`}
             >
-              {userBadgeSummary.unlockedBadges.length > 0 ? (
-                userBadgeSummary.unlockedBadges.map((b) => (
-                  <AchievementBadgeChip
-                    key={b.id}
-                    badge={b}
-                    compact={true}
-                    testId={`sidebar-badge-${b.id}`}
-                  />
-                ))
-              ) : (
-                <span className="text-[10px] font-mono text-zinc-500">
-                  Badges: 0/{userBadgeSummary.totalBadgesCount} unlocked
-                </span>
-              )}
-            </div>
+              <LogOut className="w-3.5 h-3.5" />
+              <span>Account & Sign Out</span>
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setActivePage('signout')}
-            className={`w-full flex items-center justify-center gap-2 py-2 px-3 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-              activePage === 'signout'
-                ? 'bg-rose-600 text-white'
-                : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800'
-            }`}
-          >
-            <LogOut className="w-3.5 h-3.5" />
-            <span>Account & Sign Out</span>
-          </button>
         </div>
       </aside>
 
-      {/* Right Main Workspace Viewport */}
-      <div className="flex-1 flex flex-col min-w-0">
+      {/* Right Main Workspace Viewport (Scrolls independently side-by-side next to stuck sidebar) */}
+      <div
+        id="workspace-main-viewport"
+        data-testid="workspace-main-viewport"
+        data-independent-scroll="true"
+        className={sidebarScrollSpec.mainViewportClass}
+      >
         {/* Top Workspace Header (Follows SaaS Top Bar Contract: Breadcrumb left, Theme Switcher, Streak & Primary Action right) */}
         <header className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-[#050505]">
           <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400 truncate">

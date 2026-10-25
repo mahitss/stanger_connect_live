@@ -170,6 +170,7 @@ import {
   getOnlineDirectoryQuickFilterMeta,
   toggleMoodCategoryDrawerExpanded,
   getMoodCategoryExpansionMotionSpec,
+  getWorkspaceSidebarScrollSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -3281,4 +3282,30 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
   assert.equal(preset00.transition.delay, 0.05);
   assert.equal(preset01.transition.delay, 0.085);
   assert.equal(preset10.transition.delay, 0.11);
+
+  // Sticky sidebar & hover-only scroll specification without layout fluctuation
+  const lockedSidebarSpec = getWorkspaceSidebarScrollSpec(false);
+  assert.equal(lockedSidebarSpec.isHovered, false);
+  assert.equal(lockedSidebarSpec.isSticky, true);
+  assert.equal(lockedSidebarSpec.independentMainScroll, true);
+  assert.equal(lockedSidebarSpec.preventLayoutFluctuation, true);
+  assert.equal(lockedSidebarSpec.scrollMode, 'locked');
+  assert.equal(lockedSidebarSpec.layoutMode, 'side-by-side-sticky');
+  assert.ok(lockedSidebarSpec.sidebarPositionClass.includes('md:sticky'));
+  assert.ok(lockedSidebarSpec.sidebarPositionClass.includes('md:top-0'));
+  assert.ok(lockedSidebarSpec.sidebarPositionClass.includes('md:h-screen'));
+  assert.ok(lockedSidebarSpec.sidebarScrollAreaClass.includes('overflow-y-hidden'));
+  assert.ok(lockedSidebarSpec.sidebarScrollAreaClass.includes('sidebar-stable-scroll'));
+  assert.ok(lockedSidebarSpec.mainViewportClass.includes('md:overflow-y-auto'));
+
+  const hoveredSidebarSpec = getWorkspaceSidebarScrollSpec(true);
+  assert.equal(hoveredSidebarSpec.isHovered, true);
+  assert.equal(hoveredSidebarSpec.scrollMode, 'hover-scroll');
+  assert.ok(hoveredSidebarSpec.sidebarScrollAreaClass.includes('overflow-y-auto'));
+  assert.ok(hoveredSidebarSpec.sidebarScrollAreaClass.includes('sidebar-stable-scroll'));
+  assert.equal(
+    hoveredSidebarSpec.sidebarPositionClass,
+    lockedSidebarSpec.sidebarPositionClass
+  );
 });
+

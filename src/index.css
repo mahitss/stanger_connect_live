@@ -242,3 +242,28 @@ html.light textarea::placeholder {
   }
 }
 
+/* ==========================================================================
+   STICKY SIDEBAR & INDEPENDENT MAIN VIEWPORT (ZERO LAYOUT FLUCTUATION)
+   Locks sidebar geometry so hovering/unhovering never shifts width by 1px,
+   while allowing smooth vertical scroll on hover for remaining sidebar items.
+   ========================================================================== */
+.sidebar-stable-scroll {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  overscroll-behavior: contain;
+  overflow-x: hidden;
+}
+
+.sidebar-stable-scroll::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
+  display: none;
+}
+
+.main-viewport-stable-scroll {
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+  overflow-x: hidden;
+}
+
+
