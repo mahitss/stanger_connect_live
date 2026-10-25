@@ -5008,29 +5008,80 @@ export default function App() {
                                 }
                                 data-state-icon={directoryQuickFilterMeta.stateIconName}
                                 data-secondary-icon={directoryQuickFilterMeta.secondaryStateIconName}
+                                data-crossfade-animation={
+                                  directoryQuickFilterMeta.iconCrossFadeMotion.animationType
+                                }
+                                data-crossfade-duration-ms={
+                                  directoryQuickFilterMeta.iconCrossFadeMotion.durationMs
+                                }
+                                data-active-icon-key={
+                                  directoryQuickFilterMeta.iconCrossFadeMotion.activeIconKey
+                                }
                                 role="img"
                                 aria-label={directoryQuickFilterMeta.stateIconLabel}
-                                className={`inline-flex items-center justify-center px-1.5 py-0.5 rounded border transition-colors ${
+                                className={`relative overflow-hidden inline-flex items-center justify-center px-1.5 py-0.5 rounded border quick-filter-icon-crossfade ${
                                   directoryQuickFilterMeta.isMyConnectionsOnly
                                     ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
                                     : 'bg-zinc-900 border-zinc-700/80 text-zinc-300'
                                 }`}
                               >
-                                {directoryQuickFilterMeta.isMyConnectionsOnly ? (
-                                  <UserCheck
-                                    aria-hidden="true"
-                                    data-testid="quick-filter-state-icon-usercheck"
-                                    data-icon-component="UserCheck"
-                                    className="w-3.5 h-3.5 shrink-0 text-emerald-300"
-                                  />
-                                ) : (
-                                  <Filter
-                                    aria-hidden="true"
-                                    data-testid="quick-filter-state-icon-filter"
-                                    data-icon-component="Filter"
-                                    className="w-3.5 h-3.5 shrink-0 text-zinc-300"
-                                  />
-                                )}
+                                <AnimatePresence mode="popLayout" initial={false}>
+                                  {directoryQuickFilterMeta.isMyConnectionsOnly ? (
+                                    <motion.span
+                                      key="icon-usercheck"
+                                      data-testid="quick-filter-icon-crossfade-layer"
+                                      data-icon-key="icon-usercheck"
+                                      data-icon-component="UserCheck"
+                                      initial={
+                                        directoryQuickFilterMeta.iconCrossFadeMotion.initial
+                                      }
+                                      animate={
+                                        directoryQuickFilterMeta.iconCrossFadeMotion.animate
+                                      }
+                                      exit={
+                                        directoryQuickFilterMeta.iconCrossFadeMotion.exit
+                                      }
+                                      transition={
+                                        directoryQuickFilterMeta.iconCrossFadeMotion.transition
+                                      }
+                                      className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
+                                    >
+                                      <UserCheck
+                                        aria-hidden="true"
+                                        data-testid="quick-filter-state-icon-usercheck"
+                                        data-icon-component="UserCheck"
+                                        className="w-3.5 h-3.5 shrink-0 text-emerald-300"
+                                      />
+                                    </motion.span>
+                                  ) : (
+                                    <motion.span
+                                      key="icon-filter"
+                                      data-testid="quick-filter-icon-crossfade-layer"
+                                      data-icon-key="icon-filter"
+                                      data-icon-component="Filter"
+                                      initial={
+                                        directoryQuickFilterMeta.iconCrossFadeMotion.initial
+                                      }
+                                      animate={
+                                        directoryQuickFilterMeta.iconCrossFadeMotion.animate
+                                      }
+                                      exit={
+                                        directoryQuickFilterMeta.iconCrossFadeMotion.exit
+                                      }
+                                      transition={
+                                        directoryQuickFilterMeta.iconCrossFadeMotion.transition
+                                      }
+                                      className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
+                                    >
+                                      <Filter
+                                        aria-hidden="true"
+                                        data-testid="quick-filter-state-icon-filter"
+                                        data-icon-component="Filter"
+                                        className="w-3.5 h-3.5 shrink-0 text-zinc-300"
+                                      />
+                                    </motion.span>
+                                  )}
+                                </AnimatePresence>
                               </span>
 
                               <span>

@@ -233,10 +233,39 @@ html.light textarea::placeholder {
   will-change: transform, opacity;
 }
 
+@keyframes quickFilterIconCrossFadeIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.88);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'],
+.quick-filter-icon-crossfade {
+  transition:
+    background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#online-directory-mood-filter .quick-filter-icon-crossfade-item {
+  animation: quickFilterIconCrossFadeIn 160ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transition:
+    opacity 160ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .moment-thread-collapse-grid,
   .moment-thread-slide-in,
-  .moment-thread-slide-out {
+  .moment-thread-slide-out,
+  .quick-filter-icon-crossfade,
+  #online-directory-mood-filter .quick-filter-icon-crossfade-item {
     transition: none !important;
     animation: none !important;
   }

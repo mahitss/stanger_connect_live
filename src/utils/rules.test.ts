@@ -164,6 +164,7 @@ import {
   clearOnlineDirectoryAudienceFilter,
   getQuickFilterClearButtonMotionSpec,
   getQuickFilterToggleHoverMotionSpec,
+  getQuickFilterIconCrossFadeSpec,
   getOnlineDirectoryClearFilterModalMeta,
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
@@ -3619,3 +3620,53 @@ test('filterMoodCategoryGroupsBySearchQuery filters #online-directory-mood-filte
     'No mood presets match "nonexistent_mood_xyz"'
   );
 });
+
+test('getQuickFilterIconCrossFadeSpec and getOnlineDirectoryQuickFilterMeta provide deterministic cross-fade parameters between UserCheck and Filter icons', () => {
+  const everyoneSpec = getQuickFilterIconCrossFadeSpec('everyone');
+  assert.equal(everyoneSpec.activeIconComponent, 'Filter');
+  assert.equal(everyoneSpec.inactiveIconComponent, 'UserCheck');
+  assert.equal(everyoneSpec.activeIconKey, 'icon-filter');
+  assert.equal(everyoneSpec.animationType, 'cross-fade');
+  assert.equal(everyoneSpec.durationMs, 160);
+  assert.equal(everyoneSpec.durationSec, 0.16);
+  assert.equal(everyoneSpec.easing, 'easeOut');
+  assert.equal(everyoneSpec.cubicBezier, 'cubic-bezier(0.16, 1, 0.3, 1)');
+  assert.deepEqual(everyoneSpec.initial, { opacity: 0, scale: 0.88 });
+  assert.deepEqual(everyoneSpec.animate, { opacity: 1, scale: 1 });
+  assert.deepEqual(everyoneSpec.exit, { opacity: 0, scale: 0.88 });
+  assert.equal(everyoneSpec.filterLayerState.isActive, true);
+  assert.equal(everyoneSpec.filterLayerState.opacity, 1);
+  assert.equal(everyoneSpec.filterLayerState.scale, 1);
+  assert.equal(everyoneSpec.userCheckLayerState.isActive, false);
+  assert.equal(everyoneSpec.userCheckLayerState.opacity, 0);
+  assert.equal(everyoneSpec.userCheckLayerState.scale, 0.88);
+
+  const connectionsSpec = getQuickFilterIconCrossFadeSpec('my_connections');
+  assert.equal(connectionsSpec.activeIconComponent, 'UserCheck');
+  assert.equal(connectionsSpec.inactiveIconComponent, 'Filter');
+  assert.equal(connectionsSpec.activeIconKey, 'icon-usercheck');
+  assert.equal(connectionsSpec.animationType, 'cross-fade');
+  assert.equal(connectionsSpec.durationMs, 160);
+  assert.equal(connectionsSpec.userCheckLayerState.isActive, true);
+  assert.equal(connectionsSpec.userCheckLayerState.opacity, 1);
+  assert.equal(connectionsSpec.userCheckLayerState.scale, 1);
+  assert.equal(connectionsSpec.filterLayerState.isActive, false);
+  assert.equal(connectionsSpec.filterLayerState.opacity, 0);
+  assert.equal(connectionsSpec.filterLayerState.scale, 0.88);
+
+  const metaEveryone = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1' }, { uid: 'p2' }],
+  });
+  assert.deepEqual(metaEveryone.iconCrossFadeMotion, everyoneSpec);
+
+  const metaConnections = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1' }, { uid: 'p2' }],
+    acceptedPeerUids: ['p1'],
+  });
+  assert.deepEqual(metaConnections.iconCrossFadeMotion, connectionsSpec);
+});
+
+
+

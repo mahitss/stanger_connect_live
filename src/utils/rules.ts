@@ -8563,6 +8563,72 @@ export function confirmOnlineDirectoryClearFilterReset(): {
   };
 }
 
+export interface QuickFilterIconCrossFadeMotionSpec {
+  mode: OnlineDirectoryAudienceFilter;
+  activeIconComponent: 'UserCheck' | 'Filter';
+  inactiveIconComponent: 'Filter' | 'UserCheck';
+  activeIconKey: 'icon-usercheck' | 'icon-filter';
+  animationType: 'cross-fade';
+  durationMs: number;
+  durationSec: number;
+  easing: 'easeOut';
+  cubicBezier: 'cubic-bezier(0.16, 1, 0.3, 1)';
+  initial: { opacity: number; scale: number };
+  animate: { opacity: number; scale: number };
+  exit: { opacity: number; scale: number };
+  transition: {
+    duration: number;
+    ease: 'easeOut';
+  };
+  userCheckLayerState: {
+    isActive: boolean;
+    opacity: number;
+    scale: number;
+  };
+  filterLayerState: {
+    isActive: boolean;
+    opacity: number;
+    scale: number;
+  };
+}
+
+export function getQuickFilterIconCrossFadeSpec(
+  mode: OnlineDirectoryAudienceFilter = 'everyone'
+): QuickFilterIconCrossFadeMotionSpec {
+  const normalizedMode: OnlineDirectoryAudienceFilter =
+    mode === 'my_connections' ? 'my_connections' : 'everyone';
+  const isMyConnections = normalizedMode === 'my_connections';
+
+  return {
+    mode: normalizedMode,
+    activeIconComponent: isMyConnections ? 'UserCheck' : 'Filter',
+    inactiveIconComponent: isMyConnections ? 'Filter' : 'UserCheck',
+    activeIconKey: isMyConnections ? 'icon-usercheck' : 'icon-filter',
+    animationType: 'cross-fade',
+    durationMs: 160,
+    durationSec: 0.16,
+    easing: 'easeOut',
+    cubicBezier: 'cubic-bezier(0.16, 1, 0.3, 1)',
+    initial: { opacity: 0, scale: 0.88 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.88 },
+    transition: {
+      duration: 0.16,
+      ease: 'easeOut',
+    },
+    userCheckLayerState: {
+      isActive: isMyConnections,
+      opacity: isMyConnections ? 1 : 0,
+      scale: isMyConnections ? 1 : 0.88,
+    },
+    filterLayerState: {
+      isActive: !isMyConnections,
+      opacity: isMyConnections ? 0 : 1,
+      scale: isMyConnections ? 0.88 : 1,
+    },
+  };
+}
+
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
@@ -8595,6 +8661,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   clearButtonAriaLabel: string;
   clearButtonMotion: QuickFilterClearButtonMotionSpec;
   toggleHoverMotion: QuickFilterToggleHoverMotionSpec;
+  iconCrossFadeMotion: QuickFilterIconCrossFadeMotionSpec;
 }
 
 export function toggleOnlineDirectoryAudienceFilter(
@@ -8702,6 +8769,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     clearButtonAriaLabel,
     clearButtonMotion: getQuickFilterClearButtonMotionSpec(isMyConnectionsOnly),
     toggleHoverMotion: getQuickFilterToggleHoverMotionSpec(Boolean(params.isHovered)),
+    iconCrossFadeMotion: getQuickFilterIconCrossFadeSpec(mode),
   };
 }
 
