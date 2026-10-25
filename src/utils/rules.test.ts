@@ -166,6 +166,7 @@ import {
   getQuickFilterToggleHoverMotionSpec,
   getQuickFilterIconCrossFadeSpec,
   getQuickFilterIconHoverGlowSpec,
+  getQuickFilterIconPulseSpec,
   getOnlineDirectoryClearFilterModalMeta,
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
@@ -3808,7 +3809,89 @@ test('buildOnlineDirectoryFilterShareLink and parseOnlineDirectoryFilterSharePar
   assert.equal(metaWithShare.shareLinkMeta.iconFeedbackState, 'Copied!');
 });
 
+test('getQuickFilterIconPulseSpec and getOnlineDirectoryQuickFilterMeta activate subtle pulse animation on filter icon when a specific filter mode is active (not all)', () => {
+  const defaultUnconstrained = getQuickFilterIconPulseSpec({
+    mode: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+  });
+  assert.equal(defaultUnconstrained.isDirectoryConstrained, false);
+  assert.equal(defaultUnconstrained.isPulseActive, false);
+  assert.equal(defaultUnconstrained.isAudienceConstrained, false);
+  assert.equal(defaultUnconstrained.isMoodConstrained, false);
+  assert.equal(defaultUnconstrained.isFocusConstrained, false);
+  assert.equal(defaultUnconstrained.activeConstraintReason, 'none');
+  assert.equal(defaultUnconstrained.animationName, 'none');
+  assert.equal(defaultUnconstrained.svgAnimationName, 'none');
+  assert.equal(defaultUnconstrained.cssClassName, '');
+  assert.equal(defaultUnconstrained.svgCssClassName, '');
+  assert.deepEqual(defaultUnconstrained.scaleKeyframes, [1, 1, 1]);
+  assert.deepEqual(defaultUnconstrained.opacityKeyframes, [1, 1, 1]);
 
+  const allStringMode = getQuickFilterIconPulseSpec({
+    mode: 'all',
+    moodFilter: 'ALL',
+    onlyInFocus: false,
+  });
+  assert.equal(allStringMode.isDirectoryConstrained, false);
+  assert.equal(allStringMode.isPulseActive, false);
 
+  const connectionsConstrained = getQuickFilterIconPulseSpec({
+    mode: 'my_connections',
+    moodFilter: 'all',
+    onlyInFocus: false,
+  });
+  assert.equal(connectionsConstrained.isDirectoryConstrained, true);
+  assert.equal(connectionsConstrained.isPulseActive, true);
+  assert.equal(connectionsConstrained.isAudienceConstrained, true);
+  assert.equal(connectionsConstrained.isMoodConstrained, false);
+  assert.equal(connectionsConstrained.activeConstraintReason, 'my_connections');
+  assert.equal(connectionsConstrained.animationName, 'quickFilterIconSubtlePulse');
+  assert.equal(connectionsConstrained.svgAnimationName, 'quickFilterSvgSubtlePulse');
+  assert.equal(connectionsConstrained.cssClassName, 'quick-filter-icon-pulse-active');
+  assert.equal(connectionsConstrained.svgCssClassName, 'quick-filter-icon-svg-pulse');
+  assert.equal(connectionsConstrained.durationMs, 2200);
+  assert.equal(connectionsConstrained.iterationCount, 'infinite');
+  assert.deepEqual(connectionsConstrained.scaleKeyframes, [1, 1.08, 1]);
+  assert.deepEqual(connectionsConstrained.opacityKeyframes, [1, 0.86, 1]);
 
+  const moodConstrained = getQuickFilterIconPulseSpec({
+    mode: 'everyone',
+    moodFilter: 'category:Productive',
+    onlyInFocus: false,
+  });
+  assert.equal(moodConstrained.isDirectoryConstrained, true);
+  assert.equal(moodConstrained.isPulseActive, true);
+  assert.equal(moodConstrained.isAudienceConstrained, false);
+  assert.equal(moodConstrained.isMoodConstrained, true);
+  assert.equal(moodConstrained.activeConstraintReason, 'mood_filter');
+  assert.equal(moodConstrained.animationName, 'quickFilterIconSubtlePulse');
 
+  const bothConstrained = getQuickFilterIconPulseSpec({
+    mode: 'my_connections',
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+  });
+  assert.equal(bothConstrained.isDirectoryConstrained, true);
+  assert.equal(bothConstrained.isPulseActive, true);
+  assert.equal(bothConstrained.activeConstraintReason, 'connections_and_mood');
+
+  const metaUnconstrained = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1' }],
+    moodFilter: 'all',
+    onlyInFocus: false,
+  });
+  assert.equal(metaUnconstrained.isDirectoryConstrained, false);
+  assert.equal(metaUnconstrained.iconPulseSpec.isPulseActive, false);
+
+  const metaMoodActive = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1' }],
+    moodFilter: 'category:Productive',
+    onlyInFocus: false,
+  });
+  assert.equal(metaMoodActive.isDirectoryConstrained, true);
+  assert.equal(metaMoodActive.iconPulseSpec.isPulseActive, true);
+  assert.equal(metaMoodActive.iconPulseSpec.activeConstraintReason, 'mood_filter');
+});

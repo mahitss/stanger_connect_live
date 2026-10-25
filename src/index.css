@@ -303,11 +303,54 @@ html.light textarea::placeholder {
   will-change: opacity, transform;
 }
 
+@keyframes quickFilterIconSubtlePulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(52, 211, 153, 0.08),
+      0 0 6px rgba(16, 185, 129, 0.14);
+    border-color: rgba(52, 211, 153, 0.48);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(52, 211, 153, 0.22),
+      0 0 12px rgba(52, 211, 153, 0.38);
+    border-color: rgba(110, 231, 183, 0.85);
+  }
+}
+
+@keyframes quickFilterSvgSubtlePulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.08);
+    opacity: 0.86;
+  }
+}
+
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'][data-icon-pulse-active='true'],
+#online-directory-mood-filter .quick-filter-icon-pulse-active {
+  animation: quickFilterIconSubtlePulse 2200ms ease-in-out infinite;
+}
+
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'][data-icon-pulse-active='true'] [data-testid='quick-filter-state-icon-usercheck'],
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'][data-icon-pulse-active='true'] [data-testid='quick-filter-state-icon-filter'],
+#online-directory-mood-filter .quick-filter-icon-svg-pulse {
+  animation: quickFilterSvgSubtlePulse 2200ms ease-in-out infinite;
+  transform-origin: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .moment-thread-collapse-grid,
   .moment-thread-slide-in,
   .moment-thread-slide-out,
   .quick-filter-icon-crossfade,
+  .quick-filter-icon-pulse-active,
+  .quick-filter-icon-svg-pulse,
+  #online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'],
   #online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'] svg,
   #online-directory-mood-filter .quick-filter-icon-crossfade-item {
     transition: none !important;

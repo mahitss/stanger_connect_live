@@ -8667,6 +8667,82 @@ export function getQuickFilterIconHoverGlowSpec(params?: {
   };
 }
 
+export interface QuickFilterIconPulseSpec {
+  isDirectoryConstrained: boolean;
+  isPulseActive: boolean;
+  isAudienceConstrained: boolean;
+  isMoodConstrained: boolean;
+  isFocusConstrained: boolean;
+  activeConstraintReason:
+    | 'none'
+    | 'my_connections'
+    | 'mood_filter'
+    | 'in_focus'
+    | 'connections_and_mood';
+  animationName: 'quickFilterIconSubtlePulse' | 'none';
+  svgAnimationName: 'quickFilterSvgSubtlePulse' | 'none';
+  cssClassName: string;
+  svgCssClassName: string;
+  durationMs: number;
+  durationSec: number;
+  easing: 'ease-in-out';
+  iterationCount: 'infinite' | '1';
+  scaleKeyframes: [number, number, number];
+  opacityKeyframes: [number, number, number];
+  constraintStatusLabel: string;
+}
+
+export function getQuickFilterIconPulseSpec(params?: {
+  mode?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+}): QuickFilterIconPulseSpec {
+  const rawMode = String(params?.mode ?? 'everyone').trim().toLowerCase();
+  const isAudienceConstrained =
+    rawMode !== '' && rawMode !== 'everyone' && rawMode !== 'all';
+
+  const rawMood = String(params?.moodFilter ?? 'all').trim();
+  const isMoodConstrained = rawMood !== '' && rawMood.toLowerCase() !== 'all';
+
+  const isFocusConstrained = Boolean(params?.onlyInFocus);
+  const isDirectoryConstrained =
+    isAudienceConstrained || isMoodConstrained || isFocusConstrained;
+  const isPulseActive = isDirectoryConstrained;
+
+  let activeConstraintReason: QuickFilterIconPulseSpec['activeConstraintReason'] = 'none';
+  if (isAudienceConstrained && isMoodConstrained) {
+    activeConstraintReason = 'connections_and_mood';
+  } else if (isAudienceConstrained) {
+    activeConstraintReason = 'my_connections';
+  } else if (isMoodConstrained) {
+    activeConstraintReason = 'mood_filter';
+  } else if (isFocusConstrained) {
+    activeConstraintReason = 'in_focus';
+  }
+
+  return {
+    isDirectoryConstrained,
+    isPulseActive,
+    isAudienceConstrained,
+    isMoodConstrained,
+    isFocusConstrained,
+    activeConstraintReason,
+    animationName: isPulseActive ? 'quickFilterIconSubtlePulse' : 'none',
+    svgAnimationName: isPulseActive ? 'quickFilterSvgSubtlePulse' : 'none',
+    cssClassName: isPulseActive ? 'quick-filter-icon-pulse-active' : '',
+    svgCssClassName: isPulseActive ? 'quick-filter-icon-svg-pulse' : '',
+    durationMs: 2200,
+    durationSec: 2.2,
+    easing: 'ease-in-out',
+    iterationCount: isPulseActive ? 'infinite' : '1',
+    scaleKeyframes: isPulseActive ? [1, 1.08, 1] : [1, 1, 1],
+    opacityKeyframes: isPulseActive ? [1, 0.86, 1] : [1, 1, 1],
+    constraintStatusLabel: isPulseActive
+      ? 'Directory constrained by active filter'
+      : 'Showing all peers (unconstrained)',
+  };
+}
+
 export interface OnlineDirectoryFilterShareLinkMeta {
   shareUrl: string;
   audienceMode: OnlineDirectoryAudienceFilter;
@@ -8812,6 +8888,7 @@ export function parseOnlineDirectoryFilterShareParams(search: string): {
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
+  isDirectoryConstrained: boolean;
   activeLabel: string;
   buttonLabel: string;
   nextModeLabel: string;
@@ -8843,6 +8920,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   toggleHoverMotion: QuickFilterToggleHoverMotionSpec;
   iconCrossFadeMotion: QuickFilterIconCrossFadeMotionSpec;
   iconHoverGlow: QuickFilterIconHoverGlowSpec;
+  iconPulseSpec: QuickFilterIconPulseSpec;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -8893,6 +8971,12 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   }
 
   const isMyConnectionsOnly = mode === 'my_connections';
+  const iconPulseSpec = getQuickFilterIconPulseSpec({
+    mode,
+    moodFilter: params.moodFilter,
+    onlyInFocus: params.onlyInFocus,
+  });
+  const isDirectoryConstrained = iconPulseSpec.isDirectoryConstrained;
   const hiddenPeersCount = Math.max(0, everyoneCount - myConnectionsCount);
   const clearModalMeta = getOnlineDirectoryClearFilterModalMeta({
     isOpen: Boolean(params.isClearModalOpen) && isMyConnectionsOnly,
@@ -8926,6 +9010,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   return {
     mode,
     isMyConnectionsOnly,
+    isDirectoryConstrained,
     activeLabel,
     buttonLabel,
     nextModeLabel,
@@ -8962,6 +9047,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       mode,
       isHovered: Boolean(params.isHovered),
     }),
+    iconPulseSpec,
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
       pathname: params.pathname,

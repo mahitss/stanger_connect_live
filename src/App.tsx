@@ -5067,6 +5067,17 @@ export default function App() {
                               data-testid="online-directory-quick-filter-btn"
                               data-filter-mode={directoryQuickFilterMeta.mode}
                               data-mood-filter={directoryQuickFilterMeta.shareLinkMeta.moodParam}
+                              data-directory-constrained={
+                                directoryQuickFilterMeta.isDirectoryConstrained ? 'true' : 'false'
+                              }
+                              data-icon-pulse-active={
+                                directoryQuickFilterMeta.iconPulseSpec.isPulseActive
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-constraint-reason={
+                                directoryQuickFilterMeta.iconPulseSpec.activeConstraintReason
+                              }
                               data-share-url={directoryQuickFilterMeta.shareLinkMeta.shareUrl}
                               data-copied={
                                 directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
@@ -5162,6 +5173,25 @@ export default function App() {
                                   data-icon-svg-filter={
                                     directoryQuickFilterMeta.iconHoverGlow.svgDropShadowFilter
                                   }
+                                  data-directory-constrained={
+                                    directoryQuickFilterMeta.isDirectoryConstrained
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-icon-pulse-active={
+                                    directoryQuickFilterMeta.iconPulseSpec.isPulseActive
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-pulse-animation={
+                                    directoryQuickFilterMeta.iconPulseSpec.animationName
+                                  }
+                                  data-pulse-duration-ms={
+                                    directoryQuickFilterMeta.iconPulseSpec.durationMs
+                                  }
+                                  data-constraint-reason={
+                                    directoryQuickFilterMeta.iconPulseSpec.activeConstraintReason
+                                  }
                                   data-copied={
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
                                   }
@@ -5172,16 +5202,30 @@ export default function App() {
                                   aria-label={
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied
                                       ? `Copied! — ${directoryQuickFilterMeta.stateIconLabel}`
-                                      : directoryQuickFilterMeta.stateIconLabel
+                                      : directoryQuickFilterMeta.iconPulseSpec.isPulseActive
+                                        ? `${directoryQuickFilterMeta.stateIconLabel} (${directoryQuickFilterMeta.iconPulseSpec.constraintStatusLabel})`
+                                        : directoryQuickFilterMeta.stateIconLabel
                                   }
                                   className={`relative overflow-hidden inline-flex items-center justify-center px-1.5 py-0.5 rounded border quick-filter-icon-crossfade ${
+                                    directoryQuickFilterMeta.iconPulseSpec.cssClassName
+                                  } ${
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied
                                       ? 'bg-emerald-500/30 border-emerald-400/80 text-emerald-200'
-                                      : directoryQuickFilterMeta.isMyConnectionsOnly
+                                      : directoryQuickFilterMeta.isDirectoryConstrained
                                         ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300 group-hover:bg-emerald-500/30 group-hover:border-emerald-300/80 group-hover:text-emerald-200'
                                         : 'bg-zinc-900 border-zinc-700/80 text-zinc-300 group-hover:bg-emerald-500/15 group-hover:border-emerald-400/60 group-hover:text-emerald-200'
                                   }`}
                                 >
+                                  {directoryQuickFilterMeta.iconPulseSpec.isPulseActive && (
+                                    <span
+                                      aria-hidden="true"
+                                      data-testid="quick-filter-icon-pulse-ring"
+                                      data-constraint-reason={
+                                        directoryQuickFilterMeta.iconPulseSpec.activeConstraintReason
+                                      }
+                                      className="pointer-events-none absolute inset-0 rounded border border-emerald-400/40 animate-pulse"
+                                    />
+                                  )}
                                   <AnimatePresence mode="popLayout" initial={false}>
                                     {directoryQuickFilterMeta.isMyConnectionsOnly ? (
                                       <motion.span
@@ -5207,7 +5251,14 @@ export default function App() {
                                           aria-hidden="true"
                                           data-testid="quick-filter-state-icon-usercheck"
                                           data-icon-component="UserCheck"
-                                          className="w-3.5 h-3.5 shrink-0 text-emerald-300 group-hover:text-emerald-200"
+                                          data-icon-pulse-active={
+                                            directoryQuickFilterMeta.iconPulseSpec.isPulseActive
+                                              ? 'true'
+                                              : 'false'
+                                          }
+                                          className={`w-3.5 h-3.5 shrink-0 text-emerald-300 group-hover:text-emerald-200 ${
+                                            directoryQuickFilterMeta.iconPulseSpec.svgCssClassName
+                                          }`}
                                         />
                                       </motion.span>
                                     ) : (
@@ -5234,7 +5285,18 @@ export default function App() {
                                           aria-hidden="true"
                                           data-testid="quick-filter-state-icon-filter"
                                           data-icon-component="Filter"
-                                          className="w-3.5 h-3.5 shrink-0 text-zinc-300 group-hover:text-emerald-200"
+                                          data-icon-pulse-active={
+                                            directoryQuickFilterMeta.iconPulseSpec.isPulseActive
+                                              ? 'true'
+                                              : 'false'
+                                          }
+                                          className={`w-3.5 h-3.5 shrink-0 ${
+                                            directoryQuickFilterMeta.isDirectoryConstrained
+                                              ? 'text-emerald-300'
+                                              : 'text-zinc-300'
+                                          } group-hover:text-emerald-200 ${
+                                            directoryQuickFilterMeta.iconPulseSpec.svgCssClassName
+                                          }`}
                                         />
                                       </motion.span>
                                     )}
