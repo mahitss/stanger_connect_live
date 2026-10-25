@@ -9801,3 +9801,115 @@ export function resolveStudyTogetherQuickJoinAction(params: {
   };
 }
 
+// ============================================================================
+// ONLINE DIRECTORY MOOD CATEGORY GROUPINGS PRESET SEARCH FILTER
+// ============================================================================
+
+export interface MoodCategoryPresetSearchResult {
+  rawQuery: string;
+  normalizedQuery: string;
+  hasActiveQuery: boolean;
+  filteredGroups: OnlineMoodCategoryGroup[];
+  allGroupsWithFilteredPresets: OnlineMoodCategoryGroup[];
+  matchingPresets: OnlinePeerMoodOption[];
+  totalMatchingPresets: number;
+  totalAvailablePresets: number;
+  matchingCategoryCount: number;
+  hasMatches: boolean;
+  shortMatchBadgeLabel: string;
+  statusLabel: string;
+  inputPlaceholder: string;
+  inputAriaLabel: string;
+}
+
+export function filterMoodCategoryGroupsBySearchQuery(params: {
+  groupedPresets?: OnlineMoodCategoryGroup[];
+  searchQuery?: string | null;
+  countsByMood?: Record<string, number>;
+  countsByCategory?: Partial<Record<OnlineMoodCategory, number>>;
+}): MoodCategoryPresetSearchResult {
+  const baseGroups =
+    Array.isArray(params.groupedPresets) && params.groupedPresets.length > 0
+      ? params.groupedPresets
+      : groupOnlineMoodPresetsByCategory(
+          params.countsByMood || {},
+          params.countsByCategory || {}
+        );
+
+  const rawQuery = typeof params.searchQuery === 'string' ? params.searchQuery : '';
+  const trimmedQuery = sanitizeSafeText(rawQuery.trim(), 60);
+  const normalizedQuery = trimmedQuery.toLowerCase();
+  const hasActiveQuery = normalizedQuery.length > 0;
+
+  const totalAvailablePresets = baseGroups.reduce(
+    (sum, g) => sum + g.presets.length,
+    0
+  );
+
+  const allGroupsWithFilteredPresets: OnlineMoodCategoryGroup[] = baseGroups.map(
+    (group) => {
+      if (!hasActiveQuery) {
+        return {
+          ...group,
+          presets: [...group.presets],
+        };
+      }
+      const matchingGroupPresets = group.presets.filter((preset) => {
+        const labelMatch = preset.label.toLowerCase().includes(normalizedQuery);
+        const idMatch = preset.id.toLowerCase().includes(normalizedQuery);
+        return labelMatch || idMatch;
+      });
+
+      const filteredActiveCount = matchingGroupPresets.reduce(
+        (sum, p) => sum + (Number(params.countsByMood?.[p.label]) || 0),
+        0
+      );
+
+      return {
+        ...group,
+        presets: matchingGroupPresets,
+        activeCount: hasActiveQuery ? filteredActiveCount : group.activeCount,
+      };
+    }
+  );
+
+  const filteredGroups = hasActiveQuery
+    ? allGroupsWithFilteredPresets.filter((g) => g.presets.length > 0)
+    : allGroupsWithFilteredPresets;
+
+  const matchingPresets = filteredGroups.flatMap((g) => g.presets);
+  const totalMatchingPresets = matchingPresets.length;
+  const matchingCategoryCount = filteredGroups.length;
+  const hasMatches = totalMatchingPresets > 0;
+
+  const presetNoun = totalMatchingPresets === 1 ? 'preset' : 'presets';
+  const categoryNoun = matchingCategoryCount === 1 ? 'category' : 'categories';
+
+  const shortMatchBadgeLabel = hasActiveQuery
+    ? `${totalMatchingPresets} ${totalMatchingPresets === 1 ? 'match' : 'matches'}`
+    : `${totalAvailablePresets} presets`;
+
+  const statusLabel = !hasActiveQuery
+    ? `Showing all ${totalAvailablePresets} mood presets across ${baseGroups.length} categories`
+    : hasMatches
+    ? `Found ${totalMatchingPresets} matching mood ${presetNoun} in ${matchingCategoryCount} ${categoryNoun} for "${trimmedQuery}"`
+    : `No mood presets match "${trimmedQuery}"`;
+
+  return {
+    rawQuery,
+    normalizedQuery,
+    hasActiveQuery,
+    filteredGroups,
+    allGroupsWithFilteredPresets,
+    matchingPresets,
+    totalMatchingPresets,
+    totalAvailablePresets,
+    matchingCategoryCount,
+    hasMatches,
+    shortMatchBadgeLabel,
+    statusLabel,
+    inputPlaceholder:
+      'Search mood presets by name (e.g., Deep Work, Pair Programming)...',
+    inputAriaLabel: 'Search mood presets by name',
+  };
+}

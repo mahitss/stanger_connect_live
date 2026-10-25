@@ -55,6 +55,7 @@ import {
   Globe,
   Link2,
   Info,
+  Search,
 } from 'lucide-react';
 import {
   auth,
@@ -168,6 +169,7 @@ import {
   getMoodPresetTooltipMeta,
   getMoodPresetUsageCount24hMeta,
   buildMoodPresetUsageCounts24hMap,
+  filterMoodCategoryGroupsBySearchQuery,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -676,6 +678,7 @@ export default function App() {
   >(null);
   const [showOnlyInFocusPeers, setShowOnlyInFocusPeers] = useState<boolean>(false);
   const [directoryMoodFilter, setDirectoryMoodFilter] = useState<string>('all');
+  const [moodPresetSearchQuery, setMoodPresetSearchQuery] = useState<string>('');
   const [isMoodCategoriesExpanded, setIsMoodCategoriesExpanded] = useState<boolean>(true);
   const [hoveredCategoryDrawerPresetId, setHoveredCategoryDrawerPresetId] =
     useState<string | null>(null);
@@ -2865,6 +2868,12 @@ export default function App() {
 
   const directoryFocusSummary = summarizeOnlineDirectoryFocus(onlinePeers, studyDesks);
   const directoryMoodSummary = summarizeOnlineDirectoryMoods(onlinePeers);
+  const moodPresetSearchResult = filterMoodCategoryGroupsBySearchQuery({
+    groupedPresets: directoryMoodSummary.groupedPresets,
+    searchQuery: moodPresetSearchQuery,
+    countsByMood: directoryMoodSummary.countsByMood,
+    countsByCategory: directoryMoodSummary.countsByCategory,
+  });
   const popularMoods24h = buildPopularMoodsLast24Hours({
     onlinePeers,
     moodEvents,
@@ -5395,7 +5404,7 @@ export default function App() {
                           className="px-2.5 py-1.5 text-xs font-semibold bg-[#050505] border border-zinc-800 rounded-md text-zinc-200 focus:outline-none focus:border-zinc-500"
                         >
                           <option value="all">All Moods ({onlinePeers.length})</option>
-                          {directoryMoodSummary.groupedPresets.map((group) => (
+                          {moodPresetSearchResult.filteredGroups.map((group) => (
                             <optgroup
                               key={group.category}
                               label={`${group.label} (${group.activeCount})`}
@@ -5465,221 +5474,303 @@ export default function App() {
                           data-stagger-children={
                             getMoodCategoryExpansionMotionSpec(true).staggerChildrenSec
                           }
+                          data-search-query={moodPresetSearchResult.normalizedQuery}
+                          data-matching-presets-count={
+                            moodPresetSearchResult.totalMatchingPresets
+                          }
                           initial={getMoodCategoryExpansionMotionSpec(true).containerInitial}
                           animate={getMoodCategoryExpansionMotionSpec(true).containerAnimate}
                           exit={getMoodCategoryExpansionMotionSpec(true).containerExit}
                           transition={
                             getMoodCategoryExpansionMotionSpec(true).containerTransition
                           }
-                          className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1"
+                          className="space-y-2.5 pt-1"
                         >
-                          {directoryMoodSummary.groupedPresets.map((group, catIdx) => {
-                            const headerMotion =
-                              getMoodCategoryExpansionMotionSpec(true).getCategoryHeaderMotion(
-                                catIdx
-                              );
-                            const isCatActive =
-                              directoryMoodFilter === group.categoryFilterValue ||
-                              directoryMoodFilter.toLowerCase() ===
-                                group.category.toLowerCase();
-                            return (
-                              <motion.div
-                                key={group.category}
-                                initial={headerMotion.initial}
-                                animate={headerMotion.animate}
-                                exit={headerMotion.exit}
-                                transition={headerMotion.transition}
-                                data-testid={`mood-category-drawer-group-${group.category.toLowerCase()}`}
-                                data-mood-category={group.category}
-                                data-stagger-delay={headerMotion.transition.delay}
-                                className="p-2.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2"
-                              >
-                                <motion.button
+                          {/* Search Input Field at the Top of #online-directory-mood-filter Category Groupings */}
+                          <div
+                            id="online-directory-mood-preset-search-bar"
+                            data-testid="online-directory-mood-preset-search-bar"
+                            className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-md bg-[#050505] border border-zinc-800/90"
+                          >
+                            <div className="relative flex-1 min-w-[220px] flex items-center">
+                              <Search
+                                aria-hidden="true"
+                                className="w-3.5 h-3.5 text-zinc-400 absolute left-2.5 pointer-events-none shrink-0"
+                              />
+                              <input
+                                id="online-directory-mood-preset-search-input"
+                                type="text"
+                                role="searchbox"
+                                value={moodPresetSearchQuery}
+                                onChange={(e) => setMoodPresetSearchQuery(e.target.value)}
+                                placeholder={moodPresetSearchResult.inputPlaceholder}
+                                aria-label={moodPresetSearchResult.inputAriaLabel}
+                                data-testid="online-directory-mood-preset-search-input"
+                                className="w-full pl-8 pr-8 py-1.5 text-xs bg-zinc-950/90 border border-zinc-800 rounded text-white placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/70 transition-colors"
+                              />
+                              {moodPresetSearchResult.hasActiveQuery && (
+                                <button
                                   type="button"
-                                  initial={headerMotion.initial}
-                                  animate={headerMotion.animate}
-                                  exit={headerMotion.exit}
-                                  transition={headerMotion.transition}
-                                  onClick={() =>
-                                    setDirectoryMoodFilter(
-                                      isCatActive ? 'all' : group.categoryFilterValue
-                                    )
-                                  }
-                                  aria-pressed={isCatActive}
-                                  data-testid={`mood-category-header-${group.category.toLowerCase()}`}
-                                  data-stagger-delay={headerMotion.transition.delay}
-                                  className={`w-full flex items-center justify-between gap-2 text-left text-xs font-semibold transition-colors ${
-                                    isCatActive
-                                      ? 'text-emerald-300'
-                                      : 'text-zinc-200 hover:text-white'
-                                  }`}
+                                  onClick={() => setMoodPresetSearchQuery('')}
+                                  aria-label="Clear mood preset search"
+                                  data-testid="online-directory-mood-preset-search-clear"
+                                  className="absolute right-2 p-0.5 rounded text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
                                 >
-                                  <span>{group.label}</span>
-                                  <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
-                                    {group.activeCount} online
-                                  </span>
-                                </motion.button>
+                                  <X className="w-3 h-3 shrink-0" />
+                                </button>
+                              )}
+                            </div>
 
-                                <div className="flex flex-wrap items-center gap-1.5">
-                                  {group.presets.map((preset, presetIdx) => {
-                                    const presetMotion =
-                                      getMoodCategoryExpansionMotionSpec(
-                                        true
-                                      ).getPresetItemMotion(catIdx, presetIdx);
-                                    const isPresetActive =
-                                      directoryMoodFilter.toLowerCase() ===
-                                      preset.label.toLowerCase();
-                                    const presetCount =
-                                      directoryMoodSummary.countsByMood[preset.label] || 0;
-                                    const tooltipMeta = getMoodPresetTooltipMeta(
-                                      preset.id,
-                                      hoveredCategoryDrawerPresetId === preset.id
-                                    );
-                                    const presetUsage24h =
-                                      moodPresetUsage24hById[preset.id] ||
-                                      getMoodPresetUsageCount24hMeta({
-                                        presetIdOrLabel: preset.id,
-                                        onlinePeers,
-                                        moodEvents,
-                                        currentUid: currentIdentity.uid,
-                                        currentUserMood: userMood,
-                                      });
-                                    return (
-                                      <div
-                                        key={preset.id}
-                                        data-testid={`mood-category-preset-wrapper-${preset.id}`}
-                                        className="relative inline-flex items-center group"
-                                        onMouseEnter={() =>
-                                          setHoveredCategoryDrawerPresetId(preset.id)
-                                        }
-                                        onMouseLeave={() =>
-                                          setHoveredCategoryDrawerPresetId((prev) =>
-                                            prev === preset.id ? null : prev
-                                          )
-                                        }
-                                      >
-                                        <motion.button
-                                          type="button"
-                                          initial={presetMotion.initial}
-                                          animate={presetMotion.animate}
-                                          exit={presetMotion.exit}
-                                          transition={presetMotion.transition}
-                                          onClick={() =>
-                                            setDirectoryMoodFilter(
-                                              isPresetActive ? 'all' : preset.label
-                                            )
-                                          }
-                                          onFocus={() =>
-                                            setHoveredCategoryDrawerPresetId(preset.id)
-                                          }
-                                          onBlur={() =>
-                                            setHoveredCategoryDrawerPresetId((prev) =>
-                                              prev === preset.id ? null : prev
-                                            )
-                                          }
-                                          aria-pressed={isPresetActive}
-                                          aria-describedby={tooltipMeta.tooltipId}
-                                          title={`${tooltipMeta.fullDefinitionText} · ${presetUsage24h.usageSummaryText}`}
-                                          data-testid={`mood-category-preset-${preset.id}`}
-                                          data-mood-category={group.category}
-                                          data-mood-definition={tooltipMeta.definition}
-                                          data-usage-count-24h={presetUsage24h.usageCount24h}
-                                          data-tooltip-visible={
-                                            tooltipMeta.isVisible ? 'true' : 'false'
-                                          }
-                                          data-stagger-delay={presetMotion.transition.delay}
-                                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border transition-colors whitespace-nowrap shrink-0 ${
-                                            isPresetActive
-                                              ? 'bg-white text-black border-white'
-                                              : 'bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
-                                          }`}
-                                        >
-                                          <span>{preset.label}</span>
-                                          <span className="font-mono text-[10px] opacity-75">
-                                            ({presetCount})
-                                          </span>
-                                          <span
-                                            data-testid={`mood-category-preset-usage-count-${preset.id}`}
-                                            data-usage-count-24h={presetUsage24h.usageCount24h}
-                                            className={`px-1 py-0.2 rounded text-[9px] font-mono tabular-nums border ${
-                                              isPresetActive
-                                                ? 'bg-black/10 text-zinc-900 border-black/25'
-                                                : presetUsage24h.hasRecentActivity
-                                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-                                                : 'bg-zinc-950 text-zinc-400 border-zinc-800'
-                                            }`}
-                                          >
-                                            {presetUsage24h.usageBadgeLabel}
-                                          </span>
-                                          <span
-                                            data-testid={`mood-category-preset-info-${preset.id}`}
-                                            data-icon-component={tooltipMeta.iconComponent}
-                                            aria-label={tooltipMeta.iconAriaLabel}
-                                            role="img"
-                                            className={`inline-flex items-center justify-center ml-0.5 transition-colors ${
-                                              isPresetActive
-                                                ? 'text-zinc-700'
-                                                : 'text-zinc-400 group-hover:text-emerald-300'
-                                            }`}
-                                          >
-                                            <Info
-                                              aria-hidden="true"
-                                              data-testid={`mood-category-preset-info-svg-${preset.id}`}
-                                              className="w-3 h-3 shrink-0"
-                                            />
-                                          </span>
-                                        </motion.button>
+                            <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400 shrink-0">
+                              <span
+                                data-testid="online-directory-mood-preset-search-count"
+                                className={`px-2 py-0.5 rounded border tabular-nums ${
+                                  moodPresetSearchResult.hasActiveQuery
+                                    ? moodPresetSearchResult.hasMatches
+                                      ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                      : 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+                                    : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                                }`}
+                              >
+                                {moodPresetSearchResult.shortMatchBadgeLabel}
+                              </span>
+                            </div>
+                          </div>
 
-                                        <div
-                                          id={tooltipMeta.tooltipId}
-                                          role="tooltip"
-                                          data-testid={tooltipMeta.tooltipId}
-                                          data-mood-preset={preset.id}
-                                          data-mood-category={tooltipMeta.category}
-                                          data-mood-definition={tooltipMeta.definition}
-                                          data-usage-count-24h={presetUsage24h.usageCount24h}
-                                          data-visible={tooltipMeta.isVisible ? 'true' : 'false'}
-                                          className={`pointer-events-none absolute bottom-full left-0 mb-2 z-30 w-64 p-2.5 rounded-md bg-[#050505] border border-zinc-700/90 shadow-xl space-y-1 text-left transition-opacity duration-150 ${
-                                            tooltipMeta.isVisible
-                                              ? 'opacity-100 visible'
-                                              : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
-                                          }`}
-                                        >
+                          {!moodPresetSearchResult.hasMatches ? (
+                            <div
+                              data-testid="online-directory-mood-preset-search-empty"
+                              className="p-3 rounded-md bg-[#050505] border border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs text-zinc-400"
+                            >
+                              <span>{moodPresetSearchResult.statusLabel}</span>
+                              <button
+                                type="button"
+                                onClick={() => setMoodPresetSearchQuery('')}
+                                data-testid="online-directory-mood-preset-search-reset-btn"
+                                className="px-2.5 py-1 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 rounded transition-colors whitespace-nowrap shrink-0"
+                              >
+                                Clear Search
+                              </button>
+                            </div>
+                          ) : (
+                            <div
+                              className={`grid grid-cols-1 ${
+                                moodPresetSearchResult.filteredGroups.length === 1
+                                  ? 'sm:grid-cols-1'
+                                  : moodPresetSearchResult.filteredGroups.length === 2
+                                  ? 'sm:grid-cols-2'
+                                  : 'sm:grid-cols-3'
+                              } gap-2`}
+                            >
+                              {moodPresetSearchResult.filteredGroups.map((group, catIdx) => {
+                                const headerMotion =
+                                  getMoodCategoryExpansionMotionSpec(true).getCategoryHeaderMotion(
+                                    catIdx
+                                  );
+                                const isCatActive =
+                                  directoryMoodFilter === group.categoryFilterValue ||
+                                  directoryMoodFilter.toLowerCase() ===
+                                    group.category.toLowerCase();
+                                return (
+                                  <motion.div
+                                    key={group.category}
+                                    initial={headerMotion.initial}
+                                    animate={headerMotion.animate}
+                                    exit={headerMotion.exit}
+                                    transition={headerMotion.transition}
+                                    data-testid={`mood-category-drawer-group-${group.category.toLowerCase()}`}
+                                    data-mood-category={group.category}
+                                    data-stagger-delay={headerMotion.transition.delay}
+                                    className="p-2.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2"
+                                  >
+                                    <motion.button
+                                      type="button"
+                                      initial={headerMotion.initial}
+                                      animate={headerMotion.animate}
+                                      exit={headerMotion.exit}
+                                      transition={headerMotion.transition}
+                                      onClick={() =>
+                                        setDirectoryMoodFilter(
+                                          isCatActive ? 'all' : group.categoryFilterValue
+                                        )
+                                      }
+                                      aria-pressed={isCatActive}
+                                      data-testid={`mood-category-header-${group.category.toLowerCase()}`}
+                                      data-stagger-delay={headerMotion.transition.delay}
+                                      className={`w-full flex items-center justify-between gap-2 text-left text-xs font-semibold transition-colors ${
+                                        isCatActive
+                                          ? 'text-emerald-300'
+                                          : 'text-zinc-200 hover:text-white'
+                                      }`}
+                                    >
+                                      <span>{group.label}</span>
+                                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
+                                        {group.activeCount} online
+                                      </span>
+                                    </motion.button>
+
+                                    <div className="flex flex-wrap items-center gap-1.5">
+                                      {group.presets.map((preset, presetIdx) => {
+                                        const presetMotion =
+                                          getMoodCategoryExpansionMotionSpec(
+                                            true
+                                          ).getPresetItemMotion(catIdx, presetIdx);
+                                        const isPresetActive =
+                                          directoryMoodFilter.toLowerCase() ===
+                                          preset.label.toLowerCase();
+                                        const presetCount =
+                                          directoryMoodSummary.countsByMood[preset.label] || 0;
+                                        const tooltipMeta = getMoodPresetTooltipMeta(
+                                          preset.id,
+                                          hoveredCategoryDrawerPresetId === preset.id
+                                        );
+                                        const presetUsage24h =
+                                          moodPresetUsage24hById[preset.id] ||
+                                          getMoodPresetUsageCount24hMeta({
+                                            presetIdOrLabel: preset.id,
+                                            onlinePeers,
+                                            moodEvents,
+                                            currentUid: currentIdentity.uid,
+                                            currentUserMood: userMood,
+                                          });
+                                        return (
                                           <div
-                                            data-testid={`mood-category-preset-tooltip-title-${preset.id}`}
-                                            className="flex items-center justify-between gap-1.5 text-xs font-semibold text-white"
+                                            key={preset.id}
+                                            data-testid={`mood-category-preset-wrapper-${preset.id}`}
+                                            className="relative inline-flex items-center group"
+                                            onMouseEnter={() =>
+                                              setHoveredCategoryDrawerPresetId(preset.id)
+                                            }
+                                            onMouseLeave={() =>
+                                              setHoveredCategoryDrawerPresetId((prev) =>
+                                                prev === preset.id ? null : prev
+                                              )
+                                            }
                                           >
-                                            <span className="inline-flex items-center gap-1.5">
-                                              <Info
-                                                aria-hidden="true"
-                                                className="w-3.5 h-3.5 shrink-0 text-emerald-400"
-                                              />
-                                              <span>{tooltipMeta.label}</span>
-                                            </span>
-                                            <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-400">
-                                              {tooltipMeta.category}
-                                            </span>
+                                            <motion.button
+                                              type="button"
+                                              initial={presetMotion.initial}
+                                              animate={presetMotion.animate}
+                                              exit={presetMotion.exit}
+                                              transition={presetMotion.transition}
+                                              onClick={() =>
+                                                setDirectoryMoodFilter(
+                                                  isPresetActive ? 'all' : preset.label
+                                                )
+                                              }
+                                              onFocus={() =>
+                                                setHoveredCategoryDrawerPresetId(preset.id)
+                                              }
+                                              onBlur={() =>
+                                                setHoveredCategoryDrawerPresetId((prev) =>
+                                                  prev === preset.id ? null : prev
+                                                )
+                                              }
+                                              aria-pressed={isPresetActive}
+                                              aria-describedby={tooltipMeta.tooltipId}
+                                              title={`${tooltipMeta.fullDefinitionText} · ${presetUsage24h.usageSummaryText}`}
+                                              data-testid={`mood-category-preset-${preset.id}`}
+                                              data-mood-category={group.category}
+                                              data-mood-definition={tooltipMeta.definition}
+                                              data-usage-count-24h={presetUsage24h.usageCount24h}
+                                              data-tooltip-visible={
+                                                tooltipMeta.isVisible ? 'true' : 'false'
+                                              }
+                                              data-stagger-delay={presetMotion.transition.delay}
+                                              className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border transition-colors whitespace-nowrap shrink-0 ${
+                                                isPresetActive
+                                                  ? 'bg-white text-black border-white'
+                                                  : 'bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                                              }`}
+                                            >
+                                              <span>{preset.label}</span>
+                                              <span className="font-mono text-[10px] opacity-75">
+                                                ({presetCount})
+                                              </span>
+                                              <span
+                                                data-testid={`mood-category-preset-usage-count-${preset.id}`}
+                                                data-usage-count-24h={presetUsage24h.usageCount24h}
+                                                className={`px-1 py-0.2 rounded text-[9px] font-mono tabular-nums border ${
+                                                  isPresetActive
+                                                    ? 'bg-black/10 text-zinc-900 border-black/25'
+                                                    : presetUsage24h.hasRecentActivity
+                                                    ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                                    : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                                                }`}
+                                              >
+                                                {presetUsage24h.usageBadgeLabel}
+                                              </span>
+                                              <span
+                                                data-testid={`mood-category-preset-info-${preset.id}`}
+                                                data-icon-component={tooltipMeta.iconComponent}
+                                                aria-label={tooltipMeta.iconAriaLabel}
+                                                role="img"
+                                                className={`inline-flex items-center justify-center ml-0.5 transition-colors ${
+                                                  isPresetActive
+                                                    ? 'text-zinc-700'
+                                                    : 'text-zinc-400 group-hover:text-emerald-300'
+                                                }`}
+                                              >
+                                                <Info
+                                                  aria-hidden="true"
+                                                  data-testid={`mood-category-preset-info-svg-${preset.id}`}
+                                                  className="w-3 h-3 shrink-0"
+                                                />
+                                              </span>
+                                            </motion.button>
+
+                                            <div
+                                              id={tooltipMeta.tooltipId}
+                                              role="tooltip"
+                                              data-testid={tooltipMeta.tooltipId}
+                                              data-mood-preset={preset.id}
+                                              data-mood-category={tooltipMeta.category}
+                                              data-mood-definition={tooltipMeta.definition}
+                                              data-usage-count-24h={presetUsage24h.usageCount24h}
+                                              data-visible={tooltipMeta.isVisible ? 'true' : 'false'}
+                                              className={`pointer-events-none absolute bottom-full left-0 mb-2 z-30 w-64 p-2.5 rounded-md bg-[#050505] border border-zinc-700/90 shadow-xl space-y-1 text-left transition-opacity duration-150 ${
+                                                tooltipMeta.isVisible
+                                                  ? 'opacity-100 visible'
+                                                  : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
+                                              }`}
+                                            >
+                                              <div
+                                                data-testid={`mood-category-preset-tooltip-title-${preset.id}`}
+                                                className="flex items-center justify-between gap-1.5 text-xs font-semibold text-white"
+                                              >
+                                                <span className="inline-flex items-center gap-1.5">
+                                                  <Info
+                                                    aria-hidden="true"
+                                                    className="w-3.5 h-3.5 shrink-0 text-emerald-400"
+                                                  />
+                                                  <span>{tooltipMeta.label}</span>
+                                                </span>
+                                                <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-400">
+                                                  {tooltipMeta.category}
+                                                </span>
+                                              </div>
+                                              <p
+                                                data-testid={`mood-category-preset-tooltip-definition-${preset.id}`}
+                                                className="text-[11px] text-zinc-300 leading-snug"
+                                              >
+                                                {tooltipMeta.definition}
+                                              </p>
+                                              <div
+                                                data-testid={`mood-category-preset-tooltip-usage-${preset.id}`}
+                                                className="pt-1 border-t border-zinc-800/80 text-[10px] font-mono text-emerald-300"
+                                              >
+                                                {presetUsage24h.usageSummaryText}
+                                              </div>
+                                            </div>
                                           </div>
-                                          <p
-                                            data-testid={`mood-category-preset-tooltip-definition-${preset.id}`}
-                                            className="text-[11px] text-zinc-300 leading-snug"
-                                          >
-                                            {tooltipMeta.definition}
-                                          </p>
-                                          <div
-                                            data-testid={`mood-category-preset-tooltip-usage-${preset.id}`}
-                                            className="pt-1 border-t border-zinc-800/80 text-[10px] font-mono text-emerald-300"
-                                          >
-                                            {presetUsage24h.usageSummaryText}
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </motion.div>
-                            );
-                          })}
+                                        );
+                                      })}
+                                    </div>
+                                  </motion.div>
+                                );
+                              })}
+                            </div>
+                          )}
                         </motion.div>
                       )}
                     </AnimatePresence>

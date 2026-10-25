@@ -180,6 +180,7 @@ import {
   MR_STRANGER_247_STUDY_ROOMS,
   buildMrStrangerStudyTogetherLobby,
   resolveStudyTogetherQuickJoinAction,
+  filterMoodCategoryGroupsBySearchQuery,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -3545,3 +3546,76 @@ test('Mr. Stranger 24/7 Study Together room lobby builder and 1-click quick-join
   assert.equal(cameraJoin.shouldEnableCameraPreview, true);
 });
 
+test('filterMoodCategoryGroupsBySearchQuery filters #online-directory-mood-filter category groupings by mood preset name', () => {
+  const countsByMood = {
+    'Deep Work': 2,
+    'Pair Programming': 1,
+    Brainstorming: 3,
+    'Quick Questions': 0,
+    'Coffee Break': 1,
+  };
+  const grouped = groupOnlineMoodPresetsByCategory(countsByMood);
+
+  // Empty search returns all 3 categories and all 5 presets
+  const emptyRes = filterMoodCategoryGroupsBySearchQuery({
+    groupedPresets: grouped,
+    searchQuery: '   ',
+    countsByMood,
+  });
+  assert.equal(emptyRes.hasActiveQuery, false);
+  assert.equal(emptyRes.filteredGroups.length, 3);
+  assert.equal(emptyRes.totalMatchingPresets, 5);
+  assert.equal(emptyRes.totalAvailablePresets, 5);
+  assert.equal(emptyRes.shortMatchBadgeLabel, '5 presets');
+
+  // Searching "Deep" matches only "Deep Work" in Productive category
+  const deepRes = filterMoodCategoryGroupsBySearchQuery({
+    groupedPresets: grouped,
+    searchQuery: '  deep ',
+    countsByMood,
+  });
+  assert.equal(deepRes.hasActiveQuery, true);
+  assert.equal(deepRes.normalizedQuery, 'deep');
+  assert.equal(deepRes.filteredGroups.length, 1);
+  assert.equal(deepRes.filteredGroups[0].category, 'Productive');
+  assert.deepEqual(
+    deepRes.filteredGroups[0].presets.map((p) => p.label),
+    ['Deep Work']
+  );
+  assert.equal(deepRes.filteredGroups[0].activeCount, 2);
+  assert.equal(deepRes.totalMatchingPresets, 1);
+  assert.equal(deepRes.shortMatchBadgeLabel, '1 match');
+  assert.equal(
+    deepRes.statusLabel,
+    'Found 1 matching mood preset in 1 category for "deep"'
+  );
+
+  // Searching "Coffee" matches only "Coffee Break" in Away category
+  const coffeeRes = filterMoodCategoryGroupsBySearchQuery({
+    groupedPresets: grouped,
+    searchQuery: 'Coffee',
+    countsByMood,
+  });
+  assert.equal(coffeeRes.filteredGroups.length, 1);
+  assert.equal(coffeeRes.filteredGroups[0].category, 'Away');
+  assert.deepEqual(
+    coffeeRes.filteredGroups[0].presets.map((p) => p.label),
+    ['Coffee Break']
+  );
+
+  // Searching non-existent preset returns empty filteredGroups and hasMatches: false
+  const noMatchRes = filterMoodCategoryGroupsBySearchQuery({
+    groupedPresets: grouped,
+    searchQuery: 'nonexistent_mood_xyz',
+    countsByMood,
+  });
+  assert.equal(noMatchRes.hasActiveQuery, true);
+  assert.equal(noMatchRes.hasMatches, false);
+  assert.equal(noMatchRes.totalMatchingPresets, 0);
+  assert.equal(noMatchRes.filteredGroups.length, 0);
+  assert.equal(noMatchRes.shortMatchBadgeLabel, '0 matches');
+  assert.equal(
+    noMatchRes.statusLabel,
+    'No mood presets match "nonexistent_mood_xyz"'
+  );
+});
