@@ -8865,5 +8865,72 @@ export function getWorkspaceSidebarScrollSpec(
   };
 }
 
+export interface MoodPresetTooltipMeta {
+  presetId: string;
+  label: string;
+  category: OnlineMoodCategory;
+  tone: OnlineMoodTone;
+  definition: string;
+  fullDefinitionText: string;
+  tooltipTitle: string;
+  tooltipId: string;
+  iconComponent: 'Info';
+  iconAriaLabel: string;
+  isHovered: boolean;
+  isVisible: boolean;
+}
 
+export function getMoodPresetTooltipMeta(
+  presetIdOrLabel: string | null | undefined,
+  isHovered: boolean = false
+): MoodPresetTooltipMeta {
+  const raw = String(presetIdOrLabel || '').trim();
+  const lower = raw.toLowerCase();
+  const matched = ONLINE_MOOD_PRESETS.find(
+    (p) => p.id.toLowerCase() === lower || p.label.toLowerCase() === lower
+  );
 
+  const hovered = Boolean(isHovered);
+
+  if (matched) {
+    return {
+      presetId: matched.id,
+      label: matched.label,
+      category: matched.category,
+      tone: matched.tone,
+      definition: matched.description,
+      fullDefinitionText: `${matched.label} (${matched.category}): ${matched.description}`,
+      tooltipTitle: `${matched.label} · ${matched.category}`,
+      tooltipId: `mood-category-preset-tooltip-${matched.id}`,
+      iconComponent: 'Info',
+      iconAriaLabel: `${matched.label} mood definition: ${matched.description}`,
+      isHovered: hovered,
+      isVisible: hovered,
+    };
+  }
+
+  const fallbackMeta = getOnlinePeerMoodMeta(raw);
+  const label = fallbackMeta.label || raw || 'Mood Preset';
+  const category = fallbackMeta.category || resolveMoodCategoryForText(label);
+  const definition = fallbackMeta.description;
+  const slugId =
+    label
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'custom';
+
+  return {
+    presetId: slugId,
+    label,
+    category,
+    tone: fallbackMeta.tone,
+    definition,
+    fullDefinitionText: `${label} (${category}): ${definition}`,
+    tooltipTitle: `${label} · ${category}`,
+    tooltipId: `mood-category-preset-tooltip-${slugId}`,
+    iconComponent: 'Info',
+    iconAriaLabel: `${label} mood definition: ${definition}`,
+    isHovered: hovered,
+    isVisible: hovered,
+  };
+}

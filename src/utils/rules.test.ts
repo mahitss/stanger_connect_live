@@ -171,6 +171,7 @@ import {
   toggleMoodCategoryDrawerExpanded,
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
+  getMoodPresetTooltipMeta,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -3331,6 +3332,45 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
   assert.ok(programmaticJumpSpec.sidebarScrollAreaClass.includes('overflow-y-auto'));
   assert.ok(programmaticJumpSpec.sidebarScrollAreaClass.includes('scroll-smooth'));
   assert.ok(programmaticJumpSpec.sidebarScrollAreaClass.includes('sidebar-smooth-scroll-active'));
+
+  // Descriptive tooltips (using Lucide Info icon) for each mood preset in the category drawer
+  const deepWorkIdle = getMoodPresetTooltipMeta('deep_work', false);
+  assert.equal(deepWorkIdle.presetId, 'deep_work');
+  assert.equal(deepWorkIdle.label, 'Deep Work');
+  assert.equal(deepWorkIdle.category, 'Productive');
+  assert.equal(deepWorkIdle.tone, 'emerald');
+  assert.equal(
+    deepWorkIdle.definition,
+    'Heads-down execution — minimal interruptions'
+  );
+  assert.equal(
+    deepWorkIdle.fullDefinitionText,
+    'Deep Work (Productive): Heads-down execution — minimal interruptions'
+  );
+  assert.equal(deepWorkIdle.tooltipTitle, 'Deep Work · Productive');
+  assert.equal(deepWorkIdle.tooltipId, 'mood-category-preset-tooltip-deep_work');
+  assert.equal(deepWorkIdle.iconComponent, 'Info');
+  assert.equal(deepWorkIdle.isHovered, false);
+  assert.equal(deepWorkIdle.isVisible, false);
+
+  const deepWorkHovered = getMoodPresetTooltipMeta('Deep Work', true);
+  assert.equal(deepWorkHovered.presetId, 'deep_work');
+  assert.equal(deepWorkHovered.isHovered, true);
+  assert.equal(deepWorkHovered.isVisible, true);
+  assert.equal(deepWorkHovered.iconComponent, 'Info');
+  assert.equal(
+    deepWorkHovered.definition,
+    'Heads-down execution — minimal interruptions'
+  );
+
+  for (const preset of ONLINE_MOOD_PRESETS) {
+    const meta = getMoodPresetTooltipMeta(preset.id, true);
+    assert.equal(meta.presetId, preset.id);
+    assert.equal(meta.label, preset.label);
+    assert.equal(meta.category, preset.category);
+    assert.equal(meta.definition, preset.description);
+    assert.equal(meta.iconComponent, 'Info');
+    assert.equal(meta.isVisible, true);
+    assert.ok(meta.fullDefinitionText.includes(preset.description));
+  }
 });
-
-

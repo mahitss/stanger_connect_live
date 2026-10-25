@@ -54,6 +54,7 @@ import {
   UserCheck,
   Globe,
   Link2,
+  Info,
 } from 'lucide-react';
 import {
   auth,
@@ -164,6 +165,7 @@ import {
   toggleMoodCategoryDrawerExpanded,
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
+  getMoodPresetTooltipMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -673,6 +675,10 @@ export default function App() {
   const [showOnlyInFocusPeers, setShowOnlyInFocusPeers] = useState<boolean>(false);
   const [directoryMoodFilter, setDirectoryMoodFilter] = useState<string>('all');
   const [isMoodCategoriesExpanded, setIsMoodCategoriesExpanded] = useState<boolean>(true);
+  const [hoveredCategoryDrawerPresetId, setHoveredCategoryDrawerPresetId] =
+    useState<string | null>(null);
+  const [hoveredMoodSetterPresetId, setHoveredMoodSetterPresetId] =
+    useState<string | null>(null);
   const [directoryAudienceFilter, setDirectoryAudienceFilter] =
     useState<OnlineDirectoryAudienceFilter>('everyone');
   const [isQuickFilterHovered, setIsQuickFilterHovered] = useState<boolean>(false);
@@ -4689,27 +4695,89 @@ export default function App() {
                                   myMoodMeta.hasMood &&
                                   myMoodMeta.label?.toLowerCase() ===
                                     preset.label.toLowerCase();
+                                const setterTooltipMeta = getMoodPresetTooltipMeta(
+                                  preset.id,
+                                  hoveredMoodSetterPresetId === preset.id
+                                );
                                 return (
-                                  <motion.button
+                                  <div
                                     key={preset.id}
-                                    type="button"
-                                    initial={presetMotion.initial}
-                                    animate={presetMotion.animate}
-                                    transition={presetMotion.transition}
-                                    onClick={() => handleUpdateUserMood(preset.label)}
-                                    aria-pressed={isSelected}
-                                    data-testid={`mood-preset-${preset.id}`}
-                                    data-mood-category={preset.category}
-                                    data-stagger-delay={presetMotion.transition.delay}
-                                    title={`${group.label} · ${preset.description}`}
-                                    className={`px-2.5 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
-                                      isSelected
-                                        ? 'bg-white text-black border-white'
-                                        : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
-                                    }`}
+                                    className="relative inline-flex items-center group"
+                                    onMouseEnter={() =>
+                                      setHoveredMoodSetterPresetId(preset.id)
+                                    }
+                                    onMouseLeave={() =>
+                                      setHoveredMoodSetterPresetId((prev) =>
+                                        prev === preset.id ? null : prev
+                                      )
+                                    }
                                   >
-                                    {preset.label}
-                                  </motion.button>
+                                    <motion.button
+                                      type="button"
+                                      initial={presetMotion.initial}
+                                      animate={presetMotion.animate}
+                                      transition={presetMotion.transition}
+                                      onClick={() => handleUpdateUserMood(preset.label)}
+                                      onFocus={() => setHoveredMoodSetterPresetId(preset.id)}
+                                      onBlur={() =>
+                                        setHoveredMoodSetterPresetId((prev) =>
+                                          prev === preset.id ? null : prev
+                                        )
+                                      }
+                                      aria-pressed={isSelected}
+                                      aria-describedby={`mood-setter-preset-tooltip-${preset.id}`}
+                                      data-testid={`mood-preset-${preset.id}`}
+                                      data-mood-category={preset.category}
+                                      data-mood-definition={setterTooltipMeta.definition}
+                                      data-stagger-delay={presetMotion.transition.delay}
+                                      title={setterTooltipMeta.fullDefinitionText}
+                                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
+                                        isSelected
+                                          ? 'bg-white text-black border-white'
+                                          : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                                      }`}
+                                    >
+                                      <span>{preset.label}</span>
+                                      <span
+                                        data-testid={`mood-setter-preset-info-${preset.id}`}
+                                        data-icon-component={setterTooltipMeta.iconComponent}
+                                        aria-hidden="true"
+                                        className={`inline-flex items-center justify-center transition-colors ${
+                                          isSelected
+                                            ? 'text-zinc-700'
+                                            : 'text-zinc-500 group-hover:text-zinc-200'
+                                        }`}
+                                      >
+                                        <Info className="w-3 h-3 shrink-0" />
+                                      </span>
+                                    </motion.button>
+                                    <div
+                                      id={`mood-setter-preset-tooltip-${preset.id}`}
+                                      role="tooltip"
+                                      data-testid={`mood-setter-preset-tooltip-${preset.id}`}
+                                      data-mood-preset={preset.id}
+                                      data-mood-category={preset.category}
+                                      data-visible={setterTooltipMeta.isVisible ? 'true' : 'false'}
+                                      className={`pointer-events-none absolute bottom-full left-0 mb-2 z-30 w-60 p-2.5 rounded-md bg-[#050505] border border-zinc-700/90 shadow-xl space-y-1 text-left transition-opacity duration-150 ${
+                                        setterTooltipMeta.isVisible
+                                          ? 'opacity-100 visible'
+                                          : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
+                                      }`}
+                                    >
+                                      <div className="flex items-center justify-between gap-1.5 text-[11px] font-semibold text-white">
+                                        <span className="inline-flex items-center gap-1">
+                                          <Info className="w-3 h-3 shrink-0 text-emerald-400" />
+                                          <span>{setterTooltipMeta.label}</span>
+                                        </span>
+                                        <span className="px-1.5 py-0.2 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-400">
+                                          {setterTooltipMeta.category}
+                                        </span>
+                                      </div>
+                                      <p className="text-[11px] text-zinc-300 leading-snug">
+                                        {setterTooltipMeta.definition}
+                                      </p>
+                                    </div>
+                                  </div>
                                 );
                               })}
                             </motion.div>
@@ -5411,34 +5479,119 @@ export default function App() {
                                       preset.label.toLowerCase();
                                     const presetCount =
                                       directoryMoodSummary.countsByMood[preset.label] || 0;
+                                    const tooltipMeta = getMoodPresetTooltipMeta(
+                                      preset.id,
+                                      hoveredCategoryDrawerPresetId === preset.id
+                                    );
                                     return (
-                                      <motion.button
+                                      <div
                                         key={preset.id}
-                                        type="button"
-                                        initial={presetMotion.initial}
-                                        animate={presetMotion.animate}
-                                        exit={presetMotion.exit}
-                                        transition={presetMotion.transition}
-                                        onClick={() =>
-                                          setDirectoryMoodFilter(
-                                            isPresetActive ? 'all' : preset.label
+                                        data-testid={`mood-category-preset-wrapper-${preset.id}`}
+                                        className="relative inline-flex items-center group"
+                                        onMouseEnter={() =>
+                                          setHoveredCategoryDrawerPresetId(preset.id)
+                                        }
+                                        onMouseLeave={() =>
+                                          setHoveredCategoryDrawerPresetId((prev) =>
+                                            prev === preset.id ? null : prev
                                           )
                                         }
-                                        aria-pressed={isPresetActive}
-                                        data-testid={`mood-category-preset-${preset.id}`}
-                                        data-mood-category={group.category}
-                                        data-stagger-delay={presetMotion.transition.delay}
-                                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border transition-colors whitespace-nowrap shrink-0 ${
-                                          isPresetActive
-                                            ? 'bg-white text-black border-white'
-                                            : 'bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
-                                        }`}
                                       >
-                                        <span>{preset.label}</span>
-                                        <span className="font-mono text-[10px] opacity-75">
-                                          ({presetCount})
-                                        </span>
-                                      </motion.button>
+                                        <motion.button
+                                          type="button"
+                                          initial={presetMotion.initial}
+                                          animate={presetMotion.animate}
+                                          exit={presetMotion.exit}
+                                          transition={presetMotion.transition}
+                                          onClick={() =>
+                                            setDirectoryMoodFilter(
+                                              isPresetActive ? 'all' : preset.label
+                                            )
+                                          }
+                                          onFocus={() =>
+                                            setHoveredCategoryDrawerPresetId(preset.id)
+                                          }
+                                          onBlur={() =>
+                                            setHoveredCategoryDrawerPresetId((prev) =>
+                                              prev === preset.id ? null : prev
+                                            )
+                                          }
+                                          aria-pressed={isPresetActive}
+                                          aria-describedby={tooltipMeta.tooltipId}
+                                          title={tooltipMeta.fullDefinitionText}
+                                          data-testid={`mood-category-preset-${preset.id}`}
+                                          data-mood-category={group.category}
+                                          data-mood-definition={tooltipMeta.definition}
+                                          data-tooltip-visible={
+                                            tooltipMeta.isVisible ? 'true' : 'false'
+                                          }
+                                          data-stagger-delay={presetMotion.transition.delay}
+                                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border transition-colors whitespace-nowrap shrink-0 ${
+                                            isPresetActive
+                                              ? 'bg-white text-black border-white'
+                                              : 'bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                                          }`}
+                                        >
+                                          <span>{preset.label}</span>
+                                          <span className="font-mono text-[10px] opacity-75">
+                                            ({presetCount})
+                                          </span>
+                                          <span
+                                            data-testid={`mood-category-preset-info-${preset.id}`}
+                                            data-icon-component={tooltipMeta.iconComponent}
+                                            aria-label={tooltipMeta.iconAriaLabel}
+                                            role="img"
+                                            className={`inline-flex items-center justify-center ml-0.5 transition-colors ${
+                                              isPresetActive
+                                                ? 'text-zinc-700'
+                                                : 'text-zinc-400 group-hover:text-emerald-300'
+                                            }`}
+                                          >
+                                            <Info
+                                              aria-hidden="true"
+                                              data-testid={`mood-category-preset-info-svg-${preset.id}`}
+                                              className="w-3 h-3 shrink-0"
+                                            />
+                                          </span>
+                                        </motion.button>
+
+                                        <div
+                                          id={tooltipMeta.tooltipId}
+                                          role="tooltip"
+                                          data-testid={tooltipMeta.tooltipId}
+                                          data-mood-preset={preset.id}
+                                          data-mood-category={tooltipMeta.category}
+                                          data-mood-definition={tooltipMeta.definition}
+                                          data-visible={tooltipMeta.isVisible ? 'true' : 'false'}
+                                          className={`pointer-events-none absolute bottom-full left-0 mb-2 z-30 w-64 p-2.5 rounded-md bg-[#050505] border border-zinc-700/90 shadow-xl space-y-1 text-left transition-opacity duration-150 ${
+                                            tooltipMeta.isVisible
+                                              ? 'opacity-100 visible'
+                                              : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
+                                          }`}
+                                        >
+                                          <div
+                                            data-testid={`mood-category-preset-tooltip-title-${preset.id}`}
+                                            className="flex items-center justify-between gap-1.5 text-xs font-semibold text-white"
+                                          >
+                                            <span className="inline-flex items-center gap-1.5">
+                                              <Info
+                                                aria-hidden="true"
+                                                className="w-3.5 h-3.5 shrink-0 text-emerald-400"
+                                              />
+                                              <span>{tooltipMeta.label}</span>
+                                            </span>
+                                            <span className="px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-zinc-400">
+                                              {tooltipMeta.category}
+                                            </span>
+                                          </div>
+                                          <p
+                                            data-testid={`mood-category-preset-tooltip-definition-${preset.id}`}
+                                            className="text-[11px] text-zinc-300 leading-snug"
+                                          >
+                                            {tooltipMeta.definition}
+                                          </p>
+                                        </div>
+                                      </div>
                                     );
                                   })}
                                 </div>
