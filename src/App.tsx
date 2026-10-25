@@ -3426,7 +3426,7 @@ export default function App() {
               title="Consecutive Daily Login Streak"
             >
               <Flame className="w-4 h-4" />
-              <span>{currentIdentity.streakCount}d</span>
+              <span>{Number.isFinite(currentIdentity.streakCount) ? currentIdentity.streakCount : 1}d</span>
             </div>
           </div>
         </div>
@@ -3681,7 +3681,12 @@ export default function App() {
                 <Trophy className="w-3.5 h-3.5 text-emerald-400" />
                 <span>Global Leaderboard</span>
               </span>
-              <span className="font-mono text-[11px] tabular-nums">{currentIdentity.participationPoints}p</span>
+              <span className="font-mono text-[11px] tabular-nums">
+                {Number.isFinite(currentIdentity.participationPoints)
+                  ? currentIdentity.participationPoints
+                  : 0}
+                p
+              </span>
             </button>
             <button
               type="button"

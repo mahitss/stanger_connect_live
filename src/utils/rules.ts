@@ -9094,3 +9094,710 @@ export function buildMoodPresetUsageCounts24hMap(params: {
   }
   return result;
 }
+
+// ============================================================================
+// MR. STRANGER 24/7 LIVE STUDY TOGETHER ROOMS & GLOBAL FOCUS STAGE
+// ============================================================================
+
+export type MrStranger247RoomCategory =
+  | 'global_hall'
+  | 'live_in_app'
+  | 'live_audio'
+  | 'with_camera';
+
+export interface MrStrangerSimulatedScholarTile {
+  id: string;
+  displayName: string;
+  countryFlag: string;
+  subject: string;
+  timerDisplay: string;
+  cameraActive: boolean;
+  micMuted: boolean;
+  statusLabel: string;
+  videoThumbUrl: string;
+  isCurrentUser?: boolean;
+}
+
+export interface MrStranger247StudyRoomPreset {
+  id: string;
+  roomCode: string;
+  title: string;
+  shortTitle: string;
+  badgeLabel: string;
+  category: MrStranger247RoomCategory;
+  defaultDurationMinutes: number;
+  defaultSubject: string;
+  defaultPositiveNote: string;
+  recommendedAmbientPresetId: AmbientPresetId | null;
+  requiresCameraPreferred: boolean;
+  description: string;
+  tagline: string;
+  baselineOnlineScholars: number;
+  coverImage: string;
+  simulatedScholars: MrStrangerSimulatedScholarTile[];
+}
+
+export interface MrStrangerCommunityStatItem {
+  id: string;
+  value: string;
+  label: string;
+  detail: string;
+}
+
+export interface MrStrangerStudyPillarItem {
+  id: string;
+  eyebrow: string;
+  title: string;
+  description: string;
+  highlightBadge: string;
+}
+
+export interface MrStrangerMindfulnessExercise {
+  id: string;
+  title: string;
+  durationMinutes: number;
+  cadenceLabel: string;
+  guidanceText: string;
+}
+
+export const MR_STRANGER_COMMUNITY_IMPACT_STATS: MrStrangerCommunityStatItem[] = [
+  {
+    id: 'members',
+    value: '+1M',
+    label: 'community members',
+    detail: 'Students & builders studying together worldwide on Mr. Stranger',
+  },
+  {
+    id: 'sessions',
+    value: '+16M',
+    label: 'study sessions',
+    detail: 'Verified Pomodoro & marathon deep-work sessions completed',
+  },
+  {
+    id: 'goals',
+    value: '+3M',
+    label: 'study goals reached',
+    detail: 'Daily checklist milestones and textbook chapters finished',
+  },
+  {
+    id: 'countries',
+    value: '+183',
+    label: 'countries',
+    detail: '24/7 global peer accountability across every timezone',
+  },
+  {
+    id: 'reviews',
+    value: '4.9/5',
+    label: 'positive reviews',
+    detail: 'Rated by students for focus accountability and calm ambiance',
+  },
+];
+
+export const MR_STRANGER_STUDY_PILLARS: MrStrangerStudyPillarItem[] = [
+  {
+    id: 'peer_pressure',
+    eyebrow: '01 · ACCOUNTABILITY',
+    title: "The 'good' kind of peer pressure",
+    description:
+      "You know how your parents always say peer pressure is bad? Well, when it comes to studying, they're wrong. Studying alongside live peers in Mr. Stranger helps you stay locked in and get better grades — and that's scientifically proven.",
+    highlightBadge: 'Live Camera & Avatar Desks',
+  },
+  {
+    id: 'support_247',
+    eyebrow: '02 · ALWAYS ONLINE',
+    title: '24/7 support, all year round',
+    description:
+      'Find a study buddy (or a procrastinate-mate), hop into synchronized 25-minute group focus sprints, or ask for help in the room chat. When you need a breather, launch a 5-minute guided mindfulness session right at your desk.',
+    highlightBadge: '24/7 Global Study Rooms',
+  },
+  {
+    id: 'studying_reloaded',
+    eyebrow: '03 · GAMIFIED MASTERY',
+    title: 'Studying, reloaded',
+    description:
+      'Wait, studying can actually be fun? Turn your study goals into verified streaks, track real-time textbook progress, mix custom rainfall and binaural soundscapes, and climb the Mr. Stranger global leaderboard.',
+    highlightBadge: 'Verified Streaks & Soundscapes',
+  },
+];
+
+export const MR_STRANGER_MINDFULNESS_EXERCISES: MrStrangerMindfulnessExercise[] = [
+  {
+    id: 'box_breathing_5m',
+    title: '5-Min Guided Box Breathing',
+    durationMinutes: 5,
+    cadenceLabel: '4s Inhale · 4s Hold · 4s Exhale · 4s Hold',
+    guidanceText:
+      'Unclench your jaw, drop your shoulders away from your ears, and breathe in rhythm before starting your next focus block.',
+  },
+  {
+    id: 'eye_rest_20_20_20',
+    title: '5-Min Visual Cortex & Posture Reset',
+    durationMinutes: 5,
+    cadenceLabel: 'Look 20ft away · Blink slowly · Neck release',
+    guidanceText:
+      'Rest your eyes from dense code and textbook pages. Focus on a distant point and let mental fatigue dissolve.',
+  },
+  {
+    id: 'exam_calm_grounding',
+    title: '5-Min Pre-Exam Deep Calm',
+    durationMinutes: 5,
+    cadenceLabel: 'Slow nasal inhale · Extended 6s exhale',
+    guidanceText:
+      'Quiet test anxiety and scattered thoughts. Anchor your attention on one single study task at a time.',
+  },
+];
+
+export const MR_STRANGER_247_STUDY_ROOMS: MrStranger247StudyRoomPreset[] = [
+  {
+    id: 'solo_study',
+    roomCode: 'STUDY-SOLO',
+    title: 'Solo study 📚',
+    shortTitle: 'Solo study',
+    badgeLabel: 'Live-in app',
+    category: 'live_in_app',
+    defaultDurationMinutes: 50,
+    defaultSubject: 'Quiet Individual Deep Reading & Problem Sets',
+    defaultPositiveNote: 'Staying consistent one page at a time.',
+    recommendedAmbientPresetId: 'whitenoise',
+    requiresCameraPreferred: false,
+    description:
+      'Calm individual focus sanctuary with silent peer presence, personal goal checklists, and distraction-free timer sprints.',
+    tagline: 'Silent library atmosphere · 50m Deep Focus',
+    baselineOnlineScholars: 142,
+    coverImage:
+      'https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=900&q=80',
+    simulatedScholars: [
+      {
+        id: 'sim_solo_1',
+        displayName: 'Elena R.',
+        countryFlag: '🇩🇪',
+        subject: 'Organic Chemistry Mechanisms',
+        timerDisplay: '00:41:15',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Deep Reading',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_solo_2',
+        displayName: 'Kenji T.',
+        countryFlag: '🇯🇵',
+        subject: 'Linear Algebra Proof Set #4',
+        timerDisplay: '00:34:50',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Solo Focus',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_solo_3',
+        displayName: 'Aanya M.',
+        countryFlag: '🇮🇳',
+        subject: 'System Design — DDIA Ch. 7',
+        timerDisplay: '00:48:10',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Note Taking',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_solo_4',
+        displayName: 'Lucas V.',
+        countryFlag: '🇧🇷',
+        subject: 'Constitutional Law Briefs',
+        timerDisplay: '00:22:05',
+        cameraActive: false,
+        micMuted: true,
+        statusLabel: 'Silent Desk',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=600&q=80',
+      },
+    ],
+  },
+  {
+    id: 'group_focus_25',
+    roomCode: 'STUDY-GROUP25',
+    title: 'Group focus | 25 min ☕',
+    shortTitle: 'Group focus | 25 min',
+    badgeLabel: 'Live-in app',
+    category: 'live_in_app',
+    defaultDurationMinutes: 25,
+    defaultSubject: '25-Min Synchronized Pomodoro Sprint',
+    defaultPositiveNote: 'We got this! 25 minutes of pure focus, then coffee break.',
+    recommendedAmbientPresetId: 'coffeeshop',
+    requiresCameraPreferred: true,
+    description:
+      'High-energy 25-minute Pomodoro sprints with students around the globe, followed by 5-minute chat & recharge breaks.',
+    tagline: '25m Pomodoro Sprint · 5m Break · High Accountability',
+    baselineOnlineScholars: 268,
+    coverImage:
+      'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=900&q=80',
+    simulatedScholars: [
+      {
+        id: 'sim_grp_1',
+        displayName: 'Maya L.',
+        countryFlag: '🇬🇧',
+        subject: 'Medical Pharmacology Flashcards',
+        timerDisplay: '00:20:45',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Pomodoro #3',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_grp_2',
+        displayName: 'Daniel K.',
+        countryFlag: '🇨🇦',
+        subject: 'LeetCode Dynamic Programming',
+        timerDisplay: '00:20:45',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Pomodoro #2',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_grp_3',
+        displayName: 'Sofia G.',
+        countryFlag: '🇪🇸',
+        subject: 'Macroeconomics Problem Set',
+        timerDisplay: '00:20:45',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Pomodoro #4',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_grp_4',
+        displayName: 'Noah P.',
+        countryFlag: '🇺🇸',
+        subject: 'TypeScript Compiler Internals',
+        timerDisplay: '00:20:45',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Pomodoro #1',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=600&q=80',
+      },
+    ],
+  },
+  {
+    id: 'nature_sounds',
+    roomCode: 'STUDY-NATURE',
+    title: 'Nature sounds 🌱',
+    shortTitle: 'Nature sounds',
+    badgeLabel: 'Live Audio',
+    category: 'live_audio',
+    defaultDurationMinutes: 60,
+    defaultSubject: 'Calm Deep Work with Rainfall & Forest Acoustics',
+    defaultPositiveNote: 'Peaceful mind, steady progress.',
+    recommendedAmbientPresetId: 'rainfall',
+    requiresCameraPreferred: false,
+    description:
+      'Immersive 60-minute study sanctuary paired with soothing rainfall, forest wind, and warm acoustic soundscapes.',
+    tagline: '60m Restorative Focus · Rainfall Soundscape Active',
+    baselineOnlineScholars: 189,
+    coverImage:
+      'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=900&q=80',
+    simulatedScholars: [
+      {
+        id: 'sim_nat_1',
+        displayName: 'Chloe W.',
+        countryFlag: '🇦🇺',
+        subject: 'Environmental Science Thesis',
+        timerDisplay: '00:52:18',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Rainfall Mix',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_nat_2',
+        displayName: 'Min-jun S.',
+        countryFlag: '🇰🇷',
+        subject: 'Operating Systems Kernel Lab',
+        timerDisplay: '00:44:02',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Nature Audio',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_nat_3',
+        displayName: 'Hannah B.',
+        countryFlag: '🇳🇱',
+        subject: 'Cognitive Psychology Literature Review',
+        timerDisplay: '00:39:11',
+        cameraActive: false,
+        micMuted: true,
+        statusLabel: 'Audio Sanctuary',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1548142813-c348350df52b?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_nat_4',
+        displayName: 'Omar H.',
+        countryFlag: '🇦🇪',
+        subject: 'Architecture Studio Portfolio',
+        timerDisplay: '00:56:40',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Deep Flow',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?auto=format&fit=crop&w=600&q=80',
+      },
+    ],
+  },
+  {
+    id: 'study_with_camera',
+    roomCode: 'STUDY-CAMERA',
+    title: 'Study | With Camera 📖',
+    shortTitle: 'Study | With Camera',
+    badgeLabel: 'With Camera',
+    category: 'with_camera',
+    defaultDurationMinutes: 120,
+    defaultSubject: '2-Hour Camera-On Exam Prep & Textbook Mastery',
+    defaultPositiveNote: 'Camera on, phone away, 100% locked in.',
+    recommendedAmbientPresetId: 'binaural',
+    requiresCameraPreferred: true,
+    description:
+      'Maximum peer accountability room where scholars study with camera desks active to eliminate phone scrolling and procrastination.',
+    tagline: '2h Marathon Block · Camera Accountability Grid',
+    baselineOnlineScholars: 314,
+    coverImage:
+      'https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=900&q=80',
+    simulatedScholars: [
+      {
+        id: 'sim_cam_1',
+        displayName: 'Liam C.',
+        countryFlag: '🇮🇪',
+        subject: 'USMLE Step 1 Pathology Block',
+        timerDisplay: '01:42:30',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Camera On · 2h',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_cam_2',
+        displayName: 'Zara N.',
+        countryFlag: '🇿🇦',
+        subject: 'Quantitative Finance Stochastic Calc',
+        timerDisplay: '01:18:05',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Camera On · 2h',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_cam_3',
+        displayName: 'Matteo F.',
+        countryFlag: '🇮🇹',
+        subject: 'Astrophysics Radiative Processes',
+        timerDisplay: '01:51:12',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Camera On · 2h',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1488161628813-04466f872be2?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_cam_4',
+        displayName: 'Yuki A.',
+        countryFlag: '🇯🇵',
+        subject: 'Rust Async Runtime & Tokio',
+        timerDisplay: '01:09:44',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Camera On · 2h',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1517365830460-955ce3ccd263?auto=format&fit=crop&w=600&q=80',
+      },
+    ],
+  },
+  {
+    id: 'global_hall',
+    roomCode: 'STUDY-GLOBAL',
+    title: 'Global 24/7 Study Hall 🌎',
+    shortTitle: 'Global 24/7 Hall',
+    badgeLabel: '24/7 Global Hall',
+    category: 'global_hall',
+    defaultDurationMinutes: 25,
+    defaultSubject: 'Distributed Systems & Deep Work',
+    defaultPositiveNote: 'Stay hydrated and keep pushing forward!',
+    recommendedAmbientPresetId: null,
+    requiresCameraPreferred: true,
+    description:
+      'The flagship Mr. Stranger 24/7 international study hall where everyone can join with 1 click, share positive notes, and focus together.',
+    tagline: 'Open 24/7 · All Subjects · Instant 1-Click Join',
+    baselineOnlineScholars: 412,
+    coverImage:
+      'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=900&q=80',
+    simulatedScholars: [
+      {
+        id: 'sim_glb_1',
+        displayName: 'Clara H.',
+        countryFlag: '🇫🇷',
+        subject: 'Neurobiology Synaptic Plasticity',
+        timerDisplay: '00:24:12',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Studying Live',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1544005313-94ddf0286df2?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_glb_2',
+        displayName: 'Arjun V.',
+        countryFlag: '🇮🇳',
+        subject: 'Distributed Consensus & Raft',
+        timerDisplay: '00:19:38',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Studying Live',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_glb_3',
+        displayName: 'Hannah S.',
+        countryFlag: '🇸🇪',
+        subject: 'Econometrics Time Series Analysis',
+        timerDisplay: '00:42:09',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Studying Live',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=600&q=80',
+      },
+      {
+        id: 'sim_glb_4',
+        displayName: 'Marcus D.',
+        countryFlag: '🇺🇸',
+        subject: 'Clean Architecture & DDD',
+        timerDisplay: '00:31:55',
+        cameraActive: true,
+        micMuted: true,
+        statusLabel: 'Studying Live',
+        videoThumbUrl:
+          'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=600&q=80',
+      },
+    ],
+  },
+];
+
+export interface MrStrangerStudyLobbyRoomCard extends MrStranger247StudyRoomPreset {
+  isActiveRoom: boolean;
+  isCurrentUserSeatedHere: boolean;
+  liveParticipantCount: number;
+  realSeatedCount: number;
+  activeScholarsPreview: MrStrangerSimulatedScholarTile[];
+  ctaLabel: string;
+}
+
+export interface MrStrangerStudyTogetherLobbySummary {
+  brandName: string;
+  heroTitle: string;
+  heroSubtitle: string;
+  activeRoomPreset: MrStrangerStudyLobbyRoomCard;
+  featuredAbcRooms: MrStrangerStudyLobbyRoomCard[];
+  allRooms: MrStrangerStudyLobbyRoomCard[];
+  totalLiveScholarsOnline: number;
+}
+
+export function buildMrStrangerStudyTogetherLobby(params: {
+  activeRoomCode: string;
+  studyDesks?: Array<{
+    uid: string;
+    displayName: string;
+    roomCode: string;
+    subject: string;
+    timerMinutes: number;
+  }>;
+  currentUid?: string;
+  currentName?: string;
+  currentTimerText?: string;
+  isCameraEnabled?: boolean;
+  isMicEnabled?: boolean;
+}): MrStrangerStudyTogetherLobbySummary {
+  const normalizedActiveCode = normalizeStudyRoomCode(params.activeRoomCode || 'STUDY-GLOBAL');
+  const desks = Array.isArray(params.studyDesks) ? params.studyDesks : [];
+
+  const allRooms: MrStrangerStudyLobbyRoomCard[] = MR_STRANGER_247_STUDY_ROOMS.map((preset) => {
+    const realDesksInRoom = desks.filter(
+      (d) => normalizeStudyRoomCode(d.roomCode) === preset.roomCode
+    );
+    const isActiveRoom = preset.roomCode === normalizedActiveCode;
+    const isCurrentUserSeatedHere = Boolean(
+      params.currentUid && realDesksInRoom.some((d) => d.uid === params.currentUid)
+    );
+
+    const realScholarTiles: MrStrangerSimulatedScholarTile[] = realDesksInRoom.map((desk, idx) => {
+      const isMe = Boolean(params.currentUid && desk.uid === params.currentUid);
+      return {
+        id: `real_desk_${desk.uid}_${idx}`,
+        displayName: isMe ? `${desk.displayName} (You)` : desk.displayName,
+        countryFlag: isMe ? '🌟' : '🎓',
+        subject: desk.subject || preset.defaultSubject,
+        timerDisplay:
+          isMe && params.currentTimerText
+            ? params.currentTimerText
+            : formatStudyTimerHMS(Math.max(1, desk.timerMinutes) * 60, true),
+        cameraActive: isMe ? Boolean(params.isCameraEnabled ?? true) : true,
+        micMuted: isMe ? !params.isMicEnabled : true,
+        statusLabel: isMe ? 'You · Locked In' : 'Live Peer Desk',
+        videoThumbUrl: isMe
+          ? 'https://images.unsplash.com/photo-1498050108023-c5249f4df085?auto=format&fit=crop&w=600&q=80'
+          : preset.coverImage,
+        isCurrentUser: isMe,
+      };
+    });
+
+    const combinedTiles = [...realScholarTiles, ...preset.simulatedScholars].slice(0, 6);
+    const liveParticipantCount = preset.baselineOnlineScholars + realDesksInRoom.length;
+
+    const ctaLabel = isCurrentUserSeatedHere
+      ? 'Joined · Studying Live'
+      : isActiveRoom
+      ? 'Join now'
+      : 'Join now';
+
+    return {
+      ...preset,
+      isActiveRoom,
+      isCurrentUserSeatedHere,
+      liveParticipantCount,
+      realSeatedCount: realDesksInRoom.length,
+      activeScholarsPreview: combinedTiles,
+      ctaLabel,
+    };
+  });
+
+  // If the user typed a custom room code not in the preset list, synthesize an active room card for it
+  let activeRoomPreset = allRooms.find((r) => r.roomCode === normalizedActiveCode);
+  if (!activeRoomPreset) {
+    const customDesks = desks.filter(
+      (d) => normalizeStudyRoomCode(d.roomCode) === normalizedActiveCode
+    );
+    const isCurrentUserSeatedHere = Boolean(
+      params.currentUid && customDesks.some((d) => d.uid === params.currentUid)
+    );
+    const fallbackBase = MR_STRANGER_247_STUDY_ROOMS[0];
+    const customTiles: MrStrangerSimulatedScholarTile[] = customDesks.map((desk, idx) => {
+      const isMe = Boolean(params.currentUid && desk.uid === params.currentUid);
+      return {
+        id: `custom_desk_${desk.uid}_${idx}`,
+        displayName: isMe ? `${desk.displayName} (You)` : desk.displayName,
+        countryFlag: isMe ? '🌟' : '🎓',
+        subject: desk.subject || 'Custom Study Session',
+        timerDisplay:
+          isMe && params.currentTimerText
+            ? params.currentTimerText
+            : formatStudyTimerHMS(Math.max(1, desk.timerMinutes) * 60, true),
+        cameraActive: isMe ? Boolean(params.isCameraEnabled ?? true) : true,
+        micMuted: isMe ? !params.isMicEnabled : true,
+        statusLabel: isMe ? 'You · Locked In' : 'Live Peer Desk',
+        videoThumbUrl: fallbackBase.coverImage,
+        isCurrentUser: isMe,
+      };
+    });
+
+    activeRoomPreset = {
+      ...fallbackBase,
+      id: `custom_${normalizedActiveCode.toLowerCase()}`,
+      roomCode: normalizedActiveCode,
+      title: `Custom Study Room (${normalizedActiveCode})`,
+      shortTitle: normalizedActiveCode,
+      badgeLabel: 'Custom Room',
+      isActiveRoom: true,
+      isCurrentUserSeatedHere,
+      liveParticipantCount: 12 + customDesks.length,
+      realSeatedCount: customDesks.length,
+      activeScholarsPreview: [...customTiles, ...fallbackBase.simulatedScholars].slice(0, 6),
+      ctaLabel: isCurrentUserSeatedHere ? 'Joined · Studying Live' : 'Join now',
+    };
+  }
+
+  // Featured 4 "Easy as ABC" cards matching the reference website's 4 room types
+  const featuredAbcRooms = allRooms.filter((r) =>
+    ['solo_study', 'group_focus_25', 'nature_sounds', 'study_with_camera'].includes(r.id)
+  );
+
+  const totalLiveScholarsOnline = allRooms.reduce((sum, r) => sum + r.liveParticipantCount, 0);
+
+  return {
+    brandName: APP_BRAND_NAME,
+    heroTitle: 'Meet, chat, and study with students from all over the world 🌎',
+    heroSubtitle:
+      'Join the Mr. Stranger 24/7 global student community online and say goodbye to lack of motivation.',
+    activeRoomPreset,
+    featuredAbcRooms,
+    allRooms,
+    totalLiveScholarsOnline,
+  };
+}
+
+export interface StudyTogetherQuickJoinResolution {
+  presetId: string;
+  roomCode: string;
+  roomName: string;
+  durationMinutes: number;
+  subject: string;
+  positiveNote: string;
+  ambientPresetToActivate: AmbientPresetId | null;
+  shouldEnableCameraPreview: boolean;
+}
+
+export function resolveStudyTogetherQuickJoinAction(params: {
+  roomPresetId?: string;
+  roomCode?: string;
+  currentSubject?: string;
+  currentPositiveNote?: string;
+}): StudyTogetherQuickJoinResolution {
+  const byId = params.roomPresetId
+    ? MR_STRANGER_247_STUDY_ROOMS.find((r) => r.id === params.roomPresetId)
+    : undefined;
+  const normalizedCode = params.roomCode ? normalizeStudyRoomCode(params.roomCode) : undefined;
+  const byCode = normalizedCode
+    ? MR_STRANGER_247_STUDY_ROOMS.find((r) => r.roomCode === normalizedCode)
+    : undefined;
+
+  const matched =
+    byId ||
+    byCode ||
+    MR_STRANGER_247_STUDY_ROOMS.find((r) => r.id === 'group_focus_25') ||
+    MR_STRANGER_247_STUDY_ROOMS[0];
+
+  const trimmedSubj = (params.currentSubject || '').trim();
+  const trimmedNote = (params.currentPositiveNote || '').trim();
+
+  // Use the room's signature subject if the user hasn't typed a custom one or had the generic default
+  const isGenericDefaultSubject =
+    !trimmedSubj || trimmedSubj === 'Distributed Systems & Deep Work';
+  const subject = isGenericDefaultSubject ? matched.defaultSubject : trimmedSubj;
+
+  const isGenericDefaultNote =
+    !trimmedNote || trimmedNote === 'Stay hydrated and keep pushing forward!';
+  const positiveNote = isGenericDefaultNote ? matched.defaultPositiveNote : trimmedNote;
+
+  return {
+    presetId: matched.id,
+    roomCode: matched.roomCode,
+    roomName: `Mr. Stranger — ${matched.shortTitle}`,
+    durationMinutes: matched.defaultDurationMinutes,
+    subject,
+    positiveNote,
+    ambientPresetToActivate: matched.recommendedAmbientPresetId,
+    shouldEnableCameraPreview: matched.requiresCameraPreferred,
+  };
+}
+

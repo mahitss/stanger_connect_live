@@ -174,6 +174,12 @@ import {
   getMoodPresetTooltipMeta,
   getMoodPresetUsageCount24hMeta,
   buildMoodPresetUsageCounts24hMap,
+  MR_STRANGER_COMMUNITY_IMPACT_STATS,
+  MR_STRANGER_STUDY_PILLARS,
+  MR_STRANGER_MINDFULNESS_EXERCISES,
+  MR_STRANGER_247_STUDY_ROOMS,
+  buildMrStrangerStudyTogetherLobby,
+  resolveStudyTogetherQuickJoinAction,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -3473,3 +3479,69 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
   assert.equal(usageMap.coffee_break.usageBadgeLabel, '0 in 24h');
   assert.equal(usageMap.coffee_break.hasRecentActivity, false);
 });
+
+test('Mr. Stranger 24/7 Study Together room lobby builder and 1-click quick-join resolver support Solo study, Group focus | 25 min, Nature sounds, and Study | With Camera', () => {
+  assert.equal(MR_STRANGER_COMMUNITY_IMPACT_STATS.length, 5);
+  assert.equal(MR_STRANGER_STUDY_PILLARS.length, 3);
+  assert.equal(MR_STRANGER_MINDFULNESS_EXERCISES.length, 3);
+  assert.equal(MR_STRANGER_247_STUDY_ROOMS.length, 5);
+
+  const lobby = buildMrStrangerStudyTogetherLobby({
+    activeRoomCode: 'STUDY-GROUP25',
+    currentUid: 'usr_alice',
+    currentName: 'Alice',
+    currentTimerText: '00:24:10',
+    isCameraEnabled: true,
+    isMicEnabled: false,
+    studyDesks: [
+      {
+        uid: 'usr_alice',
+        displayName: 'Alice',
+        roomCode: 'STUDY-GROUP25',
+        subject: 'Distributed Systems Raft Lab',
+        timerMinutes: 25,
+      },
+    ],
+  });
+
+  assert.equal(lobby.brandName, 'Mr. Stranger');
+  assert.equal(lobby.featuredAbcRooms.length, 4);
+  assert.deepEqual(
+    lobby.featuredAbcRooms.map((r) => r.title),
+    [
+      'Solo study 📚',
+      'Group focus | 25 min ☕',
+      'Nature sounds 🌱',
+      'Study | With Camera 📖',
+    ]
+  );
+
+  // Active room is Group focus | 25 min where Alice is seated
+  assert.equal(lobby.activeRoomPreset.roomCode, 'STUDY-GROUP25');
+  assert.equal(lobby.activeRoomPreset.isCurrentUserSeatedHere, true);
+  assert.equal(lobby.activeRoomPreset.ctaLabel, 'Joined · Studying Live');
+  assert.equal(lobby.activeRoomPreset.activeScholarsPreview[0].displayName, 'Alice (You)');
+  assert.equal(lobby.activeRoomPreset.activeScholarsPreview[0].timerDisplay, '00:24:10');
+  assert.equal(lobby.activeRoomPreset.activeScholarsPreview[0].isCurrentUser, true);
+
+  // Resolve 1-click quick join for Nature sounds room
+  const natureJoin = resolveStudyTogetherQuickJoinAction({
+    roomPresetId: 'nature_sounds',
+    currentSubject: 'Distributed Systems & Deep Work',
+  });
+  assert.equal(natureJoin.roomCode, 'STUDY-NATURE');
+  assert.equal(natureJoin.durationMinutes, 60);
+  assert.equal(natureJoin.ambientPresetToActivate, 'rainfall');
+  assert.equal(natureJoin.roomName, 'Mr. Stranger — Nature sounds');
+
+  // Resolve 1-click quick join for Study | With Camera preserving custom subject
+  const cameraJoin = resolveStudyTogetherQuickJoinAction({
+    roomPresetId: 'study_with_camera',
+    currentSubject: 'Constitutional Law Final Exam',
+  });
+  assert.equal(cameraJoin.roomCode, 'STUDY-CAMERA');
+  assert.equal(cameraJoin.durationMinutes, 120);
+  assert.equal(cameraJoin.subject, 'Constitutional Law Final Exam');
+  assert.equal(cameraJoin.shouldEnableCameraPreview, true);
+});
+

@@ -44,6 +44,12 @@ import {
   WeeklyActivitySummary,
   TopicFocusSessionRecord,
   buildStudyFocus7DaySessionTrend,
+  MR_STRANGER_COMMUNITY_IMPACT_STATS,
+  MR_STRANGER_STUDY_PILLARS,
+  MR_STRANGER_MINDFULNESS_EXERCISES,
+  MrStranger247RoomCategory,
+  buildMrStrangerStudyTogetherLobby,
+  resolveStudyTogetherQuickJoinAction,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
@@ -69,6 +75,11 @@ import {
   CheckCircle2,
   AlertTriangle,
   Sliders,
+  Users,
+  Sparkles,
+  Globe,
+  Play,
+  HeartHandshake,
 } from 'lucide-react';
 
 export interface StudyDeskItem {
@@ -755,6 +766,79 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setJoinCodeInput('');
   };
 
+  // Mr. Stranger 24/7 Study Together Lobby & Mindfulness State
+  const [selectedLobbyCategory, setSelectedLobbyCategory] = useState<
+    'all' | MrStranger247RoomCategory
+  >('all');
+  const [isMindfulnessDrawerOpen, setIsMindfulnessDrawerOpen] = useState(false);
+  const [activeMindfulnessId, setActiveMindfulnessId] = useState<string>(
+    MR_STRANGER_MINDFULNESS_EXERCISES[0].id
+  );
+  const [lastJoinedRoomToast, setLastJoinedRoomToast] = useState<string | null>(null);
+
+  const handleQuickJoinStudyTogetherRoom = (presetId?: string) => {
+    const resolved = resolveStudyTogetherQuickJoinAction({
+      roomPresetId: presetId,
+      roomCode: presetId ? undefined : activeRoomCode,
+      currentSubject: subject,
+      currentPositiveNote: positiveNote,
+    });
+
+    setNewRoomTitle(resolved.roomName);
+    setSubject(resolved.subject);
+    applyCustomStudyMinutes(resolved.durationMinutes);
+    onChangeRoomCode(resolved.roomCode, resolved.roomName);
+    onJoinDesk(
+      resolved.roomCode,
+      resolved.roomName,
+      sanitizeSafeText(resolved.subject, 100),
+      sanitizeSafeText(resolved.positiveNote, 400),
+      resolved.durationMinutes
+    );
+    setIsRunning(true);
+
+    if (
+      resolved.ambientPresetToActivate &&
+      resolved.ambientPresetToActivate !== 'off'
+    ) {
+      const trackId = resolved.ambientPresetToActivate as AmbientTrackId;
+      const isAlreadyActive = activeAmbientLayers.some((l) => l.id === trackId);
+      if (!isAlreadyActive) {
+        const nextMix = toggleAmbientLayer(ambientMixState, trackId);
+        syncAndPersistAmbientMix(nextMix);
+      }
+    }
+
+    setLastJoinedRoomToast(
+      `Joined ${resolved.roomName} (${resolved.roomCode}) · ${resolved.durationMinutes}m live session started!`
+    );
+    window.setTimeout(() => {
+      setLastJoinedRoomToast((prev) =>
+        prev && prev.includes(resolved.roomCode) ? null : prev
+      );
+    }, 5000);
+  };
+
+  const handleStartMindfulnessSession = (exerciseId: string) => {
+    const exercise =
+      MR_STRANGER_MINDFULNESS_EXERCISES.find((e) => e.id === exerciseId) ||
+      MR_STRANGER_MINDFULNESS_EXERCISES[0];
+    setActiveMindfulnessId(exercise.id);
+    setSubject(`Mindfulness: ${exercise.title}`);
+    applyCustomStudyMinutes(exercise.durationMinutes);
+    setIsRunning(true);
+    onJoinDesk(
+      activeRoomCode,
+      newRoomTitle,
+      `Mindfulness: ${exercise.title}`,
+      exercise.guidanceText,
+      exercise.durationMinutes
+    );
+    setLastJoinedRoomToast(
+      `Started ${exercise.title} (${exercise.durationMinutes}m breather) in ${activeRoomCode}`
+    );
+  };
+
   const handlePublishIntention = async (e: React.FormEvent) => {
     e.preventDefault();
     const trimmedSubject = subject.trim();
@@ -962,16 +1046,518 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       ? formatStudyTimerHMS(secondsLeft, true)
       : formatTimerMMSS(secondsLeft);
 
+  const studyTogetherLobby = buildMrStrangerStudyTogetherLobby({
+    activeRoomCode,
+    studyDesks,
+    currentUid,
+    currentName,
+    currentTimerText: primaryTimerText,
+    isCameraEnabled: studyCamActive,
+    isMicEnabled: studyMicActive,
+  });
+
+  const filteredLobbyRooms =
+    selectedLobbyCategory === 'all'
+      ? studyTogetherLobby.featuredAbcRooms
+      : studyTogetherLobby.allRooms.filter((r) => r.category === selectedLobbyCategory);
+
+  const selectedMindfulnessExercise =
+    MR_STRANGER_MINDFULNESS_EXERCISES.find((m) => m.id === activeMindfulnessId) ||
+    MR_STRANGER_MINDFULNESS_EXERCISES[0];
+
   return (
     <section className="space-y-8" aria-label="Study Mode and Shareable Study Room">
+      {/* MR. STRANGER 24/7 STUDY TOGETHER HERO & LIVE GLOBAL SCHOLAR FOCUS GRID */}
+      <div
+        data-testid="mr-stranger-study-together-hero"
+        className="rounded-xl border border-zinc-800/90 bg-gradient-to-br from-[#0A0A0F] via-[#090D16] to-[#08080A] p-6 lg:p-8 space-y-8 shadow-2xl"
+      >
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+          {/* Left Hero Copy & 1-Click Join Actions (5 cols) */}
+          <div className="lg:col-span-5 space-y-5">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono uppercase tracking-wider">
+              <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span>{studyTogetherLobby.brandName} · 24/7 Global Study Sanctuary</span>
+            </div>
+
+            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-[1.15]">
+              {studyTogetherLobby.heroTitle}
+            </h1>
+
+            <p className="text-sm sm:text-base text-zinc-300 leading-relaxed">
+              {studyTogetherLobby.heroSubtitle}
+            </p>
+
+            {/* Primary 1-Click Join CTA & Mindfulness Breather Toggle */}
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <button
+                type="button"
+                data-testid="study-together-join-now-btn"
+                onClick={() => handleQuickJoinStudyTogetherRoom()}
+                className="px-6 py-3 text-sm font-bold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded-md transition-all shadow-lg shadow-emerald-500/10 flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <Play className="w-4 h-4 fill-zinc-950 shrink-0" />
+                <span>
+                  {isSeated
+                    ? `Studying Live in ${activeRoomCode}`
+                    : 'Study Together now'}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="study-mindfulness-breather-toggle"
+                onClick={() => setIsMindfulnessDrawerOpen((prev) => !prev)}
+                aria-expanded={isMindfulnessDrawerOpen}
+                className={`px-4 py-3 text-xs font-semibold rounded-md border transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer ${
+                  isMindfulnessDrawerOpen
+                    ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
+                    : 'bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 border-zinc-700/80'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                <span>5-Min Mindfulness Breather</span>
+              </button>
+            </div>
+
+            {lastJoinedRoomToast && (
+              <div
+                role="status"
+                data-testid="study-together-joined-banner"
+                className="p-3 rounded-md bg-emerald-500/15 border border-emerald-500/40 text-xs text-emerald-200 flex items-center justify-between gap-2"
+              >
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <span>{lastJoinedRoomToast}</span>
+                </div>
+                <span className="font-mono text-[11px] text-emerald-300 shrink-0">
+                  Live Sync Active
+                </span>
+              </div>
+            )}
+
+            {/* Quick Live Room Status Strip */}
+            <div className="pt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-zinc-400 border-t border-zinc-800/80">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="font-mono font-semibold text-white tabular-nums">
+                  {studyTogetherLobby.totalLiveScholarsOnline.toLocaleString()}
+                </span>
+                <span>scholars studying right now</span>
+              </div>
+              <span aria-hidden="true" className="text-zinc-700">
+                ·
+              </span>
+              <div className="font-mono text-zinc-300">
+                Active Room:{' '}
+                <strong className="text-emerald-400">
+                  {studyTogetherLobby.activeRoomPreset.title}
+                </strong>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Live Multi-Scholar Video/Avatar Focus Grid Stage (7 cols) */}
+          <div
+            data-testid="mr-stranger-live-study-grid"
+            className="lg:col-span-7 rounded-xl border border-zinc-800 bg-[#050507] p-4 sm:p-5 space-y-4 relative overflow-hidden"
+          >
+            {/* Stage Top Floating Bar: Active Room Badge + Floating Pomodoro Timer */}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-3.5">
+              <div className="flex items-center gap-2.5">
+                <span className="px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded">
+                  {studyTogetherLobby.activeRoomPreset.badgeLabel}
+                </span>
+                <div>
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <span>{studyTogetherLobby.activeRoomPreset.title}</span>
+                    <span className="text-xs font-mono text-zinc-400">
+                      ({studyTogetherLobby.activeRoomPreset.roomCode})
+                    </span>
+                  </h2>
+                  <p className="text-[11px] text-zinc-400">
+                    {studyTogetherLobby.activeRoomPreset.tagline}
+                  </p>
+                </div>
+              </div>
+
+              {/* Floating StudyTogether-Style Timer Pill */}
+              <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-md bg-zinc-900/95 border border-zinc-700/80 shadow-inner">
+                <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <div className="text-right">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                    {isRunning ? 'Live Focus Timer' : 'Room Sprint Timer'}
+                  </div>
+                  <div
+                    data-testid="study-stage-floating-timer"
+                    className="text-sm font-mono font-bold text-white tabular-nums"
+                  >
+                    {primaryTimerText}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 4-Tile Live Scholar Camera / Avatar Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {studyTogetherLobby.activeRoomPreset.activeScholarsPreview
+                .slice(0, 4)
+                .map((scholar) => (
+                  <div
+                    key={scholar.id}
+                    data-testid={
+                      scholar.isCurrentUser
+                        ? 'live-grid-tile-current-user'
+                        : `live-grid-tile-${scholar.id}`
+                    }
+                    className={`group relative rounded-lg overflow-hidden border aspect-[16/10] bg-zinc-950 flex flex-col justify-between p-3 transition-all ${
+                      scholar.isCurrentUser
+                        ? 'border-emerald-500/70 ring-1 ring-emerald-500/30'
+                        : 'border-zinc-800/90 hover:border-zinc-700'
+                    }`}
+                  >
+                    {/* Background Scholar Camera Stream or Curated Study Desk Feed */}
+                    <img
+                      src={scholar.videoThumbUrl}
+                      alt={`${scholar.displayName} studying in ${studyTogetherLobby.activeRoomPreset.shortTitle}`}
+                      className="absolute inset-0 w-full h-full object-cover opacity-55 group-hover:opacity-65 transition-opacity"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/65" />
+
+                    {/* Top Row: Scholar Name + Flag + Individual Timer */}
+                    <div className="relative z-10 flex items-center justify-between gap-2">
+                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/75 border border-white/10 text-xs font-semibold text-white truncate">
+                        <span>{scholar.countryFlag}</span>
+                        <span className="truncate">{scholar.displayName}</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded bg-black/75 border border-white/10 text-[11px] font-mono text-emerald-300 tabular-nums shrink-0">
+                        {scholar.timerDisplay}
+                      </span>
+                    </div>
+
+                    {/* Bottom Row: Current Study Goal + Camera/Mic Indicators */}
+                    <div className="relative z-10 space-y-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300/90">
+                          {scholar.statusLabel}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <span
+                            title={scholar.micMuted ? 'Microphone Muted for Silent Focus' : 'Mic On'}
+                            className="p-1 rounded bg-black/70 text-zinc-300"
+                          >
+                            {scholar.micMuted ? (
+                              <MicOff className="w-3 h-3 text-rose-400" />
+                            ) : (
+                              <Mic className="w-3 h-3 text-emerald-400" />
+                            )}
+                          </span>
+                          <span
+                            title={scholar.cameraActive ? 'Camera Desk Active' : 'Avatar Mode'}
+                            className="p-1 rounded bg-black/70 text-zinc-300"
+                          >
+                            {scholar.cameraActive ? (
+                              <Video className="w-3 h-3 text-emerald-400" />
+                            ) : (
+                              <VideoOff className="w-3 h-3 text-zinc-400" />
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                      <p className="text-xs font-medium text-zinc-100 truncate">
+                        {scholar.subject}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+            </div>
+
+            {/* Stage Footer Bar: Quick Seat Status + Room Participants */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-zinc-400">
+              <div className="flex items-center gap-2">
+                <Users className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>
+                  <strong className="text-white font-mono tabular-nums">
+                    {studyTogetherLobby.activeRoomPreset.liveParticipantCount}
+                  </strong>{' '}
+                  students studying in {studyTogetherLobby.activeRoomPreset.shortTitle}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                {!isSeated ? (
+                  <button
+                    type="button"
+                    onClick={() => handleQuickJoinStudyTogetherRoom()}
+                    className="px-3 py-1 text-xs font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded transition-colors cursor-pointer"
+                  >
+                    + Take Your Seat in Grid
+                  </button>
+                ) : (
+                  <span className="text-emerald-400 font-mono text-[11px]">
+                    ✓ Your desk is live in {activeRoomCode}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* 5-Minute Guided Mindfulness Breather Drawer (When Expanded) */}
+        {isMindfulnessDrawerOpen && (
+          <div
+            data-testid="study-mindfulness-drawer"
+            className="p-5 rounded-lg bg-[#050507] border border-sky-500/30 space-y-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+              <div>
+                <span className="text-[11px] font-mono uppercase tracking-wider text-sky-400">
+                  MR. STRANGER MINDFULNESS SANCTUARY
+                </span>
+                <h3 className="text-base font-bold text-white">
+                  Take a 5-Minute Guided Mindfulness Breather
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsMindfulnessDrawerOpen(false)}
+                className="px-2.5 py-1 text-xs text-zinc-400 hover:text-white bg-zinc-900 rounded border border-zinc-800"
+              >
+                Close
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {MR_STRANGER_MINDFULNESS_EXERCISES.map((ex) => {
+                const isSelected = ex.id === selectedMindfulnessExercise.id;
+                return (
+                  <div
+                    key={ex.id}
+                    className={`p-4 rounded-lg border flex flex-col justify-between gap-3 transition-colors ${
+                      isSelected
+                        ? 'bg-sky-500/10 border-sky-500/50'
+                        : 'bg-[#0A0A0C] border-zinc-800/80'
+                    }`}
+                  >
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-white">{ex.title}</span>
+                        <span className="text-[11px] font-mono text-sky-300">
+                          {ex.durationMinutes} min
+                        </span>
+                      </div>
+                      <div className="text-[11px] font-mono text-sky-400/90">
+                        {ex.cadenceLabel}
+                      </div>
+                      <p className="text-xs text-zinc-300 leading-relaxed">
+                        {ex.guidanceText}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid={`start-mindfulness-${ex.id}`}
+                      onClick={() => handleStartMindfulnessSession(ex.id)}
+                      className="w-full py-2 px-3 text-xs font-semibold bg-sky-400 hover:bg-sky-300 text-zinc-950 rounded transition-colors cursor-pointer"
+                    >
+                      Start {ex.durationMinutes}m Mindfulness Session
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* MR. STRANGER GLOBAL COMMUNITY STATS STRIP (+1M Members, +16M Sessions, +183 Countries) */}
+        <div
+          data-testid="mr-stranger-community-stats-strip"
+          className="pt-4 border-t border-zinc-800/80 space-y-4"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-400">
+              Our Mr. Stranger student community is more than one million strong
+            </h2>
+            <span className="text-xs font-mono text-emerald-400">
+              Verified 24/7 Global Study Telemetry
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {MR_STRANGER_COMMUNITY_IMPACT_STATS.map((stat) => (
+              <div
+                key={stat.id}
+                className="p-3.5 rounded-lg bg-[#050507] border border-zinc-800/80 space-y-1"
+              >
+                <div className="text-2xl font-extrabold font-mono text-white tabular-nums">
+                  {stat.value}
+                </div>
+                <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">
+                  {stat.label}
+                </div>
+                <p className="text-[11px] text-zinc-400 leading-snug">{stat.detail}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* "EASY AS ABC" — 24/7 MR. STRANGER LIVE STUDY ROOMS LOBBY */}
+      <div
+        data-testid="mr-stranger-live-room-lobby"
+        className="p-6 rounded-xl border border-zinc-800/90 bg-[#0A0A0C] space-y-6"
+      >
+        <div className="flex flex-wrap items-end justify-between gap-4 border-b border-zinc-800/80 pb-4">
+          <div className="space-y-1">
+            <span className="text-xs font-mono uppercase tracking-wider text-emerald-400">
+              EASY AS ABC · INSTANT 1-CLICK ROOM JOIN
+            </span>
+            <h2 className="text-xl font-bold text-white">
+              Choose Your 24/7 Mr. Stranger Study Room
+            </h2>
+            <p className="text-xs sm:text-sm text-zinc-400">
+              Pick a room format below and click <strong className="text-white">Join now</strong> — your desk, timer, and room soundscape configure automatically so everyone can join properly.
+            </p>
+          </div>
+
+          {/* Room Category Filter Tabs */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            {(
+              [
+                { id: 'all', label: 'Featured 24/7 Rooms (4)' },
+                { id: 'live_in_app', label: 'Live-in app' },
+                { id: 'live_audio', label: 'Live Audio' },
+                { id: 'with_camera', label: 'With Camera' },
+                { id: 'global_hall', label: 'Global Hall' },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setSelectedLobbyCategory(tab.id)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md border transition-colors cursor-pointer ${
+                  selectedLobbyCategory === tab.id
+                    ? 'bg-white text-black border-white font-semibold'
+                    : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-700'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 4 Signature StudyTogether-Style Room Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {filteredLobbyRooms.map((room) => (
+            <div
+              key={room.id}
+              data-testid={`study-lobby-card-${room.id}`}
+              className={`rounded-lg border overflow-hidden flex flex-col justify-between bg-[#050507] transition-all ${
+                room.isActiveRoom
+                  ? 'border-emerald-500/70 ring-1 ring-emerald-500/30'
+                  : 'border-zinc-800/90 hover:border-zinc-700'
+              }`}
+            >
+              <div>
+                {/* Room Cover Image & Category Badge */}
+                <div className="relative h-36 overflow-hidden bg-zinc-900">
+                  <img
+                    src={room.coverImage}
+                    alt={room.title}
+                    className="w-full h-full object-cover opacity-75"
+                    loading="lazy"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#050507] via-black/30 to-black/40" />
+
+                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
+                    <span className="px-2.5 py-0.5 rounded bg-black/80 border border-white/15 text-[11px] font-mono font-semibold text-emerald-300">
+                      {room.badgeLabel}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-black/80 border border-white/10 text-[11px] font-mono text-zinc-200 tabular-nums">
+                      {room.liveParticipantCount} online
+                    </span>
+                  </div>
+
+                  <div className="absolute bottom-2.5 left-3 right-3">
+                    <h3 className="text-base font-bold text-white truncate">
+                      {room.title}
+                    </h3>
+                  </div>
+                </div>
+
+                {/* Room Description & Metadata */}
+                <div className="p-4 space-y-3">
+                  <div className="text-[11px] font-mono text-emerald-400">
+                    {room.tagline}
+                  </div>
+                  <p className="text-xs text-zinc-300 leading-relaxed">
+                    {room.description}
+                  </p>
+                  <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-1 border-t border-zinc-800/80">
+                    <span>Code: {room.roomCode}</span>
+                    <span>{room.defaultDurationMinutes}m block</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 1-Click "Join now" Button */}
+              <div className="p-4 pt-0">
+                <button
+                  type="button"
+                  data-testid={`study-together-join-room-${room.id}`}
+                  onClick={() => handleQuickJoinStudyTogetherRoom(room.id)}
+                  className={`w-full py-2.5 px-4 text-xs font-bold rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
+                    room.isCurrentUserSeatedHere
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                      : 'bg-white hover:bg-zinc-200 text-black'
+                  }`}
+                >
+                  <span>{room.ctaLabel}</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* "JUST A STUDY ROOM? THINK AGAIN!" — 3 MR. STRANGER STUDY PILLARS */}
+      <div
+        data-testid="mr-stranger-study-pillars"
+        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+      >
+        {MR_STRANGER_STUDY_PILLARS.map((pillar) => (
+          <div
+            key={pillar.id}
+            className="p-5 rounded-xl border border-zinc-800/80 bg-[#0A0A0C] flex flex-col justify-between space-y-3"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[11px] font-mono text-emerald-400 uppercase tracking-wider">
+                  {pillar.eyebrow}
+                </span>
+                <HeartHandshake className="w-4 h-4 text-zinc-500 shrink-0" />
+              </div>
+              <h3 className="text-base font-bold text-white">{pillar.title}</h3>
+              <p className="text-xs text-zinc-300 leading-relaxed">
+                {pillar.description}
+              </p>
+            </div>
+            <div className="pt-2 border-t border-zinc-800/70">
+              <span className="inline-block text-[11px] font-mono text-zinc-400">
+                ✓ {pillar.highlightBadge}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Top Header & Shareable Room Invite Strip */}
       <div className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-6">
         <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-5">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-              <h1 className="text-2xl font-bold tracking-tight text-white">
+              <h2 className="text-2xl font-bold tracking-tight text-white">
                 Study Mode & Live Study Sanctuary
-              </h1>
+              </h2>
               <span aria-hidden="true" className="text-xs text-zinc-600">
                 ·
               </span>
