@@ -3300,6 +3300,10 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
 
   const hoveredSidebarSpec = getWorkspaceSidebarScrollSpec(true);
   assert.equal(hoveredSidebarSpec.isHovered, true);
+  assert.equal(hoveredSidebarSpec.isFocused, false);
+  assert.equal(hoveredSidebarSpec.isProgrammaticScroll, false);
+  assert.equal(hoveredSidebarSpec.smoothScrollActive, false);
+  assert.equal(hoveredSidebarSpec.scrollBehavior, 'auto');
   assert.equal(hoveredSidebarSpec.scrollMode, 'hover-scroll');
   assert.ok(hoveredSidebarSpec.sidebarScrollAreaClass.includes('overflow-y-auto'));
   assert.ok(hoveredSidebarSpec.sidebarScrollAreaClass.includes('sidebar-stable-scroll'));
@@ -3307,5 +3311,26 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
     hoveredSidebarSpec.sidebarPositionClass,
     lockedSidebarSpec.sidebarPositionClass
   );
+
+  const focusedSidebarSpec = getWorkspaceSidebarScrollSpec(false, { isFocused: true });
+  assert.equal(focusedSidebarSpec.isFocused, true);
+  assert.equal(focusedSidebarSpec.smoothScrollActive, true);
+  assert.equal(focusedSidebarSpec.scrollBehavior, 'smooth');
+  assert.equal(focusedSidebarSpec.scrollMode, 'smooth-jump-scroll');
+  assert.ok(focusedSidebarSpec.sidebarScrollAreaClass.includes('overflow-y-auto'));
+  assert.ok(focusedSidebarSpec.sidebarScrollAreaClass.includes('scroll-smooth'));
+  assert.ok(focusedSidebarSpec.sidebarScrollAreaClass.includes('sidebar-smooth-scroll-active'));
+
+  const programmaticJumpSpec = getWorkspaceSidebarScrollSpec(false, {
+    isProgrammaticScroll: true,
+  });
+  assert.equal(programmaticJumpSpec.isProgrammaticScroll, true);
+  assert.equal(programmaticJumpSpec.smoothScrollActive, true);
+  assert.equal(programmaticJumpSpec.scrollBehavior, 'smooth');
+  assert.equal(programmaticJumpSpec.scrollMode, 'smooth-jump-scroll');
+  assert.ok(programmaticJumpSpec.sidebarScrollAreaClass.includes('overflow-y-auto'));
+  assert.ok(programmaticJumpSpec.sidebarScrollAreaClass.includes('scroll-smooth'));
+  assert.ok(programmaticJumpSpec.sidebarScrollAreaClass.includes('sidebar-smooth-scroll-active'));
 });
+
 

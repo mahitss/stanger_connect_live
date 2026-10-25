@@ -240,6 +240,16 @@ html.light textarea::placeholder {
     transition: none !important;
     animation: none !important;
   }
+
+  #workspace-sidebar-scroll-area,
+  #workspace-sidebar-scroll-area:focus,
+  #workspace-sidebar-scroll-area:focus-within,
+  #workspace-sidebar-scroll-area[data-sidebar-focused='true'],
+  #workspace-sidebar-scroll-area[data-programmatic-scroll='true'],
+  #workspace-sidebar-scroll-area[data-scroll-behavior='smooth'],
+  #workspace-sidebar-scroll-area.sidebar-smooth-scroll-active {
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ==========================================================================
@@ -247,6 +257,21 @@ html.light textarea::placeholder {
    Locks sidebar geometry so hovering/unhovering never shifts width by 1px,
    while allowing smooth vertical scroll on hover for remaining sidebar items.
    ========================================================================== */
+#workspace-sidebar-scroll-area {
+  scroll-behavior: auto;
+  scroll-padding-top: 12px;
+  scroll-padding-bottom: 12px;
+}
+
+#workspace-sidebar-scroll-area:focus,
+#workspace-sidebar-scroll-area:focus-within,
+#workspace-sidebar-scroll-area[data-sidebar-focused='true'],
+#workspace-sidebar-scroll-area[data-programmatic-scroll='true'],
+#workspace-sidebar-scroll-area[data-scroll-behavior='smooth'],
+#workspace-sidebar-scroll-area.sidebar-smooth-scroll-active {
+  scroll-behavior: smooth;
+}
+
 .sidebar-stable-scroll {
   scrollbar-width: none;
   -ms-overflow-style: none;
@@ -264,6 +289,8 @@ html.light textarea::placeholder {
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
   overflow-x: hidden;
+  scroll-behavior: smooth;
 }
+
 
 

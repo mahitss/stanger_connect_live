@@ -8804,12 +8804,21 @@ export function getMoodCategoryExpansionMotionSpec(
   };
 }
 
+export interface WorkspaceSidebarScrollOptions {
+  isFocused?: boolean;
+  isProgrammaticScroll?: boolean;
+}
+
 export interface WorkspaceSidebarScrollSpec {
   isHovered: boolean;
+  isFocused: boolean;
+  isProgrammaticScroll: boolean;
+  smoothScrollActive: boolean;
+  scrollBehavior: 'smooth' | 'auto';
   isSticky: true;
   independentMainScroll: true;
   preventLayoutFluctuation: true;
-  scrollMode: 'hover-scroll' | 'locked';
+  scrollMode: 'hover-scroll' | 'smooth-jump-scroll' | 'locked';
   layoutMode: 'side-by-side-sticky';
   shellClassName: string;
   sidebarPositionClass: string;
@@ -8818,26 +8827,43 @@ export interface WorkspaceSidebarScrollSpec {
 }
 
 export function getWorkspaceSidebarScrollSpec(
-  isSidebarHovered: boolean = false
+  isSidebarHovered: boolean = false,
+  options?: WorkspaceSidebarScrollOptions
 ): WorkspaceSidebarScrollSpec {
   const isHovered = Boolean(isSidebarHovered);
+  const isFocused = Boolean(options?.isFocused);
+  const isProgrammaticScroll = Boolean(options?.isProgrammaticScroll);
+  const smoothScrollActive = isFocused || isProgrammaticScroll;
+  const canScroll = isHovered || smoothScrollActive;
+
   return {
     isHovered,
+    isFocused,
+    isProgrammaticScroll,
+    smoothScrollActive,
+    scrollBehavior: smoothScrollActive ? 'smooth' : 'auto',
     isSticky: true,
     independentMainScroll: true,
     preventLayoutFluctuation: true,
-    scrollMode: isHovered ? 'hover-scroll' : 'locked',
+    scrollMode: isHovered
+      ? 'hover-scroll'
+      : smoothScrollActive
+        ? 'smooth-jump-scroll'
+        : 'locked',
     layoutMode: 'side-by-side-sticky',
     shellClassName:
       'min-h-screen md:h-screen md:max-h-screen md:overflow-hidden flex flex-col md:flex-row',
     sidebarPositionClass:
       'md:sticky md:top-0 md:h-screen md:max-h-screen md:w-64 md:min-w-[16rem] md:max-w-[16rem] shrink-0 self-start',
-    sidebarScrollAreaClass: isHovered
-      ? 'overflow-y-auto overscroll-contain sidebar-stable-scroll'
+    sidebarScrollAreaClass: canScroll
+      ? smoothScrollActive
+        ? 'overflow-y-auto overscroll-contain sidebar-stable-scroll scroll-smooth sidebar-smooth-scroll-active'
+        : 'overflow-y-auto overscroll-contain sidebar-stable-scroll'
       : 'overflow-y-hidden overscroll-contain sidebar-stable-scroll',
     mainViewportClass:
-      'flex-1 flex flex-col min-w-0 md:h-screen md:max-h-screen md:overflow-y-auto overscroll-contain main-viewport-stable-scroll',
+      'flex-1 flex flex-col min-w-0 md:h-screen md:max-h-screen md:overflow-y-auto overscroll-contain main-viewport-stable-scroll scroll-smooth',
   };
 }
+
 
 

@@ -677,6 +677,11 @@ export default function App() {
     useState<OnlineDirectoryAudienceFilter>('everyone');
   const [isQuickFilterHovered, setIsQuickFilterHovered] = useState<boolean>(false);
   const [isSidebarHovered, setIsSidebarHovered] = useState<boolean>(false);
+  const [isSidebarFocused, setIsSidebarFocused] = useState<boolean>(false);
+  const [isSidebarProgrammaticScroll, setIsSidebarProgrammaticScroll] =
+    useState<boolean>(false);
+  const sidebarScrollAreaRef = useRef<HTMLDivElement | null>(null);
+  const sidebarProgrammaticTimerRef = useRef<number | null>(null);
   const [isClearFilterModalOpen, setIsClearFilterModalOpen] = useState<boolean>(false);
   useEffect(() => {
     if (!isClearFilterModalOpen) return;
@@ -3330,12 +3335,31 @@ export default function App() {
     }
   };
 
-  const sidebarScrollSpec = getWorkspaceSidebarScrollSpec(isSidebarHovered);
+  const sidebarScrollSpec = getWorkspaceSidebarScrollSpec(isSidebarHovered, {
+    isFocused: isSidebarFocused,
+    isProgrammaticScroll: isSidebarProgrammaticScroll,
+  });
 
-  const handleSidebarQuickJump = (targetTestId: string) => {
+  const handleSidebarQuickJump = (
+    targetSelectorId: string,
+    triggerElement?: HTMLElement | null
+  ) => {
+    setIsSidebarProgrammaticScroll(true);
+    if (sidebarProgrammaticTimerRef.current) {
+      window.clearTimeout(sidebarProgrammaticTimerRef.current);
+    }
+    sidebarProgrammaticTimerRef.current = window.setTimeout(() => {
+      setIsSidebarProgrammaticScroll(false);
+    }, 600);
+
     setActivePage('hub');
     window.requestAnimationFrame(() => {
-      const targetEl = document.querySelector(`[data-testid="${targetTestId}"]`);
+      if (triggerElement && typeof triggerElement.scrollIntoView === 'function') {
+        triggerElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+      const targetEl = document.querySelector(
+        `[data-testid="${targetSelectorId}"], #${targetSelectorId}`
+      );
       if (targetEl && typeof targetEl.scrollIntoView === 'function') {
         targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
@@ -3353,12 +3377,13 @@ export default function App() {
       data-layout-mode={sidebarScrollSpec.layoutMode}
       className={`${sidebarScrollSpec.shellClassName} transition-colors ${themeMeta.rootClassName} bg-slate-50 text-slate-900 dark:bg-[#050505] dark:text-zinc-100`}
     >
-      {/* Persistent Left Sidebar Navigation (Stuck in place; scrolls remaining items only when hovered) */}
+      {/* Persistent Left Sidebar Navigation (Stuck in place; scrolls remaining items only when hovered, focused, or programmatically scrolled) */}
       <aside
         id="workspace-sidebar"
         data-testid="workspace-sidebar"
         data-sidebar-sticky="true"
         data-sidebar-hovered={sidebarScrollSpec.isHovered ? 'true' : 'false'}
+        data-sidebar-focused={sidebarScrollSpec.isFocused ? 'true' : 'false'}
         data-sidebar-scroll-mode={sidebarScrollSpec.scrollMode}
         onMouseEnter={() => setIsSidebarHovered(true)}
         onMouseLeave={() => setIsSidebarHovered(false)}
@@ -3392,14 +3417,27 @@ export default function App() {
           </div>
         </div>
 
-        {/* Hover-Scrollable Sidebar Items Container (Stuck when not hovered, scrolls smoothly for remaining items on mouse hover without width fluctuation) */}
+        {/* Hover & Focus/Programmatic Smooth-Scrollable Sidebar Items Container */}
         <div
+          ref={sidebarScrollAreaRef}
           id="workspace-sidebar-scroll-area"
+          tabIndex={-1}
           data-testid="workspace-sidebar-scroll-area"
           data-scroll-mode={sidebarScrollSpec.scrollMode}
           data-sidebar-hovered={sidebarScrollSpec.isHovered ? 'true' : 'false'}
+          data-sidebar-focused={sidebarScrollSpec.isFocused ? 'true' : 'false'}
+          data-programmatic-scroll={
+            sidebarScrollSpec.isProgrammaticScroll ? 'true' : 'false'
+          }
+          data-scroll-behavior={sidebarScrollSpec.scrollBehavior}
+          onFocusCapture={() => setIsSidebarFocused(true)}
+          onBlurCapture={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+              setIsSidebarFocused(false);
+            }
+          }}
           onWheel={(e) => {
-            if (!isSidebarHovered) {
+            if (!isSidebarHovered && !isSidebarFocused) {
               e.preventDefault();
             }
           }}
@@ -3577,7 +3615,9 @@ export default function App() {
             </div>
             <button
               type="button"
-              onClick={() => handleSidebarQuickJump('daily-productivity-goal-card')}
+              onClick={(e) =>
+                handleSidebarQuickJump('daily-productivity-goal-card', e.currentTarget)
+              }
               data-testid="sidebar-jump-daily-goal"
               className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
@@ -3589,7 +3629,9 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => handleSidebarQuickJump('streak-reminder-settings-bar')}
+              onClick={(e) =>
+                handleSidebarQuickJump('streak-reminder-settings-bar', e.currentTarget)
+              }
               data-testid="sidebar-jump-streak-reminder"
               className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
@@ -3601,7 +3643,9 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => handleSidebarQuickJump('weekly-activity-overview-card')}
+              onClick={(e) =>
+                handleSidebarQuickJump('weekly-activity-overview-card', e.currentTarget)
+              }
               data-testid="sidebar-jump-weekly-activity"
               className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
@@ -3613,7 +3657,9 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => handleSidebarQuickJump('global-leaderboard-card')}
+              onClick={(e) =>
+                handleSidebarQuickJump('global-leaderboard-card', e.currentTarget)
+              }
               data-testid="sidebar-jump-leaderboard"
               className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
@@ -3625,7 +3671,9 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => handleSidebarQuickJump('hub-online-directory')}
+              onClick={(e) =>
+                handleSidebarQuickJump('hub-online-directory', e.currentTarget)
+              }
               data-testid="sidebar-jump-mood-directory"
               className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
@@ -3637,7 +3685,12 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => handleSidebarQuickJump('online-directory-mood-category-filter')}
+              onClick={(e) =>
+                handleSidebarQuickJump(
+                  'online-directory-mood-category-filter',
+                  e.currentTarget
+                )
+              }
               data-testid="sidebar-jump-mood-categories"
               className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
             >
