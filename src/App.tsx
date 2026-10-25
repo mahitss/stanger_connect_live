@@ -163,6 +163,8 @@ import {
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
   getOnlineDirectoryQuickFilterMeta,
+  buildOnlineDirectoryFilterShareLink,
+  parseOnlineDirectoryFilterShareParams,
   toggleMoodCategoryDrawerExpanded,
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
@@ -676,8 +678,24 @@ export default function App() {
   const [sharedDailyGoalSummary, setSharedDailyGoalSummary] = useState<
     (DailyGoalMomentShareSummary & { momentId: string; copied: boolean }) | null
   >(null);
-  const [showOnlyInFocusPeers, setShowOnlyInFocusPeers] = useState<boolean>(false);
-  const [directoryMoodFilter, setDirectoryMoodFilter] = useState<string>('all');
+  const initialFilterShareParams = (() => {
+    try {
+      return parseOnlineDirectoryFilterShareParams(window.location.search);
+    } catch {
+      return {
+        hasFilterParams: false,
+        audienceFilter: 'everyone' as OnlineDirectoryAudienceFilter,
+        moodFilter: 'all',
+        onlyInFocus: false,
+      };
+    }
+  })();
+  const [showOnlyInFocusPeers, setShowOnlyInFocusPeers] = useState<boolean>(
+    initialFilterShareParams.onlyInFocus
+  );
+  const [directoryMoodFilter, setDirectoryMoodFilter] = useState<string>(
+    initialFilterShareParams.moodFilter
+  );
   const [moodPresetSearchQuery, setMoodPresetSearchQuery] = useState<string>('');
   const [isMoodCategoriesExpanded, setIsMoodCategoriesExpanded] = useState<boolean>(true);
   const [hoveredCategoryDrawerPresetId, setHoveredCategoryDrawerPresetId] =
@@ -685,8 +703,13 @@ export default function App() {
   const [hoveredMoodSetterPresetId, setHoveredMoodSetterPresetId] =
     useState<string | null>(null);
   const [directoryAudienceFilter, setDirectoryAudienceFilter] =
-    useState<OnlineDirectoryAudienceFilter>('everyone');
+    useState<OnlineDirectoryAudienceFilter>(initialFilterShareParams.audienceFilter);
   const [isQuickFilterHovered, setIsQuickFilterHovered] = useState<boolean>(false);
+  const [isDirectoryFilterLinkCopied, setIsDirectoryFilterLinkCopied] =
+    useState<boolean>(false);
+  const [lastCopiedDirectoryFilterUrl, setLastCopiedDirectoryFilterUrl] =
+    useState<string>('');
+  const filterLinkCopyTimerRef = useRef<number | null>(null);
   const [isSidebarHovered, setIsSidebarHovered] = useState<boolean>(false);
   const [isSidebarFocused, setIsSidebarFocused] = useState<boolean>(false);
   const [isSidebarProgrammaticScroll, setIsSidebarProgrammaticScroll] =
@@ -2892,7 +2915,59 @@ export default function App() {
     connectionStatusMap: connectionRequestStatusMap,
     isHovered: isQuickFilterHovered,
     isClearModalOpen: isClearFilterModalOpen,
+    moodFilter: directoryMoodFilter,
+    onlyInFocus: showOnlyInFocusPeers,
+    origin: typeof window !== 'undefined' ? window.location.origin : 'https://mrstranger.app',
+    pathname: typeof window !== 'undefined' ? window.location.pathname : '/',
+    isShareLinkCopied: isDirectoryFilterLinkCopied,
   });
+
+  const handleCopyDirectoryFilterShareLink = async (
+    e?: React.MouseEvent | React.KeyboardEvent
+  ) => {
+    if (e) {
+      e.stopPropagation();
+    }
+    const shareMeta = buildOnlineDirectoryFilterShareLink({
+      origin: typeof window !== 'undefined' ? window.location.origin : 'https://mrstranger.app',
+      pathname: typeof window !== 'undefined' ? window.location.pathname : '/',
+      audienceFilter: directoryAudienceFilter,
+      moodFilter: directoryMoodFilter,
+      onlyInFocus: showOnlyInFocusPeers,
+      isCopied: true,
+    });
+    const urlToCopy = shareMeta.shareUrl;
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(urlToCopy);
+      } catch {
+        // ignore clipboard permissions error in headless context
+      }
+    }
+
+    if (typeof window !== 'undefined' && window.history?.replaceState) {
+      try {
+        const parsedUrl = new URL(urlToCopy);
+        window.history.replaceState(
+          null,
+          '',
+          `${parsedUrl.pathname}${parsedUrl.search}`
+        );
+      } catch {
+        // ignore history error
+      }
+    }
+
+    setLastCopiedDirectoryFilterUrl(urlToCopy);
+    setIsDirectoryFilterLinkCopied(true);
+    if (filterLinkCopyTimerRef.current !== null) {
+      window.clearTimeout(filterLinkCopyTimerRef.current);
+    }
+    filterLinkCopyTimerRef.current = window.setTimeout(() => {
+      setIsDirectoryFilterLinkCopied(false);
+    }, 2400);
+  };
   const displayedOnlinePeers = filterOnlinePeersByDirectoryCriteria(
     onlinePeers,
     studyDesks,
@@ -5002,104 +5077,158 @@ export default function App() {
                               }`}
                             >
                               <span
-                                data-testid="online-directory-quick-filter-icon"
-                                data-icon-mode={directoryQuickFilterMeta.iconName}
-                                data-dynamic-icon={
-                                  directoryQuickFilterMeta.dynamicFilterIconComponent
+                                id="online-directory-mood-filter-icon-share-wrapper"
+                                data-testid="online-directory-quick-filter-icon-share-container"
+                                data-share-url={directoryQuickFilterMeta.shareLinkMeta.shareUrl}
+                                data-last-copied-url={lastCopiedDirectoryFilterUrl}
+                                data-share-status={directoryQuickFilterMeta.shareLinkMeta.statusLabel}
+                                data-share-category={directoryQuickFilterMeta.shareLinkMeta.categoryParam}
+                                data-share-summary={directoryQuickFilterMeta.shareLinkMeta.summaryLabel}
+                                data-share-copied={
+                                  directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
                                 }
-                                data-state-icon={directoryQuickFilterMeta.stateIconName}
-                                data-secondary-icon={directoryQuickFilterMeta.secondaryStateIconName}
-                                data-crossfade-animation={
-                                  directoryQuickFilterMeta.iconCrossFadeMotion.animationType
-                                }
-                                data-crossfade-duration-ms={
-                                  directoryQuickFilterMeta.iconCrossFadeMotion.durationMs
-                                }
-                                data-active-icon-key={
-                                  directoryQuickFilterMeta.iconCrossFadeMotion.activeIconKey
-                                }
-                                data-icon-hovered={
-                                  directoryQuickFilterMeta.iconHoverGlow.isHovered ? 'true' : 'false'
-                                }
-                                data-icon-glow-active={
-                                  directoryQuickFilterMeta.iconHoverGlow.isGlowActive
-                                    ? 'true'
-                                    : 'false'
-                                }
-                                data-icon-glow-tone={
-                                  directoryQuickFilterMeta.iconHoverGlow.glowTone
-                                }
-                                data-icon-glow-shadow={
-                                  directoryQuickFilterMeta.iconHoverGlow.containerBoxShadow
-                                }
-                                data-icon-svg-filter={
-                                  directoryQuickFilterMeta.iconHoverGlow.svgDropShadowFilter
-                                }
-                                role="img"
-                                aria-label={directoryQuickFilterMeta.stateIconLabel}
-                                className={`relative overflow-hidden inline-flex items-center justify-center px-1.5 py-0.5 rounded border quick-filter-icon-crossfade ${
-                                  directoryQuickFilterMeta.isMyConnectionsOnly
-                                    ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300 group-hover:bg-emerald-500/30 group-hover:border-emerald-300/80 group-hover:text-emerald-200'
-                                    : 'bg-zinc-900 border-zinc-700/80 text-zinc-300 group-hover:bg-emerald-500/15 group-hover:border-emerald-400/60 group-hover:text-emerald-200'
+                                role="button"
+                                tabIndex={0}
+                                title={directoryQuickFilterMeta.shareLinkMeta.containerTitle}
+                                aria-label={directoryQuickFilterMeta.shareLinkMeta.containerAriaLabel}
+                                onClick={(e) => {
+                                  void handleCopyDirectoryFilterShareLink(e);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    void handleCopyDirectoryFilterShareLink(e);
+                                  }
+                                }}
+                                className={`inline-flex items-center gap-1 rounded px-0.5 py-0.5 transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-emerald-400/80 ${
+                                  directoryQuickFilterMeta.shareLinkMeta.isCopied
+                                    ? 'bg-emerald-500/20 text-emerald-200'
+                                    : 'hover:bg-emerald-500/15'
                                 }`}
                               >
-                                <AnimatePresence mode="popLayout" initial={false}>
-                                  {directoryQuickFilterMeta.isMyConnectionsOnly ? (
-                                    <motion.span
-                                      key="icon-usercheck"
-                                      data-testid="quick-filter-icon-crossfade-layer"
-                                      data-icon-key="icon-usercheck"
-                                      data-icon-component="UserCheck"
-                                      initial={
-                                        directoryQuickFilterMeta.iconCrossFadeMotion.initial
-                                      }
-                                      animate={
-                                        directoryQuickFilterMeta.iconCrossFadeMotion.animate
-                                      }
-                                      exit={
-                                        directoryQuickFilterMeta.iconCrossFadeMotion.exit
-                                      }
-                                      transition={
-                                        directoryQuickFilterMeta.iconCrossFadeMotion.transition
-                                      }
-                                      className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
-                                    >
-                                      <UserCheck
-                                        aria-hidden="true"
-                                        data-testid="quick-filter-state-icon-usercheck"
+                                <span
+                                  data-testid="online-directory-quick-filter-icon"
+                                  data-icon-mode={directoryQuickFilterMeta.iconName}
+                                  data-dynamic-icon={
+                                    directoryQuickFilterMeta.dynamicFilterIconComponent
+                                  }
+                                  data-state-icon={directoryQuickFilterMeta.stateIconName}
+                                  data-secondary-icon={directoryQuickFilterMeta.secondaryStateIconName}
+                                  data-crossfade-animation={
+                                    directoryQuickFilterMeta.iconCrossFadeMotion.animationType
+                                  }
+                                  data-crossfade-duration-ms={
+                                    directoryQuickFilterMeta.iconCrossFadeMotion.durationMs
+                                  }
+                                  data-active-icon-key={
+                                    directoryQuickFilterMeta.iconCrossFadeMotion.activeIconKey
+                                  }
+                                  data-icon-hovered={
+                                    directoryQuickFilterMeta.iconHoverGlow.isHovered ? 'true' : 'false'
+                                  }
+                                  data-icon-glow-active={
+                                    directoryQuickFilterMeta.iconHoverGlow.isGlowActive
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-icon-glow-tone={
+                                    directoryQuickFilterMeta.iconHoverGlow.glowTone
+                                  }
+                                  data-icon-glow-shadow={
+                                    directoryQuickFilterMeta.iconHoverGlow.containerBoxShadow
+                                  }
+                                  data-icon-svg-filter={
+                                    directoryQuickFilterMeta.iconHoverGlow.svgDropShadowFilter
+                                  }
+                                  role="img"
+                                  aria-label={directoryQuickFilterMeta.stateIconLabel}
+                                  className={`relative overflow-hidden inline-flex items-center justify-center px-1.5 py-0.5 rounded border quick-filter-icon-crossfade ${
+                                    directoryQuickFilterMeta.isMyConnectionsOnly
+                                      ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300 group-hover:bg-emerald-500/30 group-hover:border-emerald-300/80 group-hover:text-emerald-200'
+                                      : 'bg-zinc-900 border-zinc-700/80 text-zinc-300 group-hover:bg-emerald-500/15 group-hover:border-emerald-400/60 group-hover:text-emerald-200'
+                                  }`}
+                                >
+                                  <AnimatePresence mode="popLayout" initial={false}>
+                                    {directoryQuickFilterMeta.isMyConnectionsOnly ? (
+                                      <motion.span
+                                        key="icon-usercheck"
+                                        data-testid="quick-filter-icon-crossfade-layer"
+                                        data-icon-key="icon-usercheck"
                                         data-icon-component="UserCheck"
-                                        className="w-3.5 h-3.5 shrink-0 text-emerald-300 group-hover:text-emerald-200"
-                                      />
-                                    </motion.span>
-                                  ) : (
-                                    <motion.span
-                                      key="icon-filter"
-                                      data-testid="quick-filter-icon-crossfade-layer"
-                                      data-icon-key="icon-filter"
-                                      data-icon-component="Filter"
-                                      initial={
-                                        directoryQuickFilterMeta.iconCrossFadeMotion.initial
-                                      }
-                                      animate={
-                                        directoryQuickFilterMeta.iconCrossFadeMotion.animate
-                                      }
-                                      exit={
-                                        directoryQuickFilterMeta.iconCrossFadeMotion.exit
-                                      }
-                                      transition={
-                                        directoryQuickFilterMeta.iconCrossFadeMotion.transition
-                                      }
-                                      className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
-                                    >
-                                      <Filter
-                                        aria-hidden="true"
-                                        data-testid="quick-filter-state-icon-filter"
+                                        initial={
+                                          directoryQuickFilterMeta.iconCrossFadeMotion.initial
+                                        }
+                                        animate={
+                                          directoryQuickFilterMeta.iconCrossFadeMotion.animate
+                                        }
+                                        exit={
+                                          directoryQuickFilterMeta.iconCrossFadeMotion.exit
+                                        }
+                                        transition={
+                                          directoryQuickFilterMeta.iconCrossFadeMotion.transition
+                                        }
+                                        className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
+                                      >
+                                        <UserCheck
+                                          aria-hidden="true"
+                                          data-testid="quick-filter-state-icon-usercheck"
+                                          data-icon-component="UserCheck"
+                                          className="w-3.5 h-3.5 shrink-0 text-emerald-300 group-hover:text-emerald-200"
+                                        />
+                                      </motion.span>
+                                    ) : (
+                                      <motion.span
+                                        key="icon-filter"
+                                        data-testid="quick-filter-icon-crossfade-layer"
+                                        data-icon-key="icon-filter"
                                         data-icon-component="Filter"
-                                        className="w-3.5 h-3.5 shrink-0 text-zinc-300 group-hover:text-emerald-200"
-                                      />
-                                    </motion.span>
+                                        initial={
+                                          directoryQuickFilterMeta.iconCrossFadeMotion.initial
+                                        }
+                                        animate={
+                                          directoryQuickFilterMeta.iconCrossFadeMotion.animate
+                                        }
+                                        exit={
+                                          directoryQuickFilterMeta.iconCrossFadeMotion.exit
+                                        }
+                                        transition={
+                                          directoryQuickFilterMeta.iconCrossFadeMotion.transition
+                                        }
+                                        className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
+                                      >
+                                        <Filter
+                                          aria-hidden="true"
+                                          data-testid="quick-filter-state-icon-filter"
+                                          data-icon-component="Filter"
+                                          className="w-3.5 h-3.5 shrink-0 text-zinc-300 group-hover:text-emerald-200"
+                                        />
+                                      </motion.span>
+                                    )}
+                                  </AnimatePresence>
+                                </span>
+                                <span
+                                  data-testid="online-directory-quick-filter-share-badge"
+                                  data-copied={
+                                    directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
+                                  }
+                                  className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-mono leading-none transition-colors ${
+                                    directoryQuickFilterMeta.shareLinkMeta.isCopied
+                                      ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-400/60'
+                                      : 'bg-zinc-900/90 text-zinc-400 border border-zinc-800 group-hover:text-emerald-200 group-hover:border-emerald-500/40'
+                                  }`}
+                                >
+                                  {directoryQuickFilterMeta.shareLinkMeta.isCopied ? (
+                                    <>
+                                      <Check className="w-2.5 h-2.5 shrink-0 text-emerald-300" />
+                                      <span>Copied</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Link2 className="w-2.5 h-2.5 shrink-0" />
+                                      <span>Link</span>
+                                    </>
                                   )}
-                                </AnimatePresence>
+                                </span>
                               </span>
 
                               <span>
@@ -5373,6 +5502,21 @@ export default function App() {
                             >
                               {directoryQuickFilterMeta.tooltipDetail}
                             </p>
+                            <div
+                              data-testid="online-directory-quick-filter-tooltip-share-info"
+                              className="pt-1 mt-1 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-[10px] font-mono text-zinc-400"
+                            >
+                              <span className="truncate">
+                                {directoryQuickFilterMeta.shareLinkMeta.isCopied
+                                  ? `Copied: ${directoryQuickFilterMeta.shareLinkMeta.summaryLabel}`
+                                  : `Share: ${directoryQuickFilterMeta.shareLinkMeta.summaryLabel}`}
+                              </span>
+                              <span className="text-emerald-300 shrink-0">
+                                {directoryQuickFilterMeta.shareLinkMeta.isCopied
+                                  ? 'Copied!'
+                                  : 'Click icon'}
+                              </span>
+                            </div>
                           </div>
                         </div>
 

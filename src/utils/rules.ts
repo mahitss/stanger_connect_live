@@ -8667,6 +8667,139 @@ export function getQuickFilterIconHoverGlowSpec(params?: {
   };
 }
 
+export interface OnlineDirectoryFilterShareLinkMeta {
+  shareUrl: string;
+  audienceMode: OnlineDirectoryAudienceFilter;
+  statusLabel: 'My Connections' | 'Everyone';
+  rawCategoryFilter: string;
+  categoryParam: string;
+  categoryDisplayLabel: string;
+  onlyInFocus: boolean;
+  summaryLabel: string;
+  isCopied: boolean;
+  containerAriaLabel: string;
+  containerTitle: string;
+  copiedBadgeText: 'Copied Link';
+  hoverHintText: 'Copy Link';
+}
+
+export function buildOnlineDirectoryFilterShareLink(params?: {
+  origin?: string;
+  pathname?: string;
+  audienceFilter?: OnlineDirectoryAudienceFilter;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+  isCopied?: boolean;
+}): OnlineDirectoryFilterShareLinkMeta {
+  const audienceMode: OnlineDirectoryAudienceFilter =
+    params?.audienceFilter === 'my_connections' ? 'my_connections' : 'everyone';
+  const statusLabel: 'My Connections' | 'Everyone' =
+    audienceMode === 'my_connections' ? 'My Connections' : 'Everyone';
+
+  const rawMood = String(params?.moodFilter ?? 'all').trim() || 'all';
+  let categoryParam = 'all';
+  let categoryDisplayLabel = 'All Moods';
+
+  if (rawMood.toLowerCase() === 'all') {
+    categoryParam = 'all';
+    categoryDisplayLabel = 'All Moods';
+  } else if (rawMood.startsWith('category:')) {
+    const extracted = rawMood.slice('category:'.length).trim() || 'All';
+    categoryParam = extracted;
+    categoryDisplayLabel = extracted;
+  } else {
+    categoryParam = rawMood;
+    categoryDisplayLabel = rawMood;
+  }
+
+  const onlyInFocus = Boolean(params?.onlyInFocus);
+  const isCopied = Boolean(params?.isCopied);
+
+  const cleanOrigin = (params?.origin || 'https://mrstranger.app').replace(/\/+$/, '');
+  const rawPathname = params?.pathname || '/';
+  const cleanPathname = rawPathname.startsWith('/') ? rawPathname : `/${rawPathname}`;
+
+  const searchParams = new URLSearchParams();
+  searchParams.set('filter', audienceMode);
+  searchParams.set('category', categoryParam);
+  if (onlyInFocus) {
+    searchParams.set('focus', '1');
+  }
+
+  const shareUrl = `${cleanOrigin}${cleanPathname}?${searchParams.toString()}`;
+  const focusSuffix = onlyInFocus ? ' · In Focus' : '';
+  const summaryLabel = `${statusLabel} · ${categoryDisplayLabel}${focusSuffix}`;
+
+  const containerAriaLabel = isCopied
+    ? `Copied shareable filter link (${summaryLabel})`
+    : `Copy shareable link for current filter (${summaryLabel})`;
+
+  const containerTitle = isCopied
+    ? `Copied shareable link: ${shareUrl}`
+    : `Click icon to copy shareable link for ${summaryLabel} (${shareUrl})`;
+
+  return {
+    shareUrl,
+    audienceMode,
+    statusLabel,
+    rawCategoryFilter: rawMood,
+    categoryParam,
+    categoryDisplayLabel,
+    onlyInFocus,
+    summaryLabel,
+    isCopied,
+    containerAriaLabel,
+    containerTitle,
+    copiedBadgeText: 'Copied Link',
+    hoverHintText: 'Copy Link',
+  };
+}
+
+export function parseOnlineDirectoryFilterShareParams(search: string): {
+  hasFilterParams: boolean;
+  audienceFilter: OnlineDirectoryAudienceFilter;
+  moodFilter: string;
+  onlyInFocus: boolean;
+} {
+  const rawSearch = String(search || '').trim();
+  const params = new URLSearchParams(
+    rawSearch.startsWith('?') ? rawSearch.slice(1) : rawSearch
+  );
+
+  const rawAudience = (params.get('filter') || '').trim().toLowerCase();
+  const rawCategory = (params.get('category') || '').trim();
+  const rawFocus = (params.get('focus') || '').trim().toLowerCase();
+
+  const hasFilterParams =
+    params.has('filter') || params.has('category') || params.has('focus');
+
+  const audienceFilter: OnlineDirectoryAudienceFilter =
+    rawAudience === 'my_connections' ? 'my_connections' : 'everyone';
+
+  let moodFilter = 'all';
+  if (rawCategory && rawCategory.toLowerCase() !== 'all') {
+    const lowerCat = rawCategory.toLowerCase();
+    if (lowerCat === 'productive') {
+      moodFilter = 'category:Productive';
+    } else if (lowerCat === 'social') {
+      moodFilter = 'category:Social';
+    } else if (lowerCat === 'away') {
+      moodFilter = 'category:Away';
+    } else {
+      moodFilter = rawCategory;
+    }
+  }
+
+  const onlyInFocus = rawFocus === '1' || rawFocus === 'true';
+
+  return {
+    hasFilterParams,
+    audienceFilter,
+    moodFilter,
+    onlyInFocus,
+  };
+}
+
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
@@ -8701,6 +8834,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   toggleHoverMotion: QuickFilterToggleHoverMotionSpec;
   iconCrossFadeMotion: QuickFilterIconCrossFadeMotionSpec;
   iconHoverGlow: QuickFilterIconHoverGlowSpec;
+  shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
 
@@ -8722,6 +8856,11 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   connectionStatusMap?: Record<string, ConnectionRequestStatusValue>;
   isHovered?: boolean;
   isClearModalOpen?: boolean;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+  origin?: string;
+  pathname?: string;
+  isShareLinkCopied?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -8813,6 +8952,14 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     iconHoverGlow: getQuickFilterIconHoverGlowSpec({
       mode,
       isHovered: Boolean(params.isHovered),
+    }),
+    shareLinkMeta: buildOnlineDirectoryFilterShareLink({
+      origin: params.origin,
+      pathname: params.pathname,
+      audienceFilter: mode,
+      moodFilter: params.moodFilter,
+      onlyInFocus: params.onlyInFocus,
+      isCopied: params.isShareLinkCopied,
     }),
   };
 }

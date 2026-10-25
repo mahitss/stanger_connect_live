@@ -170,6 +170,8 @@ import {
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
   getOnlineDirectoryQuickFilterMeta,
+  buildOnlineDirectoryFilterShareLink,
+  parseOnlineDirectoryFilterShareParams,
   toggleMoodCategoryDrawerExpanded,
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
@@ -3723,6 +3725,81 @@ test('getQuickFilterIconHoverGlowSpec and getOnlineDirectoryQuickFilterMeta reso
   });
   assert.deepEqual(metaHovered.iconHoverGlow, hoverEveryone);
 });
+
+test('buildOnlineDirectoryFilterShareLink and parseOnlineDirectoryFilterShareParams build and parse shareable filter status and category URLs', () => {
+  const defaultShare = buildOnlineDirectoryFilterShareLink({
+    origin: 'http://localhost:3000',
+    pathname: '/',
+    audienceFilter: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+    isCopied: false,
+  });
+  assert.equal(defaultShare.shareUrl, 'http://localhost:3000/?filter=everyone&category=all');
+  assert.equal(defaultShare.audienceMode, 'everyone');
+  assert.equal(defaultShare.statusLabel, 'Everyone');
+  assert.equal(defaultShare.categoryParam, 'all');
+  assert.equal(defaultShare.categoryDisplayLabel, 'All Moods');
+  assert.equal(defaultShare.summaryLabel, 'Everyone · All Moods');
+  assert.equal(defaultShare.isCopied, false);
+  assert.equal(
+    defaultShare.containerAriaLabel,
+    'Copy shareable link for current filter (Everyone · All Moods)'
+  );
+
+  const categoryShare = buildOnlineDirectoryFilterShareLink({
+    origin: 'http://localhost:3000',
+    pathname: '/',
+    audienceFilter: 'my_connections',
+    moodFilter: 'category:Productive',
+    onlyInFocus: true,
+    isCopied: true,
+  });
+  assert.equal(
+    categoryShare.shareUrl,
+    'http://localhost:3000/?filter=my_connections&category=Productive&focus=1'
+  );
+  assert.equal(categoryShare.statusLabel, 'My Connections');
+  assert.equal(categoryShare.categoryParam, 'Productive');
+  assert.equal(categoryShare.categoryDisplayLabel, 'Productive');
+  assert.equal(categoryShare.summaryLabel, 'My Connections · Productive · In Focus');
+  assert.equal(categoryShare.isCopied, true);
+  assert.equal(
+    categoryShare.containerAriaLabel,
+    'Copied shareable filter link (My Connections · Productive · In Focus)'
+  );
+
+  const parsedCategory = parseOnlineDirectoryFilterShareParams(
+    '?filter=my_connections&category=Productive&focus=1'
+  );
+  assert.equal(parsedCategory.hasFilterParams, true);
+  assert.equal(parsedCategory.audienceFilter, 'my_connections');
+  assert.equal(parsedCategory.moodFilter, 'category:Productive');
+  assert.equal(parsedCategory.onlyInFocus, true);
+
+  const parsedPreset = parseOnlineDirectoryFilterShareParams(
+    '?filter=everyone&category=Deep+Work'
+  );
+  assert.equal(parsedPreset.hasFilterParams, true);
+  assert.equal(parsedPreset.audienceFilter, 'everyone');
+  assert.equal(parsedPreset.moodFilter, 'Deep Work');
+  assert.equal(parsedPreset.onlyInFocus, false);
+
+  const metaWithShare = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1' }],
+    moodFilter: 'category:Social',
+    origin: 'http://localhost:3000',
+    pathname: '/',
+    isShareLinkCopied: true,
+  });
+  assert.equal(
+    metaWithShare.shareLinkMeta.shareUrl,
+    'http://localhost:3000/?filter=my_connections&category=Social'
+  );
+  assert.equal(metaWithShare.shareLinkMeta.isCopied, true);
+});
+
 
 
 
