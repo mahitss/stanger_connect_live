@@ -166,6 +166,8 @@ import {
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
   getMoodPresetTooltipMeta,
+  getMoodPresetUsageCount24hMeta,
+  buildMoodPresetUsageCounts24hMap,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -2867,6 +2869,12 @@ export default function App() {
     onlinePeers,
     moodEvents,
   });
+  const moodPresetUsage24hById = buildMoodPresetUsageCounts24hMap({
+    onlinePeers,
+    moodEvents,
+    currentUid: currentIdentity.uid,
+    currentUserMood: userMood,
+  });
   const directoryQuickFilterMeta = getOnlineDirectoryQuickFilterMeta({
     mode: directoryAudienceFilter,
     onlinePeers,
@@ -4699,6 +4707,15 @@ export default function App() {
                                   preset.id,
                                   hoveredMoodSetterPresetId === preset.id
                                 );
+                                const presetUsage24h =
+                                  moodPresetUsage24hById[preset.id] ||
+                                  getMoodPresetUsageCount24hMeta({
+                                    presetIdOrLabel: preset.id,
+                                    onlinePeers,
+                                    moodEvents,
+                                    currentUid: currentIdentity.uid,
+                                    currentUserMood: userMood,
+                                  });
                                 return (
                                   <div
                                     key={preset.id}
@@ -4729,8 +4746,13 @@ export default function App() {
                                       data-testid={`mood-preset-${preset.id}`}
                                       data-mood-category={preset.category}
                                       data-mood-definition={setterTooltipMeta.definition}
+                                      data-usage-count-24h={presetUsage24h.usageCount24h}
+                                      data-user-usage-24h={presetUsage24h.userUsageCount24h}
+                                      data-community-usage-24h={
+                                        presetUsage24h.communityUsageCount24h
+                                      }
                                       data-stagger-delay={presetMotion.transition.delay}
-                                      title={setterTooltipMeta.fullDefinitionText}
+                                      title={`${setterTooltipMeta.fullDefinitionText} · ${presetUsage24h.usageSummaryText}`}
                                       className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded border transition-colors whitespace-nowrap shrink-0 ${
                                         isSelected
                                           ? 'bg-white text-black border-white'
@@ -4738,6 +4760,24 @@ export default function App() {
                                       }`}
                                     >
                                       <span>{preset.label}</span>
+                                      <span
+                                        data-testid={`mood-preset-usage-count-${preset.id}`}
+                                        data-usage-count-24h={presetUsage24h.usageCount24h}
+                                        data-user-usage-24h={presetUsage24h.userUsageCount24h}
+                                        data-community-usage-24h={
+                                          presetUsage24h.communityUsageCount24h
+                                        }
+                                        aria-label={presetUsage24h.usageAriaLabel}
+                                        className={`px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums border transition-colors ${
+                                          isSelected
+                                            ? 'bg-black/10 text-zinc-900 border-black/25'
+                                            : presetUsage24h.hasRecentActivity
+                                            ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                            : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                                        }`}
+                                      >
+                                        {presetUsage24h.usageBadgeLabel}
+                                      </span>
                                       <span
                                         data-testid={`mood-setter-preset-info-${preset.id}`}
                                         data-icon-component={setterTooltipMeta.iconComponent}
@@ -4757,8 +4797,9 @@ export default function App() {
                                       data-testid={`mood-setter-preset-tooltip-${preset.id}`}
                                       data-mood-preset={preset.id}
                                       data-mood-category={preset.category}
+                                      data-usage-count-24h={presetUsage24h.usageCount24h}
                                       data-visible={setterTooltipMeta.isVisible ? 'true' : 'false'}
-                                      className={`pointer-events-none absolute bottom-full left-0 mb-2 z-30 w-60 p-2.5 rounded-md bg-[#050505] border border-zinc-700/90 shadow-xl space-y-1 text-left transition-opacity duration-150 ${
+                                      className={`pointer-events-none absolute bottom-full left-0 mb-2 z-30 w-64 p-2.5 rounded-md bg-[#050505] border border-zinc-700/90 shadow-xl space-y-1 text-left transition-opacity duration-150 ${
                                         setterTooltipMeta.isVisible
                                           ? 'opacity-100 visible'
                                           : 'opacity-0 invisible group-hover:opacity-100 group-hover:visible'
@@ -4776,6 +4817,12 @@ export default function App() {
                                       <p className="text-[11px] text-zinc-300 leading-snug">
                                         {setterTooltipMeta.definition}
                                       </p>
+                                      <div
+                                        data-testid={`mood-setter-preset-tooltip-usage-${preset.id}`}
+                                        className="pt-1 border-t border-zinc-800/80 text-[10px] font-mono text-emerald-300"
+                                      >
+                                        {presetUsage24h.usageSummaryText}
+                                      </div>
                                     </div>
                                   </div>
                                 );
@@ -5483,6 +5530,15 @@ export default function App() {
                                       preset.id,
                                       hoveredCategoryDrawerPresetId === preset.id
                                     );
+                                    const presetUsage24h =
+                                      moodPresetUsage24hById[preset.id] ||
+                                      getMoodPresetUsageCount24hMeta({
+                                        presetIdOrLabel: preset.id,
+                                        onlinePeers,
+                                        moodEvents,
+                                        currentUid: currentIdentity.uid,
+                                        currentUserMood: userMood,
+                                      });
                                     return (
                                       <div
                                         key={preset.id}
@@ -5518,10 +5574,11 @@ export default function App() {
                                           }
                                           aria-pressed={isPresetActive}
                                           aria-describedby={tooltipMeta.tooltipId}
-                                          title={tooltipMeta.fullDefinitionText}
+                                          title={`${tooltipMeta.fullDefinitionText} · ${presetUsage24h.usageSummaryText}`}
                                           data-testid={`mood-category-preset-${preset.id}`}
                                           data-mood-category={group.category}
                                           data-mood-definition={tooltipMeta.definition}
+                                          data-usage-count-24h={presetUsage24h.usageCount24h}
                                           data-tooltip-visible={
                                             tooltipMeta.isVisible ? 'true' : 'false'
                                           }
@@ -5535,6 +5592,19 @@ export default function App() {
                                           <span>{preset.label}</span>
                                           <span className="font-mono text-[10px] opacity-75">
                                             ({presetCount})
+                                          </span>
+                                          <span
+                                            data-testid={`mood-category-preset-usage-count-${preset.id}`}
+                                            data-usage-count-24h={presetUsage24h.usageCount24h}
+                                            className={`px-1 py-0.2 rounded text-[9px] font-mono tabular-nums border ${
+                                              isPresetActive
+                                                ? 'bg-black/10 text-zinc-900 border-black/25'
+                                                : presetUsage24h.hasRecentActivity
+                                                ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                                                : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                                            }`}
+                                          >
+                                            {presetUsage24h.usageBadgeLabel}
                                           </span>
                                           <span
                                             data-testid={`mood-category-preset-info-${preset.id}`}
@@ -5562,6 +5632,7 @@ export default function App() {
                                           data-mood-preset={preset.id}
                                           data-mood-category={tooltipMeta.category}
                                           data-mood-definition={tooltipMeta.definition}
+                                          data-usage-count-24h={presetUsage24h.usageCount24h}
                                           data-visible={tooltipMeta.isVisible ? 'true' : 'false'}
                                           className={`pointer-events-none absolute bottom-full left-0 mb-2 z-30 w-64 p-2.5 rounded-md bg-[#050505] border border-zinc-700/90 shadow-xl space-y-1 text-left transition-opacity duration-150 ${
                                             tooltipMeta.isVisible
@@ -5590,6 +5661,12 @@ export default function App() {
                                           >
                                             {tooltipMeta.definition}
                                           </p>
+                                          <div
+                                            data-testid={`mood-category-preset-tooltip-usage-${preset.id}`}
+                                            className="pt-1 border-t border-zinc-800/80 text-[10px] font-mono text-emerald-300"
+                                          >
+                                            {presetUsage24h.usageSummaryText}
+                                          </div>
                                         </div>
                                       </div>
                                     );

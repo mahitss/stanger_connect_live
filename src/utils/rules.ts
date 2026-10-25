@@ -8934,3 +8934,163 @@ export function getMoodPresetTooltipMeta(
     isVisible: hovered,
   };
 }
+
+export interface MoodPresetUsageCount24hMeta {
+  presetId: string;
+  label: string;
+  category: OnlineMoodCategory;
+  tone: OnlineMoodTone;
+  usageCount24h: number;
+  userUsageCount24h: number;
+  communityUsageCount24h: number;
+  activePeersNow: number;
+  uniquePeers24h: number;
+  usageBadgeLabel: string;
+  shortUsageLabel: string;
+  usageSummaryText: string;
+  usageAriaLabel: string;
+  hasRecentActivity: boolean;
+}
+
+export function getMoodPresetUsageCount24hMeta(params: {
+  presetIdOrLabel: string | null | undefined;
+  onlinePeers?: Array<{ uid: string; displayName?: string; mood?: string | null }>;
+  moodEvents?: PeerMoodHistoryEvent[];
+  currentUid?: string;
+  currentUserMood?: string | null;
+  nowMs?: number;
+}): MoodPresetUsageCount24hMeta {
+  const nowMs =
+    typeof params.nowMs === 'number' && params.nowMs > 0 ? params.nowMs : Date.now();
+  const cutoffMs = nowMs - MOOD_POPULARITY_WINDOW_MS;
+  const cleanCurrentUid = String(params.currentUid || '').trim();
+
+  const raw = String(params.presetIdOrLabel || '').trim();
+  const lower = raw.toLowerCase();
+  const matched = ONLINE_MOOD_PRESETS.find(
+    (p) => p.id.toLowerCase() === lower || p.label.toLowerCase() === lower
+  );
+
+  const fallbackMeta = getOnlinePeerMoodMeta(raw);
+  const presetId = matched
+    ? matched.id
+    : (fallbackMeta.label || raw || 'custom')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '') || 'custom';
+  const label = matched ? matched.label : fallbackMeta.label || raw || 'Mood Preset';
+  const category = matched
+    ? matched.category
+    : fallbackMeta.category || resolveMoodCategoryForText(label);
+  const tone = matched ? matched.tone : fallbackMeta.tone;
+  const targetKey = label.toLowerCase();
+
+  let usageCount24h = 0;
+  let userUsageCount24h = 0;
+  let communityUsageCount24h = 0;
+  const activePeersNowSet = new Set<string>();
+  const uniquePeers24hSet = new Set<string>();
+  const seenEventIds = new Set<string>();
+  const peersWithLoggedMood = new Set<string>();
+
+  const events = Array.isArray(params.moodEvents) ? params.moodEvents : [];
+  for (const ev of events) {
+    if (!ev || typeof ev.timestampMs !== 'number') continue;
+    if (ev.timestampMs < cutoffMs || ev.timestampMs > nowMs + 60_000) continue;
+    const cleanUid = String(ev.uid || '').trim();
+    if (!cleanUid) continue;
+    const evId = String(ev.id || `${cleanUid}_${ev.mood}_${ev.timestampMs}`);
+    if (seenEventIds.has(evId)) continue;
+    seenEventIds.add(evId);
+
+    const meta = getOnlinePeerMoodMeta(ev.mood);
+    if (!meta.hasMood || !meta.label) continue;
+    if (meta.label.toLowerCase() !== targetKey) continue;
+
+    usageCount24h += 1;
+    if (cleanCurrentUid && cleanUid === cleanCurrentUid) {
+      userUsageCount24h += 1;
+    } else {
+      communityUsageCount24h += 1;
+    }
+    uniquePeers24hSet.add(cleanUid);
+    peersWithLoggedMood.add(cleanUid);
+  }
+
+  const onlinePeers = Array.isArray(params.onlinePeers) ? params.onlinePeers : [];
+  for (const peer of onlinePeers) {
+    const cleanUid = String(peer?.uid || '').trim();
+    if (!cleanUid) continue;
+    const meta = getOnlinePeerMoodMeta(peer.mood);
+    if (!meta.hasMood || !meta.label) continue;
+    if (meta.label.toLowerCase() !== targetKey) continue;
+
+    activePeersNowSet.add(cleanUid);
+    uniquePeers24hSet.add(cleanUid);
+    if (!peersWithLoggedMood.has(cleanUid)) {
+      peersWithLoggedMood.add(cleanUid);
+      usageCount24h += 1;
+      if (cleanCurrentUid && cleanUid === cleanCurrentUid) {
+        userUsageCount24h += 1;
+      } else {
+        communityUsageCount24h += 1;
+      }
+    }
+  }
+
+  if (cleanCurrentUid && params.currentUserMood !== undefined) {
+    const myMeta = getOnlinePeerMoodMeta(params.currentUserMood);
+    if (
+      myMeta.hasMood &&
+      myMeta.label &&
+      myMeta.label.toLowerCase() === targetKey
+    ) {
+      activePeersNowSet.add(cleanCurrentUid);
+      uniquePeers24hSet.add(cleanCurrentUid);
+      if (!peersWithLoggedMood.has(cleanCurrentUid)) {
+        peersWithLoggedMood.add(cleanCurrentUid);
+        usageCount24h += 1;
+        userUsageCount24h += 1;
+      }
+    }
+  }
+
+  const timeNoun = usageCount24h === 1 ? 'time' : 'times';
+  const useNoun = usageCount24h === 1 ? 'use' : 'uses';
+
+  return {
+    presetId,
+    label,
+    category,
+    tone,
+    usageCount24h,
+    userUsageCount24h,
+    communityUsageCount24h,
+    activePeersNow: activePeersNowSet.size,
+    uniquePeers24h: uniquePeers24hSet.size,
+    usageBadgeLabel: `${usageCount24h} in 24h`,
+    shortUsageLabel: `${usageCount24h}×`,
+    usageSummaryText: `${usageCount24h} ${useNoun} in 24h (${userUsageCount24h} you · ${communityUsageCount24h} community)`,
+    usageAriaLabel: `${label} usage count: used ${usageCount24h} ${timeNoun} in the last 24 hours (${userUsageCount24h} by you, ${communityUsageCount24h} by community)`,
+    hasRecentActivity: usageCount24h > 0,
+  };
+}
+
+export function buildMoodPresetUsageCounts24hMap(params: {
+  onlinePeers?: Array<{ uid: string; displayName?: string; mood?: string | null }>;
+  moodEvents?: PeerMoodHistoryEvent[];
+  currentUid?: string;
+  currentUserMood?: string | null;
+  nowMs?: number;
+}): Record<string, MoodPresetUsageCount24hMeta> {
+  const result: Record<string, MoodPresetUsageCount24hMeta> = {};
+  for (const preset of ONLINE_MOOD_PRESETS) {
+    const meta = getMoodPresetUsageCount24hMeta({
+      ...params,
+      presetIdOrLabel: preset.id,
+    });
+    result[preset.id] = meta;
+    result[preset.label] = meta;
+  }
+  return result;
+}

@@ -172,6 +172,8 @@ import {
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
   getMoodPresetTooltipMeta,
+  getMoodPresetUsageCount24hMeta,
+  buildMoodPresetUsageCounts24hMap,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -3373,4 +3375,101 @@ test('Online Directory Quick Filter toggles cleanly between Everyone and My Conn
     assert.equal(meta.isVisible, true);
     assert.ok(meta.fullDefinitionText.includes(preset.description));
   }
+
+  // 24-hour usage count label metadata for each mood preset button in the mood setter drawer
+  const now24hTest = 1_760_500_000_000;
+  const recent1h = now24hTest - 60 * 60 * 1000;
+  const recent4h = now24hTest - 4 * 60 * 60 * 1000;
+  const expired30h = now24hTest - 30 * 60 * 60 * 1000;
+
+  const usageMap = buildMoodPresetUsageCounts24hMap({
+    currentUid: 'usr_alice',
+    currentUserMood: 'Deep Work',
+    nowMs: now24hTest,
+    onlinePeers: [
+      { uid: 'usr_alice', displayName: 'Alice', mood: 'Deep Work' },
+      { uid: 'usr_bob', displayName: 'Bob', mood: 'Deep Work' },
+      { uid: 'usr_carol', displayName: 'Carol', mood: 'Brainstorming' },
+    ],
+    moodEvents: [
+      {
+        id: 'ev_1',
+        uid: 'usr_alice',
+        displayName: 'Alice',
+        mood: 'Deep Work',
+        timestampMs: recent4h,
+      },
+      {
+        id: 'ev_2',
+        uid: 'usr_alice',
+        displayName: 'Alice',
+        mood: 'Deep Work',
+        timestampMs: recent1h,
+      },
+      {
+        id: 'ev_3',
+        uid: 'usr_dave',
+        displayName: 'Dave',
+        mood: 'Deep Work',
+        timestampMs: recent1h,
+      },
+      {
+        id: 'ev_expired',
+        uid: 'usr_eva',
+        displayName: 'Eva',
+        mood: 'Deep Work',
+        timestampMs: expired30h,
+      },
+      {
+        id: 'ev_pair_1',
+        uid: 'usr_alice',
+        displayName: 'Alice',
+        mood: 'Pair Programming',
+        timestampMs: recent4h,
+      },
+    ],
+  });
+
+  // Deep Work: 2 logged events by Alice + 1 logged event by Dave + 1 live unlogged peer Bob = 4 uses in 24h (2 user, 2 community)
+  const deepWorkUsage = usageMap.deep_work;
+  assert.equal(deepWorkUsage.presetId, 'deep_work');
+  assert.equal(deepWorkUsage.label, 'Deep Work');
+  assert.equal(deepWorkUsage.usageCount24h, 4);
+  assert.equal(deepWorkUsage.userUsageCount24h, 2);
+  assert.equal(deepWorkUsage.communityUsageCount24h, 2);
+  assert.equal(deepWorkUsage.activePeersNow, 2);
+  assert.equal(deepWorkUsage.uniquePeers24h, 3);
+  assert.equal(deepWorkUsage.usageBadgeLabel, '4 in 24h');
+  assert.equal(deepWorkUsage.shortUsageLabel, '4×');
+  assert.equal(
+    deepWorkUsage.usageSummaryText,
+    '4 uses in 24h (2 you · 2 community)'
+  );
+  assert.equal(deepWorkUsage.hasRecentActivity, true);
+
+  // Pair Programming: 1 logged event by Alice in last 24h
+  const pairUsage = getMoodPresetUsageCount24hMeta({
+    presetIdOrLabel: 'Pair Programming',
+    currentUid: 'usr_alice',
+    nowMs: now24hTest,
+    moodEvents: [
+      {
+        id: 'ev_pair_1',
+        uid: 'usr_alice',
+        displayName: 'Alice',
+        mood: 'Pair Programming',
+        timestampMs: recent4h,
+      },
+    ],
+  });
+  assert.equal(pairUsage.usageCount24h, 1);
+  assert.equal(pairUsage.userUsageCount24h, 1);
+  assert.equal(pairUsage.communityUsageCount24h, 0);
+  assert.equal(pairUsage.usageBadgeLabel, '1 in 24h');
+  assert.equal(pairUsage.usageSummaryText, '1 use in 24h (1 you · 0 community)');
+
+  // Coffee Break: 0 uses in last 24h
+  assert.equal(usageMap.coffee_break.usageCount24h, 0);
+  assert.equal(usageMap.coffee_break.usageBadgeLabel, '0 in 24h');
+  assert.equal(usageMap.coffee_break.hasRecentActivity, false);
 });
