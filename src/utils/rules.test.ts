@@ -3739,9 +3739,13 @@ test('buildOnlineDirectoryFilterShareLink and parseOnlineDirectoryFilterSharePar
   assert.equal(defaultShare.audienceMode, 'everyone');
   assert.equal(defaultShare.statusLabel, 'Everyone');
   assert.equal(defaultShare.categoryParam, 'all');
+  assert.equal(defaultShare.moodParam, 'all');
   assert.equal(defaultShare.categoryDisplayLabel, 'All Moods');
   assert.equal(defaultShare.summaryLabel, 'Everyone · All Moods');
   assert.equal(defaultShare.isCopied, false);
+  assert.equal(defaultShare.iconFeedbackState, 'idle');
+  assert.equal(defaultShare.iconFeedbackLabel, 'Copy Link');
+  assert.equal(defaultShare.copiedBadgeText, 'Copied!');
   assert.equal(
     defaultShare.containerAriaLabel,
     'Copy shareable link for current filter (Everyone · All Moods)'
@@ -3761,12 +3765,15 @@ test('buildOnlineDirectoryFilterShareLink and parseOnlineDirectoryFilterSharePar
   );
   assert.equal(categoryShare.statusLabel, 'My Connections');
   assert.equal(categoryShare.categoryParam, 'Productive');
+  assert.equal(categoryShare.moodParam, 'Productive');
   assert.equal(categoryShare.categoryDisplayLabel, 'Productive');
   assert.equal(categoryShare.summaryLabel, 'My Connections · Productive · In Focus');
   assert.equal(categoryShare.isCopied, true);
+  assert.equal(categoryShare.iconFeedbackState, 'Copied!');
+  assert.equal(categoryShare.iconFeedbackLabel, 'Copied!');
   assert.equal(
     categoryShare.containerAriaLabel,
-    'Copied shareable filter link (My Connections · Productive · In Focus)'
+    'Copied! (My Connections · Productive · In Focus)'
   );
 
   const parsedCategory = parseOnlineDirectoryFilterShareParams(
@@ -3778,7 +3785,7 @@ test('buildOnlineDirectoryFilterShareLink and parseOnlineDirectoryFilterSharePar
   assert.equal(parsedCategory.onlyInFocus, true);
 
   const parsedPreset = parseOnlineDirectoryFilterShareParams(
-    '?filter=everyone&category=Deep+Work'
+    '?filter=everyone&mood=Deep+Work'
   );
   assert.equal(parsedPreset.hasFilterParams, true);
   assert.equal(parsedPreset.audienceFilter, 'everyone');
@@ -3798,6 +3805,7 @@ test('buildOnlineDirectoryFilterShareLink and parseOnlineDirectoryFilterSharePar
     'http://localhost:3000/?filter=my_connections&category=Social'
   );
   assert.equal(metaWithShare.shareLinkMeta.isCopied, true);
+  assert.equal(metaWithShare.shareLinkMeta.iconFeedbackState, 'Copied!');
 });
 
 

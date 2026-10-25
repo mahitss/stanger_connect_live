@@ -2923,28 +2923,22 @@ export default function App() {
   });
 
   const handleCopyDirectoryFilterShareLink = async (
-    e?: React.MouseEvent | React.KeyboardEvent
+    e?: React.MouseEvent | React.KeyboardEvent,
+    overrideAudienceMode?: OnlineDirectoryAudienceFilter
   ) => {
     if (e) {
       e.stopPropagation();
     }
+    const effectiveAudienceMode = overrideAudienceMode ?? directoryAudienceFilter;
     const shareMeta = buildOnlineDirectoryFilterShareLink({
       origin: typeof window !== 'undefined' ? window.location.origin : 'https://mrstranger.app',
       pathname: typeof window !== 'undefined' ? window.location.pathname : '/',
-      audienceFilter: directoryAudienceFilter,
+      audienceFilter: effectiveAudienceMode,
       moodFilter: directoryMoodFilter,
       onlyInFocus: showOnlyInFocusPeers,
       isCopied: true,
     });
     const urlToCopy = shareMeta.shareUrl;
-
-    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
-      try {
-        await navigator.clipboard.writeText(urlToCopy);
-      } catch {
-        // ignore clipboard permissions error in headless context
-      }
-    }
 
     if (typeof window !== 'undefined' && window.history?.replaceState) {
       try {
@@ -2966,7 +2960,15 @@ export default function App() {
     }
     filterLinkCopyTimerRef.current = window.setTimeout(() => {
       setIsDirectoryFilterLinkCopied(false);
-    }, 2400);
+    }, 3000);
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(urlToCopy);
+      } catch {
+        // ignore clipboard permissions error in headless context
+      }
+    }
   };
   const displayedOnlinePeers = filterOnlinePeersByDirectoryCriteria(
     onlinePeers,
@@ -5031,9 +5033,17 @@ export default function App() {
                                 );
                                 if (action.shouldOpenClearModal) {
                                   setIsClearFilterModalOpen(true);
+                                  void handleCopyDirectoryFilterShareLink(
+                                    undefined,
+                                    directoryAudienceFilter
+                                  );
                                 } else {
                                   setDirectoryAudienceFilter(action.nextMode);
                                   setIsClearFilterModalOpen(false);
+                                  void handleCopyDirectoryFilterShareLink(
+                                    undefined,
+                                    action.nextMode
+                                  );
                                 }
                               }}
                               onMouseEnter={() => setIsQuickFilterHovered(true)}
@@ -5056,6 +5066,14 @@ export default function App() {
                               aria-label={directoryQuickFilterMeta.ariaLabel}
                               data-testid="online-directory-quick-filter-btn"
                               data-filter-mode={directoryQuickFilterMeta.mode}
+                              data-mood-filter={directoryQuickFilterMeta.shareLinkMeta.moodParam}
+                              data-share-url={directoryQuickFilterMeta.shareLinkMeta.shareUrl}
+                              data-copied={
+                                directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
+                              }
+                              data-feedback-state={
+                                directoryQuickFilterMeta.shareLinkMeta.iconFeedbackState
+                              }
                               data-hidden-peers-count={directoryQuickFilterMeta.hiddenPeersCount}
                               data-requires-clear-modal={
                                 directoryQuickFilterMeta.requiresClearConfirmationModal
@@ -5083,9 +5101,13 @@ export default function App() {
                                 data-last-copied-url={lastCopiedDirectoryFilterUrl}
                                 data-share-status={directoryQuickFilterMeta.shareLinkMeta.statusLabel}
                                 data-share-category={directoryQuickFilterMeta.shareLinkMeta.categoryParam}
+                                data-share-mood={directoryQuickFilterMeta.shareLinkMeta.moodParam}
                                 data-share-summary={directoryQuickFilterMeta.shareLinkMeta.summaryLabel}
                                 data-share-copied={
                                   directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
+                                }
+                                data-feedback-state={
+                                  directoryQuickFilterMeta.shareLinkMeta.iconFeedbackState
                                 }
                                 role="button"
                                 tabIndex={0}
@@ -5140,12 +5162,24 @@ export default function App() {
                                   data-icon-svg-filter={
                                     directoryQuickFilterMeta.iconHoverGlow.svgDropShadowFilter
                                   }
+                                  data-copied={
+                                    directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
+                                  }
+                                  data-feedback-state={
+                                    directoryQuickFilterMeta.shareLinkMeta.iconFeedbackState
+                                  }
                                   role="img"
-                                  aria-label={directoryQuickFilterMeta.stateIconLabel}
+                                  aria-label={
+                                    directoryQuickFilterMeta.shareLinkMeta.isCopied
+                                      ? `Copied! — ${directoryQuickFilterMeta.stateIconLabel}`
+                                      : directoryQuickFilterMeta.stateIconLabel
+                                  }
                                   className={`relative overflow-hidden inline-flex items-center justify-center px-1.5 py-0.5 rounded border quick-filter-icon-crossfade ${
-                                    directoryQuickFilterMeta.isMyConnectionsOnly
-                                      ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300 group-hover:bg-emerald-500/30 group-hover:border-emerald-300/80 group-hover:text-emerald-200'
-                                      : 'bg-zinc-900 border-zinc-700/80 text-zinc-300 group-hover:bg-emerald-500/15 group-hover:border-emerald-400/60 group-hover:text-emerald-200'
+                                    directoryQuickFilterMeta.shareLinkMeta.isCopied
+                                      ? 'bg-emerald-500/30 border-emerald-400/80 text-emerald-200'
+                                      : directoryQuickFilterMeta.isMyConnectionsOnly
+                                        ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300 group-hover:bg-emerald-500/30 group-hover:border-emerald-300/80 group-hover:text-emerald-200'
+                                        : 'bg-zinc-900 border-zinc-700/80 text-zinc-300 group-hover:bg-emerald-500/15 group-hover:border-emerald-400/60 group-hover:text-emerald-200'
                                   }`}
                                 >
                                   <AnimatePresence mode="popLayout" initial={false}>
@@ -5205,11 +5239,28 @@ export default function App() {
                                       </motion.span>
                                     )}
                                   </AnimatePresence>
+                                  {directoryQuickFilterMeta.shareLinkMeta.isCopied && (
+                                    <span
+                                      data-testid="quick-filter-icon-copied-feedback"
+                                      data-feedback-state="Copied!"
+                                      className="inline-flex items-center gap-0.5 ml-1 text-[9px] font-mono font-bold text-emerald-200 leading-none"
+                                    >
+                                      <Check
+                                        aria-hidden="true"
+                                        data-testid="quick-filter-state-icon-copied"
+                                        className="w-2.5 h-2.5 shrink-0 text-emerald-300"
+                                      />
+                                      <span>Copied!</span>
+                                    </span>
+                                  )}
                                 </span>
                                 <span
                                   data-testid="online-directory-quick-filter-share-badge"
                                   data-copied={
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
+                                  }
+                                  data-feedback-state={
+                                    directoryQuickFilterMeta.shareLinkMeta.iconFeedbackState
                                   }
                                   className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-mono leading-none transition-colors ${
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied
@@ -5220,7 +5271,7 @@ export default function App() {
                                   {directoryQuickFilterMeta.shareLinkMeta.isCopied ? (
                                     <>
                                       <Check className="w-2.5 h-2.5 shrink-0 text-emerald-300" />
-                                      <span>Copied</span>
+                                      <span>Copied!</span>
                                     </>
                                   ) : (
                                     <>

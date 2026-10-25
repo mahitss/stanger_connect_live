@@ -8673,13 +8673,16 @@ export interface OnlineDirectoryFilterShareLinkMeta {
   statusLabel: 'My Connections' | 'Everyone';
   rawCategoryFilter: string;
   categoryParam: string;
+  moodParam: string;
   categoryDisplayLabel: string;
   onlyInFocus: boolean;
   summaryLabel: string;
   isCopied: boolean;
+  iconFeedbackState: 'Copied!' | 'idle';
+  iconFeedbackLabel: 'Copied!' | 'Copy Link';
   containerAriaLabel: string;
   containerTitle: string;
-  copiedBadgeText: 'Copied Link';
+  copiedBadgeText: 'Copied!';
   hoverHintText: 'Copy Link';
 }
 
@@ -8731,11 +8734,11 @@ export function buildOnlineDirectoryFilterShareLink(params?: {
   const summaryLabel = `${statusLabel} · ${categoryDisplayLabel}${focusSuffix}`;
 
   const containerAriaLabel = isCopied
-    ? `Copied shareable filter link (${summaryLabel})`
+    ? `Copied! (${summaryLabel})`
     : `Copy shareable link for current filter (${summaryLabel})`;
 
   const containerTitle = isCopied
-    ? `Copied shareable link: ${shareUrl}`
+    ? `Copied! (${shareUrl})`
     : `Click icon to copy shareable link for ${summaryLabel} (${shareUrl})`;
 
   return {
@@ -8744,13 +8747,16 @@ export function buildOnlineDirectoryFilterShareLink(params?: {
     statusLabel,
     rawCategoryFilter: rawMood,
     categoryParam,
+    moodParam: categoryParam,
     categoryDisplayLabel,
     onlyInFocus,
     summaryLabel,
     isCopied,
+    iconFeedbackState: isCopied ? 'Copied!' : 'idle',
+    iconFeedbackLabel: isCopied ? 'Copied!' : 'Copy Link',
     containerAriaLabel,
     containerTitle,
-    copiedBadgeText: 'Copied Link',
+    copiedBadgeText: 'Copied!',
     hoverHintText: 'Copy Link',
   };
 }
@@ -8767,11 +8773,14 @@ export function parseOnlineDirectoryFilterShareParams(search: string): {
   );
 
   const rawAudience = (params.get('filter') || '').trim().toLowerCase();
-  const rawCategory = (params.get('category') || '').trim();
+  const rawCategory = (params.get('category') || params.get('mood') || '').trim();
   const rawFocus = (params.get('focus') || '').trim().toLowerCase();
 
   const hasFilterParams =
-    params.has('filter') || params.has('category') || params.has('focus');
+    params.has('filter') ||
+    params.has('category') ||
+    params.has('mood') ||
+    params.has('focus');
 
   const audienceFilter: OnlineDirectoryAudienceFilter =
     rawAudience === 'my_connections' ? 'my_connections' : 'everyone';
@@ -8779,11 +8788,11 @@ export function parseOnlineDirectoryFilterShareParams(search: string): {
   let moodFilter = 'all';
   if (rawCategory && rawCategory.toLowerCase() !== 'all') {
     const lowerCat = rawCategory.toLowerCase();
-    if (lowerCat === 'productive') {
+    if (lowerCat === 'productive' || lowerCat === 'category:productive') {
       moodFilter = 'category:Productive';
-    } else if (lowerCat === 'social') {
+    } else if (lowerCat === 'social' || lowerCat === 'category:social') {
       moodFilter = 'category:Social';
-    } else if (lowerCat === 'away') {
+    } else if (lowerCat === 'away' || lowerCat === 'category:away') {
       moodFilter = 'category:Away';
     } else {
       moodFilter = rawCategory;
