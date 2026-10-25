@@ -2890,6 +2890,7 @@ export default function App() {
     currentUid: currentIdentity.uid,
     acceptedPeerUids,
     connectionStatusMap: connectionRequestStatusMap,
+    isHovered: isQuickFilterHovered,
     isClearModalOpen: isClearFilterModalOpen,
   });
   const displayedOnlinePeers = filterOnlinePeersByDirectoryCriteria(
@@ -4994,7 +4995,7 @@ export default function App() {
                               data-hover-brightness={
                                 directoryQuickFilterMeta.toggleHoverMotion.hoverBrightness
                               }
-                              className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
+                              className={`group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
                                 directoryQuickFilterMeta.isMyConnectionsOnly
                                   ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
                                   : 'bg-[#050505] text-zinc-200 border-zinc-800 hover:border-zinc-600 hover:text-white'
@@ -5017,12 +5018,29 @@ export default function App() {
                                 data-active-icon-key={
                                   directoryQuickFilterMeta.iconCrossFadeMotion.activeIconKey
                                 }
+                                data-icon-hovered={
+                                  directoryQuickFilterMeta.iconHoverGlow.isHovered ? 'true' : 'false'
+                                }
+                                data-icon-glow-active={
+                                  directoryQuickFilterMeta.iconHoverGlow.isGlowActive
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-icon-glow-tone={
+                                  directoryQuickFilterMeta.iconHoverGlow.glowTone
+                                }
+                                data-icon-glow-shadow={
+                                  directoryQuickFilterMeta.iconHoverGlow.containerBoxShadow
+                                }
+                                data-icon-svg-filter={
+                                  directoryQuickFilterMeta.iconHoverGlow.svgDropShadowFilter
+                                }
                                 role="img"
                                 aria-label={directoryQuickFilterMeta.stateIconLabel}
                                 className={`relative overflow-hidden inline-flex items-center justify-center px-1.5 py-0.5 rounded border quick-filter-icon-crossfade ${
                                   directoryQuickFilterMeta.isMyConnectionsOnly
-                                    ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
-                                    : 'bg-zinc-900 border-zinc-700/80 text-zinc-300'
+                                    ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300 group-hover:bg-emerald-500/30 group-hover:border-emerald-300/80 group-hover:text-emerald-200'
+                                    : 'bg-zinc-900 border-zinc-700/80 text-zinc-300 group-hover:bg-emerald-500/15 group-hover:border-emerald-400/60 group-hover:text-emerald-200'
                                 }`}
                               >
                                 <AnimatePresence mode="popLayout" initial={false}>
@@ -5050,7 +5068,7 @@ export default function App() {
                                         aria-hidden="true"
                                         data-testid="quick-filter-state-icon-usercheck"
                                         data-icon-component="UserCheck"
-                                        className="w-3.5 h-3.5 shrink-0 text-emerald-300"
+                                        className="w-3.5 h-3.5 shrink-0 text-emerald-300 group-hover:text-emerald-200"
                                       />
                                     </motion.span>
                                   ) : (
@@ -5077,7 +5095,7 @@ export default function App() {
                                         aria-hidden="true"
                                         data-testid="quick-filter-state-icon-filter"
                                         data-icon-component="Filter"
-                                        className="w-3.5 h-3.5 shrink-0 text-zinc-300"
+                                        className="w-3.5 h-3.5 shrink-0 text-zinc-300 group-hover:text-emerald-200"
                                       />
                                     </motion.span>
                                   )}

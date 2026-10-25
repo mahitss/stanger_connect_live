@@ -8629,6 +8629,44 @@ export function getQuickFilterIconCrossFadeSpec(
   };
 }
 
+export interface QuickFilterIconHoverGlowSpec {
+  mode: OnlineDirectoryAudienceFilter;
+  isHovered: boolean;
+  isGlowActive: boolean;
+  glowTone: 'emerald' | 'emerald-soft';
+  transitionDurationMs: number;
+  containerBoxShadow: string;
+  svgDropShadowFilter: string;
+}
+
+export function getQuickFilterIconHoverGlowSpec(params?: {
+  mode?: OnlineDirectoryAudienceFilter;
+  isHovered?: boolean;
+}): QuickFilterIconHoverGlowSpec {
+  const normalizedMode: OnlineDirectoryAudienceFilter =
+    params?.mode === 'my_connections' ? 'my_connections' : 'everyone';
+  const isMyConnections = normalizedMode === 'my_connections';
+  const isHovered = Boolean(params?.isHovered);
+
+  const hoverContainerShadow = isMyConnections
+    ? '0 0 12px rgba(52, 211, 153, 0.42), 0 0 4px rgba(16, 185, 129, 0.28)'
+    : '0 0 12px rgba(52, 211, 153, 0.32), 0 0 4px rgba(244, 244, 245, 0.22)';
+
+  const hoverSvgDropShadow = isMyConnections
+    ? 'drop-shadow(0 0 5px rgba(52, 211, 153, 0.65))'
+    : 'drop-shadow(0 0 5px rgba(52, 211, 153, 0.5))';
+
+  return {
+    mode: normalizedMode,
+    isHovered,
+    isGlowActive: isHovered,
+    glowTone: isMyConnections ? 'emerald' : 'emerald-soft',
+    transitionDurationMs: 180,
+    containerBoxShadow: isHovered ? hoverContainerShadow : 'none',
+    svgDropShadowFilter: isHovered ? hoverSvgDropShadow : 'none',
+  };
+}
+
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
@@ -8662,7 +8700,9 @@ export interface OnlineDirectoryQuickFilterMeta {
   clearButtonMotion: QuickFilterClearButtonMotionSpec;
   toggleHoverMotion: QuickFilterToggleHoverMotionSpec;
   iconCrossFadeMotion: QuickFilterIconCrossFadeMotionSpec;
+  iconHoverGlow: QuickFilterIconHoverGlowSpec;
 }
+
 
 export function toggleOnlineDirectoryAudienceFilter(
   current: OnlineDirectoryAudienceFilter
@@ -8770,6 +8810,10 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     clearButtonMotion: getQuickFilterClearButtonMotionSpec(isMyConnectionsOnly),
     toggleHoverMotion: getQuickFilterToggleHoverMotionSpec(Boolean(params.isHovered)),
     iconCrossFadeMotion: getQuickFilterIconCrossFadeSpec(mode),
+    iconHoverGlow: getQuickFilterIconHoverGlowSpec({
+      mode,
+      isHovered: Boolean(params.isHovered),
+    }),
   };
 }
 

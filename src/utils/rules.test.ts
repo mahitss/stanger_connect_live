@@ -165,6 +165,7 @@ import {
   getQuickFilterClearButtonMotionSpec,
   getQuickFilterToggleHoverMotionSpec,
   getQuickFilterIconCrossFadeSpec,
+  getQuickFilterIconHoverGlowSpec,
   getOnlineDirectoryClearFilterModalMeta,
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
@@ -3667,6 +3668,62 @@ test('getQuickFilterIconCrossFadeSpec and getOnlineDirectoryQuickFilterMeta prov
   });
   assert.deepEqual(metaConnections.iconCrossFadeMotion, connectionsSpec);
 });
+
+test('getQuickFilterIconHoverGlowSpec and getOnlineDirectoryQuickFilterMeta resolve soft glow effect for #online-directory-mood-filter icon on hover', () => {
+  const restEveryone = getQuickFilterIconHoverGlowSpec({
+    mode: 'everyone',
+    isHovered: false,
+  });
+  assert.equal(restEveryone.mode, 'everyone');
+  assert.equal(restEveryone.isHovered, false);
+  assert.equal(restEveryone.isGlowActive, false);
+  assert.equal(restEveryone.glowTone, 'emerald-soft');
+  assert.equal(restEveryone.transitionDurationMs, 180);
+  assert.equal(restEveryone.containerBoxShadow, 'none');
+  assert.equal(restEveryone.svgDropShadowFilter, 'none');
+
+  const hoverEveryone = getQuickFilterIconHoverGlowSpec({
+    mode: 'everyone',
+    isHovered: true,
+  });
+  assert.equal(hoverEveryone.mode, 'everyone');
+  assert.equal(hoverEveryone.isHovered, true);
+  assert.equal(hoverEveryone.isGlowActive, true);
+  assert.equal(hoverEveryone.glowTone, 'emerald-soft');
+  assert.equal(
+    hoverEveryone.containerBoxShadow,
+    '0 0 12px rgba(52, 211, 153, 0.32), 0 0 4px rgba(244, 244, 245, 0.22)'
+  );
+  assert.equal(
+    hoverEveryone.svgDropShadowFilter,
+    'drop-shadow(0 0 5px rgba(52, 211, 153, 0.5))'
+  );
+
+  const hoverConnections = getQuickFilterIconHoverGlowSpec({
+    mode: 'my_connections',
+    isHovered: true,
+  });
+  assert.equal(hoverConnections.mode, 'my_connections');
+  assert.equal(hoverConnections.isHovered, true);
+  assert.equal(hoverConnections.isGlowActive, true);
+  assert.equal(hoverConnections.glowTone, 'emerald');
+  assert.equal(
+    hoverConnections.containerBoxShadow,
+    '0 0 12px rgba(52, 211, 153, 0.42), 0 0 4px rgba(16, 185, 129, 0.28)'
+  );
+  assert.equal(
+    hoverConnections.svgDropShadowFilter,
+    'drop-shadow(0 0 5px rgba(52, 211, 153, 0.65))'
+  );
+
+  const metaHovered = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1' }],
+    isHovered: true,
+  });
+  assert.deepEqual(metaHovered.iconHoverGlow, hoverEveryone);
+});
+
 
 
 

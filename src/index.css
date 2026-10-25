@@ -247,9 +247,52 @@ html.light textarea::placeholder {
 #online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'],
 .quick-filter-icon-crossfade {
   transition:
-    background-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    border-color 160ms cubic-bezier(0.16, 1, 0.3, 1),
-    color 160ms cubic-bezier(0.16, 1, 0.3, 1);
+    background-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    filter 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'] svg {
+  transition:
+    filter 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    color 180ms cubic-bezier(0.16, 1, 0.3, 1),
+    transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#online-directory-mood-filter:hover [data-testid='online-directory-quick-filter-icon'],
+#online-directory-mood-filter:focus-visible [data-testid='online-directory-quick-filter-icon'],
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon']:hover,
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'][data-icon-glow-active='true'] {
+  box-shadow:
+    0 0 12px rgba(52, 211, 153, 0.32),
+    0 0 4px rgba(244, 244, 245, 0.22);
+  border-color: rgba(52, 211, 153, 0.55);
+}
+
+#online-directory-mood-filter[data-filter-mode='my_connections']:hover [data-testid='online-directory-quick-filter-icon'],
+#online-directory-mood-filter[data-filter-mode='my_connections']:focus-visible [data-testid='online-directory-quick-filter-icon'],
+#online-directory-mood-filter[data-filter-mode='my_connections'] [data-testid='online-directory-quick-filter-icon']:hover,
+#online-directory-mood-filter[data-filter-mode='my_connections'] [data-testid='online-directory-quick-filter-icon'][data-icon-glow-active='true'] {
+  box-shadow:
+    0 0 12px rgba(52, 211, 153, 0.42),
+    0 0 4px rgba(16, 185, 129, 0.28);
+  border-color: rgba(110, 231, 183, 0.75);
+}
+
+#online-directory-mood-filter:hover [data-testid='online-directory-quick-filter-icon'] svg,
+#online-directory-mood-filter:focus-visible [data-testid='online-directory-quick-filter-icon'] svg,
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon']:hover svg,
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'][data-icon-glow-active='true'] svg {
+  filter: drop-shadow(0 0 5px rgba(52, 211, 153, 0.5));
+}
+
+#online-directory-mood-filter[data-filter-mode='my_connections']:hover [data-testid='online-directory-quick-filter-icon'] svg,
+#online-directory-mood-filter[data-filter-mode='my_connections']:focus-visible [data-testid='online-directory-quick-filter-icon'] svg,
+#online-directory-mood-filter[data-filter-mode='my_connections'] [data-testid='online-directory-quick-filter-icon']:hover svg,
+#online-directory-mood-filter[data-filter-mode='my_connections'] [data-testid='online-directory-quick-filter-icon'][data-icon-glow-active='true'] svg {
+  filter: drop-shadow(0 0 5px rgba(52, 211, 153, 0.65));
 }
 
 #online-directory-mood-filter .quick-filter-icon-crossfade-item {
@@ -265,10 +308,12 @@ html.light textarea::placeholder {
   .moment-thread-slide-in,
   .moment-thread-slide-out,
   .quick-filter-icon-crossfade,
+  #online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'] svg,
   #online-directory-mood-filter .quick-filter-icon-crossfade-item {
     transition: none !important;
     animation: none !important;
   }
+
 
   #workspace-sidebar-scroll-area,
   #workspace-sidebar-scroll-area:focus,
