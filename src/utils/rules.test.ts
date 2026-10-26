@@ -168,6 +168,7 @@ import {
   getQuickFilterIconHoverGlowSpec,
   getQuickFilterIconPulseSpec,
   resolveQuickFilterToggleChime,
+  getQuickFilterResetFlashBounceSpec,
   getOnlineDirectoryClearFilterModalMeta,
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
@@ -3954,4 +3955,62 @@ test('resolveQuickFilterToggleChime and getOnlineDirectoryQuickFilterMeta resolv
   });
   assert.equal(metaConnections.toggleChimeSpec.utilityName, 'playSubtleUiChime');
   assert.equal(metaConnections.toggleChimeSpec.chimeType, 'end');
+});
+
+test('getQuickFilterResetFlashBounceSpec and getOnlineDirectoryQuickFilterMeta trigger CSS flash/bounce effect when filter is reset to all', () => {
+  const idleSpec = getQuickFilterResetFlashBounceSpec({
+    isResetFlashActive: false,
+  });
+  assert.equal(idleSpec.isResetToAllTransition, false);
+  assert.equal(idleSpec.isResetFlashActive, false);
+  assert.equal(idleSpec.animationName, 'none');
+  assert.equal(idleSpec.cssClassName, '');
+  assert.deepEqual(idleSpec.scaleKeyframes, [1, 1, 1, 1]);
+  assert.equal(idleSpec.flashBoxShadow, 'none');
+
+  const moodResetTransition = getQuickFilterResetFlashBounceSpec({
+    previousMoodFilter: 'category:Productive',
+    nextMoodFilter: 'all',
+  });
+  assert.equal(moodResetTransition.isResetToAllTransition, true);
+  assert.equal(moodResetTransition.isResetFlashActive, true);
+  assert.equal(moodResetTransition.animationName, 'quickFilterResetFlashBounce');
+  assert.equal(moodResetTransition.cssClassName, 'quick-filter-reset-flash-bounce');
+  assert.equal(moodResetTransition.durationMs, 520);
+  assert.deepEqual(moodResetTransition.scaleKeyframes, [1, 1.06, 0.98, 1]);
+  assert.equal(
+    moodResetTransition.confirmationLabel,
+    'Constraint removed · Showing all'
+  );
+
+  const audienceResetTransition = getQuickFilterResetFlashBounceSpec({
+    previousMode: 'my_connections',
+    nextMode: 'everyone',
+  });
+  assert.equal(audienceResetTransition.isResetToAllTransition, true);
+  assert.equal(audienceResetTransition.isResetFlashActive, true);
+  assert.equal(audienceResetTransition.animationName, 'quickFilterResetFlashBounce');
+
+  const nonResetTransition = getQuickFilterResetFlashBounceSpec({
+    previousMoodFilter: 'all',
+    nextMoodFilter: 'category:Social',
+  });
+  assert.equal(nonResetTransition.isResetToAllTransition, false);
+  assert.equal(nonResetTransition.isResetFlashActive, false);
+
+  const metaWithFlash = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1' }],
+    moodFilter: 'all',
+    isResetFlashActive: true,
+  });
+  assert.equal(metaWithFlash.resetFlashSpec.isResetFlashActive, true);
+  assert.equal(
+    metaWithFlash.resetFlashSpec.animationName,
+    'quickFilterResetFlashBounce'
+  );
+  assert.equal(
+    metaWithFlash.resetFlashSpec.cssClassName,
+    'quick-filter-reset-flash-bounce'
+  );
 });

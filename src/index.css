@@ -343,6 +343,41 @@ html.light textarea::placeholder {
   transform-origin: center;
 }
 
+@keyframes quickFilterResetFlashBounce {
+  0% {
+    transform: scale(1) translateY(0);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+    border-color: rgba(52, 211, 153, 0.85);
+    background-color: rgba(16, 185, 129, 0.24);
+  }
+  32% {
+    transform: scale(1.06) translateY(-2px);
+    box-shadow:
+      0 0 0 3px rgba(52, 211, 153, 0.38),
+      0 0 16px rgba(52, 211, 153, 0.45);
+    border-color: rgba(110, 231, 183, 0.95);
+    background-color: rgba(16, 185, 129, 0.28);
+  }
+  68% {
+    transform: scale(0.98) translateY(0.5px);
+    box-shadow:
+      0 0 0 1.5px rgba(52, 211, 153, 0.18),
+      0 0 8px rgba(52, 211, 153, 0.22);
+    border-color: rgba(52, 211, 153, 0.55);
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+
+#online-directory-mood-filter[data-reset-flash-active='true'],
+#online-directory-mood-filter.quick-filter-reset-flash-bounce,
+#online-directory-mood-select[data-reset-flash-active='true'],
+.quick-filter-reset-flash-bounce {
+  animation: quickFilterResetFlashBounce 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .moment-thread-collapse-grid,
   .moment-thread-slide-in,
@@ -350,6 +385,9 @@ html.light textarea::placeholder {
   .quick-filter-icon-crossfade,
   .quick-filter-icon-pulse-active,
   .quick-filter-icon-svg-pulse,
+  .quick-filter-reset-flash-bounce,
+  #online-directory-mood-filter[data-reset-flash-active='true'],
+  #online-directory-mood-select[data-reset-flash-active='true'],
   #online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'],
   #online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'] svg,
   #online-directory-mood-filter .quick-filter-icon-crossfade-item {

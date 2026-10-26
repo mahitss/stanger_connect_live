@@ -8939,6 +8939,68 @@ export function resolveQuickFilterToggleChime(params?: {
   };
 }
 
+export interface QuickFilterResetFlashBounceSpec {
+  isResetToAllTransition: boolean;
+  isResetFlashActive: boolean;
+  animationName: 'quickFilterResetFlashBounce' | 'none';
+  cssClassName: string;
+  durationMs: number;
+  durationSec: number;
+  easing: 'cubic-bezier(0.22, 1, 0.36, 1)';
+  scaleKeyframes: [number, number, number, number];
+  flashBoxShadow: string;
+  confirmationLabel: string;
+}
+
+export function getQuickFilterResetFlashBounceSpec(params?: {
+  isResetFlashActive?: boolean;
+  previousMode?: OnlineDirectoryAudienceFilter | string | null;
+  nextMode?: OnlineDirectoryAudienceFilter | string | null;
+  previousMoodFilter?: string | null;
+  nextMoodFilter?: string | null;
+}): QuickFilterResetFlashBounceSpec {
+  const hasModeTransition =
+    params?.previousMode !== undefined && params?.nextMode !== undefined;
+  const wasAudienceConstrained =
+    hasModeTransition &&
+    String(params?.previousMode || '').trim().toLowerCase() === 'my_connections';
+  const nextModeClean = String(params?.nextMode ?? 'everyone').trim().toLowerCase();
+  const isNowAudienceAll =
+    hasModeTransition && (nextModeClean === 'everyone' || nextModeClean === 'all');
+
+  const hasMoodTransition =
+    params?.previousMoodFilter !== undefined && params?.nextMoodFilter !== undefined;
+  const prevMoodClean = String(params?.previousMoodFilter || '').trim().toLowerCase();
+  const nextMoodClean = String(params?.nextMoodFilter ?? 'all').trim().toLowerCase();
+  const wasMoodConstrained =
+    hasMoodTransition && prevMoodClean !== '' && prevMoodClean !== 'all';
+  const isNowMoodAll =
+    hasMoodTransition && (nextMoodClean === '' || nextMoodClean === 'all');
+
+  const isResetToAllTransition =
+    Boolean(wasAudienceConstrained && isNowAudienceAll) ||
+    Boolean(wasMoodConstrained && isNowMoodAll);
+  const isResetFlashActive =
+    Boolean(params?.isResetFlashActive) || isResetToAllTransition;
+
+  return {
+    isResetToAllTransition,
+    isResetFlashActive,
+    animationName: isResetFlashActive ? 'quickFilterResetFlashBounce' : 'none',
+    cssClassName: isResetFlashActive ? 'quick-filter-reset-flash-bounce' : '',
+    durationMs: 520,
+    durationSec: 0.52,
+    easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    scaleKeyframes: isResetFlashActive ? [1, 1.06, 0.98, 1] : [1, 1, 1, 1],
+    flashBoxShadow: isResetFlashActive
+      ? '0 0 0 3px rgba(52, 211, 153, 0.38), 0 0 16px rgba(52, 211, 153, 0.45)'
+      : 'none',
+    confirmationLabel: isResetFlashActive
+      ? 'Constraint removed · Showing all'
+      : 'Ready',
+  };
+}
+
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
@@ -8976,6 +9038,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   iconHoverGlow: QuickFilterIconHoverGlowSpec;
   iconPulseSpec: QuickFilterIconPulseSpec;
   toggleChimeSpec: QuickFilterToggleChimeResult;
+  resetFlashSpec: QuickFilterResetFlashBounceSpec;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -9004,6 +9067,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   pathname?: string;
   isShareLinkCopied?: boolean;
   uiSoundPreferences?: UiSoundEffectPreferences;
+  isResetFlashActive?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -9035,6 +9099,9 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   const toggleChimeSpec = resolveQuickFilterToggleChime({
     currentMode: mode,
     preferences: params.uiSoundPreferences,
+  });
+  const resetFlashSpec = getQuickFilterResetFlashBounceSpec({
+    isResetFlashActive: Boolean(params.isResetFlashActive),
   });
   const isDirectoryConstrained = iconPulseSpec.isDirectoryConstrained;
   const hiddenPeersCount = Math.max(0, everyoneCount - myConnectionsCount);
@@ -9109,6 +9176,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     }),
     iconPulseSpec,
     toggleChimeSpec,
+    resetFlashSpec,
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
       pathname: params.pathname,

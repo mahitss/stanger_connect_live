@@ -714,6 +714,15 @@ export default function App() {
     'start' | 'end' | null
   >(null);
   const [directoryFilterChimeCount, setDirectoryFilterChimeCount] = useState<number>(0);
+  const [isDirectoryFilterResetFlashActive, setIsDirectoryFilterResetFlashActive] =
+    useState<boolean>(false);
+  const [directoryFilterResetFlashCount, setDirectoryFilterResetFlashCount] =
+    useState<number>(0);
+  const filterResetFlashTimerRef = useRef<number | null>(null);
+  const prevMoodFilterForResetRef = useRef<string>(initialFilterShareParams.moodFilter);
+  const prevAudienceFilterForResetRef = useRef<OnlineDirectoryAudienceFilter>(
+    initialFilterShareParams.audienceFilter
+  );
   const filterLinkCopyTimerRef = useRef<number | null>(null);
   const [isSidebarHovered, setIsSidebarHovered] = useState<boolean>(false);
   const [isSidebarFocused, setIsSidebarFocused] = useState<boolean>(false);
@@ -733,6 +742,37 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [isClearFilterModalOpen]);
+
+  const triggerDirectoryFilterResetFlash = () => {
+    setIsDirectoryFilterResetFlashActive(true);
+    setDirectoryFilterResetFlashCount((prev) => prev + 1);
+    if (filterResetFlashTimerRef.current !== null) {
+      window.clearTimeout(filterResetFlashTimerRef.current);
+    }
+    filterResetFlashTimerRef.current = window.setTimeout(() => {
+      setIsDirectoryFilterResetFlashActive(false);
+      filterResetFlashTimerRef.current = null;
+    }, 650);
+  };
+
+  useEffect(() => {
+    const prevMood = (prevMoodFilterForResetRef.current || 'all').trim() || 'all';
+    const nextMood = (directoryMoodFilter || 'all').trim() || 'all';
+    const prevAudience = prevAudienceFilterForResetRef.current;
+    const nextAudience = directoryAudienceFilter;
+
+    const moodResetToAll =
+      prevMood.toLowerCase() !== 'all' && nextMood.toLowerCase() === 'all';
+    const audienceResetToEveryone =
+      prevAudience === 'my_connections' && nextAudience === 'everyone';
+
+    prevMoodFilterForResetRef.current = nextMood;
+    prevAudienceFilterForResetRef.current = nextAudience;
+
+    if (moodResetToAll || audienceResetToEveryone) {
+      triggerDirectoryFilterResetFlash();
+    }
+  }, [directoryMoodFilter, directoryAudienceFilter]);
   const [userMood, setUserMood] = useState<string | null>(() => {
     try {
       const saved = localStorage.getItem('mr_stranger_user_mood_v1');
@@ -2926,6 +2966,7 @@ export default function App() {
     pathname: typeof window !== 'undefined' ? window.location.pathname : '/',
     isShareLinkCopied: isDirectoryFilterLinkCopied,
     uiSoundPreferences: uiSoundPrefs,
+    isResetFlashActive: isDirectoryFilterResetFlashActive,
   });
 
   const handlePlayDirectoryFilterToggleChime = (
@@ -5114,6 +5155,15 @@ export default function App() {
                                   ? 'true'
                                   : 'false'
                               }
+                              data-reset-flash-active={
+                                directoryQuickFilterMeta.resetFlashSpec.isResetFlashActive
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-reset-animation={
+                                directoryQuickFilterMeta.resetFlashSpec.animationName
+                              }
+                              data-reset-flash-count={directoryFilterResetFlashCount}
                               data-constraint-reason={
                                 directoryQuickFilterMeta.iconPulseSpec.activeConstraintReason
                               }
@@ -5142,7 +5192,7 @@ export default function App() {
                                 directoryQuickFilterMeta.isMyConnectionsOnly
                                   ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
                                   : 'bg-[#050505] text-zinc-200 border-zinc-800 hover:border-zinc-600 hover:text-white'
-                              }`}
+                              } ${directoryQuickFilterMeta.resetFlashSpec.cssClassName}`}
                             >
                               <span
                                 id="online-directory-mood-filter-icon-share-wrapper"
@@ -5685,7 +5735,13 @@ export default function App() {
                         >
                           <button
                             type="button"
-                            onClick={() => setDirectoryMoodFilter('all')}
+                            onClick={() => {
+                              if (directoryMoodFilter === 'all') {
+                                triggerDirectoryFilterResetFlash();
+                              } else {
+                                setDirectoryMoodFilter('all');
+                              }
+                            }}
                             aria-pressed={directoryMoodFilter === 'all'}
                             data-testid="mood-category-filter-all"
                             className={`px-2 py-1 text-[11px] font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
@@ -5768,9 +5824,18 @@ export default function App() {
                           id="online-directory-mood-select"
                           aria-label="Filter online peers by Mood indicator or category"
                           data-testid="online-directory-mood-filter"
+                          data-reset-flash-active={
+                            directoryQuickFilterMeta.resetFlashSpec.isResetFlashActive
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-reset-animation={
+                            directoryQuickFilterMeta.resetFlashSpec.animationName
+                          }
+                          data-reset-flash-count={directoryFilterResetFlashCount}
                           value={directoryMoodFilter}
                           onChange={(e) => setDirectoryMoodFilter(e.target.value)}
-                          className="px-2.5 py-1.5 text-xs font-semibold bg-[#050505] border border-zinc-800 rounded-md text-zinc-200 focus:outline-none focus:border-zinc-500"
+                          className={`px-2.5 py-1.5 text-xs font-semibold bg-[#050505] border border-zinc-800 rounded-md text-zinc-200 focus:outline-none focus:border-zinc-500 ${directoryQuickFilterMeta.resetFlashSpec.cssClassName}`}
                         >
                           <option value="all">All Moods ({onlinePeers.length})</option>
                           {moodPresetSearchResult.filteredGroups.map((group) => (
