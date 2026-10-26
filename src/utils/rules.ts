@@ -8885,6 +8885,60 @@ export function parseOnlineDirectoryFilterShareParams(search: string): {
   };
 }
 
+export interface QuickFilterToggleChimeResult {
+  utilityName: 'playSubtleUiChime';
+  currentMode: OnlineDirectoryAudienceFilter;
+  nextMode: OnlineDirectoryAudienceFilter;
+  chimeType: 'start' | 'end';
+  shouldPlay: boolean;
+  volumePercent: number;
+  chime: UiSoundChimeSpec;
+  feedbackMessage: string;
+}
+
+export function resolveQuickFilterToggleChime(params?: {
+  currentMode?: OnlineDirectoryAudienceFilter | string | null;
+  nextMode?: OnlineDirectoryAudienceFilter | string | null;
+  preferences?: UiSoundEffectPreferences;
+}): QuickFilterToggleChimeResult {
+  const currentMode: OnlineDirectoryAudienceFilter =
+    params?.currentMode === 'my_connections' ? 'my_connections' : 'everyone';
+  const nextMode: OnlineDirectoryAudienceFilter =
+    params?.nextMode !== undefined && params?.nextMode !== null
+      ? params.nextMode === 'my_connections'
+        ? 'my_connections'
+        : 'everyone'
+      : currentMode === 'my_connections'
+        ? 'everyone'
+        : 'my_connections';
+
+  const prefs = params?.preferences ?? DEFAULT_UI_SOUND_PREFERENCES;
+  const volumePercent = clampSoundVolumePercent(prefs.volumePercent);
+  const isActivatingFilter = nextMode === 'my_connections';
+  const chimeType: 'start' | 'end' = isActivatingFilter ? 'start' : 'end';
+  const chime = getUiSoundChimeSpec(chimeType, false, volumePercent);
+  const shouldPlay = Boolean(prefs.enabled);
+
+  const feedbackMessage = isActivatingFilter
+    ? shouldPlay
+      ? `Filter chime played: My Connections active (${chime.noteNames})`
+      : 'Filter toggled: My Connections active (Sound alerts muted)'
+    : shouldPlay
+      ? `Filter chime played: Reset to Everyone (${chime.noteNames})`
+      : 'Filter toggled: Reset to Everyone (Sound alerts muted)';
+
+  return {
+    utilityName: 'playSubtleUiChime',
+    currentMode,
+    nextMode,
+    chimeType,
+    shouldPlay,
+    volumePercent,
+    chime,
+    feedbackMessage,
+  };
+}
+
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
@@ -8921,6 +8975,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   iconCrossFadeMotion: QuickFilterIconCrossFadeMotionSpec;
   iconHoverGlow: QuickFilterIconHoverGlowSpec;
   iconPulseSpec: QuickFilterIconPulseSpec;
+  toggleChimeSpec: QuickFilterToggleChimeResult;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -8948,6 +9003,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   origin?: string;
   pathname?: string;
   isShareLinkCopied?: boolean;
+  uiSoundPreferences?: UiSoundEffectPreferences;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -8975,6 +9031,10 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     mode,
     moodFilter: params.moodFilter,
     onlyInFocus: params.onlyInFocus,
+  });
+  const toggleChimeSpec = resolveQuickFilterToggleChime({
+    currentMode: mode,
+    preferences: params.uiSoundPreferences,
   });
   const isDirectoryConstrained = iconPulseSpec.isDirectoryConstrained;
   const hiddenPeersCount = Math.max(0, everyoneCount - myConnectionsCount);
@@ -9048,6 +9108,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       isHovered: Boolean(params.isHovered),
     }),
     iconPulseSpec,
+    toggleChimeSpec,
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
       pathname: params.pathname,

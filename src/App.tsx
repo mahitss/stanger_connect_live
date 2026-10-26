@@ -163,6 +163,7 @@ import {
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
   getOnlineDirectoryQuickFilterMeta,
+  resolveQuickFilterToggleChime,
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
   toggleMoodCategoryDrawerExpanded,
@@ -709,6 +710,10 @@ export default function App() {
     useState<boolean>(false);
   const [lastCopiedDirectoryFilterUrl, setLastCopiedDirectoryFilterUrl] =
     useState<string>('');
+  const [lastDirectoryFilterChime, setLastDirectoryFilterChime] = useState<
+    'start' | 'end' | null
+  >(null);
+  const [directoryFilterChimeCount, setDirectoryFilterChimeCount] = useState<number>(0);
   const filterLinkCopyTimerRef = useRef<number | null>(null);
   const [isSidebarHovered, setIsSidebarHovered] = useState<boolean>(false);
   const [isSidebarFocused, setIsSidebarFocused] = useState<boolean>(false);
@@ -2920,7 +2925,25 @@ export default function App() {
     origin: typeof window !== 'undefined' ? window.location.origin : 'https://mrstranger.app',
     pathname: typeof window !== 'undefined' ? window.location.pathname : '/',
     isShareLinkCopied: isDirectoryFilterLinkCopied,
+    uiSoundPreferences: uiSoundPrefs,
   });
+
+  const handlePlayDirectoryFilterToggleChime = (
+    currentMode: OnlineDirectoryAudienceFilter,
+    nextMode?: OnlineDirectoryAudienceFilter
+  ) => {
+    const chimeResult = resolveQuickFilterToggleChime({
+      currentMode,
+      nextMode,
+      preferences: uiSoundPrefs,
+    });
+    if (chimeResult.shouldPlay) {
+      playSubtleUiChime(chimeResult.chime, chimeResult.volumePercent);
+    }
+    setLastDirectoryFilterChime(chimeResult.chimeType);
+    setDirectoryFilterChimeCount((prev) => prev + 1);
+    setLastSoundFeedback(chimeResult.feedbackMessage);
+  };
 
   const handleCopyDirectoryFilterShareLink = async (
     e?: React.MouseEvent | React.KeyboardEvent,
@@ -5033,6 +5056,10 @@ export default function App() {
                                 );
                                 if (action.shouldOpenClearModal) {
                                   setIsClearFilterModalOpen(true);
+                                  handlePlayDirectoryFilterToggleChime(
+                                    directoryAudienceFilter,
+                                    'everyone'
+                                  );
                                   void handleCopyDirectoryFilterShareLink(
                                     undefined,
                                     directoryAudienceFilter
@@ -5040,6 +5067,10 @@ export default function App() {
                                 } else {
                                   setDirectoryAudienceFilter(action.nextMode);
                                   setIsClearFilterModalOpen(false);
+                                  handlePlayDirectoryFilterToggleChime(
+                                    directoryAudienceFilter,
+                                    action.nextMode
+                                  );
                                   void handleCopyDirectoryFilterShareLink(
                                     undefined,
                                     action.nextMode
@@ -5067,6 +5098,14 @@ export default function App() {
                               data-testid="online-directory-quick-filter-btn"
                               data-filter-mode={directoryQuickFilterMeta.mode}
                               data-mood-filter={directoryQuickFilterMeta.shareLinkMeta.moodParam}
+                              data-chime-utility={directoryQuickFilterMeta.toggleChimeSpec.utilityName}
+                              data-chime-enabled={uiSoundPrefs.enabled ? 'true' : 'false'}
+                              data-next-chime-type={directoryQuickFilterMeta.toggleChimeSpec.chimeType}
+                              data-next-chime-notes={
+                                directoryQuickFilterMeta.toggleChimeSpec.chime.noteNames
+                              }
+                              data-last-chime-played={lastDirectoryFilterChime || 'none'}
+                              data-chime-play-count={directoryFilterChimeCount}
                               data-directory-constrained={
                                 directoryQuickFilterMeta.isDirectoryConstrained ? 'true' : 'false'
                               }
@@ -5553,6 +5592,10 @@ export default function App() {
                                         const reset = confirmOnlineDirectoryClearFilterReset();
                                         setDirectoryAudienceFilter(reset.nextMode);
                                         setIsClearFilterModalOpen(reset.isModalOpen);
+                                        handlePlayDirectoryFilterToggleChime(
+                                          'my_connections',
+                                          reset.nextMode
+                                        );
                                       }}
                                       data-testid="online-directory-confirm-reset-btn"
                                       className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-md bg-white hover:bg-zinc-200 text-black transition-colors whitespace-nowrap"

@@ -167,6 +167,7 @@ import {
   getQuickFilterIconCrossFadeSpec,
   getQuickFilterIconHoverGlowSpec,
   getQuickFilterIconPulseSpec,
+  resolveQuickFilterToggleChime,
   getOnlineDirectoryClearFilterModalMeta,
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
@@ -3894,4 +3895,63 @@ test('getQuickFilterIconPulseSpec and getOnlineDirectoryQuickFilterMeta activate
   assert.equal(metaMoodActive.isDirectoryConstrained, true);
   assert.equal(metaMoodActive.iconPulseSpec.isPulseActive, true);
   assert.equal(metaMoodActive.iconPulseSpec.activeConstraintReason, 'mood_filter');
+});
+
+test('resolveQuickFilterToggleChime and getOnlineDirectoryQuickFilterMeta resolve playSubtleUiChime specs when #online-directory-mood-filter is toggled', () => {
+  const activateChime = resolveQuickFilterToggleChime({
+    currentMode: 'everyone',
+  });
+  assert.equal(activateChime.utilityName, 'playSubtleUiChime');
+  assert.equal(activateChime.currentMode, 'everyone');
+  assert.equal(activateChime.nextMode, 'my_connections');
+  assert.equal(activateChime.chimeType, 'start');
+  assert.equal(activateChime.shouldPlay, true);
+  assert.deepEqual(activateChime.chime.frequenciesHz, [523.25, 659.25]);
+  assert.equal(activateChime.chime.noteNames, 'C5 → E5 Focus Start');
+  assert.equal(
+    activateChime.feedbackMessage,
+    'Filter chime played: My Connections active (C5 → E5 Focus Start)'
+  );
+
+  const resetChime = resolveQuickFilterToggleChime({
+    currentMode: 'my_connections',
+  });
+  assert.equal(resetChime.utilityName, 'playSubtleUiChime');
+  assert.equal(resetChime.currentMode, 'my_connections');
+  assert.equal(resetChime.nextMode, 'everyone');
+  assert.equal(resetChime.chimeType, 'end');
+  assert.equal(resetChime.shouldPlay, true);
+  assert.deepEqual(resetChime.chime.frequenciesHz, [659.25, 493.88]);
+  assert.equal(resetChime.chime.noteNames, 'E5 → B4 Focus End');
+  assert.equal(
+    resetChime.feedbackMessage,
+    'Filter chime played: Reset to Everyone (E5 → B4 Focus End)'
+  );
+
+  const mutedChime = resolveQuickFilterToggleChime({
+    currentMode: 'everyone',
+    preferences: {
+      ...DEFAULT_UI_SOUND_PREFERENCES,
+      enabled: false,
+    },
+  });
+  assert.equal(mutedChime.shouldPlay, false);
+  assert.equal(
+    mutedChime.feedbackMessage,
+    'Filter toggled: My Connections active (Sound alerts muted)'
+  );
+
+  const metaEveryone = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1' }],
+  });
+  assert.equal(metaEveryone.toggleChimeSpec.utilityName, 'playSubtleUiChime');
+  assert.equal(metaEveryone.toggleChimeSpec.chimeType, 'start');
+
+  const metaConnections = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1' }],
+  });
+  assert.equal(metaConnections.toggleChimeSpec.utilityName, 'playSubtleUiChime');
+  assert.equal(metaConnections.toggleChimeSpec.chimeType, 'end');
 });
