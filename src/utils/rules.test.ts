@@ -169,6 +169,7 @@ import {
   getQuickFilterIconPulseSpec,
   resolveQuickFilterToggleChime,
   getQuickFilterResetFlashBounceSpec,
+  resolveZeroPeersMoodFilterNotice,
   getOnlineDirectoryClearFilterModalMeta,
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
@@ -4038,3 +4039,62 @@ test('getQuickFilterResetFlashBounceSpec and getOnlineDirectoryQuickFilterMeta t
     'quick-filter-reset-flash-bounce'
   );
 });
+
+test('resolveZeroPeersMoodFilterNotice and getOnlineDirectoryQuickFilterMeta display non-intrusive tooltip/toast suggestion when a mood filter yields zero online peers', () => {
+  const allMoodsNotice = resolveZeroPeersMoodFilterNotice({
+    moodFilter: 'all',
+    audienceFilter: 'everyone',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+  });
+  assert.equal(allMoodsNotice.isMoodFilterActive, false);
+  assert.equal(allMoodsNotice.isZeroMatchingPeers, false);
+  assert.equal(allMoodsNotice.shouldShowNotice, false);
+  assert.equal(allMoodsNotice.displayedPeersCount, 1);
+  assert.equal(allMoodsNotice.tone, 'neutral');
+
+  const zeroMatchingMoodNotice = resolveZeroPeersMoodFilterNotice({
+    moodFilter: 'Taking a Break',
+    audienceFilter: 'everyone',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+  });
+  assert.equal(zeroMatchingMoodNotice.isMoodFilterActive, true);
+  assert.equal(zeroMatchingMoodNotice.isZeroMatchingPeers, true);
+  assert.equal(zeroMatchingMoodNotice.shouldShowNotice, true);
+  assert.equal(zeroMatchingMoodNotice.moodDisplayLabel, 'Taking a Break');
+  assert.equal(zeroMatchingMoodNotice.displayedPeersCount, 0);
+  assert.equal(
+    zeroMatchingMoodNotice.headline,
+    '0 online peers match "Taking a Break"'
+  );
+  assert.equal(
+    zeroMatchingMoodNotice.suggestionText,
+    'No online peers currently match "Taking a Break" — try widening your criteria to All Moods.'
+  );
+  assert.equal(zeroMatchingMoodNotice.actionLabel, 'Widen Criteria');
+  assert.equal(zeroMatchingMoodNotice.tone, 'amber');
+
+  const matchingMoodNotice = resolveZeroPeersMoodFilterNotice({
+    moodFilter: 'category:Productive',
+    audienceFilter: 'everyone',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+  });
+  assert.equal(matchingMoodNotice.isMoodFilterActive, true);
+  assert.equal(matchingMoodNotice.isZeroMatchingPeers, false);
+  assert.equal(matchingMoodNotice.shouldShowNotice, false);
+  assert.equal(matchingMoodNotice.displayedPeersCount, 1);
+
+  const metaZeroPeers = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'category:Away',
+    displayedPeersCount: 0,
+  });
+  assert.equal(metaZeroPeers.zeroPeersNotice.shouldShowNotice, true);
+  assert.equal(metaZeroPeers.zeroPeersNotice.moodDisplayLabel, 'Away');
+  assert.equal(metaZeroPeers.zeroPeersNotice.displayedPeersCount, 0);
+  assert.equal(
+    metaZeroPeers.zeroPeersNotice.suggestionText,
+    'No online peers currently match "Away" — try widening your criteria to All Moods.'
+  );
+});
+

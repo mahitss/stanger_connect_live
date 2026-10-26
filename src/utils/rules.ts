@@ -9013,6 +9013,132 @@ export function getQuickFilterResetFlashBounceSpec(params?: {
   };
 }
 
+export interface ZeroPeersMoodFilterNoticeSpec {
+  isMoodFilterActive: boolean;
+  isAudienceFilterActive: boolean;
+  isFocusFilterActive: boolean;
+  isZeroMatchingPeers: boolean;
+  shouldShowNotice: boolean;
+  moodFilterValue: string;
+  moodDisplayLabel: string;
+  displayedPeersCount: number;
+  totalOnlinePeersCount: number;
+  headline: string;
+  suggestionText: string;
+  shortToastLabel: string;
+  actionLabel: 'Widen Criteria';
+  tone: 'amber' | 'neutral';
+}
+
+export function resolveZeroPeersMoodFilterNotice(params?: {
+  moodFilter?: string | null;
+  audienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+  onlyInFocus?: boolean;
+  displayedPeersCount?: number | null;
+  onlinePeers?: Array<{ uid: string; mood?: string | null }>;
+  currentUid?: string;
+  acceptedPeerUids?: Iterable<string>;
+  connectionStatusMap?: Record<string, ConnectionRequestStatusValue>;
+  isDismissed?: boolean;
+}): ZeroPeersMoodFilterNoticeSpec {
+  const rawMood = String(params?.moodFilter ?? 'all').trim() || 'all';
+  const parsedMood = parseOnlineDirectoryMoodFilterSelection(rawMood);
+  const isMoodFilterActive = parsedMood.type !== 'all';
+
+  const rawAudience = String(params?.audienceFilter ?? 'everyone').trim().toLowerCase();
+  const isAudienceFilterActive =
+    rawAudience !== '' && rawAudience !== 'everyone' && rawAudience !== 'all';
+  const isFocusFilterActive = Boolean(params?.onlyInFocus);
+
+  const moodDisplayLabel =
+    parsedMood.type === 'category' && parsedMood.category
+      ? `${parsedMood.category}`
+      : parsedMood.type === 'preset' && parsedMood.presetLabel
+        ? parsedMood.presetLabel
+        : 'All Moods';
+
+  const peers = Array.isArray(params?.onlinePeers) ? params!.onlinePeers : [];
+  const totalOnlinePeersCount = peers.length;
+  const cleanCurrentUid = String(params?.currentUid || '').trim();
+  const acceptedSet = params?.acceptedPeerUids
+    ? new Set(params.acceptedPeerUids)
+    : new Set<string>();
+
+  let computedDisplayedCount = totalOnlinePeersCount;
+  if (
+    params?.displayedPeersCount !== undefined &&
+    params?.displayedPeersCount !== null &&
+    Number.isFinite(Number(params.displayedPeersCount))
+  ) {
+    computedDisplayedCount = Math.max(0, Math.floor(Number(params.displayedPeersCount)));
+  } else if (isMoodFilterActive || isAudienceFilterActive) {
+    let matched = 0;
+    for (const peer of peers) {
+      const peerUid = String(peer?.uid || '').trim();
+      if (!peerUid) continue;
+      if (isAudienceFilterActive) {
+        if (cleanCurrentUid && peerUid === cleanCurrentUid) continue;
+        const isAccepted =
+          acceptedSet.has(peerUid) ||
+          params?.connectionStatusMap?.[peerUid] === 'accepted';
+        if (!isAccepted) continue;
+      }
+      if (isMoodFilterActive) {
+        const meta = getOnlinePeerMoodMeta(peer?.mood);
+        if (!meta.hasMood || !meta.label) continue;
+        if (parsedMood.type === 'category' && parsedMood.category) {
+          if (meta.category !== parsedMood.category) continue;
+        } else if (parsedMood.type === 'preset' && parsedMood.presetLabel) {
+          if (meta.label.toLowerCase() !== parsedMood.presetLabel.toLowerCase()) {
+            continue;
+          }
+        }
+      }
+      matched += 1;
+    }
+    computedDisplayedCount = matched;
+  }
+
+  const isZeroMatchingPeers = computedDisplayedCount === 0;
+  const isAnyConstraintActive =
+    isMoodFilterActive || isAudienceFilterActive || isFocusFilterActive;
+  const shouldShowNotice =
+    isAnyConstraintActive && isZeroMatchingPeers && !Boolean(params?.isDismissed);
+
+  const headline = isMoodFilterActive
+    ? `0 online peers match "${moodDisplayLabel}"`
+    : '0 online peers match active filter';
+
+  const suggestionText = shouldShowNotice
+    ? isMoodFilterActive
+      ? `No online peers currently match "${moodDisplayLabel}" — try widening your criteria to All Moods.`
+      : 'No online peers match your current filter — try widening your criteria.'
+    : `Showing ${computedDisplayedCount} matching ${
+        computedDisplayedCount === 1 ? 'peer' : 'peers'
+      }`;
+
+  const shortToastLabel = shouldShowNotice
+    ? `0 peers in ${moodDisplayLabel} · Widen criteria`
+    : `${computedDisplayedCount} matching`;
+
+  return {
+    isMoodFilterActive,
+    isAudienceFilterActive,
+    isFocusFilterActive,
+    isZeroMatchingPeers,
+    shouldShowNotice,
+    moodFilterValue: isMoodFilterActive ? rawMood : 'all',
+    moodDisplayLabel,
+    displayedPeersCount: computedDisplayedCount,
+    totalOnlinePeersCount,
+    headline,
+    suggestionText,
+    shortToastLabel,
+    actionLabel: 'Widen Criteria',
+    tone: shouldShowNotice ? 'amber' : 'neutral',
+  };
+}
+
 export interface OnlineDirectoryQuickFilterMeta {
   mode: OnlineDirectoryAudienceFilter;
   isMyConnectionsOnly: boolean;
@@ -9051,6 +9177,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   iconPulseSpec: QuickFilterIconPulseSpec;
   toggleChimeSpec: QuickFilterToggleChimeResult;
   resetFlashSpec: QuickFilterResetFlashBounceSpec;
+  zeroPeersNotice: ZeroPeersMoodFilterNoticeSpec;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -9067,7 +9194,7 @@ export function clearOnlineDirectoryAudienceFilter(): OnlineDirectoryAudienceFil
 
 export function getOnlineDirectoryQuickFilterMeta(params: {
   mode: OnlineDirectoryAudienceFilter;
-  onlinePeers: Array<{ uid: string }>;
+  onlinePeers: Array<{ uid: string; mood?: string | null }>;
   currentUid?: string;
   acceptedPeerUids?: Iterable<string>;
   connectionStatusMap?: Record<string, ConnectionRequestStatusValue>;
@@ -9075,6 +9202,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   isClearModalOpen?: boolean;
   moodFilter?: string | null;
   onlyInFocus?: boolean;
+  displayedPeersCount?: number | null;
   origin?: string;
   pathname?: string;
   isShareLinkCopied?: boolean;
@@ -9114,6 +9242,16 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   });
   const resetFlashSpec = getQuickFilterResetFlashBounceSpec({
     isResetFlashActive: Boolean(params.isResetFlashActive),
+  });
+  const zeroPeersNotice = resolveZeroPeersMoodFilterNotice({
+    moodFilter: params.moodFilter,
+    audienceFilter: mode,
+    onlyInFocus: params.onlyInFocus,
+    displayedPeersCount: params.displayedPeersCount,
+    onlinePeers: peers,
+    currentUid: cleanCurrentUid,
+    acceptedPeerUids: acceptedSet,
+    connectionStatusMap: params.connectionStatusMap,
   });
   const isDirectoryConstrained = iconPulseSpec.isDirectoryConstrained;
   const hiddenPeersCount = Math.max(0, everyoneCount - myConnectionsCount);
@@ -9189,6 +9327,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     iconPulseSpec,
     toggleChimeSpec,
     resetFlashSpec,
+    zeroPeersNotice,
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
       pathname: params.pathname,

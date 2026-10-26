@@ -2952,6 +2952,18 @@ export default function App() {
     currentUid: currentIdentity.uid,
     currentUserMood: userMood,
   });
+  const displayedOnlinePeers = filterOnlinePeersByDirectoryCriteria(
+    onlinePeers,
+    studyDesks,
+    {
+      onlyInFocus: showOnlyInFocusPeers,
+      moodFilter: directoryMoodFilter === 'all' ? null : directoryMoodFilter,
+      audienceFilter: directoryAudienceFilter,
+      currentUid: currentIdentity.uid,
+      acceptedPeerUids,
+      connectionStatusMap: connectionRequestStatusMap,
+    }
+  );
   const directoryQuickFilterMeta = getOnlineDirectoryQuickFilterMeta({
     mode: directoryAudienceFilter,
     onlinePeers,
@@ -2962,6 +2974,7 @@ export default function App() {
     isClearModalOpen: isClearFilterModalOpen,
     moodFilter: directoryMoodFilter,
     onlyInFocus: showOnlyInFocusPeers,
+    displayedPeersCount: displayedOnlinePeers.length,
     origin: typeof window !== 'undefined' ? window.location.origin : 'https://mrstranger.app',
     pathname: typeof window !== 'undefined' ? window.location.pathname : '/',
     isShareLinkCopied: isDirectoryFilterLinkCopied,
@@ -3034,18 +3047,6 @@ export default function App() {
       }
     }
   };
-  const displayedOnlinePeers = filterOnlinePeersByDirectoryCriteria(
-    onlinePeers,
-    studyDesks,
-    {
-      onlyInFocus: showOnlyInFocusPeers,
-      moodFilter: directoryMoodFilter === 'all' ? null : directoryMoodFilter,
-      audienceFilter: directoryAudienceFilter,
-      currentUid: currentIdentity.uid,
-      acceptedPeerUids,
-      connectionStatusMap: connectionRequestStatusMap,
-    }
-  );
   const myFocusStatus =
     directoryFocusSummary.byUid[currentIdentity.uid] ||
     getOnlinePeerFocusStatus(
@@ -5173,6 +5174,17 @@ export default function App() {
                                 directoryQuickFilterMeta.resetFlashSpec.animationName
                               }
                               data-reset-flash-count={directoryFilterResetFlashCount}
+                              data-zero-peers-notice={
+                                directoryQuickFilterMeta.zeroPeersNotice.shouldShowNotice
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-matching-peers-count={
+                                directoryQuickFilterMeta.zeroPeersNotice.displayedPeersCount
+                              }
+                              data-zero-peers-suggestion={
+                                directoryQuickFilterMeta.zeroPeersNotice.suggestionText
+                              }
                               data-constraint-reason={
                                 directoryQuickFilterMeta.iconPulseSpec.activeConstraintReason
                               }
@@ -5702,14 +5714,69 @@ export default function App() {
                             {directoryQuickFilterMeta.tooltipTitle}
                           </span>
 
+                          {directoryQuickFilterMeta.zeroPeersNotice.shouldShowNotice && (
+                            <div
+                              id="online-directory-zero-peers-toast"
+                              role="status"
+                              aria-live="polite"
+                              data-testid="online-directory-zero-peers-toast"
+                              data-mood-filter={
+                                directoryQuickFilterMeta.zeroPeersNotice.moodFilterValue
+                              }
+                              data-mood-label={
+                                directoryQuickFilterMeta.zeroPeersNotice.moodDisplayLabel
+                              }
+                              data-matching-peers-count={
+                                directoryQuickFilterMeta.zeroPeersNotice.displayedPeersCount
+                              }
+                              className="inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-amber-500/10 border border-amber-400/50 text-[11px] text-amber-200 shadow-sm"
+                            >
+                              <span
+                                aria-hidden="true"
+                                className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse shrink-0"
+                              />
+                              <span
+                                data-testid="online-directory-zero-peers-toast-message"
+                                className="font-medium leading-tight"
+                              >
+                                {directoryQuickFilterMeta.zeroPeersNotice.suggestionText}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setDirectoryMoodFilter('all');
+                                  setShowOnlyInFocusPeers(false);
+                                  if (directoryAudienceFilter !== 'everyone') {
+                                    setDirectoryAudienceFilter('everyone');
+                                  }
+                                }}
+                                data-testid="online-directory-widen-criteria-btn"
+                                className="px-1.5 py-0.5 rounded bg-amber-400/20 hover:bg-amber-400/30 border border-amber-300/50 text-[10px] font-semibold font-mono text-amber-100 transition-colors whitespace-nowrap shrink-0"
+                              >
+                                {directoryQuickFilterMeta.zeroPeersNotice.actionLabel}
+                              </button>
+                            </div>
+                          )}
+
                           <div
                             id="online-directory-quick-filter-tooltip"
                             role="tooltip"
                             data-testid="online-directory-quick-filter-tooltip"
                             data-filter-mode={directoryQuickFilterMeta.mode}
-                            data-visible={isQuickFilterHovered ? 'true' : 'false'}
+                            data-zero-peers-notice={
+                              directoryQuickFilterMeta.zeroPeersNotice.shouldShowNotice
+                                ? 'true'
+                                : 'false'
+                            }
+                            data-visible={
+                              isQuickFilterHovered ||
+                              directoryQuickFilterMeta.zeroPeersNotice.shouldShowNotice
+                                ? 'true'
+                                : 'false'
+                            }
                             className={`pointer-events-none absolute bottom-full left-0 mb-2 z-30 w-72 p-2.5 rounded-md bg-[#050505] border border-zinc-700/90 shadow-xl space-y-1 text-left transition-opacity duration-150 ${
-                              isQuickFilterHovered
+                              isQuickFilterHovered ||
+                              directoryQuickFilterMeta.zeroPeersNotice.shouldShowNotice
                                 ? 'opacity-100 visible'
                                 : 'opacity-0 invisible'
                             }`}
@@ -5738,6 +5805,19 @@ export default function App() {
                             >
                               {directoryQuickFilterMeta.tooltipDetail}
                             </p>
+                            {directoryQuickFilterMeta.zeroPeersNotice.shouldShowNotice && (
+                              <div
+                                data-testid="online-directory-quick-filter-tooltip-zero-peers"
+                                className="pt-1.5 mt-1 border-t border-amber-500/30 text-[11px] text-amber-300 leading-snug"
+                              >
+                                <span className="font-semibold">
+                                  {directoryQuickFilterMeta.zeroPeersNotice.headline}:
+                                </span>{' '}
+                                <span>
+                                  {directoryQuickFilterMeta.zeroPeersNotice.suggestionText}
+                                </span>
+                              </div>
+                            )}
                             <div
                               data-testid="online-directory-quick-filter-tooltip-share-info"
                               className="pt-1 mt-1 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-[10px] font-mono text-zinc-400"
@@ -5863,6 +5943,17 @@ export default function App() {
                             directoryQuickFilterMeta.resetFlashSpec.animationName
                           }
                           data-reset-flash-count={directoryFilterResetFlashCount}
+                          data-zero-peers-notice={
+                            directoryQuickFilterMeta.zeroPeersNotice.shouldShowNotice
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-matching-peers-count={
+                            directoryQuickFilterMeta.zeroPeersNotice.displayedPeersCount
+                          }
+                          data-zero-peers-suggestion={
+                            directoryQuickFilterMeta.zeroPeersNotice.suggestionText
+                          }
                           value={directoryMoodFilter}
                           onChange={(e) => setDirectoryMoodFilter(e.target.value)}
                           className={`px-2.5 py-1.5 text-xs font-semibold bg-[#050505] border border-zinc-800 rounded-md text-zinc-200 focus:outline-none focus:border-zinc-500 ${directoryQuickFilterMeta.resetFlashSpec.cssClassName}`}
