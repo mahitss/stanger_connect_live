@@ -3837,6 +3837,10 @@ test('getQuickFilterIconPulseSpec and getOnlineDirectoryQuickFilterMeta activate
   });
   assert.equal(allStringMode.isDirectoryConstrained, false);
   assert.equal(allStringMode.isPulseActive, false);
+  assert.equal(allStringMode.iconColorTone, 'zinc-neutral');
+  assert.equal(allStringMode.iconColorClass, 'text-zinc-300');
+  assert.deepEqual(allStringMode.colorKeyframes, ['#d4d4d8', '#d4d4d8', '#d4d4d8']);
+  assert.equal(allStringMode.emeraldGlowDropShadow, 'none');
 
   const connectionsConstrained = getQuickFilterIconPulseSpec({
     mode: 'my_connections',
@@ -3852,10 +3856,21 @@ test('getQuickFilterIconPulseSpec and getOnlineDirectoryQuickFilterMeta activate
   assert.equal(connectionsConstrained.svgAnimationName, 'quickFilterSvgSubtlePulse');
   assert.equal(connectionsConstrained.cssClassName, 'quick-filter-icon-pulse-active');
   assert.equal(connectionsConstrained.svgCssClassName, 'quick-filter-icon-svg-pulse');
+  assert.equal(connectionsConstrained.iconColorTone, 'emerald-glow');
+  assert.equal(connectionsConstrained.iconColorClass, 'text-emerald-300');
+  assert.deepEqual(connectionsConstrained.colorKeyframes, [
+    '#6ee7b7',
+    '#a7f3d0',
+    '#6ee7b7',
+  ]);
+  assert.equal(
+    connectionsConstrained.emeraldGlowDropShadow,
+    'drop-shadow(0 0 6px rgba(52, 211, 153, 0.72))'
+  );
   assert.equal(connectionsConstrained.durationMs, 2200);
   assert.equal(connectionsConstrained.iterationCount, 'infinite');
   assert.deepEqual(connectionsConstrained.scaleKeyframes, [1, 1.08, 1]);
-  assert.deepEqual(connectionsConstrained.opacityKeyframes, [1, 0.86, 1]);
+  assert.deepEqual(connectionsConstrained.opacityKeyframes, [1, 0.94, 1]);
 
   const moodConstrained = getQuickFilterIconPulseSpec({
     mode: 'everyone',
@@ -3868,6 +3883,8 @@ test('getQuickFilterIconPulseSpec and getOnlineDirectoryQuickFilterMeta activate
   assert.equal(moodConstrained.isMoodConstrained, true);
   assert.equal(moodConstrained.activeConstraintReason, 'mood_filter');
   assert.equal(moodConstrained.animationName, 'quickFilterIconSubtlePulse');
+  assert.equal(moodConstrained.iconColorTone, 'emerald-glow');
+  assert.equal(moodConstrained.iconColorClass, 'text-emerald-300');
 
   const bothConstrained = getQuickFilterIconPulseSpec({
     mode: 'my_connections',
@@ -3886,6 +3903,7 @@ test('getQuickFilterIconPulseSpec and getOnlineDirectoryQuickFilterMeta activate
   });
   assert.equal(metaUnconstrained.isDirectoryConstrained, false);
   assert.equal(metaUnconstrained.iconPulseSpec.isPulseActive, false);
+  assert.equal(metaUnconstrained.iconPulseSpec.iconColorTone, 'zinc-neutral');
 
   const metaMoodActive = getOnlineDirectoryQuickFilterMeta({
     mode: 'everyone',
@@ -3896,6 +3914,12 @@ test('getQuickFilterIconPulseSpec and getOnlineDirectoryQuickFilterMeta activate
   assert.equal(metaMoodActive.isDirectoryConstrained, true);
   assert.equal(metaMoodActive.iconPulseSpec.isPulseActive, true);
   assert.equal(metaMoodActive.iconPulseSpec.activeConstraintReason, 'mood_filter');
+  assert.equal(metaMoodActive.iconPulseSpec.iconColorTone, 'emerald-glow');
+  assert.deepEqual(metaMoodActive.iconPulseSpec.colorKeyframes, [
+    '#6ee7b7',
+    '#a7f3d0',
+    '#6ee7b7',
+  ]);
 });
 
 test('resolveQuickFilterToggleChime and getOnlineDirectoryQuickFilterMeta resolve playSubtleUiChime specs when #online-directory-mood-filter is toggled', () => {

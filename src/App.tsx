@@ -5155,6 +5155,15 @@ export default function App() {
                                   ? 'true'
                                   : 'false'
                               }
+                              data-icon-color-tone={
+                                directoryQuickFilterMeta.iconPulseSpec.iconColorTone
+                              }
+                              data-pulse-color-keyframes={
+                                directoryQuickFilterMeta.iconPulseSpec.colorKeyframes.join(',')
+                              }
+                              data-icon-emerald-glow={
+                                directoryQuickFilterMeta.iconPulseSpec.emeraldGlowDropShadow
+                              }
                               data-reset-flash-active={
                                 directoryQuickFilterMeta.resetFlashSpec.isResetFlashActive
                                   ? 'true'
@@ -5272,6 +5281,15 @@ export default function App() {
                                       ? 'true'
                                       : 'false'
                                   }
+                                  data-icon-color-tone={
+                                    directoryQuickFilterMeta.iconPulseSpec.iconColorTone
+                                  }
+                                  data-pulse-color-keyframes={
+                                    directoryQuickFilterMeta.iconPulseSpec.colorKeyframes.join(',')
+                                  }
+                                  data-icon-emerald-glow={
+                                    directoryQuickFilterMeta.iconPulseSpec.emeraldGlowDropShadow
+                                  }
                                   data-pulse-animation={
                                     directoryQuickFilterMeta.iconPulseSpec.animationName
                                   }
@@ -5345,7 +5363,15 @@ export default function App() {
                                               ? 'true'
                                               : 'false'
                                           }
-                                          className={`w-3.5 h-3.5 shrink-0 text-emerald-300 group-hover:text-emerald-200 ${
+                                          data-icon-color-tone={
+                                            directoryQuickFilterMeta.iconPulseSpec.iconColorTone
+                                          }
+                                          data-icon-emerald-glow={
+                                            directoryQuickFilterMeta.iconPulseSpec.emeraldGlowDropShadow
+                                          }
+                                          className={`w-3.5 h-3.5 shrink-0 ${
+                                            directoryQuickFilterMeta.iconPulseSpec.iconColorClass
+                                          } group-hover:text-emerald-200 ${
                                             directoryQuickFilterMeta.iconPulseSpec.svgCssClassName
                                           }`}
                                         />
@@ -5379,10 +5405,14 @@ export default function App() {
                                               ? 'true'
                                               : 'false'
                                           }
+                                          data-icon-color-tone={
+                                            directoryQuickFilterMeta.iconPulseSpec.iconColorTone
+                                          }
+                                          data-icon-emerald-glow={
+                                            directoryQuickFilterMeta.iconPulseSpec.emeraldGlowDropShadow
+                                          }
                                           className={`w-3.5 h-3.5 shrink-0 ${
-                                            directoryQuickFilterMeta.isDirectoryConstrained
-                                              ? 'text-emerald-300'
-                                              : 'text-zinc-300'
+                                            directoryQuickFilterMeta.iconPulseSpec.iconColorClass
                                           } group-hover:text-emerald-200 ${
                                             directoryQuickFilterMeta.iconPulseSpec.svgCssClassName
                                           }`}

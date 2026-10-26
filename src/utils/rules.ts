@@ -8683,6 +8683,10 @@ export interface QuickFilterIconPulseSpec {
   svgAnimationName: 'quickFilterSvgSubtlePulse' | 'none';
   cssClassName: string;
   svgCssClassName: string;
+  iconColorTone: 'emerald-glow' | 'zinc-neutral';
+  iconColorClass: string;
+  colorKeyframes: [string, string, string];
+  emeraldGlowDropShadow: string;
   durationMs: number;
   durationSec: number;
   easing: 'ease-in-out';
@@ -8731,12 +8735,20 @@ export function getQuickFilterIconPulseSpec(params?: {
     svgAnimationName: isPulseActive ? 'quickFilterSvgSubtlePulse' : 'none',
     cssClassName: isPulseActive ? 'quick-filter-icon-pulse-active' : '',
     svgCssClassName: isPulseActive ? 'quick-filter-icon-svg-pulse' : '',
+    iconColorTone: isPulseActive ? 'emerald-glow' : 'zinc-neutral',
+    iconColorClass: isPulseActive ? 'text-emerald-300' : 'text-zinc-300',
+    colorKeyframes: isPulseActive
+      ? ['#6ee7b7', '#a7f3d0', '#6ee7b7']
+      : ['#d4d4d8', '#d4d4d8', '#d4d4d8'],
+    emeraldGlowDropShadow: isPulseActive
+      ? 'drop-shadow(0 0 6px rgba(52, 211, 153, 0.72))'
+      : 'none',
     durationMs: 2200,
     durationSec: 2.2,
     easing: 'ease-in-out',
     iterationCount: isPulseActive ? 'infinite' : '1',
     scaleKeyframes: isPulseActive ? [1, 1.08, 1] : [1, 1, 1],
-    opacityKeyframes: isPulseActive ? [1, 0.86, 1] : [1, 1, 1],
+    opacityKeyframes: isPulseActive ? [1, 0.94, 1] : [1, 1, 1],
     constraintStatusLabel: isPulseActive
       ? 'Directory constrained by active filter'
       : 'Showing all peers (unconstrained)',
