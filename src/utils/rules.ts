@@ -8781,6 +8781,112 @@ export function getQuickFilterIconHoverGlowSpec(params?: {
   };
 }
 
+export type QuickFilterAppliedCriterionKey = 'mood' | 'focus' | 'audience';
+
+export interface QuickFilterIconActiveBadgeSpec {
+  isMoodApplied: boolean;
+  isFocusApplied: boolean;
+  isAudienceApplied: boolean;
+  isAnyCriteriaApplied: boolean;
+  appliedCriteriaKeys: QuickFilterAppliedCriterionKey[];
+  appliedCriteriaLabels: string[];
+  appliedCriteriaCount: number;
+  showActiveBadge: boolean;
+  badgeLabel: 'ACTIVE' | 'IDLE';
+  badgeShortLabel: 'Active' | 'Idle';
+  badgeDisplayText: string;
+  badgeTone: 'emerald' | 'zinc';
+  isIconShifted: boolean;
+  iconShiftTranslateYpx: number;
+  iconShiftRotateDeg: number;
+  iconShiftScale: number;
+  iconShiftTransform: string;
+  iconShiftClassName: string;
+  badgeClassName: string;
+  summaryLabel: string;
+}
+
+export function getQuickFilterIconActiveBadgeSpec(params?: {
+  mode?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+}): QuickFilterIconActiveBadgeSpec {
+  const rawMode = String(params?.mode ?? 'everyone').trim().toLowerCase();
+  const isAudienceApplied =
+    rawMode !== '' && rawMode !== 'everyone' && rawMode !== 'all';
+
+  const rawMood = String(params?.moodFilter ?? 'all').trim();
+  const isMoodApplied = rawMood !== '' && rawMood.toLowerCase() !== 'all';
+
+  const isFocusApplied = Boolean(params?.onlyInFocus);
+  const appliedCriteriaKeys: QuickFilterAppliedCriterionKey[] = [];
+  const appliedCriteriaLabels: string[] = [];
+
+  if (isMoodApplied) {
+    appliedCriteriaKeys.push('mood');
+    const cleanMoodLabel = rawMood.toLowerCase().startsWith('category:')
+      ? rawMood.slice('category:'.length).trim()
+      : rawMood;
+    appliedCriteriaLabels.push(`Mood (${cleanMoodLabel})`);
+  }
+  if (isFocusApplied) {
+    appliedCriteriaKeys.push('focus');
+    appliedCriteriaLabels.push('In Focus');
+  }
+  if (isAudienceApplied) {
+    appliedCriteriaKeys.push('audience');
+    appliedCriteriaLabels.push('My Connections');
+  }
+
+  const appliedCriteriaCount = appliedCriteriaKeys.length;
+  const isAnyCriteriaApplied = appliedCriteriaCount > 0;
+  const showActiveBadge = isAnyCriteriaApplied;
+  const badgeLabel: 'ACTIVE' | 'IDLE' = isAnyCriteriaApplied ? 'ACTIVE' : 'IDLE';
+  const badgeShortLabel: 'Active' | 'Idle' = isAnyCriteriaApplied ? 'Active' : 'Idle';
+  const badgeDisplayText = isAnyCriteriaApplied
+    ? appliedCriteriaCount > 1
+      ? `Active · ${appliedCriteriaCount}`
+      : 'Active'
+    : 'Idle';
+  const badgeTone: 'emerald' | 'zinc' = isAnyCriteriaApplied ? 'emerald' : 'zinc';
+
+  const isIconShifted = isAnyCriteriaApplied;
+  const iconShiftTranslateYpx = isIconShifted ? -1 : 0;
+  const iconShiftRotateDeg = isIconShifted ? -6 : 0;
+  const iconShiftScale = isIconShifted ? 1.08 : 1;
+  const iconShiftTransform = isIconShifted
+    ? 'translateY(-1px) rotate(-6deg) scale(1.08)'
+    : 'translateY(0px) rotate(0deg) scale(1)';
+  const iconShiftClassName = isIconShifted ? 'quick-filter-icon-criteria-shifted' : '';
+  const badgeClassName = isAnyCriteriaApplied ? 'quick-filter-active-criteria-badge' : '';
+  const summaryLabel = isAnyCriteriaApplied
+    ? `Active filter criteria (${appliedCriteriaCount}): ${appliedCriteriaLabels.join(', ')}`
+    : 'No filter criteria applied (showing all peers)';
+
+  return {
+    isMoodApplied,
+    isFocusApplied,
+    isAudienceApplied,
+    isAnyCriteriaApplied,
+    appliedCriteriaKeys,
+    appliedCriteriaLabels,
+    appliedCriteriaCount,
+    showActiveBadge,
+    badgeLabel,
+    badgeShortLabel,
+    badgeDisplayText,
+    badgeTone,
+    isIconShifted,
+    iconShiftTranslateYpx,
+    iconShiftRotateDeg,
+    iconShiftScale,
+    iconShiftTransform,
+    iconShiftClassName,
+    badgeClassName,
+    summaryLabel,
+  };
+}
+
 export interface QuickFilterIconPulseSpec {
   isDirectoryConstrained: boolean;
   isPulseActive: boolean;
@@ -8808,6 +8914,7 @@ export interface QuickFilterIconPulseSpec {
   scaleKeyframes: [number, number, number];
   opacityKeyframes: [number, number, number];
   constraintStatusLabel: string;
+  activeBadgeSpec: QuickFilterIconActiveBadgeSpec;
 }
 
 export function getQuickFilterIconPulseSpec(params?: {
@@ -8826,6 +8933,7 @@ export function getQuickFilterIconPulseSpec(params?: {
   const isDirectoryConstrained =
     isAudienceConstrained || isMoodConstrained || isFocusConstrained;
   const isPulseActive = isDirectoryConstrained;
+  const activeBadgeSpec = getQuickFilterIconActiveBadgeSpec(params);
 
   let activeConstraintReason: QuickFilterIconPulseSpec['activeConstraintReason'] = 'none';
   if (isAudienceConstrained && isMoodConstrained) {
@@ -8866,6 +8974,7 @@ export function getQuickFilterIconPulseSpec(params?: {
     constraintStatusLabel: isPulseActive
       ? 'Directory constrained by active filter'
       : 'Showing all peers (unconstrained)',
+    activeBadgeSpec,
   };
 }
 
@@ -9289,11 +9398,13 @@ export interface OnlineDirectoryQuickFilterMeta {
   iconCrossFadeMotion: QuickFilterIconCrossFadeMotionSpec;
   iconHoverGlow: QuickFilterIconHoverGlowSpec;
   iconPulseSpec: QuickFilterIconPulseSpec;
+  iconActiveBadgeSpec: QuickFilterIconActiveBadgeSpec;
   toggleChimeSpec: QuickFilterToggleChimeResult;
   resetFlashSpec: QuickFilterResetFlashBounceSpec;
   zeroPeersNotice: ZeroPeersMoodFilterNoticeSpec;
   moodDrawersToggleAll: MoodCategoryDrawersToggleAllState;
   resetOnlyButtonMeta: SecondaryResetOnlyFilterSpec;
+  recentFiltersMeta: RecentDirectoryFiltersDropdownMeta;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -9327,6 +9438,8 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   isMainDrawerExpanded?: boolean;
   categoryExpansionMap?: Partial<Record<OnlineMoodCategory, boolean>> | null;
   isShiftKeyHeld?: boolean;
+  recentFiltersHistory?: RecentDirectoryFilterCombination[] | null;
+  isRecentFiltersDropdownOpen?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -9444,6 +9557,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       isHovered: Boolean(params.isHovered),
     }),
     iconPulseSpec,
+    iconActiveBadgeSpec: iconPulseSpec.activeBadgeSpec,
     toggleChimeSpec,
     resetFlashSpec,
     zeroPeersNotice,
@@ -9459,6 +9573,13 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       currentMode: mode,
       moodFilter: params.moodFilter,
       onlyInFocus: params.onlyInFocus,
+    }),
+    recentFiltersMeta: getRecentDirectoryFiltersDropdownMeta({
+      history: params.recentFiltersHistory,
+      currentAudienceFilter: mode,
+      currentMoodFilter: params.moodFilter,
+      currentOnlyInFocus: params.onlyInFocus,
+      isOpen: params.isRecentFiltersDropdownOpen,
     }),
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
@@ -10837,3 +10958,295 @@ export function filterMoodCategoryGroupsBySearchQuery(params: {
     inputAriaLabel: 'Search mood presets by name',
   };
 }
+
+export const MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS = 5;
+export const RECENT_DIRECTORY_FILTERS_STORAGE_KEY =
+  'mr_stranger_recent_directory_filters_v1';
+
+export interface RecentDirectoryFilterCombination {
+  id: string;
+  audienceFilter: OnlineDirectoryAudienceFilter;
+  moodFilter: string;
+  onlyInFocus: boolean;
+  moodDisplayLabel: string;
+  audienceDisplayLabel: 'My Connections' | 'Everyone';
+  focusDisplayLabel: 'In Focus' | 'All Statuses';
+  label: string;
+  shortLabel: string;
+  criteriaCount: number;
+  isDefaultAll: boolean;
+  timestampMs: number;
+}
+
+export function buildDirectoryFilterCombinationEntry(params?: {
+  audienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+  timestampMs?: number;
+}): RecentDirectoryFilterCombination {
+  const rawAudience = String(params?.audienceFilter ?? 'everyone')
+    .trim()
+    .toLowerCase();
+  const audienceFilter: OnlineDirectoryAudienceFilter =
+    rawAudience === 'my_connections' ? 'my_connections' : 'everyone';
+  const audienceDisplayLabel: 'My Connections' | 'Everyone' =
+    audienceFilter === 'my_connections' ? 'My Connections' : 'Everyone';
+
+  const rawMood = String(params?.moodFilter ?? 'all').trim();
+  const isMoodAll = !rawMood || rawMood.toLowerCase() === 'all';
+  let moodFilter = 'all';
+  let moodDisplayLabel = 'All Moods';
+  if (!isMoodAll) {
+    const parsed = parseOnlineDirectoryMoodFilterSelection(rawMood);
+    if (parsed.type === 'category' && parsed.category) {
+      moodFilter = `category:${parsed.category}`;
+      moodDisplayLabel = parsed.category;
+    } else if (parsed.type === 'preset' && parsed.presetLabel) {
+      moodFilter = parsed.presetLabel;
+      moodDisplayLabel = parsed.presetLabel;
+    } else {
+      moodFilter = rawMood;
+      moodDisplayLabel = rawMood;
+    }
+  }
+
+  const onlyInFocus = Boolean(params?.onlyInFocus);
+  const focusDisplayLabel: 'In Focus' | 'All Statuses' = onlyInFocus
+    ? 'In Focus'
+    : 'All Statuses';
+
+  const id = `${audienceFilter}|${moodFilter.toLowerCase()}|${onlyInFocus ? '1' : '0'}`;
+  const isDefaultAll =
+    audienceFilter === 'everyone' && moodFilter === 'all' && !onlyInFocus;
+  const criteriaCount =
+    (audienceFilter === 'my_connections' ? 1 : 0) +
+    (moodFilter !== 'all' ? 1 : 0) +
+    (onlyInFocus ? 1 : 0);
+
+  const parts: string[] = [moodDisplayLabel, audienceDisplayLabel];
+  if (onlyInFocus) {
+    parts.push('In Focus');
+  }
+  const label = parts.join(' · ');
+  const shortLabel = isDefaultAll
+    ? 'All Peers (Default)'
+    : onlyInFocus
+      ? `${moodDisplayLabel} · ${
+          audienceFilter === 'my_connections' ? 'Connections' : 'Everyone'
+        } · Focus`
+      : `${moodDisplayLabel} · ${
+          audienceFilter === 'my_connections' ? 'Connections' : 'Everyone'
+        }`;
+
+  const timestampMs =
+    typeof params?.timestampMs === 'number' && Number.isFinite(params.timestampMs)
+      ? params.timestampMs
+      : Date.now();
+
+  return {
+    id,
+    audienceFilter,
+    moodFilter,
+    onlyInFocus,
+    moodDisplayLabel,
+    audienceDisplayLabel,
+    focusDisplayLabel,
+    label,
+    shortLabel,
+    criteriaCount,
+    isDefaultAll,
+    timestampMs,
+  };
+}
+
+export const DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS: RecentDirectoryFilterCombination[] =
+  [
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'everyone',
+      moodFilter: 'all',
+      onlyInFocus: false,
+      timestampMs: 1_760_000_005_000,
+    }),
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'everyone',
+      moodFilter: 'category:Productive',
+      onlyInFocus: false,
+      timestampMs: 1_760_000_004_000,
+    }),
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'my_connections',
+      moodFilter: 'all',
+      onlyInFocus: false,
+      timestampMs: 1_760_000_003_000,
+    }),
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'everyone',
+      moodFilter: 'Deep Work',
+      onlyInFocus: true,
+      timestampMs: 1_760_000_002_000,
+    }),
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'my_connections',
+      moodFilter: 'category:Social',
+      onlyInFocus: false,
+      timestampMs: 1_760_000_001_000,
+    }),
+  ];
+
+export function recordRecentDirectoryFilterCombination(
+  currentHistory: RecentDirectoryFilterCombination[] | null | undefined,
+  nextParams: {
+    audienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+    moodFilter?: string | null;
+    onlyInFocus?: boolean;
+    timestampMs?: number;
+  },
+  maxItems: number = MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS
+): RecentDirectoryFilterCombination[] {
+  const safeMax = Math.max(
+    1,
+    Math.min(10, Math.floor(Number(maxItems) || MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS))
+  );
+  const entry = buildDirectoryFilterCombinationEntry(nextParams);
+  const existing = Array.isArray(currentHistory) ? currentHistory : [];
+  const deduplicated = existing.filter((item) => item && item.id !== entry.id);
+  return [entry, ...deduplicated].slice(0, safeMax);
+}
+
+export function applyRecentDirectoryFilterCombination(
+  currentHistory: RecentDirectoryFilterCombination[] | null | undefined,
+  targetIdOrIndex: string | number,
+  timestampMs?: number
+): {
+  found: boolean;
+  appliedCombination: RecentDirectoryFilterCombination | null;
+  audienceFilter: OnlineDirectoryAudienceFilter;
+  moodFilter: string;
+  onlyInFocus: boolean;
+  updatedHistory: RecentDirectoryFilterCombination[];
+} {
+  const list =
+    Array.isArray(currentHistory) && currentHistory.length > 0
+      ? currentHistory
+      : DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS;
+
+  let matched: RecentDirectoryFilterCombination | undefined;
+  if (typeof targetIdOrIndex === 'number') {
+    matched = list[targetIdOrIndex];
+  } else {
+    const cleanTarget = String(targetIdOrIndex || '').trim();
+    matched = list.find((item) => item.id === cleanTarget || item.label === cleanTarget);
+    if (!matched && /^\d+$/.test(cleanTarget)) {
+      matched = list[Number(cleanTarget)];
+    }
+  }
+
+  if (!matched) {
+    const fallback = buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'everyone',
+      moodFilter: 'all',
+      onlyInFocus: false,
+      timestampMs,
+    });
+    return {
+      found: false,
+      appliedCombination: null,
+      audienceFilter: fallback.audienceFilter,
+      moodFilter: fallback.moodFilter,
+      onlyInFocus: fallback.onlyInFocus,
+      updatedHistory: list.slice(0, MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS),
+    };
+  }
+
+  const updatedHistory = recordRecentDirectoryFilterCombination(
+    list,
+    {
+      audienceFilter: matched.audienceFilter,
+      moodFilter: matched.moodFilter,
+      onlyInFocus: matched.onlyInFocus,
+      timestampMs,
+    },
+    MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS
+  );
+
+  return {
+    found: true,
+    appliedCombination: updatedHistory[0],
+    audienceFilter: matched.audienceFilter,
+    moodFilter: matched.moodFilter,
+    onlyInFocus: matched.onlyInFocus,
+    updatedHistory,
+  };
+}
+
+export interface RecentDirectoryFilterDropdownOption
+  extends RecentDirectoryFilterCombination {
+  rank: number;
+  isCurrentlyActive: boolean;
+}
+
+export interface RecentDirectoryFiltersDropdownMeta {
+  dropdownId: 'online-directory-recent-filters-dropdown';
+  selectId: 'online-directory-recent-filters-select';
+  triggerButtonId: 'online-directory-recent-filters-btn';
+  menuId: 'online-directory-recent-filters-menu';
+  dropdownLabel: 'Recent Filters';
+  maxItems: number;
+  count: number;
+  hasRecentFilters: boolean;
+  isOpen: boolean;
+  activeCombinationId: string;
+  activeCombinationLabel: string;
+  badgeText: string;
+  ariaLabel: string;
+  options: RecentDirectoryFilterDropdownOption[];
+}
+
+export function getRecentDirectoryFiltersDropdownMeta(params?: {
+  history?: RecentDirectoryFilterCombination[] | null;
+  currentAudienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+  currentMoodFilter?: string | null;
+  currentOnlyInFocus?: boolean;
+  isOpen?: boolean;
+}): RecentDirectoryFiltersDropdownMeta {
+  const currentActive = buildDirectoryFilterCombinationEntry({
+    audienceFilter: params?.currentAudienceFilter,
+    moodFilter: params?.currentMoodFilter,
+    onlyInFocus: params?.currentOnlyInFocus,
+  });
+
+  const rawHistory =
+    Array.isArray(params?.history) && params.history.length > 0
+      ? params.history
+      : DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS;
+
+  const trimmedHistory = rawHistory.slice(0, MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS);
+  const options: RecentDirectoryFilterDropdownOption[] = trimmedHistory.map(
+    (item, idx) => ({
+      ...item,
+      rank: idx + 1,
+      isCurrentlyActive: item.id === currentActive.id,
+    })
+  );
+
+  const count = options.length;
+  const maxItems = MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS;
+
+  return {
+    dropdownId: 'online-directory-recent-filters-dropdown',
+    selectId: 'online-directory-recent-filters-select',
+    triggerButtonId: 'online-directory-recent-filters-btn',
+    menuId: 'online-directory-recent-filters-menu',
+    dropdownLabel: 'Recent Filters',
+    maxItems,
+    count,
+    hasRecentFilters: count > 0,
+    isOpen: Boolean(params?.isOpen),
+    activeCombinationId: currentActive.id,
+    activeCombinationLabel: currentActive.label,
+    badgeText: `${count}/${maxItems}`,
+    ariaLabel: `Recent Filters dropdown (${count} of ${maxItems} recent filter combinations). Currently active: ${currentActive.label}.`,
+    options,
+  };
+}
+

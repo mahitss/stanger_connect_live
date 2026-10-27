@@ -180,6 +180,13 @@ import {
   buildMoodPresetUsageCounts24hMap,
   filterMoodCategoryGroupsBySearchQuery,
   MoodCategory,
+  MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS,
+  RECENT_DIRECTORY_FILTERS_STORAGE_KEY,
+  RecentDirectoryFilterCombination,
+  DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS,
+  recordRecentDirectoryFilterCombination,
+  applyRecentDirectoryFilterCombination,
+  getRecentDirectoryFiltersDropdownMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -806,6 +813,48 @@ export default function App() {
       triggerDirectoryFilterResetFlash();
     }
   }, [directoryMoodFilter, directoryAudienceFilter]);
+
+  const [recentDirectoryFilters, setRecentDirectoryFilters] = useState<
+    RecentDirectoryFilterCombination[]
+  >(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_DIRECTORY_FILTERS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.slice(0, MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS;
+  });
+  const [isRecentFiltersDropdownOpen, setIsRecentFiltersDropdownOpen] =
+    useState<boolean>(false);
+
+  useEffect(() => {
+    setRecentDirectoryFilters((prev) => {
+      const updated = recordRecentDirectoryFilterCombination(
+        prev,
+        {
+          audienceFilter: directoryAudienceFilter,
+          moodFilter: directoryMoodFilter,
+          onlyInFocus: showOnlyInFocusPeers,
+        },
+        MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS
+      );
+      try {
+        localStorage.setItem(
+          RECENT_DIRECTORY_FILTERS_STORAGE_KEY,
+          JSON.stringify(updated)
+        );
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+  }, [directoryAudienceFilter, directoryMoodFilter, showOnlyInFocusPeers]);
   const [userMood, setUserMood] = useState<string | null>(() => {
     try {
       const saved = localStorage.getItem('mr_stranger_user_mood_v1');
@@ -3016,7 +3065,35 @@ export default function App() {
     isMainDrawerExpanded: isMoodCategoriesExpanded,
     categoryExpansionMap: moodCategoryDrawerMap,
     isShiftKeyHeld: isShiftKeyHeldForFilter,
+    recentFiltersHistory: recentDirectoryFilters,
+    isRecentFiltersDropdownOpen,
   });
+
+  const handleApplyRecentDirectoryFilter = (targetIdOrIndex: string | number) => {
+    const applied = applyRecentDirectoryFilterCombination(
+      recentDirectoryFilters,
+      targetIdOrIndex
+    );
+    if (!applied.found) return;
+    setIsClearFilterModalOpen(false);
+    setIsRecentFiltersDropdownOpen(false);
+    setDirectoryAudienceFilter(applied.audienceFilter);
+    setDirectoryMoodFilter(applied.moodFilter);
+    setShowOnlyInFocusPeers(applied.onlyInFocus);
+    setRecentDirectoryFilters(applied.updatedHistory);
+    try {
+      localStorage.setItem(
+        RECENT_DIRECTORY_FILTERS_STORAGE_KEY,
+        JSON.stringify(applied.updatedHistory)
+      );
+    } catch {
+      // ignore
+    }
+    handlePlayDirectoryFilterToggleChime(
+      directoryAudienceFilter,
+      applied.audienceFilter
+    );
+  };
 
   const handleToggleAllMoodCategoryDrawers = () => {
     const nextState = toggleAllMoodCategoryDrawers({
@@ -5233,6 +5310,24 @@ export default function App() {
                               }
                               data-quick-reset-count={quickResetWithoutModalCount}
                               data-last-reset-shift={lastQuickResetUsedShift ? 'true' : 'false'}
+                              data-active-badge-visible={
+                                directoryQuickFilterMeta.iconActiveBadgeSpec.showActiveBadge
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-applied-criteria={
+                                directoryQuickFilterMeta.iconActiveBadgeSpec.appliedCriteriaKeys.join(
+                                  ','
+                                ) || 'none'
+                              }
+                              data-applied-criteria-count={
+                                directoryQuickFilterMeta.iconActiveBadgeSpec.appliedCriteriaCount
+                              }
+                              data-icon-shifted={
+                                directoryQuickFilterMeta.iconActiveBadgeSpec.isIconShifted
+                                  ? 'true'
+                                  : 'false'
+                              }
                               data-mood-filter={directoryQuickFilterMeta.shareLinkMeta.moodParam}
                               data-chime-utility={directoryQuickFilterMeta.toggleChimeSpec.utilityName}
                               data-chime-enabled={uiSoundPrefs.enabled ? 'true' : 'false'}
@@ -5405,6 +5500,30 @@ export default function App() {
                                   data-constraint-reason={
                                     directoryQuickFilterMeta.iconPulseSpec.activeConstraintReason
                                   }
+                                  data-icon-shifted={
+                                    directoryQuickFilterMeta.iconActiveBadgeSpec.isIconShifted
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-icon-shift-transform={
+                                    directoryQuickFilterMeta.iconActiveBadgeSpec.iconShiftTransform
+                                  }
+                                  data-active-badge-visible={
+                                    directoryQuickFilterMeta.iconActiveBadgeSpec.showActiveBadge
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-applied-criteria={
+                                    directoryQuickFilterMeta.iconActiveBadgeSpec.appliedCriteriaKeys.join(
+                                      ','
+                                    ) || 'none'
+                                  }
+                                  data-applied-criteria-count={
+                                    directoryQuickFilterMeta.iconActiveBadgeSpec.appliedCriteriaCount
+                                  }
+                                  data-active-badge-label={
+                                    directoryQuickFilterMeta.iconActiveBadgeSpec.badgeDisplayText
+                                  }
                                   data-copied={
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
                                   }
@@ -5416,11 +5535,13 @@ export default function App() {
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied
                                       ? `Copied! — ${directoryQuickFilterMeta.stateIconLabel}`
                                       : directoryQuickFilterMeta.iconPulseSpec.isPulseActive
-                                        ? `${directoryQuickFilterMeta.stateIconLabel} (${directoryQuickFilterMeta.iconPulseSpec.constraintStatusLabel})`
+                                        ? `${directoryQuickFilterMeta.stateIconLabel} (${directoryQuickFilterMeta.iconPulseSpec.constraintStatusLabel} · ${directoryQuickFilterMeta.iconActiveBadgeSpec.summaryLabel})`
                                         : directoryQuickFilterMeta.stateIconLabel
                                   }
-                                  className={`relative overflow-hidden inline-flex items-center justify-center px-1.5 py-0.5 rounded border quick-filter-icon-crossfade ${
+                                  className={`relative overflow-hidden inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded border quick-filter-icon-crossfade ${
                                     directoryQuickFilterMeta.iconPulseSpec.cssClassName
+                                  } ${
+                                    directoryQuickFilterMeta.iconActiveBadgeSpec.iconShiftClassName
                                   } ${
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied
                                       ? 'bg-emerald-500/30 border-emerald-400/80 text-emerald-200'
@@ -5439,93 +5560,153 @@ export default function App() {
                                       className="pointer-events-none absolute inset-0 rounded border border-emerald-400/40 animate-pulse"
                                     />
                                   )}
-                                  <AnimatePresence mode="popLayout" initial={false}>
-                                    {directoryQuickFilterMeta.isMyConnectionsOnly ? (
-                                      <motion.span
-                                        key="icon-usercheck"
-                                        data-testid="quick-filter-icon-crossfade-layer"
-                                        data-icon-key="icon-usercheck"
-                                        data-icon-component="UserCheck"
-                                        initial={
-                                          directoryQuickFilterMeta.iconCrossFadeMotion.initial
-                                        }
-                                        animate={
-                                          directoryQuickFilterMeta.iconCrossFadeMotion.animate
-                                        }
-                                        exit={
-                                          directoryQuickFilterMeta.iconCrossFadeMotion.exit
-                                        }
-                                        transition={
-                                          directoryQuickFilterMeta.iconCrossFadeMotion.transition
-                                        }
-                                        className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
-                                      >
-                                        <UserCheck
-                                          aria-hidden="true"
-                                          data-testid="quick-filter-state-icon-usercheck"
+                                  <span
+                                    data-testid="quick-filter-icon-shift-wrapper"
+                                    data-shifted={
+                                      directoryQuickFilterMeta.iconActiveBadgeSpec.isIconShifted
+                                        ? 'true'
+                                        : 'false'
+                                    }
+                                    data-shift-transform={
+                                      directoryQuickFilterMeta.iconActiveBadgeSpec.iconShiftTransform
+                                    }
+                                    className="inline-flex items-center justify-center quick-filter-icon-shift-wrapper"
+                                  >
+                                    <AnimatePresence mode="popLayout" initial={false}>
+                                      {directoryQuickFilterMeta.isMyConnectionsOnly ? (
+                                        <motion.span
+                                          key="icon-usercheck"
+                                          data-testid="quick-filter-icon-crossfade-layer"
+                                          data-icon-key="icon-usercheck"
                                           data-icon-component="UserCheck"
-                                          data-icon-pulse-active={
-                                            directoryQuickFilterMeta.iconPulseSpec.isPulseActive
-                                              ? 'true'
-                                              : 'false'
+                                          initial={
+                                            directoryQuickFilterMeta.iconCrossFadeMotion.initial
                                           }
-                                          data-icon-color-tone={
-                                            directoryQuickFilterMeta.iconPulseSpec.iconColorTone
+                                          animate={
+                                            directoryQuickFilterMeta.iconCrossFadeMotion.animate
                                           }
-                                          data-icon-emerald-glow={
-                                            directoryQuickFilterMeta.iconPulseSpec.emeraldGlowDropShadow
+                                          exit={
+                                            directoryQuickFilterMeta.iconCrossFadeMotion.exit
                                           }
-                                          className={`w-3.5 h-3.5 shrink-0 ${
-                                            directoryQuickFilterMeta.iconPulseSpec.iconColorClass
-                                          } group-hover:text-emerald-200 ${
-                                            directoryQuickFilterMeta.iconPulseSpec.svgCssClassName
-                                          }`}
-                                        />
-                                      </motion.span>
-                                    ) : (
-                                      <motion.span
-                                        key="icon-filter"
-                                        data-testid="quick-filter-icon-crossfade-layer"
-                                        data-icon-key="icon-filter"
-                                        data-icon-component="Filter"
-                                        initial={
-                                          directoryQuickFilterMeta.iconCrossFadeMotion.initial
-                                        }
-                                        animate={
-                                          directoryQuickFilterMeta.iconCrossFadeMotion.animate
-                                        }
-                                        exit={
-                                          directoryQuickFilterMeta.iconCrossFadeMotion.exit
-                                        }
-                                        transition={
-                                          directoryQuickFilterMeta.iconCrossFadeMotion.transition
-                                        }
-                                        className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
-                                      >
-                                        <Filter
-                                          aria-hidden="true"
-                                          data-testid="quick-filter-state-icon-filter"
+                                          transition={
+                                            directoryQuickFilterMeta.iconCrossFadeMotion.transition
+                                          }
+                                          className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
+                                        >
+                                          <UserCheck
+                                            aria-hidden="true"
+                                            data-testid="quick-filter-state-icon-usercheck"
+                                            data-icon-component="UserCheck"
+                                            data-icon-pulse-active={
+                                              directoryQuickFilterMeta.iconPulseSpec.isPulseActive
+                                                ? 'true'
+                                                : 'false'
+                                            }
+                                            data-icon-shifted={
+                                              directoryQuickFilterMeta.iconActiveBadgeSpec
+                                                .isIconShifted
+                                                ? 'true'
+                                                : 'false'
+                                            }
+                                            data-icon-color-tone={
+                                              directoryQuickFilterMeta.iconPulseSpec.iconColorTone
+                                            }
+                                            data-icon-emerald-glow={
+                                              directoryQuickFilterMeta.iconPulseSpec
+                                                .emeraldGlowDropShadow
+                                            }
+                                            className={`w-3.5 h-3.5 shrink-0 ${
+                                              directoryQuickFilterMeta.iconPulseSpec.iconColorClass
+                                            } group-hover:text-emerald-200 ${
+                                              directoryQuickFilterMeta.iconPulseSpec.svgCssClassName
+                                            }`}
+                                          />
+                                        </motion.span>
+                                      ) : (
+                                        <motion.span
+                                          key="icon-filter"
+                                          data-testid="quick-filter-icon-crossfade-layer"
+                                          data-icon-key="icon-filter"
                                           data-icon-component="Filter"
-                                          data-icon-pulse-active={
-                                            directoryQuickFilterMeta.iconPulseSpec.isPulseActive
-                                              ? 'true'
-                                              : 'false'
+                                          initial={
+                                            directoryQuickFilterMeta.iconCrossFadeMotion.initial
                                           }
-                                          data-icon-color-tone={
-                                            directoryQuickFilterMeta.iconPulseSpec.iconColorTone
+                                          animate={
+                                            directoryQuickFilterMeta.iconCrossFadeMotion.animate
                                           }
-                                          data-icon-emerald-glow={
-                                            directoryQuickFilterMeta.iconPulseSpec.emeraldGlowDropShadow
+                                          exit={
+                                            directoryQuickFilterMeta.iconCrossFadeMotion.exit
                                           }
-                                          className={`w-3.5 h-3.5 shrink-0 ${
-                                            directoryQuickFilterMeta.iconPulseSpec.iconColorClass
-                                          } group-hover:text-emerald-200 ${
-                                            directoryQuickFilterMeta.iconPulseSpec.svgCssClassName
-                                          }`}
-                                        />
-                                      </motion.span>
-                                    )}
-                                  </AnimatePresence>
+                                          transition={
+                                            directoryQuickFilterMeta.iconCrossFadeMotion.transition
+                                          }
+                                          className="inline-flex items-center justify-center quick-filter-icon-crossfade-item"
+                                        >
+                                          <Filter
+                                            aria-hidden="true"
+                                            data-testid="quick-filter-state-icon-filter"
+                                            data-icon-component="Filter"
+                                            data-icon-pulse-active={
+                                              directoryQuickFilterMeta.iconPulseSpec.isPulseActive
+                                                ? 'true'
+                                                : 'false'
+                                            }
+                                            data-icon-shifted={
+                                              directoryQuickFilterMeta.iconActiveBadgeSpec
+                                                .isIconShifted
+                                                ? 'true'
+                                                : 'false'
+                                            }
+                                            data-icon-color-tone={
+                                              directoryQuickFilterMeta.iconPulseSpec.iconColorTone
+                                            }
+                                            data-icon-emerald-glow={
+                                              directoryQuickFilterMeta.iconPulseSpec
+                                                .emeraldGlowDropShadow
+                                            }
+                                            className={`w-3.5 h-3.5 shrink-0 ${
+                                              directoryQuickFilterMeta.iconPulseSpec.iconColorClass
+                                            } group-hover:text-emerald-200 ${
+                                              directoryQuickFilterMeta.iconPulseSpec.svgCssClassName
+                                            }`}
+                                          />
+                                        </motion.span>
+                                      )}
+                                    </AnimatePresence>
+                                  </span>
+                                  {directoryQuickFilterMeta.iconActiveBadgeSpec.showActiveBadge && (
+                                    <span
+                                      id="online-directory-mood-filter-active-badge"
+                                      data-testid="online-directory-quick-filter-icon-active-badge"
+                                      data-badge-state="active"
+                                      data-applied-criteria={
+                                        directoryQuickFilterMeta.iconActiveBadgeSpec.appliedCriteriaKeys.join(
+                                          ','
+                                        )
+                                      }
+                                      data-criteria-count={
+                                        directoryQuickFilterMeta.iconActiveBadgeSpec
+                                          .appliedCriteriaCount
+                                      }
+                                      title={
+                                        directoryQuickFilterMeta.iconActiveBadgeSpec.summaryLabel
+                                      }
+                                      className={`inline-flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-mono font-bold uppercase tracking-wider bg-emerald-400/25 text-emerald-200 border border-emerald-300/60 leading-none ${
+                                        directoryQuickFilterMeta.iconActiveBadgeSpec.badgeClassName
+                                      }`}
+                                    >
+                                      <span
+                                        aria-hidden="true"
+                                        className="w-1.5 h-1.5 rounded-full bg-emerald-300 shrink-0"
+                                      />
+                                      <span>
+                                        {
+                                          directoryQuickFilterMeta.iconActiveBadgeSpec
+                                            .badgeDisplayText
+                                        }
+                                      </span>
+                                    </span>
+                                  )}
                                   {directoryQuickFilterMeta.shareLinkMeta.isCopied && (
                                     <span
                                       data-testid="quick-filter-icon-copied-feedback"
@@ -5722,6 +5903,149 @@ export default function App() {
                                 {directoryQuickFilterMeta.moodDrawersToggleAll.totalCount}
                               </span>
                             </button>
+
+                            <div
+                              id="online-directory-recent-filters-dropdown"
+                              data-testid="online-directory-recent-filters-dropdown"
+                              data-recent-count={
+                                directoryQuickFilterMeta.recentFiltersMeta.count
+                              }
+                              data-max-recent={
+                                directoryQuickFilterMeta.recentFiltersMeta.maxItems
+                              }
+                              data-active-combination-id={
+                                directoryQuickFilterMeta.recentFiltersMeta.activeCombinationId
+                              }
+                              data-active-combination-label={
+                                directoryQuickFilterMeta.recentFiltersMeta
+                                  .activeCombinationLabel
+                              }
+                              data-dropdown-open={
+                                directoryQuickFilterMeta.recentFiltersMeta.isOpen
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              className="relative inline-flex items-center gap-1 bg-zinc-900/90 border border-zinc-800 rounded-md px-2 py-1"
+                            >
+                              <button
+                                id="online-directory-recent-filters-btn"
+                                type="button"
+                                onClick={() =>
+                                  setIsRecentFiltersDropdownOpen((prev) => !prev)
+                                }
+                                aria-haspopup="listbox"
+                                aria-expanded={
+                                  directoryQuickFilterMeta.recentFiltersMeta.isOpen
+                                }
+                                aria-controls="online-directory-recent-filters-menu"
+                                aria-label={
+                                  directoryQuickFilterMeta.recentFiltersMeta.ariaLabel
+                                }
+                                title={
+                                  directoryQuickFilterMeta.recentFiltersMeta.ariaLabel
+                                }
+                                data-testid="online-directory-recent-filters-btn"
+                                className="inline-flex items-center gap-1 text-[11px] font-semibold text-zinc-300 hover:text-white transition-colors whitespace-nowrap shrink-0"
+                              >
+                                <span>
+                                  {
+                                    directoryQuickFilterMeta.recentFiltersMeta
+                                      .dropdownLabel
+                                  }
+                                </span>
+                                <span
+                                  data-testid="online-directory-recent-filters-badge"
+                                  className="px-1 py-0.2 rounded bg-zinc-950 border border-zinc-800 text-[9px] font-mono text-emerald-300 tabular-nums"
+                                >
+                                  {directoryQuickFilterMeta.recentFiltersMeta.badgeText}
+                                </span>
+                              </button>
+
+                              <select
+                                id="online-directory-recent-filters-select"
+                                aria-label={
+                                  directoryQuickFilterMeta.recentFiltersMeta.ariaLabel
+                                }
+                                data-testid="online-directory-recent-filters-select"
+                                data-recent-count={
+                                  directoryQuickFilterMeta.recentFiltersMeta.count
+                                }
+                                value={
+                                  directoryQuickFilterMeta.recentFiltersMeta
+                                    .activeCombinationId
+                                }
+                                onChange={(e) =>
+                                  handleApplyRecentDirectoryFilter(e.target.value)
+                                }
+                                className="bg-zinc-950 border border-zinc-800 rounded px-1.5 py-0.5 text-[11px] font-mono text-zinc-200 focus:outline-none focus:border-emerald-500/70 max-w-[180px] truncate cursor-pointer"
+                              >
+                                {directoryQuickFilterMeta.recentFiltersMeta.options.map(
+                                  (opt, idx) => (
+                                    <option
+                                      key={opt.id}
+                                      value={opt.id}
+                                      data-testid={`recent-filter-select-option-${idx}`}
+                                      data-audience-filter={opt.audienceFilter}
+                                      data-mood-filter={opt.moodFilter}
+                                      data-only-in-focus={
+                                        opt.onlyInFocus ? 'true' : 'false'
+                                      }
+                                    >
+                                      {opt.rank}. {opt.label}
+                                    </option>
+                                  )
+                                )}
+                              </select>
+
+                              {directoryQuickFilterMeta.recentFiltersMeta.isOpen && (
+                                <div
+                                  id="online-directory-recent-filters-menu"
+                                  role="listbox"
+                                  aria-label="Last 5 Recent Filter Combinations"
+                                  data-testid="online-directory-recent-filters-menu"
+                                  className="absolute top-full left-0 mt-1.5 z-40 w-72 rounded-md bg-[#050505] border border-zinc-700/90 shadow-2xl p-1.5 space-y-1 text-left"
+                                >
+                                  <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono text-zinc-400 border-b border-zinc-800/80">
+                                    <span>Last 5 Filter Combinations</span>
+                                    <span className="text-emerald-300">
+                                      {directoryQuickFilterMeta.recentFiltersMeta.badgeText}
+                                    </span>
+                                  </div>
+                                  {directoryQuickFilterMeta.recentFiltersMeta.options.map(
+                                    (opt, idx) => (
+                                      <button
+                                        key={opt.id}
+                                        type="button"
+                                        role="option"
+                                        aria-selected={opt.isCurrentlyActive}
+                                        onClick={() =>
+                                          handleApplyRecentDirectoryFilter(opt.id)
+                                        }
+                                        data-testid={`recent-filter-option-${idx}`}
+                                        data-combination-id={opt.id}
+                                        data-audience-filter={opt.audienceFilter}
+                                        data-mood-filter={opt.moodFilter}
+                                        data-only-in-focus={
+                                          opt.onlyInFocus ? 'true' : 'false'
+                                        }
+                                        className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors text-left ${
+                                          opt.isCurrentlyActive
+                                            ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/50 font-semibold'
+                                            : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
+                                        }`}
+                                      >
+                                        <span className="truncate">
+                                          {opt.rank}. {opt.label}
+                                        </span>
+                                        <span className="text-[10px] font-mono shrink-0 opacity-80">
+                                          {opt.isCurrentlyActive ? 'Active' : 'Apply'}
+                                        </span>
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+                              )}
+                            </div>
 
                             <AnimatePresence initial={false}>
                               {directoryQuickFilterMeta.showClearButton && (

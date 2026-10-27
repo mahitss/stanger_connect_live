@@ -167,6 +167,7 @@ import {
   getQuickFilterIconCrossFadeSpec,
   getQuickFilterIconHoverGlowSpec,
   getQuickFilterIconPulseSpec,
+  getQuickFilterIconActiveBadgeSpec,
   resolveQuickFilterToggleChime,
   getQuickFilterResetFlashBounceSpec,
   resolveZeroPeersMoodFilterNotice,
@@ -182,6 +183,12 @@ import {
   evaluateMoodCategoryDrawersToggleState,
   toggleAllMoodCategoryDrawers,
   toggleSingleMoodCategoryDrawer,
+  MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS,
+  DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS,
+  buildDirectoryFilterCombinationEntry,
+  recordRecentDirectoryFilterCombination,
+  applyRecentDirectoryFilterCombination,
+  getRecentDirectoryFiltersDropdownMeta,
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
   getMoodPresetTooltipMeta,
@@ -4247,6 +4254,139 @@ test('resolveSecondaryResetOnlyFilterAction, resolveOnlineDirectoryFilterToggleA
   assert.equal(metaWithShift.resetOnlyButtonMeta.shouldBypassModal, true);
   assert.equal(metaWithShift.resetOnlyButtonMeta.shouldOpenClearModal, false);
 });
+
+test('getQuickFilterIconActiveBadgeSpec and getOnlineDirectoryQuickFilterMeta visually shift the filter icon and display an Active badge whenever mood, focus, or audience criteria is applied', () => {
+  // 1. Idle (no criteria applied)
+  const idleSpec = getQuickFilterIconActiveBadgeSpec({
+    mode: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+  });
+  assert.equal(idleSpec.isAnyCriteriaApplied, false);
+  assert.equal(idleSpec.showActiveBadge, false);
+  assert.equal(idleSpec.appliedCriteriaCount, 0);
+  assert.deepEqual(idleSpec.appliedCriteriaKeys, []);
+  assert.equal(idleSpec.badgeLabel, 'IDLE');
+  assert.equal(idleSpec.badgeDisplayText, 'Idle');
+  assert.equal(idleSpec.isIconShifted, false);
+  assert.equal(idleSpec.iconShiftClassName, '');
+
+  // 2. Mood criterion applied only
+  const moodOnlySpec = getQuickFilterIconActiveBadgeSpec({
+    mode: 'everyone',
+    moodFilter: 'category:Productive',
+    onlyInFocus: false,
+  });
+  assert.equal(moodOnlySpec.isMoodApplied, true);
+  assert.equal(moodOnlySpec.isFocusApplied, false);
+  assert.equal(moodOnlySpec.isAudienceApplied, false);
+  assert.equal(moodOnlySpec.isAnyCriteriaApplied, true);
+  assert.equal(moodOnlySpec.showActiveBadge, true);
+  assert.equal(moodOnlySpec.appliedCriteriaCount, 1);
+  assert.deepEqual(moodOnlySpec.appliedCriteriaKeys, ['mood']);
+  assert.equal(moodOnlySpec.badgeLabel, 'ACTIVE');
+  assert.equal(moodOnlySpec.badgeDisplayText, 'Active');
+  assert.equal(moodOnlySpec.isIconShifted, true);
+  assert.equal(moodOnlySpec.iconShiftClassName, 'quick-filter-icon-criteria-shifted');
+
+  // 3. Focus criterion applied only
+  const focusOnlySpec = getQuickFilterIconActiveBadgeSpec({
+    mode: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: true,
+  });
+  assert.equal(focusOnlySpec.isFocusApplied, true);
+  assert.equal(focusOnlySpec.showActiveBadge, true);
+  assert.equal(focusOnlySpec.appliedCriteriaCount, 1);
+  assert.deepEqual(focusOnlySpec.appliedCriteriaKeys, ['focus']);
+  assert.equal(focusOnlySpec.badgeDisplayText, 'Active');
+  assert.equal(focusOnlySpec.isIconShifted, true);
+
+  // 4. All three criteria applied (mood + focus + audience)
+  const allThreeMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+  });
+  assert.equal(allThreeMeta.iconActiveBadgeSpec.isAnyCriteriaApplied, true);
+  assert.equal(allThreeMeta.iconActiveBadgeSpec.showActiveBadge, true);
+  assert.equal(allThreeMeta.iconActiveBadgeSpec.appliedCriteriaCount, 3);
+  assert.deepEqual(allThreeMeta.iconActiveBadgeSpec.appliedCriteriaKeys, [
+    'mood',
+    'focus',
+    'audience',
+  ]);
+  assert.equal(allThreeMeta.iconActiveBadgeSpec.badgeDisplayText, 'Active · 3');
+  assert.equal(allThreeMeta.iconActiveBadgeSpec.isIconShifted, true);
+  assert.equal(
+    allThreeMeta.iconActiveBadgeSpec.iconShiftTransform,
+    'translateY(-1px) rotate(-6deg) scale(1.08)'
+  );
+});
+
+test('Recent Filters dropdown records, deduplicates, caps at 5 combinations, and re-applies any of the last 5 filter combinations', () => {
+  assert.equal(MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS, 5);
+  assert.equal(DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS.length, 5);
+
+  // 1. Record 6 distinct filter combinations and verify cap at 5 with most recent first
+  let history = DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS;
+  history = recordRecentDirectoryFilterCombination(history, {
+    audienceFilter: 'my_connections',
+    moodFilter: 'Brainstorming',
+    onlyInFocus: true,
+    timestampMs: 1_760_000_010_000,
+  });
+  assert.equal(history.length, 5);
+  assert.equal(history[0].moodFilter, 'Brainstorming');
+  assert.equal(history[0].audienceFilter, 'my_connections');
+  assert.equal(history[0].onlyInFocus, true);
+  assert.equal(history[0].label, 'Brainstorming · My Connections · In Focus');
+
+  // 2. Re-recording an existing combination deduplicates and moves it to rank 1
+  const targetExisting = history[3];
+  history = recordRecentDirectoryFilterCombination(history, {
+    audienceFilter: targetExisting.audienceFilter,
+    moodFilter: targetExisting.moodFilter,
+    onlyInFocus: targetExisting.onlyInFocus,
+    timestampMs: 1_760_000_020_000,
+  });
+  assert.equal(history.length, 5);
+  assert.equal(history[0].id, targetExisting.id);
+
+  // 3. Applying one of the last 5 combinations by id or index returns its filter state and promotes it to rank 1
+  const fourthCombo = history[4];
+  const applied = applyRecentDirectoryFilterCombination(
+    history,
+    fourthCombo.id,
+    1_760_000_030_000
+  );
+  assert.equal(applied.found, true);
+  assert.equal(applied.audienceFilter, fourthCombo.audienceFilter);
+  assert.equal(applied.moodFilter, fourthCombo.moodFilter);
+  assert.equal(applied.onlyInFocus, fourthCombo.onlyInFocus);
+  assert.equal(applied.updatedHistory.length, 5);
+  assert.equal(applied.updatedHistory[0].id, fourthCombo.id);
+
+  // 4. Dropdown metadata marks the currently active combination and exposes 5 options
+  const dropdownMeta = getRecentDirectoryFiltersDropdownMeta({
+    history: applied.updatedHistory,
+    currentAudienceFilter: applied.audienceFilter,
+    currentMoodFilter: applied.moodFilter,
+    currentOnlyInFocus: applied.onlyInFocus,
+    isOpen: true,
+  });
+  assert.equal(dropdownMeta.dropdownLabel, 'Recent Filters');
+  assert.equal(dropdownMeta.count, 5);
+  assert.equal(dropdownMeta.maxItems, 5);
+  assert.equal(dropdownMeta.badgeText, '5/5');
+  assert.equal(dropdownMeta.isOpen, true);
+  assert.equal(dropdownMeta.options[0].isCurrentlyActive, true);
+  assert.equal(dropdownMeta.options[0].rank, 1);
+  assert.equal(dropdownMeta.options[4].rank, 5);
+});
+
+
 
 
 

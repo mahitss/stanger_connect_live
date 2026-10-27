@@ -352,6 +352,23 @@ html.light textarea::placeholder {
   transform-origin: center;
 }
 
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'][data-icon-shifted='true'],
+#online-directory-mood-filter .quick-filter-icon-criteria-shifted {
+  transform: translateY(-1px) scale(1.04);
+  box-shadow:
+    0 2px 10px rgba(16, 185, 129, 0.28),
+    0 0 0 1px rgba(52, 211, 153, 0.5);
+}
+
+#online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'][data-icon-shifted='true'] .quick-filter-icon-shift-wrapper {
+  transform: translateY(-0.5px) rotate(-6deg) scale(1.08);
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+#online-directory-mood-filter .quick-filter-active-criteria-badge {
+  box-shadow: 0 0 8px rgba(52, 211, 153, 0.45);
+}
+
 @keyframes quickFilterResetFlashBounce {
   0% {
     transform: scale(1) translateY(0);
