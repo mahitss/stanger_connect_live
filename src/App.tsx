@@ -750,6 +750,9 @@ export default function App() {
   const [isShiftKeyHeldForFilter, setIsShiftKeyHeldForFilter] = useState<boolean>(false);
   const [quickResetWithoutModalCount, setQuickResetWithoutModalCount] = useState<number>(0);
   const [lastQuickResetUsedShift, setLastQuickResetUsedShift] = useState<boolean>(false);
+  const [isShiftResetToastVisible, setIsShiftResetToastVisible] = useState<boolean>(false);
+  const [shiftResetToastCount, setShiftResetToastCount] = useState<number>(0);
+  const shiftResetToastTimerRef = useRef<number | null>(null);
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift' || e.shiftKey) {
@@ -769,6 +772,13 @@ export default function App() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('blur', onBlur);
+    };
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (shiftResetToastTimerRef.current !== null) {
+        window.clearTimeout(shiftResetToastTimerRef.current);
+      }
     };
   }, []);
   useEffect(() => {
@@ -793,6 +803,18 @@ export default function App() {
       setIsDirectoryFilterResetFlashActive(false);
       filterResetFlashTimerRef.current = null;
     }, 650);
+  };
+
+  const triggerShiftResetToastConfirmation = () => {
+    setIsShiftResetToastVisible(true);
+    setShiftResetToastCount((prev) => prev + 1);
+    if (shiftResetToastTimerRef.current !== null) {
+      window.clearTimeout(shiftResetToastTimerRef.current);
+    }
+    shiftResetToastTimerRef.current = window.setTimeout(() => {
+      setIsShiftResetToastVisible(false);
+      shiftResetToastTimerRef.current = null;
+    }, 2800);
   };
 
   useEffect(() => {
@@ -3065,6 +3087,8 @@ export default function App() {
     isMainDrawerExpanded: isMoodCategoriesExpanded,
     categoryExpansionMap: moodCategoryDrawerMap,
     isShiftKeyHeld: isShiftKeyHeldForFilter,
+    isShiftResetToastVisible,
+    shiftResetToastCount,
     recentFiltersHistory: recentDirectoryFilters,
     isRecentFiltersDropdownOpen,
   });
@@ -3129,6 +3153,7 @@ export default function App() {
     setQuickResetWithoutModalCount((prev) => prev + 1);
     setLastQuickResetUsedShift(Boolean(shiftKeyUsed));
     triggerDirectoryFilterResetFlash();
+    triggerShiftResetToastConfirmation();
     handlePlayDirectoryFilterToggleChime(directoryAudienceFilter, 'everyone');
   };
 
@@ -5310,6 +5335,17 @@ export default function App() {
                               }
                               data-quick-reset-count={quickResetWithoutModalCount}
                               data-last-reset-shift={lastQuickResetUsedShift ? 'true' : 'false'}
+                              data-shift-reset-toast-visible={
+                                directoryQuickFilterMeta.shiftResetToast.isVisible
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-shift-reset-toast-message={
+                                directoryQuickFilterMeta.shiftResetToast.message
+                              }
+                              data-shift-reset-toast-count={
+                                directoryQuickFilterMeta.shiftResetToast.triggerCount
+                              }
                               data-active-badge-visible={
                                 directoryQuickFilterMeta.iconActiveBadgeSpec.showActiveBadge
                                   ? 'true'
@@ -5826,6 +5862,14 @@ export default function App() {
                                 }
                                 data-quick-reset-count={quickResetWithoutModalCount}
                                 data-last-reset-shift={lastQuickResetUsedShift ? 'true' : 'false'}
+                                data-shift-reset-toast-visible={
+                                  directoryQuickFilterMeta.shiftResetToast.isVisible
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-shift-reset-toast-message={
+                                  directoryQuickFilterMeta.shiftResetToast.message
+                                }
                                 className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border transition-colors ${
                                   directoryQuickFilterMeta.resetOnlyButtonMeta.isShiftHeld
                                     ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/70 shadow-sm'
@@ -7148,6 +7192,74 @@ export default function App() {
                         Open this app link in another browser window or share your Study Room invite link with friends to see live multi-user presence and exchange real-time requests.
                       </div>
                     )}
+                  </div>
+
+                  {/* Bottom of Directory View — Animated Shift-Reset Toast Confirmation */}
+                  <div
+                    id="online-directory-bottom-toast-region"
+                    data-testid="online-directory-bottom-toast-region"
+                    data-toast-visible={
+                      directoryQuickFilterMeta.shiftResetToast.isVisible ? 'true' : 'false'
+                    }
+                    className="pt-1"
+                  >
+                    <AnimatePresence initial={false}>
+                      {directoryQuickFilterMeta.shiftResetToast.shouldShowToast && (
+                        <motion.div
+                          key={`shift-reset-toast-${directoryQuickFilterMeta.shiftResetToast.triggerCount}`}
+                          id={directoryQuickFilterMeta.shiftResetToast.toastId}
+                          role="status"
+                          aria-live="polite"
+                          data-testid={directoryQuickFilterMeta.shiftResetToast.toastTestId}
+                          data-toast-message={directoryQuickFilterMeta.shiftResetToast.message}
+                          data-toast-position={directoryQuickFilterMeta.shiftResetToast.position}
+                          data-toast-animation={
+                            directoryQuickFilterMeta.shiftResetToast.animationName
+                          }
+                          data-toast-trigger-count={
+                            directoryQuickFilterMeta.shiftResetToast.triggerCount
+                          }
+                          data-last-reset-shift={lastQuickResetUsedShift ? 'true' : 'false'}
+                          initial={directoryQuickFilterMeta.shiftResetToast.motion.initial}
+                          animate={directoryQuickFilterMeta.shiftResetToast.motion.animate}
+                          exit={directoryQuickFilterMeta.shiftResetToast.motion.exit}
+                          transition={directoryQuickFilterMeta.shiftResetToast.motion.transition}
+                          className={`flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-md bg-emerald-500/15 border border-emerald-400/50 text-xs text-emerald-200 shadow-lg ${directoryQuickFilterMeta.shiftResetToast.cssClassName}`}
+                        >
+                          <div className="inline-flex items-center gap-2 min-w-0">
+                            <span className="inline-flex items-center justify-center w-5 h-5 rounded bg-emerald-400/20 border border-emerald-300/50 text-emerald-300 shrink-0">
+                              <Check className="w-3 h-3 shrink-0" />
+                            </span>
+                            <span
+                              data-testid="online-directory-shift-reset-toast-message"
+                              className="font-semibold text-emerald-100"
+                            >
+                              {directoryQuickFilterMeta.shiftResetToast.message}
+                            </span>
+                            <span className="hidden sm:inline text-[11px] text-emerald-200/80 truncate">
+                              — {directoryQuickFilterMeta.shiftResetToast.detailText}
+                            </span>
+                          </div>
+                          <div className="inline-flex items-center gap-1.5 shrink-0">
+                            <span
+                              data-testid="online-directory-shift-reset-toast-badge"
+                              className="px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-400/40 text-[10px] font-mono font-semibold text-emerald-300"
+                            >
+                              {directoryQuickFilterMeta.shiftResetToast.shortcutBadgeLabel}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setIsShiftResetToastVisible(false)}
+                              aria-label="Dismiss Filters Reset to Default toast"
+                              data-testid="online-directory-shift-reset-toast-dismiss"
+                              className="p-0.5 rounded text-emerald-300/80 hover:text-white hover:bg-emerald-500/20 transition-colors"
+                            >
+                              <X className="w-3 h-3 shrink-0" />
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
                 </div>
 

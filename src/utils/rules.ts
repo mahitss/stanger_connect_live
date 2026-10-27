@@ -8572,6 +8572,66 @@ export function confirmOnlineDirectoryClearFilterReset(): {
   };
 }
 
+export interface ShiftResetToastConfirmationSpec {
+  toastId: 'online-directory-shift-reset-toast';
+  toastTestId: 'online-directory-shift-reset-toast';
+  message: 'Filters Reset to Default';
+  detailText: string;
+  shortcutBadgeLabel: '⇧ Shift + Click';
+  position: 'bottom-of-directory-view';
+  isShiftHeld: boolean;
+  isVisible: boolean;
+  shouldShowToast: boolean;
+  triggerCount: number;
+  autoDismissMs: number;
+  animationName: 'shiftResetToastSlideFadeIn' | 'none';
+  cssClassName: string;
+  motion: {
+    initial: { opacity: number; y: number; scale: number };
+    animate: { opacity: number; y: number; scale: number };
+    exit: { opacity: number; y: number; scale: number };
+    transition: { duration: number; ease: 'easeOut' };
+  };
+}
+
+export function resolveShiftResetToastConfirmation(params?: {
+  isVisible?: boolean;
+  shiftKeyUsed?: boolean;
+  triggerCount?: number;
+  autoDismissMs?: number;
+}): ShiftResetToastConfirmationSpec {
+  const isShiftHeld = Boolean(params?.shiftKeyUsed);
+  const isVisible = Boolean(params?.isVisible);
+  const triggerCount = Math.max(0, Math.floor(Number(params?.triggerCount) || 0));
+  const autoDismissMs = Math.max(
+    400,
+    Math.min(10000, Math.floor(Number(params?.autoDismissMs) || 2800))
+  );
+
+  return {
+    toastId: 'online-directory-shift-reset-toast',
+    toastTestId: 'online-directory-shift-reset-toast',
+    message: 'Filters Reset to Default',
+    detailText:
+      'All active directory filters (Audience, Mood, and In Focus) restored to default.',
+    shortcutBadgeLabel: '⇧ Shift + Click',
+    position: 'bottom-of-directory-view',
+    isShiftHeld,
+    isVisible,
+    shouldShowToast: isVisible,
+    triggerCount,
+    autoDismissMs,
+    animationName: isVisible ? 'shiftResetToastSlideFadeIn' : 'none',
+    cssClassName: isVisible ? 'shift-reset-toast-animated' : '',
+    motion: {
+      initial: { opacity: 0, y: 10, scale: 0.96 },
+      animate: { opacity: 1, y: 0, scale: 1 },
+      exit: { opacity: 0, y: 8, scale: 0.96 },
+      transition: { duration: 0.22, ease: 'easeOut' },
+    },
+  };
+}
+
 export interface SecondaryResetOnlyFilterSpec {
   buttonId: 'online-directory-mood-filter-reset-only';
   buttonTestId: 'online-directory-mood-filter-reset-only';
@@ -8587,6 +8647,9 @@ export interface SecondaryResetOnlyFilterSpec {
   shouldBypassModal: boolean;
   shouldOpenClearModal: boolean;
   didQuickReset: boolean;
+  shouldTriggerShiftResetToast: boolean;
+  toastConfirmationText: 'Filters Reset to Default';
+  shiftResetToastSpec: ShiftResetToastConfirmationSpec;
   nextMode: OnlineDirectoryAudienceFilter;
   nextMoodFilter: 'all' | string;
   nextOnlyInFocus: boolean;
@@ -8627,6 +8690,12 @@ export function resolveSecondaryResetOnlyFilterAction(params?: {
   const shouldBypassModal = isShiftHeld || !requireShift;
   const shouldOpenClearModal = !shouldBypassModal && isAudienceConstrained;
   const didQuickReset = shouldBypassModal;
+  const shouldTriggerShiftResetToast = Boolean(isShiftHeld && didQuickReset);
+  const shiftResetToastSpec = resolveShiftResetToastConfirmation({
+    isVisible: shouldTriggerShiftResetToast,
+    shiftKeyUsed: isShiftHeld,
+    triggerCount: shouldTriggerShiftResetToast ? 1 : 0,
+  });
 
   const nextMode: OnlineDirectoryAudienceFilter = didQuickReset
     ? 'everyone'
@@ -8648,7 +8717,7 @@ export function resolveSecondaryResetOnlyFilterAction(params?: {
 
   const statusText = didQuickReset
     ? isShiftHeld
-      ? 'Quick reset via Shift+Click (modal bypassed)'
+      ? 'Filters Reset to Default (via Shift+Click, modal bypassed)'
       : 'Quick reset applied (modal bypassed)'
     : 'Modal confirmation required (hold Shift to bypass)';
 
@@ -8667,6 +8736,9 @@ export function resolveSecondaryResetOnlyFilterAction(params?: {
     shouldBypassModal,
     shouldOpenClearModal,
     didQuickReset,
+    shouldTriggerShiftResetToast,
+    toastConfirmationText: 'Filters Reset to Default',
+    shiftResetToastSpec,
     nextMode,
     nextMoodFilter,
     nextOnlyInFocus,
@@ -9404,6 +9476,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   zeroPeersNotice: ZeroPeersMoodFilterNoticeSpec;
   moodDrawersToggleAll: MoodCategoryDrawersToggleAllState;
   resetOnlyButtonMeta: SecondaryResetOnlyFilterSpec;
+  shiftResetToast: ShiftResetToastConfirmationSpec;
   recentFiltersMeta: RecentDirectoryFiltersDropdownMeta;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
@@ -9438,6 +9511,8 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   isMainDrawerExpanded?: boolean;
   categoryExpansionMap?: Partial<Record<OnlineMoodCategory, boolean>> | null;
   isShiftKeyHeld?: boolean;
+  isShiftResetToastVisible?: boolean;
+  shiftResetToastCount?: number;
   recentFiltersHistory?: RecentDirectoryFilterCombination[] | null;
   isRecentFiltersDropdownOpen?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
@@ -9573,6 +9648,11 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       currentMode: mode,
       moodFilter: params.moodFilter,
       onlyInFocus: params.onlyInFocus,
+    }),
+    shiftResetToast: resolveShiftResetToastConfirmation({
+      isVisible: Boolean(params.isShiftResetToastVisible),
+      shiftKeyUsed: Boolean(params.isShiftKeyHeld || params.isShiftResetToastVisible),
+      triggerCount: params.shiftResetToastCount,
     }),
     recentFiltersMeta: getRecentDirectoryFiltersDropdownMeta({
       history: params.recentFiltersHistory,

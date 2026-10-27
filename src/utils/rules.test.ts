@@ -174,6 +174,7 @@ import {
   getOnlineDirectoryClearFilterModalMeta,
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
+  resolveShiftResetToastConfirmation,
   resolveSecondaryResetOnlyFilterAction,
   getOnlineDirectoryQuickFilterMeta,
   buildOnlineDirectoryFilterShareLink,
@@ -4386,7 +4387,50 @@ test('Recent Filters dropdown records, deduplicates, caps at 5 combinations, and
   assert.equal(dropdownMeta.options[4].rank, 5);
 });
 
+test('Holding Shift to reset filters triggers an animated toast confirmation explicitly stating "Filters Reset to Default" at the bottom of the directory view', () => {
+  // 1. Direct toast spec when visible after Shift+Click reset
+  const toastActive = resolveShiftResetToastConfirmation({
+    isVisible: true,
+    shiftKeyUsed: true,
+    triggerCount: 2,
+  });
+  assert.equal(toastActive.toastId, 'online-directory-shift-reset-toast');
+  assert.equal(toastActive.message, 'Filters Reset to Default');
+  assert.equal(toastActive.position, 'bottom-of-directory-view');
+  assert.equal(toastActive.isShiftHeld, true);
+  assert.equal(toastActive.isVisible, true);
+  assert.equal(toastActive.shouldShowToast, true);
+  assert.equal(toastActive.triggerCount, 2);
+  assert.equal(toastActive.animationName, 'shiftResetToastSlideFadeIn');
+  assert.equal(toastActive.cssClassName, 'shift-reset-toast-animated');
+  assert.deepEqual(toastActive.motion.initial, { opacity: 0, y: 10, scale: 0.96 });
+  assert.deepEqual(toastActive.motion.animate, { opacity: 1, y: 0, scale: 1 });
 
+  // 2. resolveSecondaryResetOnlyFilterAction with Shift held sets shouldTriggerShiftResetToast and toastConfirmationText
+  const shiftResetAction = resolveSecondaryResetOnlyFilterAction({
+    shiftKey: true,
+    currentMode: 'my_connections',
+    moodFilter: 'category:Productive',
+    onlyInFocus: true,
+  });
+  assert.equal(shiftResetAction.shouldTriggerShiftResetToast, true);
+  assert.equal(shiftResetAction.toastConfirmationText, 'Filters Reset to Default');
+  assert.equal(shiftResetAction.shiftResetToastSpec.message, 'Filters Reset to Default');
+  assert.equal(shiftResetAction.shiftResetToastSpec.shouldShowToast, true);
 
-
-
+  // 3. getOnlineDirectoryQuickFilterMeta exposes shiftResetToast state
+  const metaWithToast = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'all',
+    onlyInFocus: false,
+    isShiftKeyHeld: false,
+    isShiftResetToastVisible: true,
+    shiftResetToastCount: 1,
+  });
+  assert.equal(metaWithToast.shiftResetToast.isVisible, true);
+  assert.equal(metaWithToast.shiftResetToast.shouldShowToast, true);
+  assert.equal(metaWithToast.shiftResetToast.message, 'Filters Reset to Default');
+  assert.equal(metaWithToast.shiftResetToast.position, 'bottom-of-directory-view');
+  assert.equal(metaWithToast.shiftResetToast.animationName, 'shiftResetToastSlideFadeIn');
+});

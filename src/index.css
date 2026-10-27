@@ -404,6 +404,27 @@ html.light textarea::placeholder {
   animation: quickFilterResetFlashBounce 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+@keyframes shiftResetToastSlideFadeIn {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 10px, 0) scale(0.96);
+  }
+  65% {
+    opacity: 1;
+    transform: translate3d(0, -1px, 0) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+#online-directory-shift-reset-toast,
+.shift-reset-toast-animated {
+  animation: shiftResetToastSlideFadeIn 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .moment-thread-collapse-grid,
   .moment-thread-slide-in,
@@ -412,6 +433,8 @@ html.light textarea::placeholder {
   .quick-filter-icon-pulse-active,
   .quick-filter-icon-svg-pulse,
   .quick-filter-reset-flash-bounce,
+  .shift-reset-toast-animated,
+  #online-directory-shift-reset-toast,
   #online-directory-mood-filter[data-reset-flash-active='true'],
   #online-directory-mood-select[data-reset-flash-active='true'],
   #online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'],
