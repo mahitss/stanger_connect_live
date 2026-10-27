@@ -8536,11 +8536,20 @@ export function getOnlineDirectoryClearFilterModalMeta(params: {
 }
 
 export function resolveOnlineDirectoryFilterToggleAction(
-  current: OnlineDirectoryAudienceFilter
+  current: OnlineDirectoryAudienceFilter,
+  options?: {
+    shiftKey?: boolean;
+  }
 ): {
   nextMode: OnlineDirectoryAudienceFilter;
   shouldOpenClearModal: boolean;
 } {
+  if (options?.shiftKey) {
+    return {
+      nextMode: 'everyone',
+      shouldOpenClearModal: false,
+    };
+  }
   if (current === 'my_connections') {
     return {
       nextMode: 'my_connections',
@@ -8560,6 +8569,111 @@ export function confirmOnlineDirectoryClearFilterReset(): {
   return {
     nextMode: 'everyone',
     isModalOpen: false,
+  };
+}
+
+export interface SecondaryResetOnlyFilterSpec {
+  buttonId: 'online-directory-mood-filter-reset-only';
+  buttonTestId: 'online-directory-mood-filter-reset-only';
+  label: 'Reset';
+  shortcutLabel: '⇧ Reset';
+  modifierKey: 'Shift';
+  isShiftHeld: boolean;
+  isAnyFilterActive: boolean;
+  isAudienceConstrained: boolean;
+  isMoodConstrained: boolean;
+  isFocusConstrained: boolean;
+  activeFiltersCount: number;
+  shouldBypassModal: boolean;
+  shouldOpenClearModal: boolean;
+  didQuickReset: boolean;
+  nextMode: OnlineDirectoryAudienceFilter;
+  nextMoodFilter: 'all' | string;
+  nextOnlyInFocus: boolean;
+  isModalOpen: boolean;
+  ariaLabel: string;
+  tooltipText: string;
+  statusText: string;
+}
+
+export function resolveSecondaryResetOnlyFilterAction(params?: {
+  shiftKey?: boolean;
+  currentMode?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+  requireShiftKeyForModalBypass?: boolean;
+}): SecondaryResetOnlyFilterSpec {
+  const isShiftHeld = Boolean(params?.shiftKey);
+  const rawMode = String(params?.currentMode ?? 'everyone').trim().toLowerCase();
+  const isAudienceConstrained =
+    rawMode !== '' && rawMode !== 'everyone' && rawMode !== 'all';
+
+  const rawMood = String(params?.moodFilter ?? 'all').trim();
+  const isMoodConstrained = rawMood !== '' && rawMood.toLowerCase() !== 'all';
+
+  const isFocusConstrained = Boolean(params?.onlyInFocus);
+  const isAnyFilterActive =
+    isAudienceConstrained || isMoodConstrained || isFocusConstrained;
+  const activeFiltersCount =
+    (isAudienceConstrained ? 1 : 0) +
+    (isMoodConstrained ? 1 : 0) +
+    (isFocusConstrained ? 1 : 0);
+
+  const requireShift =
+    params?.requireShiftKeyForModalBypass !== undefined
+      ? Boolean(params.requireShiftKeyForModalBypass)
+      : false;
+
+  const shouldBypassModal = isShiftHeld || !requireShift;
+  const shouldOpenClearModal = !shouldBypassModal && isAudienceConstrained;
+  const didQuickReset = shouldBypassModal;
+
+  const nextMode: OnlineDirectoryAudienceFilter = didQuickReset
+    ? 'everyone'
+    : isAudienceConstrained
+      ? 'my_connections'
+      : 'everyone';
+  const nextMoodFilter = didQuickReset ? 'all' : isMoodConstrained ? rawMood : 'all';
+  const nextOnlyInFocus = didQuickReset ? false : isFocusConstrained;
+
+  const ariaLabel = isAnyFilterActive
+    ? `Reset-only quick action (${activeFiltersCount} active ${
+        activeFiltersCount === 1 ? 'filter' : 'filters'
+      }): Hold Shift while clicking to quickly reset active filters without opening the modal dialog`
+    : 'Reset-only quick action: Hold Shift while clicking to quickly reset active filters without opening the modal dialog';
+
+  const tooltipText = isShiftHeld
+    ? 'Shift held · Click to immediately reset all active filters (bypasses modal)'
+    : 'Hold Shift + Click to quickly reset active filters without triggering the full modal dialog';
+
+  const statusText = didQuickReset
+    ? isShiftHeld
+      ? 'Quick reset via Shift+Click (modal bypassed)'
+      : 'Quick reset applied (modal bypassed)'
+    : 'Modal confirmation required (hold Shift to bypass)';
+
+  return {
+    buttonId: 'online-directory-mood-filter-reset-only',
+    buttonTestId: 'online-directory-mood-filter-reset-only',
+    label: 'Reset',
+    shortcutLabel: '⇧ Reset',
+    modifierKey: 'Shift',
+    isShiftHeld,
+    isAnyFilterActive,
+    isAudienceConstrained,
+    isMoodConstrained,
+    isFocusConstrained,
+    activeFiltersCount,
+    shouldBypassModal,
+    shouldOpenClearModal,
+    didQuickReset,
+    nextMode,
+    nextMoodFilter,
+    nextOnlyInFocus,
+    isModalOpen: shouldOpenClearModal,
+    ariaLabel,
+    tooltipText,
+    statusText,
   };
 }
 
@@ -9179,6 +9293,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   resetFlashSpec: QuickFilterResetFlashBounceSpec;
   zeroPeersNotice: ZeroPeersMoodFilterNoticeSpec;
   moodDrawersToggleAll: MoodCategoryDrawersToggleAllState;
+  resetOnlyButtonMeta: SecondaryResetOnlyFilterSpec;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -9211,6 +9326,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   isResetFlashActive?: boolean;
   isMainDrawerExpanded?: boolean;
   categoryExpansionMap?: Partial<Record<OnlineMoodCategory, boolean>> | null;
+  isShiftKeyHeld?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -9337,6 +9453,12 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
           ? params.isMainDrawerExpanded
           : true,
       categoryExpansionMap: params.categoryExpansionMap,
+    }),
+    resetOnlyButtonMeta: resolveSecondaryResetOnlyFilterAction({
+      shiftKey: Boolean(params.isShiftKeyHeld),
+      currentMode: mode,
+      moodFilter: params.moodFilter,
+      onlyInFocus: params.onlyInFocus,
     }),
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,

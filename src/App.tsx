@@ -162,6 +162,7 @@ import {
   getQuickFilterToggleHoverMotionSpec,
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
+  resolveSecondaryResetOnlyFilterAction,
   getOnlineDirectoryQuickFilterMeta,
   resolveQuickFilterToggleChime,
   buildOnlineDirectoryFilterShareLink,
@@ -739,6 +740,30 @@ export default function App() {
   const sidebarScrollAreaRef = useRef<HTMLDivElement | null>(null);
   const sidebarProgrammaticTimerRef = useRef<number | null>(null);
   const [isClearFilterModalOpen, setIsClearFilterModalOpen] = useState<boolean>(false);
+  const [isShiftKeyHeldForFilter, setIsShiftKeyHeldForFilter] = useState<boolean>(false);
+  const [quickResetWithoutModalCount, setQuickResetWithoutModalCount] = useState<number>(0);
+  const [lastQuickResetUsedShift, setLastQuickResetUsedShift] = useState<boolean>(false);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' || e.shiftKey) {
+        setIsShiftKeyHeldForFilter(true);
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift' || !e.shiftKey) {
+        setIsShiftKeyHeldForFilter(false);
+      }
+    };
+    const onBlur = () => setIsShiftKeyHeldForFilter(false);
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onBlur);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
+    };
+  }, []);
   useEffect(() => {
     if (!isClearFilterModalOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -2990,6 +3015,7 @@ export default function App() {
     isResetFlashActive: isDirectoryFilterResetFlashActive,
     isMainDrawerExpanded: isMoodCategoriesExpanded,
     categoryExpansionMap: moodCategoryDrawerMap,
+    isShiftKeyHeld: isShiftKeyHeldForFilter,
   });
 
   const handleToggleAllMoodCategoryDrawers = () => {
@@ -3009,6 +3035,24 @@ export default function App() {
     });
     setIsMoodCategoriesExpanded(nextState.isMainDrawerExpanded);
     setMoodCategoryDrawerMap(nextState.categoryExpansionMap);
+  };
+
+  const handleQuickResetActiveFiltersWithoutModal = (shiftKeyUsed: boolean) => {
+    const resetResult = resolveSecondaryResetOnlyFilterAction({
+      shiftKey: shiftKeyUsed,
+      currentMode: directoryAudienceFilter,
+      moodFilter: directoryMoodFilter,
+      onlyInFocus: showOnlyInFocusPeers,
+      requireShiftKeyForModalBypass: false,
+    });
+    setIsClearFilterModalOpen(resetResult.isModalOpen);
+    setDirectoryAudienceFilter(resetResult.nextMode);
+    setDirectoryMoodFilter(resetResult.nextMoodFilter);
+    setShowOnlyInFocusPeers(resetResult.nextOnlyInFocus);
+    setQuickResetWithoutModalCount((prev) => prev + 1);
+    setLastQuickResetUsedShift(Boolean(shiftKeyUsed));
+    triggerDirectoryFilterResetFlash();
+    handlePlayDirectoryFilterToggleChime(directoryAudienceFilter, 'everyone');
   };
 
   const handlePlayDirectoryFilterToggleChime = (
@@ -5129,9 +5173,15 @@ export default function App() {
                                 getQuickFilterToggleHoverMotionSpec(isQuickFilterHovered)
                                   .transition
                               }
-                              onClick={() => {
+                              onClick={(e) => {
+                                const shiftHeld = Boolean(e.shiftKey || isShiftKeyHeldForFilter);
+                                if (shiftHeld) {
+                                  handleQuickResetActiveFiltersWithoutModal(true);
+                                  return;
+                                }
                                 const action = resolveOnlineDirectoryFilterToggleAction(
-                                  directoryAudienceFilter
+                                  directoryAudienceFilter,
+                                  { shiftKey: false }
                                 );
                                 if (action.shouldOpenClearModal) {
                                   setIsClearFilterModalOpen(true);
@@ -5176,6 +5226,13 @@ export default function App() {
                               aria-label={directoryQuickFilterMeta.ariaLabel}
                               data-testid="online-directory-quick-filter-btn"
                               data-filter-mode={directoryQuickFilterMeta.mode}
+                              data-shift-held={
+                                directoryQuickFilterMeta.resetOnlyButtonMeta.isShiftHeld
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-quick-reset-count={quickResetWithoutModalCount}
+                              data-last-reset-shift={lastQuickResetUsedShift ? 'true' : 'false'}
                               data-mood-filter={directoryQuickFilterMeta.shareLinkMeta.moodParam}
                               data-chime-utility={directoryQuickFilterMeta.toggleChimeSpec.utilityName}
                               data-chime-enabled={uiSoundPrefs.enabled ? 'true' : 'false'}
@@ -5546,6 +5603,61 @@ export default function App() {
                                 </span>
                                 <span>{directoryQuickFilterMeta.toggleStateIndicator}</span>
                               </span>
+
+                              <span
+                                id="online-directory-mood-filter-reset-only"
+                                role="button"
+                                tabIndex={0}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  const shiftHeld = Boolean(e.shiftKey || isShiftKeyHeldForFilter);
+                                  handleQuickResetActiveFiltersWithoutModal(shiftHeld);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    const shiftHeld = Boolean(e.shiftKey || isShiftKeyHeldForFilter);
+                                    handleQuickResetActiveFiltersWithoutModal(shiftHeld);
+                                  }
+                                }}
+                                title={directoryQuickFilterMeta.resetOnlyButtonMeta.tooltipText}
+                                aria-label={directoryQuickFilterMeta.resetOnlyButtonMeta.ariaLabel}
+                                data-testid="online-directory-mood-filter-reset-only"
+                                data-reset-only="true"
+                                data-bypasses-modal="true"
+                                data-modifier-key={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.modifierKey
+                                }
+                                data-shift-held={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.isShiftHeld
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-any-filter-active={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.isAnyFilterActive
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-active-filters-count={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.activeFiltersCount
+                                }
+                                data-quick-reset-count={quickResetWithoutModalCount}
+                                data-last-reset-shift={lastQuickResetUsedShift ? 'true' : 'false'}
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border transition-colors ${
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.isShiftHeld
+                                    ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/70 shadow-sm'
+                                    : directoryQuickFilterMeta.resetOnlyButtonMeta.isAnyFilterActive
+                                      ? 'bg-amber-500/15 text-amber-200 border-amber-400/40 hover:bg-amber-500/25 hover:border-amber-300/70'
+                                      : 'bg-zinc-900/90 text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:border-zinc-600'
+                                }`}
+                              >
+                                <RotateCcw className="w-2.5 h-2.5 shrink-0" />
+                                <span>
+                                  {directoryQuickFilterMeta.resetOnlyButtonMeta.shortcutLabel}
+                                </span>
+                              </span>
                             </motion.button>
 
                             <button
@@ -5621,7 +5733,13 @@ export default function App() {
                                   animate={directoryQuickFilterMeta.clearButtonMotion.animate}
                                   exit={directoryQuickFilterMeta.clearButtonMotion.exit}
                                   transition={directoryQuickFilterMeta.clearButtonMotion.transition}
-                                  onClick={() => setIsClearFilterModalOpen(true)}
+                                  onClick={(e) => {
+                                    if (e.shiftKey || isShiftKeyHeldForFilter) {
+                                      handleQuickResetActiveFiltersWithoutModal(true);
+                                      return;
+                                    }
+                                    setIsClearFilterModalOpen(true);
+                                  }}
                                   title={directoryQuickFilterMeta.clearModalMeta.triggerButtonAriaLabel}
                                   aria-label={directoryQuickFilterMeta.clearModalMeta.triggerButtonAriaLabel}
                                   aria-haspopup="dialog"

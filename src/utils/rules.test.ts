@@ -173,6 +173,7 @@ import {
   getOnlineDirectoryClearFilterModalMeta,
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
+  resolveSecondaryResetOnlyFilterAction,
   getOnlineDirectoryQuickFilterMeta,
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
@@ -4180,5 +4181,72 @@ test('evaluateMoodCategoryDrawersToggleState, toggleAllMoodCategoryDrawers, and 
   assert.equal(metaWithDrawers.moodDrawersToggleAll.expandedCount, 0);
   assert.equal(metaWithDrawers.moodDrawersToggleAll.toggleAllButtonLabel, 'Toggle All');
 });
+
+test('resolveSecondaryResetOnlyFilterAction, resolveOnlineDirectoryFilterToggleAction with Shift, and getOnlineDirectoryQuickFilterMeta reset active filters without triggering the full modal dialog', () => {
+  // 1. Shift+Click on main filter toggle bypasses modal and resets to everyone
+  assert.deepEqual(
+    resolveOnlineDirectoryFilterToggleAction('my_connections', { shiftKey: true }),
+    {
+      nextMode: 'everyone',
+      shouldOpenClearModal: false,
+    }
+  );
+
+  // 2. Secondary reset-only action with Shift key held resets audience, mood, and focus filters without opening modal
+  const shiftResetSpec = resolveSecondaryResetOnlyFilterAction({
+    shiftKey: true,
+    currentMode: 'my_connections',
+    moodFilter: 'category:Productive',
+    onlyInFocus: true,
+    requireShiftKeyForModalBypass: true,
+  });
+  assert.equal(shiftResetSpec.buttonId, 'online-directory-mood-filter-reset-only');
+  assert.equal(shiftResetSpec.label, 'Reset');
+  assert.equal(shiftResetSpec.shortcutLabel, '⇧ Reset');
+  assert.equal(shiftResetSpec.modifierKey, 'Shift');
+  assert.equal(shiftResetSpec.isShiftHeld, true);
+  assert.equal(shiftResetSpec.isAnyFilterActive, true);
+  assert.equal(shiftResetSpec.activeFiltersCount, 3);
+  assert.equal(shiftResetSpec.shouldBypassModal, true);
+  assert.equal(shiftResetSpec.shouldOpenClearModal, false);
+  assert.equal(shiftResetSpec.didQuickReset, true);
+  assert.equal(shiftResetSpec.nextMode, 'everyone');
+  assert.equal(shiftResetSpec.nextMoodFilter, 'all');
+  assert.equal(shiftResetSpec.nextOnlyInFocus, false);
+  assert.equal(shiftResetSpec.isModalOpen, false);
+
+  // 3. When requireShiftKeyForModalBypass is true and Shift is NOT held while my_connections is active
+  const nonShiftModalRequired = resolveSecondaryResetOnlyFilterAction({
+    shiftKey: false,
+    currentMode: 'my_connections',
+    moodFilter: 'Deep Work',
+    onlyInFocus: false,
+    requireShiftKeyForModalBypass: true,
+  });
+  assert.equal(nonShiftModalRequired.isShiftHeld, false);
+  assert.equal(nonShiftModalRequired.shouldBypassModal, false);
+  assert.equal(nonShiftModalRequired.shouldOpenClearModal, true);
+  assert.equal(nonShiftModalRequired.didQuickReset, false);
+  assert.equal(nonShiftModalRequired.isModalOpen, true);
+
+  // 4. getOnlineDirectoryQuickFilterMeta exposes resetOnlyButtonMeta
+  const metaWithShift = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+    isShiftKeyHeld: true,
+  });
+  assert.equal(
+    metaWithShift.resetOnlyButtonMeta.buttonId,
+    'online-directory-mood-filter-reset-only'
+  );
+  assert.equal(metaWithShift.resetOnlyButtonMeta.isShiftHeld, true);
+  assert.equal(metaWithShift.resetOnlyButtonMeta.isAnyFilterActive, true);
+  assert.equal(metaWithShift.resetOnlyButtonMeta.activeFiltersCount, 3);
+  assert.equal(metaWithShift.resetOnlyButtonMeta.shouldBypassModal, true);
+  assert.equal(metaWithShift.resetOnlyButtonMeta.shouldOpenClearModal, false);
+});
+
 
 
