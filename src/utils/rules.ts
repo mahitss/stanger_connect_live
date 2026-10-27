@@ -9178,6 +9178,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   toggleChimeSpec: QuickFilterToggleChimeResult;
   resetFlashSpec: QuickFilterResetFlashBounceSpec;
   zeroPeersNotice: ZeroPeersMoodFilterNoticeSpec;
+  moodDrawersToggleAll: MoodCategoryDrawersToggleAllState;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -9208,6 +9209,8 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   isShareLinkCopied?: boolean;
   uiSoundPreferences?: UiSoundEffectPreferences;
   isResetFlashActive?: boolean;
+  isMainDrawerExpanded?: boolean;
+  categoryExpansionMap?: Partial<Record<OnlineMoodCategory, boolean>> | null;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -9328,6 +9331,13 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     toggleChimeSpec,
     resetFlashSpec,
     zeroPeersNotice,
+    moodDrawersToggleAll: evaluateMoodCategoryDrawersToggleState({
+      isMainDrawerExpanded:
+        params.isMainDrawerExpanded !== undefined
+          ? params.isMainDrawerExpanded
+          : true,
+      categoryExpansionMap: params.categoryExpansionMap,
+    }),
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
       pathname: params.pathname,
@@ -9337,6 +9347,164 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       isCopied: params.isShareLinkCopied,
     }),
   };
+}
+
+export type MoodCategoryDrawerExpansionMap = Record<OnlineMoodCategory, boolean>;
+
+export const DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP: MoodCategoryDrawerExpansionMap =
+  {
+    Productive: true,
+    Social: true,
+    Away: true,
+  };
+
+export interface MoodCategoryDrawersToggleAllState {
+  isMainDrawerExpanded: boolean;
+  categoryExpansionMap: MoodCategoryDrawerExpansionMap;
+  expandedCategories: OnlineMoodCategory[];
+  collapsedCategories: OnlineMoodCategory[];
+  expandedCount: number;
+  totalCategoriesCount: number;
+  totalCount: number;
+  areAllDrawersExpanded: boolean;
+  areAllDrawersCollapsed: boolean;
+  isAnyDrawerExpanded: boolean;
+  nextToggleAction: 'collapse_all' | 'expand_all';
+  nextAction: 'collapse_all' | 'expand_all';
+  buttonLabel: 'Toggle All';
+  toggleAllButtonLabel: 'Toggle All';
+  actionVerbLabel: 'Collapse All' | 'Expand All';
+  statusBadgeLabel: string;
+  ariaLabel: string;
+  toggleAllAriaLabel: string;
+  title: string;
+}
+
+export function evaluateMoodCategoryDrawersToggleState(params?: {
+  isMainDrawerExpanded?: boolean;
+  categoryExpansionMap?: Partial<Record<OnlineMoodCategory, boolean>> | null;
+}): MoodCategoryDrawersToggleAllState {
+  const isMainDrawerExpanded =
+    params?.isMainDrawerExpanded !== undefined
+      ? Boolean(params.isMainDrawerExpanded)
+      : true;
+
+  const rawMap = params?.categoryExpansionMap ?? {};
+  const categoryExpansionMap: MoodCategoryDrawerExpansionMap = {
+    Productive: isMainDrawerExpanded
+      ? rawMap.Productive !== undefined
+        ? Boolean(rawMap.Productive)
+        : true
+      : false,
+    Social: isMainDrawerExpanded
+      ? rawMap.Social !== undefined
+        ? Boolean(rawMap.Social)
+        : true
+      : false,
+    Away: isMainDrawerExpanded
+      ? rawMap.Away !== undefined
+        ? Boolean(rawMap.Away)
+        : true
+      : false,
+  };
+
+  const expandedCategories = ONLINE_MOOD_CATEGORIES.filter(
+    (cat) => categoryExpansionMap[cat]
+  );
+  const collapsedCategories = ONLINE_MOOD_CATEGORIES.filter(
+    (cat) => !categoryExpansionMap[cat]
+  );
+  const totalCategoriesCount = ONLINE_MOOD_CATEGORIES.length;
+  const expandedCount = expandedCategories.length;
+  const areAllDrawersExpanded =
+    isMainDrawerExpanded && expandedCount === totalCategoriesCount;
+  const areAllDrawersCollapsed = !isMainDrawerExpanded || expandedCount === 0;
+  const isAnyDrawerExpanded = !areAllDrawersCollapsed;
+  const nextToggleAction: 'collapse_all' | 'expand_all' = areAllDrawersExpanded
+    ? 'collapse_all'
+    : 'expand_all';
+  const actionVerbLabel: 'Collapse All' | 'Expand All' = areAllDrawersExpanded
+    ? 'Collapse All'
+    : 'Expand All';
+  const statusBadgeLabel = `Toggle All (${expandedCount}/${totalCategoriesCount})`;
+  const ariaLabel = areAllDrawersExpanded
+    ? `Toggle All mood category drawers: currently all ${totalCategoriesCount} expanded. Click to collapse every mood category drawer simultaneously.`
+    : `Toggle All mood category drawers: currently ${expandedCount} of ${totalCategoriesCount} expanded. Click to expand every mood category drawer simultaneously.`;
+  const title = areAllDrawersExpanded
+    ? 'Toggle All — Collapse every mood category drawer (Productive, Social, Away) simultaneously'
+    : 'Toggle All — Expand every mood category drawer (Productive, Social, Away) simultaneously';
+
+  return {
+    isMainDrawerExpanded: !areAllDrawersCollapsed,
+    categoryExpansionMap,
+    expandedCategories,
+    collapsedCategories,
+    expandedCount,
+    totalCategoriesCount,
+    totalCount: totalCategoriesCount,
+    areAllDrawersExpanded,
+    areAllDrawersCollapsed,
+    isAnyDrawerExpanded,
+    nextToggleAction,
+    nextAction: nextToggleAction,
+    buttonLabel: 'Toggle All',
+    toggleAllButtonLabel: 'Toggle All',
+    actionVerbLabel,
+    statusBadgeLabel,
+    ariaLabel,
+    toggleAllAriaLabel: ariaLabel,
+    title,
+  };
+}
+
+export function toggleAllMoodCategoryDrawers(params?: {
+  isMainDrawerExpanded?: boolean;
+  categoryExpansionMap?: Partial<Record<OnlineMoodCategory, boolean>> | null;
+  forceExpanded?: boolean;
+}): MoodCategoryDrawersToggleAllState {
+  const current = evaluateMoodCategoryDrawersToggleState({
+    isMainDrawerExpanded: params?.isMainDrawerExpanded,
+    categoryExpansionMap: params?.categoryExpansionMap,
+  });
+  const targetExpanded =
+    params?.forceExpanded !== undefined
+      ? Boolean(params.forceExpanded)
+      : !current.areAllDrawersExpanded;
+
+  return evaluateMoodCategoryDrawersToggleState({
+    isMainDrawerExpanded: targetExpanded,
+    categoryExpansionMap: {
+      Productive: targetExpanded,
+      Social: targetExpanded,
+      Away: targetExpanded,
+    },
+  });
+}
+
+export function toggleSingleMoodCategoryDrawer(params: {
+  category: OnlineMoodCategory;
+  isMainDrawerExpanded?: boolean;
+  categoryExpansionMap?: Partial<Record<OnlineMoodCategory, boolean>> | null;
+}): MoodCategoryDrawersToggleAllState {
+  const current = evaluateMoodCategoryDrawersToggleState({
+    isMainDrawerExpanded:
+      params.isMainDrawerExpanded !== undefined
+        ? params.isMainDrawerExpanded
+        : true,
+    categoryExpansionMap: params.categoryExpansionMap,
+  });
+
+  const nextCategoryState = !current.categoryExpansionMap[params.category];
+  const nextMap: MoodCategoryDrawerExpansionMap = {
+    ...current.categoryExpansionMap,
+    [params.category]: nextCategoryState,
+  };
+  const anyStillExpanded = ONLINE_MOOD_CATEGORIES.some((cat) => nextMap[cat]);
+
+  return evaluateMoodCategoryDrawersToggleState({
+    isMainDrawerExpanded: anyStillExpanded ? true : current.isMainDrawerExpanded,
+    categoryExpansionMap: nextMap,
+  });
 }
 
 export interface MoodCategoryItemMotionSpec {

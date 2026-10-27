@@ -177,6 +177,10 @@ import {
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
   toggleMoodCategoryDrawerExpanded,
+  DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP,
+  evaluateMoodCategoryDrawersToggleState,
+  toggleAllMoodCategoryDrawers,
+  toggleSingleMoodCategoryDrawer,
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
   getMoodPresetTooltipMeta,
@@ -4097,4 +4101,84 @@ test('resolveZeroPeersMoodFilterNotice and getOnlineDirectoryQuickFilterMeta dis
     'No online peers currently match "Away" — try widening your criteria to All Moods.'
   );
 });
+
+test('evaluateMoodCategoryDrawersToggleState, toggleAllMoodCategoryDrawers, and toggleSingleMoodCategoryDrawer simultaneously expand or collapse all mood category drawers', () => {
+  // Default state: all 3 category drawers expanded (3/3)
+  const initialState = evaluateMoodCategoryDrawersToggleState({
+    isMainDrawerExpanded: true,
+    categoryExpansionMap: DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP,
+  });
+  assert.equal(initialState.isMainDrawerExpanded, true);
+  assert.equal(initialState.areAllDrawersExpanded, true);
+  assert.equal(initialState.isAnyDrawerExpanded, true);
+  assert.equal(initialState.expandedCount, 3);
+  assert.equal(initialState.totalCount, 3);
+  assert.equal(initialState.nextAction, 'collapse_all');
+  assert.equal(initialState.toggleAllButtonLabel, 'Toggle All');
+  assert.equal(initialState.statusBadgeLabel, 'Toggle All (3/3)');
+
+  // Clicking Toggle All when all expanded collapses every category drawer simultaneously (0/3)
+  const collapsedAllState = toggleAllMoodCategoryDrawers({
+    isMainDrawerExpanded: initialState.isMainDrawerExpanded,
+    categoryExpansionMap: initialState.categoryExpansionMap,
+  });
+  assert.equal(collapsedAllState.isMainDrawerExpanded, false);
+  assert.equal(collapsedAllState.areAllDrawersExpanded, false);
+  assert.equal(collapsedAllState.isAnyDrawerExpanded, false);
+  assert.equal(collapsedAllState.expandedCount, 0);
+  assert.equal(collapsedAllState.totalCount, 3);
+  assert.deepEqual(collapsedAllState.categoryExpansionMap, {
+    Productive: false,
+    Social: false,
+    Away: false,
+  });
+  assert.equal(collapsedAllState.nextAction, 'expand_all');
+  assert.equal(collapsedAllState.statusBadgeLabel, 'Toggle All (0/3)');
+
+  // Clicking Toggle All again when collapsed expands every category drawer simultaneously (3/3)
+  const reExpandedAllState = toggleAllMoodCategoryDrawers({
+    isMainDrawerExpanded: collapsedAllState.isMainDrawerExpanded,
+    categoryExpansionMap: collapsedAllState.categoryExpansionMap,
+  });
+  assert.equal(reExpandedAllState.isMainDrawerExpanded, true);
+  assert.equal(reExpandedAllState.areAllDrawersExpanded, true);
+  assert.equal(reExpandedAllState.expandedCount, 3);
+  assert.deepEqual(reExpandedAllState.categoryExpansionMap, {
+    Productive: true,
+    Social: true,
+    Away: true,
+  });
+
+  // Toggling a single category drawer (e.g. Away -> false) leaves 2/3 expanded; Toggle All then expands all 3/3
+  const partialState = toggleSingleMoodCategoryDrawer({
+    category: 'Away',
+    isMainDrawerExpanded: true,
+    categoryExpansionMap: reExpandedAllState.categoryExpansionMap,
+  });
+  assert.equal(partialState.isMainDrawerExpanded, true);
+  assert.equal(partialState.areAllDrawersExpanded, false);
+  assert.equal(partialState.isAnyDrawerExpanded, true);
+  assert.equal(partialState.expandedCount, 2);
+  assert.equal(partialState.nextAction, 'expand_all');
+  assert.equal(partialState.statusBadgeLabel, 'Toggle All (2/3)');
+
+  const syncedFromPartial = toggleAllMoodCategoryDrawers({
+    isMainDrawerExpanded: partialState.isMainDrawerExpanded,
+    categoryExpansionMap: partialState.categoryExpansionMap,
+  });
+  assert.equal(syncedFromPartial.areAllDrawersExpanded, true);
+  assert.equal(syncedFromPartial.expandedCount, 3);
+
+  // Verify getOnlineDirectoryQuickFilterMeta exposes moodDrawersToggleAll
+  const metaWithDrawers = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    isMainDrawerExpanded: false,
+    categoryExpansionMap: { Productive: false, Social: false, Away: false },
+  });
+  assert.equal(metaWithDrawers.moodDrawersToggleAll.areAllDrawersExpanded, false);
+  assert.equal(metaWithDrawers.moodDrawersToggleAll.expandedCount, 0);
+  assert.equal(metaWithDrawers.moodDrawersToggleAll.toggleAllButtonLabel, 'Toggle All');
+});
+
 

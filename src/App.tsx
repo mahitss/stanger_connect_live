@@ -167,12 +167,18 @@ import {
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
   toggleMoodCategoryDrawerExpanded,
+  DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP,
+  MoodCategoryDrawerExpansionMap,
+  evaluateMoodCategoryDrawersToggleState,
+  toggleAllMoodCategoryDrawers,
+  toggleSingleMoodCategoryDrawer,
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
   getMoodPresetTooltipMeta,
   getMoodPresetUsageCount24hMeta,
   buildMoodPresetUsageCounts24hMap,
   filterMoodCategoryGroupsBySearchQuery,
+  MoodCategory,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -699,6 +705,8 @@ export default function App() {
   );
   const [moodPresetSearchQuery, setMoodPresetSearchQuery] = useState<string>('');
   const [isMoodCategoriesExpanded, setIsMoodCategoriesExpanded] = useState<boolean>(true);
+  const [moodCategoryDrawerMap, setMoodCategoryDrawerMap] =
+    useState<MoodCategoryDrawerExpansionMap>(DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP);
   const [hoveredCategoryDrawerPresetId, setHoveredCategoryDrawerPresetId] =
     useState<string | null>(null);
   const [hoveredMoodSetterPresetId, setHoveredMoodSetterPresetId] =
@@ -2980,7 +2988,28 @@ export default function App() {
     isShareLinkCopied: isDirectoryFilterLinkCopied,
     uiSoundPreferences: uiSoundPrefs,
     isResetFlashActive: isDirectoryFilterResetFlashActive,
+    isMainDrawerExpanded: isMoodCategoriesExpanded,
+    categoryExpansionMap: moodCategoryDrawerMap,
   });
+
+  const handleToggleAllMoodCategoryDrawers = () => {
+    const nextState = toggleAllMoodCategoryDrawers({
+      isMainDrawerExpanded: isMoodCategoriesExpanded,
+      categoryExpansionMap: moodCategoryDrawerMap,
+    });
+    setIsMoodCategoriesExpanded(nextState.isMainDrawerExpanded);
+    setMoodCategoryDrawerMap(nextState.categoryExpansionMap);
+  };
+
+  const handleToggleSingleMoodCategoryDrawer = (category: MoodCategory) => {
+    const nextState = toggleSingleMoodCategoryDrawer({
+      category,
+      isMainDrawerExpanded: isMoodCategoriesExpanded,
+      categoryExpansionMap: moodCategoryDrawerMap,
+    });
+    setIsMoodCategoriesExpanded(nextState.isMainDrawerExpanded);
+    setMoodCategoryDrawerMap(nextState.categoryExpansionMap);
+  };
 
   const handlePlayDirectoryFilterToggleChime = (
     currentMode: OnlineDirectoryAudienceFilter,
@@ -5068,11 +5097,19 @@ export default function App() {
 
                         <div
                           data-testid="online-directory-quick-filter-area"
+                          data-drawers-all-expanded={
+                            directoryQuickFilterMeta.moodDrawersToggleAll.areAllDrawersExpanded
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-expanded-drawers-count={
+                            directoryQuickFilterMeta.moodDrawersToggleAll.expandedCount
+                          }
                           className="relative inline-flex flex-wrap items-center gap-2"
                           onMouseEnter={() => setIsQuickFilterHovered(true)}
                           onMouseLeave={() => setIsQuickFilterHovered(false)}
                         >
-                          <div className="inline-flex items-center gap-1.5">
+                          <div className="inline-flex flex-wrap items-center gap-1.5">
                             <motion.button
                               id="online-directory-mood-filter"
                               type="button"
@@ -5511,6 +5548,69 @@ export default function App() {
                               </span>
                             </motion.button>
 
+                            <button
+                              id="online-directory-mood-toggle-all-btn"
+                              type="button"
+                              onClick={handleToggleAllMoodCategoryDrawers}
+                              aria-expanded={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.areAllDrawersExpanded
+                              }
+                              aria-controls="online-directory-mood-category-drawer"
+                              aria-label={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.toggleAllAriaLabel
+                              }
+                              title={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.toggleAllAriaLabel
+                              }
+                              data-testid="online-directory-mood-toggle-all-btn"
+                              data-all-expanded={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.areAllDrawersExpanded
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-any-expanded={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.isAnyDrawerExpanded
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-expanded-drawers-count={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.expandedCount
+                              }
+                              data-total-drawers-count={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.totalCount
+                              }
+                              data-next-action={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.nextAction
+                              }
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border transition-colors whitespace-nowrap shrink-0 ${
+                                directoryQuickFilterMeta.moodDrawersToggleAll.areAllDrawersExpanded
+                                  ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/50 hover:bg-emerald-500/25'
+                                  : 'bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white hover:border-zinc-600'
+                              }`}
+                            >
+                              {directoryQuickFilterMeta.moodDrawersToggleAll
+                                .areAllDrawersExpanded ? (
+                                <ChevronUp className="w-3.5 h-3.5 shrink-0 text-emerald-300" />
+                              ) : (
+                                <ChevronDown className="w-3.5 h-3.5 shrink-0 text-zinc-400" />
+                              )}
+                              <span>
+                                {directoryQuickFilterMeta.moodDrawersToggleAll.toggleAllButtonLabel}
+                              </span>
+                              <span
+                                data-testid="online-directory-mood-toggle-all-badge"
+                                className={`px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums border ${
+                                  directoryQuickFilterMeta.moodDrawersToggleAll
+                                    .areAllDrawersExpanded
+                                    ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/40'
+                                    : 'bg-zinc-950 text-zinc-400 border-zinc-800'
+                                }`}
+                              >
+                                {directoryQuickFilterMeta.moodDrawersToggleAll.expandedCount}/
+                                {directoryQuickFilterMeta.moodDrawersToggleAll.totalCount}
+                              </span>
+                            </button>
+
                             <AnimatePresence initial={false}>
                               {directoryQuickFilterMeta.showClearButton && (
                                 <motion.button
@@ -5906,27 +6006,34 @@ export default function App() {
                           <button
                             id="online-directory-mood-category-expand-toggle"
                             type="button"
-                            onClick={() =>
-                              setIsMoodCategoriesExpanded((prev) =>
-                                toggleMoodCategoryDrawerExpanded(prev)
-                              )
+                            onClick={handleToggleAllMoodCategoryDrawers}
+                            aria-expanded={
+                              directoryQuickFilterMeta.moodDrawersToggleAll.areAllDrawersExpanded
                             }
-                            aria-expanded={isMoodCategoriesExpanded}
                             aria-controls="online-directory-mood-category-drawer"
                             data-testid="online-directory-mood-category-expand-btn"
-                            title={
-                              isMoodCategoriesExpanded
-                                ? 'Collapse Mood category preset groupings'
-                                : 'Expand Mood category preset groupings'
+                            data-all-expanded={
+                              directoryQuickFilterMeta.moodDrawersToggleAll.areAllDrawersExpanded
+                                ? 'true'
+                                : 'false'
                             }
-                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-mono text-zinc-400 hover:text-white rounded hover:bg-zinc-900 transition-colors whitespace-nowrap shrink-0"
+                            data-expanded-drawers-count={
+                              directoryQuickFilterMeta.moodDrawersToggleAll.expandedCount
+                            }
+                            title={
+                              directoryQuickFilterMeta.moodDrawersToggleAll.toggleAllAriaLabel
+                            }
+                            className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-mono text-zinc-300 hover:text-white rounded hover:bg-zinc-900 transition-colors whitespace-nowrap shrink-0"
                           >
-                            {isMoodCategoriesExpanded ? (
-                              <ChevronUp className="w-3 h-3 shrink-0" />
+                            {directoryQuickFilterMeta.moodDrawersToggleAll
+                              .areAllDrawersExpanded ? (
+                              <ChevronUp className="w-3 h-3 shrink-0 text-emerald-300" />
                             ) : (
-                              <ChevronDown className="w-3 h-3 shrink-0" />
+                              <ChevronDown className="w-3 h-3 shrink-0 text-zinc-400" />
                             )}
-                            <span>{isMoodCategoriesExpanded ? 'Presets' : 'Expand Presets'}</span>
+                            <span>
+                              {directoryQuickFilterMeta.moodDrawersToggleAll.statusBadgeLabel}
+                            </span>
                           </button>
                         </div>
 
@@ -6126,6 +6233,9 @@ export default function App() {
                                   directoryMoodFilter === group.categoryFilterValue ||
                                   directoryMoodFilter.toLowerCase() ===
                                     group.category.toLowerCase();
+                                const isCategoryDrawerExpanded =
+                                  directoryQuickFilterMeta.moodDrawersToggleAll
+                                    .categoryExpansionMap[group.category];
                                 return (
                                   <motion.div
                                     key={group.category}
@@ -6135,37 +6245,71 @@ export default function App() {
                                     transition={headerMotion.transition}
                                     data-testid={`mood-category-drawer-group-${group.category.toLowerCase()}`}
                                     data-mood-category={group.category}
+                                    data-drawer-expanded={
+                                      isCategoryDrawerExpanded ? 'true' : 'false'
+                                    }
                                     data-stagger-delay={headerMotion.transition.delay}
                                     className="p-2.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2"
                                   >
-                                    <motion.button
-                                      type="button"
-                                      initial={headerMotion.initial}
-                                      animate={headerMotion.animate}
-                                      exit={headerMotion.exit}
-                                      transition={headerMotion.transition}
-                                      onClick={() =>
-                                        setDirectoryMoodFilter(
-                                          isCatActive ? 'all' : group.categoryFilterValue
-                                        )
-                                      }
-                                      aria-pressed={isCatActive}
-                                      data-testid={`mood-category-header-${group.category.toLowerCase()}`}
-                                      data-stagger-delay={headerMotion.transition.delay}
-                                      className={`w-full flex items-center justify-between gap-2 text-left text-xs font-semibold transition-colors ${
-                                        isCatActive
-                                          ? 'text-emerald-300'
-                                          : 'text-zinc-200 hover:text-white'
-                                      }`}
-                                    >
-                                      <span>{group.label}</span>
-                                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
-                                        {group.activeCount} online
-                                      </span>
-                                    </motion.button>
+                                    <div className="w-full flex items-center justify-between gap-2">
+                                      <motion.button
+                                        type="button"
+                                        initial={headerMotion.initial}
+                                        animate={headerMotion.animate}
+                                        exit={headerMotion.exit}
+                                        transition={headerMotion.transition}
+                                        onClick={() =>
+                                          setDirectoryMoodFilter(
+                                            isCatActive ? 'all' : group.categoryFilterValue
+                                          )
+                                        }
+                                        aria-pressed={isCatActive}
+                                        data-testid={`mood-category-header-${group.category.toLowerCase()}`}
+                                        data-stagger-delay={headerMotion.transition.delay}
+                                        className={`flex-1 flex items-center justify-between gap-2 text-left text-xs font-semibold transition-colors ${
+                                          isCatActive
+                                            ? 'text-emerald-300'
+                                            : 'text-zinc-200 hover:text-white'
+                                        }`}
+                                      >
+                                        <span>{group.label}</span>
+                                        <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-zinc-400">
+                                          {group.activeCount} online
+                                        </span>
+                                      </motion.button>
 
-                                    <div className="flex flex-wrap items-center gap-1.5">
-                                      {group.presets.map((preset, presetIdx) => {
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleToggleSingleMoodCategoryDrawer(group.category)
+                                        }
+                                        aria-expanded={isCategoryDrawerExpanded}
+                                        aria-label={`${
+                                          isCategoryDrawerExpanded ? 'Collapse' : 'Expand'
+                                        } ${group.label} mood drawer`}
+                                        title={`${
+                                          isCategoryDrawerExpanded ? 'Collapse' : 'Expand'
+                                        } ${group.label} mood drawer`}
+                                        data-testid={`mood-category-drawer-toggle-${group.category.toLowerCase()}`}
+                                        data-drawer-expanded={
+                                          isCategoryDrawerExpanded ? 'true' : 'false'
+                                        }
+                                        className="inline-flex items-center justify-center p-1 rounded bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-400 hover:text-white transition-colors shrink-0"
+                                      >
+                                        {isCategoryDrawerExpanded ? (
+                                          <ChevronUp className="w-3 h-3 shrink-0" />
+                                        ) : (
+                                          <ChevronDown className="w-3 h-3 shrink-0" />
+                                        )}
+                                      </button>
+                                    </div>
+
+                                    {isCategoryDrawerExpanded && (
+                                      <div
+                                        data-testid={`mood-category-drawer-body-${group.category.toLowerCase()}`}
+                                        className="flex flex-wrap items-center gap-1.5"
+                                      >
+                                        {group.presets.map((preset, presetIdx) => {
                                         const presetMotion =
                                           getMoodCategoryExpansionMotionSpec(
                                             true
@@ -6320,7 +6464,8 @@ export default function App() {
                                           </div>
                                         );
                                       })}
-                                    </div>
+                                      </div>
+                                    )}
                                   </motion.div>
                                 );
                               })}
