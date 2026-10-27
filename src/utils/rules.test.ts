@@ -176,6 +176,7 @@ import {
   confirmOnlineDirectoryClearFilterReset,
   resolveShiftResetToastConfirmation,
   resolveSecondaryResetOnlyFilterAction,
+  resolveDedicatedClearFiltersButtonAction,
   getOnlineDirectoryQuickFilterMeta,
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
@@ -4433,4 +4434,55 @@ test('Holding Shift to reset filters triggers an animated toast confirmation exp
   assert.equal(metaWithToast.shiftResetToast.message, 'Filters Reset to Default');
   assert.equal(metaWithToast.shiftResetToast.position, 'bottom-of-directory-view');
   assert.equal(metaWithToast.shiftResetToast.animationName, 'shiftResetToastSlideFadeIn');
+});
+
+test('Dedicated "Clear Filters" button (#online-directory-clear-filters-btn) only appears when at least one filter criterion is active and resets to default without using the reset modal', () => {
+  // 1. Default state (no criteria active) -> hidden
+  const idleSpec = resolveDedicatedClearFiltersButtonAction({
+    mode: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+  });
+  assert.equal(idleSpec.buttonId, 'online-directory-clear-filters-btn');
+  assert.equal(idleSpec.label, 'Clear Filters');
+  assert.equal(idleSpec.shouldShowButton, false);
+  assert.equal(idleSpec.isVisible, false);
+  assert.equal(idleSpec.isAnyCriterionActive, false);
+  assert.equal(idleSpec.activeCriteriaCount, 0);
+
+  // 2. Single criterion active (Mood only) -> visible, bypasses modal
+  const moodActiveSpec = resolveDedicatedClearFiltersButtonAction({
+    mode: 'everyone',
+    moodFilter: 'category:Productive',
+    onlyInFocus: false,
+  });
+  assert.equal(moodActiveSpec.shouldShowButton, true);
+  assert.equal(moodActiveSpec.isVisible, true);
+  assert.equal(moodActiveSpec.isMoodCriterionActive, true);
+  assert.equal(moodActiveSpec.activeCriteriaCount, 1);
+  assert.equal(moodActiveSpec.badgeText, '1 active');
+  assert.equal(moodActiveSpec.bypassesResetModal, true);
+  assert.equal(moodActiveSpec.shouldOpenClearModal, false);
+  assert.equal(moodActiveSpec.nextMode, 'everyone');
+  assert.equal(moodActiveSpec.nextMoodFilter, 'all');
+  assert.equal(moodActiveSpec.nextOnlyInFocus, false);
+  assert.equal(moodActiveSpec.isModalOpen, false);
+
+  // 3. Multiple criteria active (Audience + Mood + Focus) -> visible via getOnlineDirectoryQuickFilterMeta
+  const metaActive = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+  });
+  assert.equal(
+    metaActive.dedicatedClearFiltersButtonMeta.buttonId,
+    'online-directory-clear-filters-btn'
+  );
+  assert.equal(metaActive.dedicatedClearFiltersButtonMeta.label, 'Clear Filters');
+  assert.equal(metaActive.dedicatedClearFiltersButtonMeta.shouldShowButton, true);
+  assert.equal(metaActive.dedicatedClearFiltersButtonMeta.activeCriteriaCount, 3);
+  assert.equal(metaActive.dedicatedClearFiltersButtonMeta.badgeText, '3 active');
+  assert.equal(metaActive.dedicatedClearFiltersButtonMeta.bypassesResetModal, true);
+  assert.equal(metaActive.dedicatedClearFiltersButtonMeta.isModalOpen, false);
 });

@@ -8749,6 +8749,96 @@ export function resolveSecondaryResetOnlyFilterAction(params?: {
   };
 }
 
+export interface DedicatedClearFiltersButtonSpec {
+  buttonId: 'online-directory-clear-filters-btn';
+  buttonTestId: 'online-directory-clear-filters-btn';
+  label: 'Clear Filters';
+  shouldShowButton: boolean;
+  isVisible: boolean;
+  isAnyCriterionActive: boolean;
+  isMoodCriterionActive: boolean;
+  isFocusCriterionActive: boolean;
+  isAudienceCriterionActive: boolean;
+  activeCriteriaCount: number;
+  activeCriteriaKeys: QuickFilterAppliedCriterionKey[];
+  activeCriteriaLabels: string[];
+  activeCriteriaSummary: string;
+  badgeText: string;
+  bypassesResetModal: true;
+  shouldOpenClearModal: false;
+  nextMode: 'everyone';
+  nextMoodFilter: 'all';
+  nextOnlyInFocus: false;
+  isModalOpen: false;
+  ariaLabel: string;
+  tooltipText: string;
+  motion: {
+    initial: { opacity: number; scale: number };
+    animate: { opacity: number; scale: number };
+    exit: { opacity: number; scale: number };
+    transition: { duration: number; ease: 'easeOut' };
+  };
+}
+
+export function resolveDedicatedClearFiltersButtonAction(params?: {
+  mode?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+}): DedicatedClearFiltersButtonSpec {
+  const criteriaSpec = getQuickFilterIconActiveBadgeSpec({
+    mode: params?.mode,
+    moodFilter: params?.moodFilter,
+    onlyInFocus: params?.onlyInFocus,
+  });
+
+  const isAnyCriterionActive = criteriaSpec.isAnyCriteriaApplied;
+  const activeCriteriaCount = criteriaSpec.appliedCriteriaCount;
+  const shouldShowButton = isAnyCriterionActive && activeCriteriaCount > 0;
+  const activeCriteriaSummary = criteriaSpec.appliedCriteriaLabels.join(', ');
+  const badgeText = `${activeCriteriaCount} active`;
+
+  const ariaLabel = shouldShowButton
+    ? `Clear Filters (${activeCriteriaCount} active ${
+        activeCriteriaCount === 1 ? 'criterion' : 'criteria'
+      }: ${activeCriteriaSummary}) — return to default state without reset modal`
+    : 'Clear Filters (no active filter criteria)';
+
+  const tooltipText = shouldShowButton
+    ? `Clear Filters (${activeCriteriaSummary}) — immediately returns directory to default state without opening the reset modal`
+    : 'No active filter criteria applied';
+
+  return {
+    buttonId: 'online-directory-clear-filters-btn',
+    buttonTestId: 'online-directory-clear-filters-btn',
+    label: 'Clear Filters',
+    shouldShowButton,
+    isVisible: shouldShowButton,
+    isAnyCriterionActive,
+    isMoodCriterionActive: criteriaSpec.isMoodApplied,
+    isFocusCriterionActive: criteriaSpec.isFocusApplied,
+    isAudienceCriterionActive: criteriaSpec.isAudienceApplied,
+    activeCriteriaCount,
+    activeCriteriaKeys: criteriaSpec.appliedCriteriaKeys,
+    activeCriteriaLabels: criteriaSpec.appliedCriteriaLabels,
+    activeCriteriaSummary,
+    badgeText,
+    bypassesResetModal: true,
+    shouldOpenClearModal: false,
+    nextMode: 'everyone',
+    nextMoodFilter: 'all',
+    nextOnlyInFocus: false,
+    isModalOpen: false,
+    ariaLabel,
+    tooltipText,
+    motion: {
+      initial: { opacity: 0, scale: 0.9 },
+      animate: { opacity: 1, scale: 1 },
+      exit: { opacity: 0, scale: 0.9 },
+      transition: { duration: 0.16, ease: 'easeOut' },
+    },
+  };
+}
+
 export interface QuickFilterIconCrossFadeMotionSpec {
   mode: OnlineDirectoryAudienceFilter;
   activeIconComponent: 'UserCheck' | 'Filter';
@@ -9476,6 +9566,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   zeroPeersNotice: ZeroPeersMoodFilterNoticeSpec;
   moodDrawersToggleAll: MoodCategoryDrawersToggleAllState;
   resetOnlyButtonMeta: SecondaryResetOnlyFilterSpec;
+  dedicatedClearFiltersButtonMeta: DedicatedClearFiltersButtonSpec;
   shiftResetToast: ShiftResetToastConfirmationSpec;
   recentFiltersMeta: RecentDirectoryFiltersDropdownMeta;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
@@ -9646,6 +9737,11 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
     resetOnlyButtonMeta: resolveSecondaryResetOnlyFilterAction({
       shiftKey: Boolean(params.isShiftKeyHeld),
       currentMode: mode,
+      moodFilter: params.moodFilter,
+      onlyInFocus: params.onlyInFocus,
+    }),
+    dedicatedClearFiltersButtonMeta: resolveDedicatedClearFiltersButtonAction({
+      mode,
       moodFilter: params.moodFilter,
       onlyInFocus: params.onlyInFocus,
     }),

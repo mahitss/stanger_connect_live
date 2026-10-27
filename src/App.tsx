@@ -163,6 +163,7 @@ import {
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
   resolveSecondaryResetOnlyFilterAction,
+  resolveDedicatedClearFiltersButtonAction,
   getOnlineDirectoryQuickFilterMeta,
   resolveQuickFilterToggleChime,
   buildOnlineDirectoryFilterShareLink,
@@ -3157,6 +3158,23 @@ export default function App() {
     handlePlayDirectoryFilterToggleChime(directoryAudienceFilter, 'everyone');
   };
 
+  const handleDedicatedClearAllActiveFilters = (shiftKeyUsed: boolean = false) => {
+    const clearResult = resolveDedicatedClearFiltersButtonAction({
+      mode: directoryAudienceFilter,
+      moodFilter: directoryMoodFilter,
+      onlyInFocus: showOnlyInFocusPeers,
+    });
+    setIsClearFilterModalOpen(clearResult.isModalOpen);
+    setDirectoryAudienceFilter(clearResult.nextMode);
+    setDirectoryMoodFilter(clearResult.nextMoodFilter);
+    setShowOnlyInFocusPeers(clearResult.nextOnlyInFocus);
+    setQuickResetWithoutModalCount((prev) => prev + 1);
+    setLastQuickResetUsedShift(Boolean(shiftKeyUsed));
+    triggerDirectoryFilterResetFlash();
+    triggerShiftResetToastConfirmation();
+    handlePlayDirectoryFilterToggleChime(directoryAudienceFilter, 'everyone');
+  };
+
   const handlePlayDirectoryFilterToggleChime = (
     currentMode: OnlineDirectoryAudienceFilter,
     nextMode?: OnlineDirectoryAudienceFilter
@@ -5251,6 +5269,16 @@ export default function App() {
                           data-expanded-drawers-count={
                             directoryQuickFilterMeta.moodDrawersToggleAll.expandedCount
                           }
+                          data-clear-filters-visible={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                              .shouldShowButton
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-active-criteria-count={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                              .activeCriteriaCount
+                          }
                           className="relative inline-flex flex-wrap items-center gap-2"
                           onMouseEnter={() => setIsQuickFilterHovered(true)}
                           onMouseLeave={() => setIsQuickFilterHovered(false)}
@@ -5348,6 +5376,12 @@ export default function App() {
                               }
                               data-active-badge-visible={
                                 directoryQuickFilterMeta.iconActiveBadgeSpec.showActiveBadge
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-clear-filters-visible={
+                                directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                  .shouldShowButton
                                   ? 'true'
                                   : 'false'
                               }
@@ -6090,6 +6124,83 @@ export default function App() {
                                 </div>
                               )}
                             </div>
+
+                            <AnimatePresence initial={false}>
+                              {directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                .shouldShowButton && (
+                                <motion.button
+                                  key="online-directory-clear-filters-btn"
+                                  id={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .buttonId
+                                  }
+                                  type="button"
+                                  initial={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.initial
+                                  }
+                                  animate={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.animate
+                                  }
+                                  exit={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exit
+                                  }
+                                  transition={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.transition
+                                  }
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    handleDedicatedClearAllActiveFilters(
+                                      Boolean(e.shiftKey || isShiftKeyHeldForFilter)
+                                    );
+                                  }}
+                                  title={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .tooltipText
+                                  }
+                                  aria-label={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .ariaLabel
+                                  }
+                                  data-testid={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .buttonTestId
+                                  }
+                                  data-bypasses-modal="true"
+                                  data-active-criteria-count={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .activeCriteriaCount
+                                  }
+                                  data-active-criteria-keys={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.activeCriteriaKeys.join(
+                                      ','
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-emerald-400/50 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 hover:text-white hover:border-emerald-300/80 transition-colors whitespace-nowrap shrink-0 origin-center"
+                                >
+                                  <RotateCcw className="w-3 h-3 shrink-0 text-emerald-300" />
+                                  <span>
+                                    {
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .label
+                                    }
+                                  </span>
+                                  <span
+                                    data-testid="dedicated-clear-filters-badge"
+                                    className="px-1.5 py-0.2 rounded bg-emerald-950/80 border border-emerald-400/40 text-[10px] font-mono text-emerald-300 tabular-nums"
+                                  >
+                                    {
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .badgeText
+                                    }
+                                  </span>
+                                </motion.button>
+                              )}
+                            </AnimatePresence>
 
                             <AnimatePresence initial={false}>
                               {directoryQuickFilterMeta.showClearButton && (
