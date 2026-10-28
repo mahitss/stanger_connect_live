@@ -9897,6 +9897,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   shiftResetToast: ShiftResetToastConfirmationSpec;
   recentFiltersMeta: RecentDirectoryFiltersDropdownMeta;
   recentlyAppliedMeta: RecentlyAppliedDirectoryFilterMeta;
+  secondaryClearAllModalMeta: SecondaryComplexFilterClearModalMeta;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -9935,6 +9936,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   recentFiltersHistory?: RecentDirectoryFilterCombination[] | null;
   isRecentFiltersDropdownOpen?: boolean;
   isClearFiltersHovered?: boolean;
+  isSecondaryClearModalOpen?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -10093,6 +10095,15 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       currentAudienceFilter: mode,
       currentMoodFilter: params.moodFilter,
       currentOnlyInFocus: params.onlyInFocus,
+    }),
+    secondaryClearAllModalMeta: evaluateSecondaryComplexFilterClearModalMeta({
+      isOpen: Boolean(params.isSecondaryClearModalOpen),
+      mode,
+      moodFilter: params.moodFilter,
+      onlyInFocus: params.onlyInFocus,
+      history: params.recentFiltersHistory,
+      everyoneCount,
+      matchingPeersCount: zeroPeersNotice.displayedPeersCount,
     }),
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
@@ -11962,5 +11973,322 @@ export function getRecentDirectoryFiltersDropdownMeta(params?: {
     options,
   };
 }
+
+export interface SecondaryComplexFilterClearModalMeta {
+  modalId: 'online-directory-secondary-clear-all-modal';
+  modalTestId: 'online-directory-secondary-clear-all-modal';
+  overlayTestId: 'online-directory-secondary-clear-all-modal-overlay';
+  triggerButtonId: 'online-directory-mood-filter-confirm-clear-all-btn';
+  triggerButtonTestId: 'online-directory-mood-filter-confirm-clear-all-btn';
+  confirmButtonId: 'online-directory-secondary-confirm-clear-all-btn';
+  confirmButtonTestId: 'online-directory-secondary-confirm-clear-all-btn';
+  cancelButtonId: 'online-directory-secondary-cancel-clear-all-btn';
+  cancelButtonTestId: 'online-directory-secondary-cancel-clear-all-btn';
+  closeButtonTestId: 'online-directory-secondary-clear-all-close-btn';
+  targetElementId: 'online-directory-mood-filter';
+  isOpen: boolean;
+  isAnyCriterionActive: boolean;
+  activeCriteriaCount: number;
+  criterionNoun: 'criterion' | 'criteria';
+  activeCriteriaKeys: QuickFilterAppliedCriterionKey[];
+  activeCriteriaLabels: string[];
+  activeCriteriaSummary: string;
+  isComplexCombination: boolean;
+  isRecentlyAppliedCombination: boolean;
+  isComplexRecentlyAppliedCombination: boolean;
+  requiresExplicitConfirmation: boolean;
+  shouldShowTriggerButton: boolean;
+  combinationId: string;
+  combinationLabel: string;
+  combinationShortLabel: string;
+  recentlyAppliedRank: number | null;
+  recentlyAppliedRankBadge: string | null;
+  totalRecentCount: number;
+  matchingPeersCount: number;
+  everyoneCount: number;
+  hiddenPeersCount: number;
+  modalTitle: 'Confirm Clear All Active Filters?';
+  modalSubtitle: 'Safeguard for complex, recently-applied filter combination';
+  warningBadgeText: string;
+  modalWarningHeadline: string;
+  modalDescription: string;
+  confirmActionLabel: 'Confirm & Clear All Filters';
+  cancelActionLabel: 'Keep Complex Filter Active';
+  triggerButtonLabel: 'Confirm Clear All';
+  triggerBadgeText: string;
+  triggerButtonAriaLabel: string;
+}
+
+export function evaluateSecondaryComplexFilterClearModalMeta(params?: {
+  isOpen?: boolean;
+  mode?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+  history?: RecentDirectoryFilterCombination[] | null;
+  everyoneCount?: number;
+  matchingPeersCount?: number;
+}): SecondaryComplexFilterClearModalMeta {
+  const criteriaSpec = getQuickFilterIconActiveBadgeSpec({
+    mode: params?.mode,
+    moodFilter: params?.moodFilter,
+    onlyInFocus: params?.onlyInFocus,
+  });
+
+  const recentlyApplied = evaluateRecentlyAppliedDirectoryFilterMeta({
+    history: params?.history,
+    currentAudienceFilter: params?.mode,
+    currentMoodFilter: params?.moodFilter,
+    currentOnlyInFocus: params?.onlyInFocus,
+  });
+
+  const activeCriteriaCount = criteriaSpec.appliedCriteriaCount;
+  const isAnyCriterionActive = criteriaSpec.isAnyCriteriaApplied && activeCriteriaCount > 0;
+  const criterionNoun: 'criterion' | 'criteria' =
+    activeCriteriaCount === 1 ? 'criterion' : 'criteria';
+  const activeCriteriaSummary =
+    criteriaSpec.appliedCriteriaLabels.length > 0
+      ? criteriaSpec.appliedCriteriaLabels.join(' + ')
+      : 'None';
+
+  const isComplexCombination = activeCriteriaCount >= 2;
+  const isRecentlyAppliedCombination =
+    isAnyCriterionActive && recentlyApplied.isNonDefaultRecentlyApplied;
+  const isComplexRecentlyAppliedCombination =
+    isComplexCombination && isRecentlyAppliedCombination;
+
+  const requiresExplicitConfirmation =
+    isComplexRecentlyAppliedCombination ||
+    isComplexCombination ||
+    isRecentlyAppliedCombination;
+  const shouldShowTriggerButton = isAnyCriterionActive && requiresExplicitConfirmation;
+
+  const everyoneCount = Math.max(0, Math.floor(Number(params?.everyoneCount) || 0));
+  const matchingPeersCount =
+    params?.matchingPeersCount !== undefined &&
+    params?.matchingPeersCount !== null &&
+    Number.isFinite(Number(params.matchingPeersCount))
+      ? Math.max(0, Math.min(everyoneCount || 9999, Math.floor(Number(params.matchingPeersCount))))
+      : everyoneCount;
+  const hiddenPeersCount = Math.max(0, everyoneCount - matchingPeersCount);
+
+  const rankBadge = recentlyApplied.rankBadgeText;
+  const warningBadgeText = isComplexRecentlyAppliedCombination
+    ? `Complex · Recently Applied ${rankBadge || '#1'}`
+    : isComplexCombination
+      ? `Complex · ${activeCriteriaCount} Active Criteria`
+      : isRecentlyAppliedCombination
+        ? `Recently Applied ${rankBadge || '#1'}`
+        : `${activeCriteriaCount} Active`;
+
+  const triggerBadgeText = isComplexRecentlyAppliedCombination
+    ? `${activeCriteriaCount} active · Recent ${rankBadge || '#1'}`
+    : isComplexCombination
+      ? `${activeCriteriaCount} active · Complex`
+      : isRecentlyAppliedCombination
+        ? `Recent ${rankBadge || '#1'}`
+        : `${activeCriteriaCount} active`;
+
+  const modalWarningHeadline = isComplexRecentlyAppliedCombination
+    ? `Protected Complex & Recently Applied Combination (${activeCriteriaCount} ${criterionNoun})`
+    : isComplexCombination
+      ? `Protected Multi-Criteria Filter Combination (${activeCriteriaCount} ${criterionNoun})`
+      : `Protected Recently Applied Filter (${recentlyApplied.currentCombination.label})`;
+
+  const modalDescription = isComplexRecentlyAppliedCombination
+    ? `You are about to clear all ${activeCriteriaCount} active filter ${criterionNoun} (${activeCriteriaSummary}) from a complex, recently-applied filter combination (${recentlyApplied.currentCombination.label}, rank ${rankBadge || '#1'} in Recent Filters). Please confirm to reset the Online Directory to Everyone · All Moods.`
+    : `You are about to clear ${activeCriteriaCount} active filter ${criterionNoun} (${activeCriteriaSummary}) for "${recentlyApplied.currentCombination.label}". Please confirm to reset the Online Directory to the default view.`;
+
+  const triggerButtonAriaLabel = `Open secondary confirmation modal before clearing all ${activeCriteriaCount} active filter ${criterionNoun} (${activeCriteriaSummary})`;
+
+  return {
+    modalId: 'online-directory-secondary-clear-all-modal',
+    modalTestId: 'online-directory-secondary-clear-all-modal',
+    overlayTestId: 'online-directory-secondary-clear-all-modal-overlay',
+    triggerButtonId: 'online-directory-mood-filter-confirm-clear-all-btn',
+    triggerButtonTestId: 'online-directory-mood-filter-confirm-clear-all-btn',
+    confirmButtonId: 'online-directory-secondary-confirm-clear-all-btn',
+    confirmButtonTestId: 'online-directory-secondary-confirm-clear-all-btn',
+    cancelButtonId: 'online-directory-secondary-cancel-clear-all-btn',
+    cancelButtonTestId: 'online-directory-secondary-cancel-clear-all-btn',
+    closeButtonTestId: 'online-directory-secondary-clear-all-close-btn',
+    targetElementId: 'online-directory-mood-filter',
+    isOpen: Boolean(params?.isOpen) && isAnyCriterionActive,
+    isAnyCriterionActive,
+    activeCriteriaCount,
+    criterionNoun,
+    activeCriteriaKeys: criteriaSpec.appliedCriteriaKeys,
+    activeCriteriaLabels: criteriaSpec.appliedCriteriaLabels,
+    activeCriteriaSummary,
+    isComplexCombination,
+    isRecentlyAppliedCombination,
+    isComplexRecentlyAppliedCombination,
+    requiresExplicitConfirmation,
+    shouldShowTriggerButton,
+    combinationId: recentlyApplied.currentCombination.id,
+    combinationLabel: recentlyApplied.currentCombination.label,
+    combinationShortLabel: recentlyApplied.currentCombination.shortLabel,
+    recentlyAppliedRank: recentlyApplied.matchedRank,
+    recentlyAppliedRankBadge: rankBadge,
+    totalRecentCount: recentlyApplied.totalRecentCount,
+    matchingPeersCount,
+    everyoneCount,
+    hiddenPeersCount,
+    modalTitle: 'Confirm Clear All Active Filters?',
+    modalSubtitle: 'Safeguard for complex, recently-applied filter combination',
+    warningBadgeText,
+    modalWarningHeadline,
+    modalDescription,
+    confirmActionLabel: 'Confirm & Clear All Filters',
+    cancelActionLabel: 'Keep Complex Filter Active',
+    triggerButtonLabel: 'Confirm Clear All',
+    triggerBadgeText,
+    triggerButtonAriaLabel,
+  };
+}
+
+export interface SecondaryComplexFilterClearGateResult {
+  shouldOpenSecondaryModal: boolean;
+  shouldOpenPrimaryModal: boolean;
+  didImmediateReset: boolean;
+  isProtectedComplexRecentCombination: boolean;
+  activeCriteriaCount: number;
+  nextMode: OnlineDirectoryAudienceFilter;
+  nextMoodFilter: string;
+  nextOnlyInFocus: boolean;
+  secondaryModalMeta: SecondaryComplexFilterClearModalMeta;
+}
+
+export function resolveSecondaryComplexFilterClearGateAction(params?: {
+  mode?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+  history?: RecentDirectoryFilterCombination[] | null;
+  shiftKey?: boolean;
+  forceSecondaryConfirmation?: boolean;
+  everyoneCount?: number;
+  matchingPeersCount?: number;
+}): SecondaryComplexFilterClearGateResult {
+  const currentMode: OnlineDirectoryAudienceFilter =
+    params?.mode === 'my_connections' ? 'my_connections' : 'everyone';
+  const currentMood = String(params?.moodFilter ?? 'all').trim() || 'all';
+  const currentFocus = Boolean(params?.onlyInFocus);
+  const shiftHeld = Boolean(params?.shiftKey);
+
+  const meta = evaluateSecondaryComplexFilterClearModalMeta({
+    isOpen: true,
+    mode: currentMode,
+    moodFilter: currentMood,
+    onlyInFocus: currentFocus,
+    history: params?.history,
+    everyoneCount: params?.everyoneCount,
+    matchingPeersCount: params?.matchingPeersCount,
+  });
+
+  if (shiftHeld) {
+    return {
+      shouldOpenSecondaryModal: false,
+      shouldOpenPrimaryModal: false,
+      didImmediateReset: true,
+      isProtectedComplexRecentCombination: meta.requiresExplicitConfirmation,
+      activeCriteriaCount: meta.activeCriteriaCount,
+      nextMode: 'everyone',
+      nextMoodFilter: 'all',
+      nextOnlyInFocus: false,
+      secondaryModalMeta: { ...meta, isOpen: false },
+    };
+  }
+
+  const shouldProtectWithSecondary =
+    meta.isAnyCriterionActive &&
+    (Boolean(params?.forceSecondaryConfirmation) ||
+      meta.isComplexRecentlyAppliedCombination ||
+      meta.isComplexCombination);
+
+  if (shouldProtectWithSecondary) {
+    return {
+      shouldOpenSecondaryModal: true,
+      shouldOpenPrimaryModal: false,
+      didImmediateReset: false,
+      isProtectedComplexRecentCombination: true,
+      activeCriteriaCount: meta.activeCriteriaCount,
+      nextMode: currentMode,
+      nextMoodFilter: currentMood,
+      nextOnlyInFocus: currentFocus,
+      secondaryModalMeta: { ...meta, isOpen: true },
+    };
+  }
+
+  if (currentMode === 'my_connections') {
+    return {
+      shouldOpenSecondaryModal: false,
+      shouldOpenPrimaryModal: true,
+      didImmediateReset: false,
+      isProtectedComplexRecentCombination: false,
+      activeCriteriaCount: meta.activeCriteriaCount,
+      nextMode: currentMode,
+      nextMoodFilter: currentMood,
+      nextOnlyInFocus: currentFocus,
+      secondaryModalMeta: { ...meta, isOpen: false },
+    };
+  }
+
+  return {
+    shouldOpenSecondaryModal: false,
+    shouldOpenPrimaryModal: false,
+    didImmediateReset: true,
+    isProtectedComplexRecentCombination: false,
+    activeCriteriaCount: meta.activeCriteriaCount,
+    nextMode: 'everyone',
+    nextMoodFilter: 'all',
+    nextOnlyInFocus: false,
+    secondaryModalMeta: { ...meta, isOpen: false },
+  };
+}
+
+export interface SecondaryComplexFilterConfirmedResetResult {
+  confirmed: true;
+  nextMode: 'everyone';
+  nextMoodFilter: 'all';
+  nextOnlyInFocus: false;
+  isSecondaryModalOpen: false;
+  isPrimaryModalOpen: false;
+  clearedCriteriaCount: number;
+  clearedCriteriaSummary: string;
+  chimeSpec: ClearFiltersButtonChimeResult;
+  toastMessage: 'Filters Reset to Default';
+}
+
+export function confirmSecondaryComplexFilterClearAllReset(params?: {
+  mode?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+  preferences?: UiSoundEffectPreferences;
+}): SecondaryComplexFilterConfirmedResetResult {
+  const criteriaSpec = getQuickFilterIconActiveBadgeSpec({
+    mode: params?.mode,
+    moodFilter: params?.moodFilter,
+    onlyInFocus: params?.onlyInFocus,
+  });
+  const activeCriteriaSummary = criteriaSpec.appliedCriteriaLabels.join(', ');
+  const chimeSpec = resolveClearFiltersButtonChime({
+    preferences: params?.preferences,
+    activeCriteriaCount: criteriaSpec.appliedCriteriaCount,
+    activeCriteriaSummary,
+  });
+
+  return {
+    confirmed: true,
+    nextMode: 'everyone',
+    nextMoodFilter: 'all',
+    nextOnlyInFocus: false,
+    isSecondaryModalOpen: false,
+    isPrimaryModalOpen: false,
+    clearedCriteriaCount: criteriaSpec.appliedCriteriaCount,
+    clearedCriteriaSummary: activeCriteriaSummary,
+    chimeSpec,
+    toastMessage: 'Filters Reset to Default',
+  };
+}
+
 
 

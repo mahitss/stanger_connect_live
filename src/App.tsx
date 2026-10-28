@@ -192,6 +192,9 @@ import {
   getRecentDirectoryFiltersDropdownMeta,
   evaluateRecentlyAppliedDirectoryFilterMeta,
   isMoodFilterInRecentDirectoryFilters,
+  evaluateSecondaryComplexFilterClearModalMeta,
+  resolveSecondaryComplexFilterClearGateAction,
+  confirmSecondaryComplexFilterClearAllReset,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -754,6 +757,10 @@ export default function App() {
   const sidebarScrollAreaRef = useRef<HTMLDivElement | null>(null);
   const sidebarProgrammaticTimerRef = useRef<number | null>(null);
   const [isClearFilterModalOpen, setIsClearFilterModalOpen] = useState<boolean>(false);
+  const [isSecondaryClearFilterModalOpen, setIsSecondaryClearFilterModalOpen] =
+    useState<boolean>(false);
+  const [secondaryModalConfirmCount, setSecondaryModalConfirmCount] =
+    useState<number>(0);
   const [isShiftKeyHeldForFilter, setIsShiftKeyHeldForFilter] = useState<boolean>(false);
   const [quickResetWithoutModalCount, setQuickResetWithoutModalCount] = useState<number>(0);
   const [lastQuickResetUsedShift, setLastQuickResetUsedShift] = useState<boolean>(false);
@@ -794,16 +801,17 @@ export default function App() {
     };
   }, []);
   useEffect(() => {
-    if (!isClearFilterModalOpen) return;
+    if (!isClearFilterModalOpen && !isSecondaryClearFilterModalOpen) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         setIsClearFilterModalOpen(false);
+        setIsSecondaryClearFilterModalOpen(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isClearFilterModalOpen]);
+  }, [isClearFilterModalOpen, isSecondaryClearFilterModalOpen]);
 
   const triggerDirectoryFilterResetFlash = () => {
     setIsDirectoryFilterResetFlashActive(true);
@@ -992,6 +1000,7 @@ export default function App() {
       preferences: uiSoundPrefs,
     });
     setIsClearFilterModalOpen(clearResult.isModalOpen);
+    setIsSecondaryClearFilterModalOpen(false);
     setIsClearFiltersBtnHovered(false);
     setDirectoryAudienceFilter(clearResult.nextMode);
     setDirectoryMoodFilter(clearResult.nextMoodFilter);
@@ -3177,7 +3186,33 @@ export default function App() {
     recentFiltersHistory: recentDirectoryFilters,
     isRecentFiltersDropdownOpen,
     isClearFiltersHovered: isClearFiltersBtnHovered,
+    isSecondaryClearModalOpen: isSecondaryClearFilterModalOpen,
   });
+
+  const handleConfirmSecondaryComplexClearAllFilters = () => {
+    const confirmed = confirmSecondaryComplexFilterClearAllReset({
+      mode: directoryAudienceFilter,
+      moodFilter: directoryMoodFilter,
+      onlyInFocus: showOnlyInFocusPeers,
+      preferences: uiSoundPrefs,
+    });
+    setIsSecondaryClearFilterModalOpen(confirmed.isSecondaryModalOpen);
+    setIsClearFilterModalOpen(confirmed.isPrimaryModalOpen);
+    setIsClearFiltersBtnHovered(false);
+    setDirectoryAudienceFilter(confirmed.nextMode);
+    setDirectoryMoodFilter(confirmed.nextMoodFilter);
+    setShowOnlyInFocusPeers(confirmed.nextOnlyInFocus);
+    setSecondaryModalConfirmCount((prev) => prev + 1);
+    triggerDirectoryFilterResetFlash();
+    triggerShiftResetToastConfirmation();
+    if (confirmed.chimeSpec.shouldPlay) {
+      playSubtleUiChime('ui_chime', confirmed.chimeSpec.volumePercent);
+    }
+    setLastDirectoryFilterChime(confirmed.chimeSpec.chimeType);
+    setDirectoryFilterChimeCount((prev) => prev + 1);
+    setClearFiltersChimeCount((prev) => prev + 1);
+    setLastSoundFeedback(confirmed.chimeSpec.feedbackMessage);
+  };
 
   const handleApplyRecentDirectoryFilter = (targetIdOrIndex: string | number) => {
     const applied = applyRecentDirectoryFilterCombination(
@@ -5377,6 +5412,24 @@ export default function App() {
                           }
                           data-clear-shortcut-count={clearFiltersShortcutTriggerCount}
                           data-last-clear-shortcut={lastClearFiltersShortcutCombo}
+                          data-secondary-modal-open={
+                            directoryQuickFilterMeta.secondaryClearAllModalMeta.isOpen
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-requires-secondary-clear-modal={
+                            directoryQuickFilterMeta.secondaryClearAllModalMeta
+                              .requiresExplicitConfirmation
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-complex-recent-combination={
+                            directoryQuickFilterMeta.secondaryClearAllModalMeta
+                              .isComplexRecentlyAppliedCombination
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-secondary-confirm-count={secondaryModalConfirmCount}
                           className="relative inline-flex flex-wrap items-center gap-2"
                         >
                           <div className="inline-flex flex-wrap items-center gap-1.5">
@@ -5405,6 +5458,36 @@ export default function App() {
                                   handleQuickResetActiveFiltersWithoutModal(true);
                                   return;
                                 }
+                                if (
+                                  directoryAudienceFilter === 'my_connections' &&
+                                  directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                    .isComplexCombination
+                                ) {
+                                  const gate = resolveSecondaryComplexFilterClearGateAction({
+                                    mode: directoryAudienceFilter,
+                                    moodFilter: directoryMoodFilter,
+                                    onlyInFocus: showOnlyInFocusPeers,
+                                    history: recentDirectoryFilters,
+                                    shiftKey: false,
+                                    everyoneCount: directoryQuickFilterMeta.everyoneCount,
+                                    matchingPeersCount:
+                                      directoryQuickFilterMeta.zeroPeersNotice
+                                        .displayedPeersCount,
+                                  });
+                                  if (gate.shouldOpenSecondaryModal) {
+                                    setIsSecondaryClearFilterModalOpen(true);
+                                    setIsClearFilterModalOpen(false);
+                                    handlePlayDirectoryFilterToggleChime(
+                                      directoryAudienceFilter,
+                                      'everyone'
+                                    );
+                                    void handleCopyDirectoryFilterShareLink(
+                                      undefined,
+                                      directoryAudienceFilter
+                                    );
+                                    return;
+                                  }
+                                }
                                 const action = resolveOnlineDirectoryFilterToggleAction(
                                   directoryAudienceFilter,
                                   { shiftKey: false }
@@ -5422,6 +5505,7 @@ export default function App() {
                                 } else {
                                   setDirectoryAudienceFilter(action.nextMode);
                                   setIsClearFilterModalOpen(false);
+                                  setIsSecondaryClearFilterModalOpen(false);
                                   handlePlayDirectoryFilterToggleChime(
                                     directoryAudienceFilter,
                                     action.nextMode
@@ -5597,6 +5681,27 @@ export default function App() {
                               }
                               data-clear-shortcut-count={clearFiltersShortcutTriggerCount}
                               data-last-clear-shortcut={lastClearFiltersShortcutCombo}
+                              data-secondary-modal-id={
+                                directoryQuickFilterMeta.secondaryClearAllModalMeta.modalId
+                              }
+                              data-secondary-modal-open={
+                                directoryQuickFilterMeta.secondaryClearAllModalMeta.isOpen
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-requires-secondary-clear-modal={
+                                directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                  .requiresExplicitConfirmation
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-complex-recent-combination={
+                                directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                  .isComplexRecentlyAppliedCombination
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-secondary-confirm-count={secondaryModalConfirmCount}
                               className={`group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
                                 directoryQuickFilterMeta.isMyConnectionsOnly
                                   ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
@@ -6633,12 +6738,22 @@ export default function App() {
                                       handleQuickResetActiveFiltersWithoutModal(true);
                                       return;
                                     }
+                                    if (
+                                      directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                        .isComplexCombination
+                                    ) {
+                                      setIsSecondaryClearFilterModalOpen(true);
+                                      setIsClearFilterModalOpen(false);
+                                      return;
+                                    }
                                     setIsClearFilterModalOpen(true);
                                   }}
                                   title={directoryQuickFilterMeta.clearModalMeta.triggerButtonAriaLabel}
                                   aria-label={directoryQuickFilterMeta.clearModalMeta.triggerButtonAriaLabel}
                                   aria-haspopup="dialog"
-                                  aria-expanded={isClearFilterModalOpen}
+                                  aria-expanded={
+                                    isClearFilterModalOpen || isSecondaryClearFilterModalOpen
+                                  }
                                   data-testid="online-directory-quick-filter-clear-btn"
                                   data-hidden-peers-count={directoryQuickFilterMeta.hiddenPeersCount}
                                   data-motion-exit-scale={
@@ -6653,6 +6768,87 @@ export default function App() {
                                     className="px-1.5 py-0.2 rounded bg-zinc-800 border border-zinc-700 text-[10px] font-mono text-amber-300"
                                   >
                                     {directoryQuickFilterMeta.hiddenPeersCount} hidden
+                                  </span>
+                                </motion.button>
+                              )}
+                            </AnimatePresence>
+
+                            <AnimatePresence initial={false}>
+                              {directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                .shouldShowTriggerButton && (
+                                <motion.button
+                                  key="online-directory-mood-filter-confirm-clear-all-btn"
+                                  id={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .triggerButtonId
+                                  }
+                                  type="button"
+                                  initial={{ opacity: 0, scale: 0.92 }}
+                                  animate={{ opacity: 1, scale: 1 }}
+                                  exit={{ opacity: 0, scale: 0.92 }}
+                                  transition={{ duration: 0.16, ease: 'easeOut' }}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    if (e.shiftKey || isShiftKeyHeldForFilter) {
+                                      handleQuickResetActiveFiltersWithoutModal(true);
+                                      return;
+                                    }
+                                    setIsSecondaryClearFilterModalOpen(true);
+                                    setIsClearFilterModalOpen(false);
+                                  }}
+                                  title={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .triggerButtonAriaLabel
+                                  }
+                                  aria-label={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .triggerButtonAriaLabel
+                                  }
+                                  aria-haspopup="dialog"
+                                  aria-expanded={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta.isOpen
+                                  }
+                                  data-testid={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .triggerButtonTestId
+                                  }
+                                  data-target-modal={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta.modalId
+                                  }
+                                  data-active-criteria-count={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .activeCriteriaCount
+                                  }
+                                  data-is-complex={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .isComplexCombination
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-is-recently-applied={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .isRecentlyAppliedCombination
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-amber-400/50 bg-amber-500/15 text-amber-200 hover:bg-amber-500/25 hover:text-white hover:border-amber-300/80 transition-colors whitespace-nowrap shrink-0 origin-center"
+                                >
+                                  <ShieldCheck className="w-3 h-3 shrink-0 text-amber-300" />
+                                  <span>
+                                    {
+                                      directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                        .triggerButtonLabel
+                                    }
+                                  </span>
+                                  <span
+                                    data-testid="secondary-clear-all-trigger-badge"
+                                    className="px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-400/40 text-[10px] font-mono text-amber-300 tabular-nums"
+                                  >
+                                    {
+                                      directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                        .triggerBadgeText
+                                    }
                                   </span>
                                 </motion.button>
                               )}
@@ -6808,6 +7004,268 @@ export default function App() {
                                       <RotateCcw className="w-3.5 h-3.5 shrink-0" />
                                       <span>
                                         {directoryQuickFilterMeta.clearModalMeta.confirmActionLabel}
+                                      </span>
+                                    </button>
+                                  </div>
+                                </motion.div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
+                          <AnimatePresence>
+                            {directoryQuickFilterMeta.secondaryClearAllModalMeta.isOpen && (
+                              <motion.div
+                                key="online-directory-secondary-clear-all-modal-backdrop"
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: 0.16, ease: 'easeOut' }}
+                                onClick={() => setIsSecondaryClearFilterModalOpen(false)}
+                                data-testid={
+                                  directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                    .overlayTestId
+                                }
+                                className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                              >
+                                <motion.div
+                                  id={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .modalId
+                                  }
+                                  role="dialog"
+                                  aria-modal="true"
+                                  aria-labelledby="online-directory-secondary-clear-all-modal-title"
+                                  aria-describedby="online-directory-secondary-clear-all-modal-desc"
+                                  data-testid={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .modalTestId
+                                  }
+                                  data-target-element={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .targetElementId
+                                  }
+                                  data-active-criteria-count={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .activeCriteriaCount
+                                  }
+                                  data-is-complex={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .isComplexCombination
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-is-recently-applied={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .isRecentlyAppliedCombination
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-combination-label={
+                                    directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                      .combinationLabel
+                                  }
+                                  initial={{ opacity: 0, scale: 0.95, y: 8 }}
+                                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                                  exit={{ opacity: 0, scale: 0.95, y: 8 }}
+                                  transition={{ duration: 0.16, ease: 'easeOut' }}
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="w-full max-w-md rounded-xl bg-[#0A0A0C] border border-amber-500/40 shadow-2xl p-5 space-y-4 text-left"
+                                >
+                                  <div className="flex items-start justify-between gap-3">
+                                    <div className="flex items-center gap-2.5">
+                                      <span className="inline-flex items-center justify-center w-9 h-9 rounded-lg bg-amber-500/15 border border-amber-400/50 text-amber-300 shrink-0">
+                                        <ShieldCheck className="w-4 h-4" />
+                                      </span>
+                                      <div>
+                                        <h4
+                                          id="online-directory-secondary-clear-all-modal-title"
+                                          data-testid="secondary-clear-all-modal-title"
+                                          className="text-sm font-bold text-white"
+                                        >
+                                          {
+                                            directoryQuickFilterMeta
+                                              .secondaryClearAllModalMeta.modalTitle
+                                          }
+                                        </h4>
+                                        <p
+                                          data-testid="secondary-clear-all-modal-subtitle"
+                                          className="text-[11px] font-mono text-amber-300/90"
+                                        >
+                                          {
+                                            directoryQuickFilterMeta
+                                              .secondaryClearAllModalMeta.modalSubtitle
+                                          }
+                                        </p>
+                                      </div>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => setIsSecondaryClearFilterModalOpen(false)}
+                                      aria-label="Close Confirm Clear All modal"
+                                      data-testid={
+                                        directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                          .closeButtonTestId
+                                      }
+                                      className="p-1.5 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-900 border border-transparent hover:border-zinc-800 transition-colors"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </div>
+
+                                  <div
+                                    id="online-directory-secondary-clear-all-summary"
+                                    data-testid="secondary-clear-modal-combination-summary"
+                                    className="p-3.5 rounded-lg bg-[#050505] border border-amber-500/35 space-y-2.5"
+                                  >
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                      <span
+                                        data-testid="secondary-clear-modal-warning-headline"
+                                        className="text-xs font-semibold text-amber-200"
+                                      >
+                                        {
+                                          directoryQuickFilterMeta
+                                            .secondaryClearAllModalMeta.modalWarningHeadline
+                                        }
+                                      </span>
+                                      <span
+                                        data-testid="secondary-clear-modal-warning-badge"
+                                        className="px-2 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-[10px] font-mono font-bold text-amber-200"
+                                      >
+                                        {
+                                          directoryQuickFilterMeta
+                                            .secondaryClearAllModalMeta.warningBadgeText
+                                        }
+                                      </span>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                                      {directoryQuickFilterMeta.secondaryClearAllModalMeta.activeCriteriaLabels.map(
+                                        (critLabel) => (
+                                          <span
+                                            key={critLabel}
+                                            data-testid="secondary-clear-modal-criterion-chip"
+                                            className="inline-flex items-center px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/40 text-[10px] font-mono text-emerald-200"
+                                          >
+                                            {critLabel}
+                                          </span>
+                                        )
+                                      )}
+                                      {directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                        .isRecentlyAppliedCombination && (
+                                        <span
+                                          data-testid="secondary-clear-modal-recent-badge"
+                                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-sky-500/15 border border-sky-400/40 text-[10px] font-mono text-sky-200"
+                                        >
+                                          <Clock className="w-2.5 h-2.5" />
+                                          <span>
+                                            Recently Applied{' '}
+                                            {
+                                              directoryQuickFilterMeta
+                                                .secondaryClearAllModalMeta
+                                                .recentlyAppliedRankBadge
+                                            }
+                                          </span>
+                                        </span>
+                                      )}
+                                    </div>
+
+                                    <div className="grid grid-cols-3 gap-2 pt-1 text-center">
+                                      <div className="p-2 rounded bg-zinc-900/90 border border-zinc-800">
+                                        <div className="text-[10px] font-mono text-zinc-400">
+                                          Active Criteria
+                                        </div>
+                                        <div
+                                          data-testid="secondary-clear-modal-criteria-count"
+                                          className="text-sm font-bold text-amber-300 font-mono"
+                                        >
+                                          {
+                                            directoryQuickFilterMeta
+                                              .secondaryClearAllModalMeta
+                                              .activeCriteriaCount
+                                          }
+                                        </div>
+                                      </div>
+                                      <div className="p-2 rounded bg-zinc-900/90 border border-zinc-800">
+                                        <div className="text-[10px] font-mono text-zinc-400">
+                                          Matching Now
+                                        </div>
+                                        <div
+                                          data-testid="secondary-clear-modal-matching-count"
+                                          className="text-sm font-bold text-emerald-300 font-mono"
+                                        >
+                                          {
+                                            directoryQuickFilterMeta
+                                              .secondaryClearAllModalMeta
+                                              .matchingPeersCount
+                                          }
+                                        </div>
+                                      </div>
+                                      <div className="p-2 rounded bg-zinc-900/90 border border-zinc-800">
+                                        <div className="text-[10px] font-mono text-zinc-400">
+                                          After Reset
+                                        </div>
+                                        <div
+                                          data-testid="secondary-clear-modal-everyone-count"
+                                          className="text-sm font-bold text-white font-mono"
+                                        >
+                                          {
+                                            directoryQuickFilterMeta
+                                              .secondaryClearAllModalMeta.everyoneCount
+                                          }
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <p
+                                    id="online-directory-secondary-clear-all-modal-desc"
+                                    data-testid="secondary-clear-modal-description"
+                                    className="text-xs text-zinc-300 leading-relaxed"
+                                  >
+                                    {
+                                      directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                        .modalDescription
+                                    }
+                                  </p>
+
+                                  <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-zinc-800/80">
+                                    <button
+                                      id={
+                                        directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                          .cancelButtonId
+                                      }
+                                      type="button"
+                                      onClick={() => setIsSecondaryClearFilterModalOpen(false)}
+                                      data-testid={
+                                        directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                          .cancelButtonTestId
+                                      }
+                                      className="px-3.5 py-2 text-xs font-semibold rounded-md bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 transition-colors whitespace-nowrap"
+                                    >
+                                      {
+                                        directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                          .cancelActionLabel
+                                      }
+                                    </button>
+                                    <button
+                                      id={
+                                        directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                          .confirmButtonId
+                                      }
+                                      type="button"
+                                      onClick={handleConfirmSecondaryComplexClearAllFilters}
+                                      data-testid={
+                                        directoryQuickFilterMeta.secondaryClearAllModalMeta
+                                          .confirmButtonTestId
+                                      }
+                                      className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold rounded-md bg-amber-400 hover:bg-amber-300 text-black transition-colors whitespace-nowrap"
+                                    >
+                                      <RotateCcw className="w-3.5 h-3.5 shrink-0" />
+                                      <span>
+                                        {
+                                          directoryQuickFilterMeta
+                                            .secondaryClearAllModalMeta.confirmActionLabel
+                                        }
                                       </span>
                                     </button>
                                   </div>

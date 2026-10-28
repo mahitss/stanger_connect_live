@@ -182,6 +182,9 @@ import {
   resolveDedicatedClearFiltersButtonAction,
   isClearFiltersKeyboardShortcutEvent,
   resolveClearFiltersKeyboardShortcutAction,
+  evaluateSecondaryComplexFilterClearModalMeta,
+  resolveSecondaryComplexFilterClearGateAction,
+  confirmSecondaryComplexFilterClearAllReset,
   getOnlineDirectoryQuickFilterMeta,
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
@@ -4883,4 +4886,107 @@ test('isClearFiltersKeyboardShortcutEvent and resolveClearFiltersKeyboardShortcu
   assert.equal(buttonAction.keyboardShortcutBadgeText, 'Ctrl+R');
   assert.deepEqual(buttonAction.shortcutsSupported, ['Ctrl+R', 'Cmd+R']);
 });
+
+// ---------------------------------------------------------------------------
+// 75. Secondary Confirmation Modal for Complex, Recently-Applied Filters (#online-directory-mood-filter)
+// ---------------------------------------------------------------------------
+test('evaluateSecondaryComplexFilterClearModalMeta, resolveSecondaryComplexFilterClearGateAction, and confirmSecondaryComplexFilterClearAllReset safeguard complex, recently-applied filter combinations in #online-directory-mood-filter', () => {
+  const customHistory = [
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'my_connections',
+      moodFilter: 'Deep Work',
+      onlyInFocus: true,
+      timestampMs: 1_760_000_050_000,
+    }),
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'my_connections',
+      moodFilter: 'category:Productive',
+      onlyInFocus: false,
+      timestampMs: 1_760_000_040_000,
+    }),
+  ];
+
+  // 1. Default unconstrained state -> not complex, not recently applied, trigger hidden
+  const idleMeta = evaluateSecondaryComplexFilterClearModalMeta({
+    isOpen: false,
+    mode: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+    history: customHistory,
+  });
+  assert.equal(idleMeta.modalId, 'online-directory-secondary-clear-all-modal');
+  assert.equal(idleMeta.targetElementId, 'online-directory-mood-filter');
+  assert.equal(idleMeta.isAnyCriterionActive, false);
+  assert.equal(idleMeta.isComplexCombination, false);
+  assert.equal(idleMeta.isRecentlyAppliedCombination, false);
+  assert.equal(idleMeta.isComplexRecentlyAppliedCombination, false);
+  assert.equal(idleMeta.shouldShowTriggerButton, false);
+
+  // 2. Complex, recently-applied combination (3 criteria: My Connections + Deep Work + In Focus, rank #1)
+  const complexRecentMeta = evaluateSecondaryComplexFilterClearModalMeta({
+    isOpen: true,
+    mode: 'my_connections',
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+    history: customHistory,
+    everyoneCount: 6,
+    matchingPeersCount: 1,
+  });
+  assert.equal(complexRecentMeta.isOpen, true);
+  assert.equal(complexRecentMeta.activeCriteriaCount, 3);
+  assert.equal(complexRecentMeta.isComplexCombination, true);
+  assert.equal(complexRecentMeta.isRecentlyAppliedCombination, true);
+  assert.equal(complexRecentMeta.isComplexRecentlyAppliedCombination, true);
+  assert.equal(complexRecentMeta.requiresExplicitConfirmation, true);
+  assert.equal(complexRecentMeta.shouldShowTriggerButton, true);
+  assert.equal(complexRecentMeta.recentlyAppliedRank, 1);
+  assert.equal(complexRecentMeta.recentlyAppliedRankBadge, '#1');
+  assert.equal(complexRecentMeta.hiddenPeersCount, 5);
+  assert.equal(complexRecentMeta.modalTitle, 'Confirm Clear All Active Filters?');
+  assert.equal(
+    complexRecentMeta.confirmActionLabel,
+    'Confirm & Clear All Filters'
+  );
+  assert.equal(
+    complexRecentMeta.cancelActionLabel,
+    'Keep Complex Filter Active'
+  );
+  assert.ok(complexRecentMeta.warningBadgeText.includes('Complex · Recently Applied #1'));
+
+  // 3. Gate action intercepts clearing a complex, recently-applied combination when Shift is not held
+  const gateIntercepted = resolveSecondaryComplexFilterClearGateAction({
+    mode: 'my_connections',
+    moodFilter: 'category:Productive',
+    onlyInFocus: false,
+    history: customHistory,
+    shiftKey: false,
+    everyoneCount: 4,
+    matchingPeersCount: 1,
+  });
+  assert.equal(gateIntercepted.shouldOpenSecondaryModal, true);
+  assert.equal(gateIntercepted.shouldOpenPrimaryModal, false);
+  assert.equal(gateIntercepted.didImmediateReset, false);
+  assert.equal(gateIntercepted.isProtectedComplexRecentCombination, true);
+  assert.equal(gateIntercepted.nextMode, 'my_connections');
+  assert.equal(gateIntercepted.nextMoodFilter, 'category:Productive');
+  assert.equal(gateIntercepted.secondaryModalMeta.isOpen, true);
+
+  // 4. Explicit confirmation resets all criteria (Audience, Mood, In Focus) and triggers ui_chime
+  const confirmedReset = confirmSecondaryComplexFilterClearAllReset({
+    mode: 'my_connections',
+    moodFilter: 'category:Productive',
+    onlyInFocus: true,
+    preferences: { ...DEFAULT_UI_SOUND_PREFERENCES, enabled: true, volumePercent: 70 },
+  });
+  assert.equal(confirmedReset.confirmed, true);
+  assert.equal(confirmedReset.nextMode, 'everyone');
+  assert.equal(confirmedReset.nextMoodFilter, 'all');
+  assert.equal(confirmedReset.nextOnlyInFocus, false);
+  assert.equal(confirmedReset.isSecondaryModalOpen, false);
+  assert.equal(confirmedReset.isPrimaryModalOpen, false);
+  assert.equal(confirmedReset.clearedCriteriaCount, 3);
+  assert.equal(confirmedReset.chimeSpec.eventType, 'ui_chime');
+  assert.equal(confirmedReset.toastMessage, 'Filters Reset to Default');
+});
+
 
