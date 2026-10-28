@@ -728,9 +728,10 @@ export default function App() {
   const [lastCopiedDirectoryFilterUrl, setLastCopiedDirectoryFilterUrl] =
     useState<string>('');
   const [lastDirectoryFilterChime, setLastDirectoryFilterChime] = useState<
-    'start' | 'end' | null
+    'start' | 'end' | 'ui_chime' | null
   >(null);
   const [directoryFilterChimeCount, setDirectoryFilterChimeCount] = useState<number>(0);
+  const [clearFiltersChimeCount, setClearFiltersChimeCount] = useState<number>(0);
   const [isDirectoryFilterResetFlashActive, setIsDirectoryFilterResetFlashActive] =
     useState<boolean>(false);
   const [directoryFilterResetFlashCount, setDirectoryFilterResetFlashCount] =
@@ -3163,6 +3164,7 @@ export default function App() {
       mode: directoryAudienceFilter,
       moodFilter: directoryMoodFilter,
       onlyInFocus: showOnlyInFocusPeers,
+      preferences: uiSoundPrefs,
     });
     setIsClearFilterModalOpen(clearResult.isModalOpen);
     setDirectoryAudienceFilter(clearResult.nextMode);
@@ -3172,7 +3174,13 @@ export default function App() {
     setLastQuickResetUsedShift(Boolean(shiftKeyUsed));
     triggerDirectoryFilterResetFlash();
     triggerShiftResetToastConfirmation();
-    handlePlayDirectoryFilterToggleChime(directoryAudienceFilter, 'everyone');
+    if (clearResult.chimeSpec.shouldPlay) {
+      playSubtleUiChime('ui_chime', clearResult.chimeSpec.volumePercent);
+    }
+    setLastDirectoryFilterChime(clearResult.chimeSpec.chimeType);
+    setDirectoryFilterChimeCount((prev) => prev + 1);
+    setClearFiltersChimeCount((prev) => prev + 1);
+    setLastSoundFeedback(clearResult.chimeSpec.feedbackMessage);
   };
 
   const handlePlayDirectoryFilterToggleChime = (
@@ -5279,6 +5287,16 @@ export default function App() {
                             directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
                               .activeCriteriaCount
                           }
+                          data-clear-filters-chime-utility={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                              .chimeUtility
+                          }
+                          data-clear-filters-chime-event={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                              .chimeEventType
+                          }
+                          data-clear-filters-chime-count={clearFiltersChimeCount}
+                          data-last-chime-played={lastDirectoryFilterChime || 'none'}
                           className="relative inline-flex flex-wrap items-center gap-2"
                           onMouseEnter={() => setIsQuickFilterHovered(true)}
                           onMouseLeave={() => setIsQuickFilterHovered(false)}
@@ -5407,6 +5425,11 @@ export default function App() {
                               }
                               data-last-chime-played={lastDirectoryFilterChime || 'none'}
                               data-chime-play-count={directoryFilterChimeCount}
+                              data-clear-filters-chime-event={
+                                directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                  .chimeEventType
+                              }
+                              data-clear-filters-chime-count={clearFiltersChimeCount}
                               data-directory-constrained={
                                 directoryQuickFilterMeta.isDirectoryConstrained ? 'true' : 'false'
                               }
@@ -6147,6 +6170,14 @@ export default function App() {
                                     directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
                                       .motion.exit
                                   }
+                                  whileHover={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.whileHover
+                                  }
+                                  whileTap={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.whileTap
+                                  }
                                   transition={
                                     directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
                                       .motion.transition
@@ -6180,6 +6211,62 @@ export default function App() {
                                       ','
                                     )
                                   }
+                                  data-motion-engine={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.engine
+                                  }
+                                  data-motion-entrance={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.animationType
+                                  }
+                                  data-motion-initial-opacity={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.initialOpacity
+                                  }
+                                  data-motion-initial-scale={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.initialScale
+                                  }
+                                  data-motion-animate-opacity={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.animateOpacity
+                                  }
+                                  data-motion-animate-scale={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.animateScale
+                                  }
+                                  data-motion-hover-scale={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.hoverScale
+                                  }
+                                  data-motion-tap-scale={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.tapScale
+                                  }
+                                  data-motion-duration-ms={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.durationMs
+                                  }
+                                  data-chime-utility={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .chimeUtility
+                                  }
+                                  data-chime-event={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .chimeEventType
+                                  }
+                                  data-chime-notes={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .chimeSpec.chime.noteNames
+                                  }
+                                  data-chime-enabled={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .chimeSpec.shouldPlay
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-last-chime-played={lastDirectoryFilterChime || 'none'}
+                                  data-chime-play-count={clearFiltersChimeCount}
                                   className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-emerald-400/50 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 hover:text-white hover:border-emerald-300/80 transition-colors whitespace-nowrap shrink-0 origin-center"
                                 >
                                   <RotateCcw className="w-3 h-3 shrink-0 text-emerald-300" />

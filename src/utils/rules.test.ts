@@ -176,6 +176,8 @@ import {
   confirmOnlineDirectoryClearFilterReset,
   resolveShiftResetToastConfirmation,
   resolveSecondaryResetOnlyFilterAction,
+  getDedicatedClearFiltersButtonMotionSpec,
+  resolveClearFiltersButtonChime,
   resolveDedicatedClearFiltersButtonAction,
   getOnlineDirectoryQuickFilterMeta,
   buildOnlineDirectoryFilterShareLink,
@@ -4486,3 +4488,97 @@ test('Dedicated "Clear Filters" button (#online-directory-clear-filters-btn) onl
   assert.equal(metaActive.dedicatedClearFiltersButtonMeta.bypassesResetModal, true);
   assert.equal(metaActive.dedicatedClearFiltersButtonMeta.isModalOpen, false);
 });
+
+// ---------------------------------------------------------------------------
+// 70. Dedicated "Clear Filters" Button Framer Motion Fade-In & Scale Entrance
+// ---------------------------------------------------------------------------
+test('getDedicatedClearFiltersButtonMotionSpec configures Framer Motion fade-in and scale entrance animation for #online-directory-clear-filters-btn', () => {
+  const hiddenMotion = getDedicatedClearFiltersButtonMotionSpec(false);
+  assert.equal(hiddenMotion.isVisible, false);
+  assert.equal(hiddenMotion.animationType, 'fade-in-scale');
+  assert.equal(hiddenMotion.engine, 'framer-motion');
+  assert.deepEqual(hiddenMotion.initial, { opacity: 0, scale: 0.9 });
+  assert.deepEqual(hiddenMotion.animate, { opacity: 1, scale: 1 });
+  assert.deepEqual(hiddenMotion.exit, { opacity: 0, scale: 0.9 });
+
+  const visibleMotion = getDedicatedClearFiltersButtonMotionSpec(true);
+  assert.equal(visibleMotion.isVisible, true);
+  assert.equal(visibleMotion.animationType, 'fade-in-scale');
+  assert.equal(visibleMotion.engine, 'framer-motion');
+  assert.equal(visibleMotion.initialOpacity, 0);
+  assert.equal(visibleMotion.initialScale, 0.9);
+  assert.equal(visibleMotion.animateOpacity, 1);
+  assert.equal(visibleMotion.animateScale, 1);
+  assert.equal(visibleMotion.durationMs, 180);
+  assert.deepEqual(visibleMotion.initial, { opacity: 0, scale: 0.9 });
+  assert.deepEqual(visibleMotion.animate, { opacity: 1, scale: 1 });
+  assert.deepEqual(visibleMotion.exit, { opacity: 0, scale: 0.9 });
+  assert.deepEqual(visibleMotion.whileHover, { scale: 1.03 });
+  assert.deepEqual(visibleMotion.whileTap, { scale: 0.97 });
+  assert.equal(visibleMotion.transition.opacity.duration, 0.18);
+  assert.equal(visibleMotion.transition.opacity.ease, 'easeOut');
+  assert.equal(visibleMotion.transition.scale.type, 'spring');
+  assert.equal(visibleMotion.transition.scale.stiffness, 420);
+  assert.equal(visibleMotion.transition.scale.damping, 28);
+  assert.equal(visibleMotion.transition.scale.mass, 0.7);
+
+  // Verify resolveDedicatedClearFiltersButtonAction exposes the motion spec directly
+  const activeButtonSpec = resolveDedicatedClearFiltersButtonAction({
+    mode: 'everyone',
+    moodFilter: 'Deep Work',
+    onlyInFocus: false,
+  });
+  assert.equal(activeButtonSpec.shouldShowButton, true);
+  assert.equal(activeButtonSpec.motion.isVisible, true);
+  assert.equal(activeButtonSpec.motion.animationType, 'fade-in-scale');
+  assert.equal(activeButtonSpec.motion.engine, 'framer-motion');
+  assert.deepEqual(activeButtonSpec.motion.initial, { opacity: 0, scale: 0.9 });
+  assert.deepEqual(activeButtonSpec.motion.animate, { opacity: 1, scale: 1 });
+});
+
+// ---------------------------------------------------------------------------
+// 71. Clear Filters Button Subtle 'ui_chime' via playSubtleUiChime
+// ---------------------------------------------------------------------------
+test('resolveClearFiltersButtonChime and resolveDedicatedClearFiltersButtonAction configure subtle ui_chime from playSubtleUiChime when Clear Filters is clicked', () => {
+  const rawUiChime = getUiSoundChimeSpec('ui_chime', false, 65);
+  assert.equal(rawUiChime.eventType, 'ui_chime');
+  assert.equal(rawUiChime.label, 'Clear Filters Reset UI Chime');
+  assert.deepEqual(rawUiChime.frequenciesHz, [587.33, 440]);
+  assert.equal(rawUiChime.noteNames, 'D5 → A4 Subtle UI Chime');
+  assert.equal(rawUiChime.durationMs, 200);
+
+  const chimeEnabled = resolveClearFiltersButtonChime({
+    preferences: { ...DEFAULT_UI_SOUND_PREFERENCES, enabled: true, volumePercent: 70 },
+    activeCriteriaCount: 2,
+    activeCriteriaSummary: 'Mood (Deep Work), In Focus',
+  });
+  assert.equal(chimeEnabled.utilityName, 'playSubtleUiChime');
+  assert.equal(chimeEnabled.eventType, 'ui_chime');
+  assert.equal(chimeEnabled.chimeType, 'ui_chime');
+  assert.equal(chimeEnabled.shouldPlay, true);
+  assert.equal(chimeEnabled.volumePercent, 70);
+  assert.equal(chimeEnabled.chime.eventType, 'ui_chime');
+  assert.ok(chimeEnabled.feedbackMessage.includes('UI chime played: Clear Filters reset'));
+
+  const chimeMuted = resolveClearFiltersButtonChime({
+    preferences: { ...DEFAULT_UI_SOUND_PREFERENCES, enabled: false, volumePercent: 70 },
+    activeCriteriaCount: 1,
+    activeCriteriaSummary: 'My Connections',
+  });
+  assert.equal(chimeMuted.utilityName, 'playSubtleUiChime');
+  assert.equal(chimeMuted.eventType, 'ui_chime');
+  assert.equal(chimeMuted.shouldPlay, false);
+
+  const buttonSpec = resolveDedicatedClearFiltersButtonAction({
+    mode: 'my_connections',
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+    preferences: { ...DEFAULT_UI_SOUND_PREFERENCES, enabled: true, volumePercent: 65 },
+  });
+  assert.equal(buttonSpec.chimeUtility, 'playSubtleUiChime');
+  assert.equal(buttonSpec.chimeEventType, 'ui_chime');
+  assert.equal(buttonSpec.chimeSpec.eventType, 'ui_chime');
+  assert.equal(buttonSpec.chimeSpec.shouldPlay, true);
+});
+
+

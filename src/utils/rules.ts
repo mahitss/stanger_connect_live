@@ -249,7 +249,8 @@ export type UiSoundAlertEvent =
   | 'incoming_message'
   | 'connection_request'
   | 'start'
-  | 'end';
+  | 'end'
+  | 'ui_chime';
 
 export interface UiSoundEffectPreferences {
   enabled: boolean;
@@ -397,6 +398,17 @@ export function getUiSoundChimeSpec(
       frequenciesHz: [659.25, 493.88],
       noteNames: 'E5 → B4 Focus End',
       durationMs: isAppInBackground ? 300 : 240,
+      gainScalar,
+    };
+  }
+
+  if (eventType === 'ui_chime') {
+    return {
+      eventType: 'ui_chime',
+      label: 'Clear Filters Reset UI Chime',
+      frequenciesHz: [587.33, 440],
+      noteNames: 'D5 → A4 Subtle UI Chime',
+      durationMs: isAppInBackground ? 260 : 200,
       gainScalar,
     };
   }
@@ -8749,6 +8761,113 @@ export function resolveSecondaryResetOnlyFilterAction(params?: {
   };
 }
 
+export interface DedicatedClearFiltersButtonMotionSpec {
+  isVisible: boolean;
+  animationType: 'fade-in-scale';
+  engine: 'framer-motion';
+  initialOpacity: number;
+  initialScale: number;
+  animateOpacity: number;
+  animateScale: number;
+  exitOpacity: number;
+  exitScale: number;
+  hoverScale: number;
+  tapScale: number;
+  durationSec: number;
+  durationMs: number;
+  initial: { opacity: number; scale: number };
+  animate: { opacity: number; scale: number };
+  exit: { opacity: number; scale: number };
+  whileHover: { scale: number };
+  whileTap: { scale: number };
+  transition: {
+    duration: number;
+    ease: 'easeOut';
+    opacity: { duration: number; ease: 'easeOut' };
+    scale: {
+      type: 'spring';
+      stiffness: number;
+      damping: number;
+      mass: number;
+    };
+  };
+}
+
+export function getDedicatedClearFiltersButtonMotionSpec(
+  isVisible: boolean = true
+): DedicatedClearFiltersButtonMotionSpec {
+  const visible = Boolean(isVisible);
+  return {
+    isVisible: visible,
+    animationType: 'fade-in-scale',
+    engine: 'framer-motion',
+    initialOpacity: 0,
+    initialScale: 0.9,
+    animateOpacity: 1,
+    animateScale: 1,
+    exitOpacity: 0,
+    exitScale: 0.9,
+    hoverScale: 1.03,
+    tapScale: 0.97,
+    durationSec: 0.18,
+    durationMs: 180,
+    initial: { opacity: 0, scale: 0.9 },
+    animate: { opacity: 1, scale: 1 },
+    exit: { opacity: 0, scale: 0.9 },
+    whileHover: { scale: 1.03 },
+    whileTap: { scale: 0.97 },
+    transition: {
+      duration: 0.18,
+      ease: 'easeOut',
+      opacity: { duration: 0.18, ease: 'easeOut' },
+      scale: {
+        type: 'spring',
+        stiffness: 420,
+        damping: 28,
+        mass: 0.7,
+      },
+    },
+  };
+}
+
+export interface ClearFiltersButtonChimeResult {
+  utilityName: 'playSubtleUiChime';
+  eventType: 'ui_chime';
+  chimeType: 'ui_chime';
+  shouldPlay: boolean;
+  volumePercent: number;
+  chime: UiSoundChimeSpec;
+  feedbackMessage: string;
+}
+
+export function resolveClearFiltersButtonChime(params?: {
+  preferences?: UiSoundEffectPreferences;
+  activeCriteriaCount?: number;
+  activeCriteriaSummary?: string;
+}): ClearFiltersButtonChimeResult {
+  const prefs = params?.preferences ?? DEFAULT_UI_SOUND_PREFERENCES;
+  const volumePercent = clampSoundVolumePercent(prefs.volumePercent);
+  const chime = getUiSoundChimeSpec('ui_chime', false, volumePercent);
+  const shouldPlay = Boolean(prefs.enabled);
+  const summarySuffix = params?.activeCriteriaSummary
+    ? ` · Cleared ${params.activeCriteriaSummary}`
+    : '';
+
+  const feedbackMessage = shouldPlay
+    ? `UI chime played: Clear Filters reset (${chime.noteNames})${summarySuffix}`
+    : `Clear Filters reset (Sound alerts muted)${summarySuffix}`;
+
+  return {
+    utilityName: 'playSubtleUiChime',
+    eventType: 'ui_chime',
+    chimeType: 'ui_chime',
+    shouldPlay,
+    volumePercent,
+    chime,
+    feedbackMessage,
+  };
+}
+
 export interface DedicatedClearFiltersButtonSpec {
   buttonId: 'online-directory-clear-filters-btn';
   buttonTestId: 'online-directory-clear-filters-btn';
@@ -8772,18 +8891,17 @@ export interface DedicatedClearFiltersButtonSpec {
   isModalOpen: false;
   ariaLabel: string;
   tooltipText: string;
-  motion: {
-    initial: { opacity: number; scale: number };
-    animate: { opacity: number; scale: number };
-    exit: { opacity: number; scale: number };
-    transition: { duration: number; ease: 'easeOut' };
-  };
+  motion: DedicatedClearFiltersButtonMotionSpec;
+  chimeUtility: 'playSubtleUiChime';
+  chimeEventType: 'ui_chime';
+  chimeSpec: ClearFiltersButtonChimeResult;
 }
 
 export function resolveDedicatedClearFiltersButtonAction(params?: {
   mode?: OnlineDirectoryAudienceFilter | string | null;
   moodFilter?: string | null;
   onlyInFocus?: boolean;
+  preferences?: UiSoundEffectPreferences;
 }): DedicatedClearFiltersButtonSpec {
   const criteriaSpec = getQuickFilterIconActiveBadgeSpec({
     mode: params?.mode,
@@ -8806,6 +8924,12 @@ export function resolveDedicatedClearFiltersButtonAction(params?: {
   const tooltipText = shouldShowButton
     ? `Clear Filters (${activeCriteriaSummary}) — immediately returns directory to default state without opening the reset modal`
     : 'No active filter criteria applied';
+
+  const chimeSpec = resolveClearFiltersButtonChime({
+    preferences: params?.preferences,
+    activeCriteriaCount,
+    activeCriteriaSummary,
+  });
 
   return {
     buttonId: 'online-directory-clear-filters-btn',
@@ -8830,12 +8954,10 @@ export function resolveDedicatedClearFiltersButtonAction(params?: {
     isModalOpen: false,
     ariaLabel,
     tooltipText,
-    motion: {
-      initial: { opacity: 0, scale: 0.9 },
-      animate: { opacity: 1, scale: 1 },
-      exit: { opacity: 0, scale: 0.9 },
-      transition: { duration: 0.16, ease: 'easeOut' },
-    },
+    motion: getDedicatedClearFiltersButtonMotionSpec(shouldShowButton),
+    chimeUtility: 'playSubtleUiChime',
+    chimeEventType: 'ui_chime',
+    chimeSpec,
   };
 }
 
@@ -9744,6 +9866,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       mode,
       moodFilter: params.moodFilter,
       onlyInFocus: params.onlyInFocus,
+      preferences: params.uiSoundPreferences,
     }),
     shiftResetToast: resolveShiftResetToastConfirmation({
       isVisible: Boolean(params.isShiftResetToastVisible),
