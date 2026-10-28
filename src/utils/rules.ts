@@ -8868,6 +8868,82 @@ export function resolveClearFiltersButtonChime(params?: {
   };
 }
 
+export interface DedicatedClearFiltersTooltipSpec {
+  tooltipId: 'online-directory-clear-filters-tooltip';
+  tooltipTestId: 'online-directory-clear-filters-tooltip';
+  role: 'tooltip';
+  isHovered: boolean;
+  isVisible: boolean;
+  activeCriteriaCount: number;
+  criterionNoun: 'criterion' | 'criteria';
+  activeCriteriaLabels: string[];
+  activeCriteriaSummary: string;
+  headlineText: string;
+  countBadgeText: string;
+  descriptionText: string;
+  fullTooltipText: string;
+}
+
+export function getDedicatedClearFiltersTooltipMeta(params?: {
+  activeCriteriaCount?: number;
+  activeCriteriaLabels?: string[];
+  isHovered?: boolean;
+}): DedicatedClearFiltersTooltipSpec {
+  const rawLabels = Array.isArray(params?.activeCriteriaLabels)
+    ? params!.activeCriteriaLabels.map((lbl) => String(lbl || '').trim()).filter(Boolean)
+    : [];
+  const rawCount =
+    params?.activeCriteriaCount !== undefined &&
+    params?.activeCriteriaCount !== null &&
+    Number.isFinite(Number(params.activeCriteriaCount))
+      ? Math.max(0, Math.floor(Number(params.activeCriteriaCount)))
+      : rawLabels.length;
+  const activeCriteriaCount = Math.max(rawCount, rawLabels.length);
+  const criterionNoun: 'criterion' | 'criteria' =
+    activeCriteriaCount === 1 ? 'criterion' : 'criteria';
+  const activeCriteriaSummary =
+    rawLabels.length > 0
+      ? rawLabels.join(', ')
+      : activeCriteriaCount > 0
+        ? `${activeCriteriaCount} active ${criterionNoun}`
+        : 'None';
+  const isHovered = Boolean(params?.isHovered);
+  const isVisible = Boolean(isHovered && activeCriteriaCount > 0);
+
+  const headlineText =
+    activeCriteriaCount > 0
+      ? `Reset ${activeCriteriaCount} active ${criterionNoun}`
+      : 'No active filter criteria to reset';
+
+  const countBadgeText = `${activeCriteriaCount} ${criterionNoun}`;
+
+  const descriptionText =
+    activeCriteriaCount > 0
+      ? `Resets ${activeCriteriaCount} active filter ${criterionNoun} (${activeCriteriaSummary}) to default view.`
+      : 'No active filter criteria applied.';
+
+  const fullTooltipText =
+    activeCriteriaCount > 0
+      ? `Reset ${activeCriteriaCount} active ${criterionNoun} (${activeCriteriaSummary}) — immediately returns directory to default state without opening the reset modal`
+      : 'No active filter criteria applied';
+
+  return {
+    tooltipId: 'online-directory-clear-filters-tooltip',
+    tooltipTestId: 'online-directory-clear-filters-tooltip',
+    role: 'tooltip',
+    isHovered,
+    isVisible,
+    activeCriteriaCount,
+    criterionNoun,
+    activeCriteriaLabels: rawLabels,
+    activeCriteriaSummary,
+    headlineText,
+    countBadgeText,
+    descriptionText,
+    fullTooltipText,
+  };
+}
+
 export interface DedicatedClearFiltersButtonSpec {
   buttonId: 'online-directory-clear-filters-btn';
   buttonTestId: 'online-directory-clear-filters-btn';
@@ -8890,7 +8966,10 @@ export interface DedicatedClearFiltersButtonSpec {
   nextOnlyInFocus: false;
   isModalOpen: false;
   ariaLabel: string;
+  tooltipId: 'online-directory-clear-filters-tooltip';
+  tooltipTitle: string;
   tooltipText: string;
+  tooltipMeta: DedicatedClearFiltersTooltipSpec;
   motion: DedicatedClearFiltersButtonMotionSpec;
   chimeUtility: 'playSubtleUiChime';
   chimeEventType: 'ui_chime';
@@ -8902,6 +8981,7 @@ export function resolveDedicatedClearFiltersButtonAction(params?: {
   moodFilter?: string | null;
   onlyInFocus?: boolean;
   preferences?: UiSoundEffectPreferences;
+  isHovered?: boolean;
 }): DedicatedClearFiltersButtonSpec {
   const criteriaSpec = getQuickFilterIconActiveBadgeSpec({
     mode: params?.mode,
@@ -8915,15 +8995,17 @@ export function resolveDedicatedClearFiltersButtonAction(params?: {
   const activeCriteriaSummary = criteriaSpec.appliedCriteriaLabels.join(', ');
   const badgeText = `${activeCriteriaCount} active`;
 
+  const tooltipMeta = getDedicatedClearFiltersTooltipMeta({
+    activeCriteriaCount,
+    activeCriteriaLabels: criteriaSpec.appliedCriteriaLabels,
+    isHovered: Boolean(params?.isHovered),
+  });
+
   const ariaLabel = shouldShowButton
-    ? `Clear Filters (${activeCriteriaCount} active ${
-        activeCriteriaCount === 1 ? 'criterion' : 'criteria'
-      }: ${activeCriteriaSummary}) — return to default state without reset modal`
+    ? `Clear Filters (${activeCriteriaCount} active ${tooltipMeta.criterionNoun}: ${activeCriteriaSummary}) — return to default state without reset modal`
     : 'Clear Filters (no active filter criteria)';
 
-  const tooltipText = shouldShowButton
-    ? `Clear Filters (${activeCriteriaSummary}) — immediately returns directory to default state without opening the reset modal`
-    : 'No active filter criteria applied';
+  const tooltipText = tooltipMeta.fullTooltipText;
 
   const chimeSpec = resolveClearFiltersButtonChime({
     preferences: params?.preferences,
@@ -8953,7 +9035,10 @@ export function resolveDedicatedClearFiltersButtonAction(params?: {
     nextOnlyInFocus: false,
     isModalOpen: false,
     ariaLabel,
+    tooltipId: tooltipMeta.tooltipId,
+    tooltipTitle: tooltipMeta.headlineText,
     tooltipText,
+    tooltipMeta,
     motion: getDedicatedClearFiltersButtonMotionSpec(shouldShowButton),
     chimeUtility: 'playSubtleUiChime',
     chimeEventType: 'ui_chime',
@@ -9728,6 +9813,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   shiftResetToastCount?: number;
   recentFiltersHistory?: RecentDirectoryFilterCombination[] | null;
   isRecentFiltersDropdownOpen?: boolean;
+  isClearFiltersHovered?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -9867,6 +9953,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       moodFilter: params.moodFilter,
       onlyInFocus: params.onlyInFocus,
       preferences: params.uiSoundPreferences,
+      isHovered: Boolean(params.isClearFiltersHovered),
     }),
     shiftResetToast: resolveShiftResetToastConfirmation({
       isVisible: Boolean(params.isShiftResetToastVisible),

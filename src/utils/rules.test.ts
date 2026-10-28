@@ -178,6 +178,7 @@ import {
   resolveSecondaryResetOnlyFilterAction,
   getDedicatedClearFiltersButtonMotionSpec,
   resolveClearFiltersButtonChime,
+  getDedicatedClearFiltersTooltipMeta,
   resolveDedicatedClearFiltersButtonAction,
   getOnlineDirectoryQuickFilterMeta,
   buildOnlineDirectoryFilterShareLink,
@@ -4579,6 +4580,84 @@ test('resolveClearFiltersButtonChime and resolveDedicatedClearFiltersButtonActio
   assert.equal(buttonSpec.chimeEventType, 'ui_chime');
   assert.equal(buttonSpec.chimeSpec.eventType, 'ui_chime');
   assert.equal(buttonSpec.chimeSpec.shouldPlay, true);
+});
+
+// ---------------------------------------------------------------------------
+// 72. Clear Filters Button Dynamic Active Criteria Count Tooltip
+// ---------------------------------------------------------------------------
+test('getDedicatedClearFiltersTooltipMeta and resolveDedicatedClearFiltersButtonAction dynamically show the current number of active criteria being reset when hovered', () => {
+  // 0 active criteria
+  const zeroTooltip = getDedicatedClearFiltersTooltipMeta({
+    activeCriteriaCount: 0,
+    activeCriteriaLabels: [],
+    isHovered: true,
+  });
+  assert.equal(zeroTooltip.tooltipId, 'online-directory-clear-filters-tooltip');
+  assert.equal(zeroTooltip.isVisible, false);
+  assert.equal(zeroTooltip.activeCriteriaCount, 0);
+  assert.equal(zeroTooltip.criterionNoun, 'criteria');
+
+  // 1 active criterion (hovered)
+  const singleSpec = resolveDedicatedClearFiltersButtonAction({
+    mode: 'my_connections',
+    moodFilter: 'all',
+    onlyInFocus: false,
+    isHovered: true,
+  });
+  assert.equal(singleSpec.activeCriteriaCount, 1);
+  assert.equal(singleSpec.tooltipId, 'online-directory-clear-filters-tooltip');
+  assert.equal(singleSpec.tooltipTitle, 'Reset 1 active criterion');
+  assert.equal(singleSpec.tooltipMeta.isVisible, true);
+  assert.equal(singleSpec.tooltipMeta.criterionNoun, 'criterion');
+  assert.equal(singleSpec.tooltipMeta.countBadgeText, '1 criterion');
+  assert.ok(singleSpec.tooltipText.includes('Reset 1 active criterion (My Connections)'));
+  assert.ok(
+    singleSpec.tooltipMeta.descriptionText.includes(
+      'Resets 1 active filter criterion (My Connections)'
+    )
+  );
+
+  // 2 active criteria (hovered)
+  const doubleSpec = resolveDedicatedClearFiltersButtonAction({
+    mode: 'my_connections',
+    moodFilter: 'Deep Work',
+    onlyInFocus: false,
+    isHovered: true,
+  });
+  assert.equal(doubleSpec.activeCriteriaCount, 2);
+  assert.equal(doubleSpec.tooltipTitle, 'Reset 2 active criteria');
+  assert.equal(doubleSpec.tooltipMeta.isVisible, true);
+  assert.equal(doubleSpec.tooltipMeta.criterionNoun, 'criteria');
+  assert.equal(doubleSpec.tooltipMeta.countBadgeText, '2 criteria');
+  assert.ok(
+    doubleSpec.tooltipText.includes(
+      'Reset 2 active criteria (Mood (Deep Work), My Connections)'
+    )
+  );
+
+  // 3 active criteria via getOnlineDirectoryQuickFilterMeta
+  const tripleMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+    isClearFiltersHovered: true,
+  });
+  assert.equal(tripleMeta.dedicatedClearFiltersButtonMeta.activeCriteriaCount, 3);
+  assert.equal(
+    tripleMeta.dedicatedClearFiltersButtonMeta.tooltipMeta.headlineText,
+    'Reset 3 active criteria'
+  );
+  assert.equal(
+    tripleMeta.dedicatedClearFiltersButtonMeta.tooltipMeta.countBadgeText,
+    '3 criteria'
+  );
+  assert.equal(tripleMeta.dedicatedClearFiltersButtonMeta.tooltipMeta.isVisible, true);
+  assert.ok(
+    tripleMeta.dedicatedClearFiltersButtonMeta.tooltipText.includes(
+      'Reset 3 active criteria (Mood (Deep Work), In Focus, My Connections)'
+    )
+  );
 });
 
 
