@@ -8882,6 +8882,8 @@ export interface DedicatedClearFiltersTooltipSpec {
   countBadgeText: string;
   descriptionText: string;
   fullTooltipText: string;
+  keyboardShortcutLabel: 'Ctrl+R / Cmd+R';
+  keyboardShortcutBadgeText: 'Ctrl+R';
 }
 
 export function getDedicatedClearFiltersTooltipMeta(params?: {
@@ -8919,13 +8921,13 @@ export function getDedicatedClearFiltersTooltipMeta(params?: {
 
   const descriptionText =
     activeCriteriaCount > 0
-      ? `Resets ${activeCriteriaCount} active filter ${criterionNoun} (${activeCriteriaSummary}) to default view.`
-      : 'No active filter criteria applied.';
+      ? `Resets ${activeCriteriaCount} active filter ${criterionNoun} (${activeCriteriaSummary}) to default view (Shortcut: Ctrl+R / Cmd+R).`
+      : 'No active filter criteria applied (Shortcut: Ctrl+R / Cmd+R).';
 
   const fullTooltipText =
     activeCriteriaCount > 0
-      ? `Reset ${activeCriteriaCount} active ${criterionNoun} (${activeCriteriaSummary}) — immediately returns directory to default state without opening the reset modal`
-      : 'No active filter criteria applied';
+      ? `Reset ${activeCriteriaCount} active ${criterionNoun} (${activeCriteriaSummary}) — immediately returns directory to default state without opening the reset modal (Ctrl+R / Cmd+R)`
+      : 'No active filter criteria applied (Ctrl+R / Cmd+R)';
 
   return {
     tooltipId: 'online-directory-clear-filters-tooltip',
@@ -8941,6 +8943,8 @@ export function getDedicatedClearFiltersTooltipMeta(params?: {
     countBadgeText,
     descriptionText,
     fullTooltipText,
+    keyboardShortcutLabel: 'Ctrl+R / Cmd+R',
+    keyboardShortcutBadgeText: 'Ctrl+R',
   };
 }
 
@@ -8959,6 +8963,9 @@ export interface DedicatedClearFiltersButtonSpec {
   activeCriteriaLabels: string[];
   activeCriteriaSummary: string;
   badgeText: string;
+  keyboardShortcutLabel: 'Ctrl+R / Cmd+R';
+  keyboardShortcutBadgeText: 'Ctrl+R';
+  shortcutsSupported: ['Ctrl+R', 'Cmd+R'];
   bypassesResetModal: true;
   shouldOpenClearModal: false;
   nextMode: 'everyone';
@@ -9002,8 +9009,8 @@ export function resolveDedicatedClearFiltersButtonAction(params?: {
   });
 
   const ariaLabel = shouldShowButton
-    ? `Clear Filters (${activeCriteriaCount} active ${tooltipMeta.criterionNoun}: ${activeCriteriaSummary}) — return to default state without reset modal`
-    : 'Clear Filters (no active filter criteria)';
+    ? `Clear Filters (${activeCriteriaCount} active ${tooltipMeta.criterionNoun}: ${activeCriteriaSummary}) — return to default state without reset modal (Ctrl+R / Cmd+R)`
+    : 'Clear Filters (no active filter criteria · Ctrl+R / Cmd+R)';
 
   const tooltipText = tooltipMeta.fullTooltipText;
 
@@ -9028,6 +9035,9 @@ export function resolveDedicatedClearFiltersButtonAction(params?: {
     activeCriteriaLabels: criteriaSpec.appliedCriteriaLabels,
     activeCriteriaSummary,
     badgeText,
+    keyboardShortcutLabel: 'Ctrl+R / Cmd+R',
+    keyboardShortcutBadgeText: 'Ctrl+R',
+    shortcutsSupported: ['Ctrl+R', 'Cmd+R'],
     bypassesResetModal: true,
     shouldOpenClearModal: false,
     nextMode: 'everyone',
@@ -9043,6 +9053,116 @@ export function resolveDedicatedClearFiltersButtonAction(params?: {
     chimeUtility: 'playSubtleUiChime',
     chimeEventType: 'ui_chime',
     chimeSpec,
+  };
+}
+
+export interface ClearFiltersKeyboardShortcutEventInput {
+  key?: string | null;
+  code?: string | null;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+}
+
+export interface ClearFiltersKeyboardShortcutActionResult {
+  matchedShortcut: boolean;
+  shouldPreventDefault: boolean;
+  shouldStopPropagation: boolean;
+  shouldTriggerReset: boolean;
+  modifierUsed: 'Ctrl' | 'Cmd' | 'Ctrl+Cmd' | 'none';
+  shortcutCombo: 'Ctrl+R' | 'Cmd+R' | 'none';
+  shortcutDisplayLabel: 'Ctrl+R / Cmd+R';
+  ctrlShortcutLabel: 'Ctrl+R';
+  cmdShortcutLabel: 'Cmd+R';
+  macShortcutSymbol: '⌘R';
+  targetButtonId: 'online-directory-clear-filters-btn';
+  targetContainerId: 'online-directory-mood-filter';
+  clearAction: DedicatedClearFiltersButtonSpec;
+  nextMode: 'everyone';
+  nextMoodFilter: 'all';
+  nextOnlyInFocus: false;
+  isModalOpen: false;
+  bypassesResetModal: true;
+  chimeSpec: ClearFiltersButtonChimeResult;
+}
+
+export function isClearFiltersKeyboardShortcutEvent(
+  event?: ClearFiltersKeyboardShortcutEventInput | null
+): boolean {
+  if (!event) return false;
+  const hasCtrlOrMeta = Boolean(event.ctrlKey) || Boolean(event.metaKey);
+  if (!hasCtrlOrMeta) return false;
+  if (Boolean(event.altKey)) return false;
+
+  const rawKey = String(event.key ?? '').trim().toLowerCase();
+  const rawCode = String(event.code ?? '').trim();
+  return rawKey === 'r' || rawCode === 'KeyR';
+}
+
+export function resolveClearFiltersKeyboardShortcutAction(params?: {
+  key?: string | null;
+  code?: string | null;
+  ctrlKey?: boolean;
+  metaKey?: boolean;
+  altKey?: boolean;
+  shiftKey?: boolean;
+  mode?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+  preferences?: UiSoundEffectPreferences;
+  isDirectoryActive?: boolean;
+}): ClearFiltersKeyboardShortcutActionResult {
+  const matchedShortcut = isClearFiltersKeyboardShortcutEvent(params);
+  const isDirectoryActive =
+    params?.isDirectoryActive !== undefined ? Boolean(params.isDirectoryActive) : true;
+  const shouldTriggerReset = matchedShortcut && isDirectoryActive;
+
+  const ctrlHeld = Boolean(params?.ctrlKey);
+  const metaHeld = Boolean(params?.metaKey);
+
+  let modifierUsed: 'Ctrl' | 'Cmd' | 'Ctrl+Cmd' | 'none' = 'none';
+  let shortcutCombo: 'Ctrl+R' | 'Cmd+R' | 'none' = 'none';
+  if (matchedShortcut) {
+    if (ctrlHeld && metaHeld) {
+      modifierUsed = 'Ctrl+Cmd';
+      shortcutCombo = 'Ctrl+R';
+    } else if (metaHeld) {
+      modifierUsed = 'Cmd';
+      shortcutCombo = 'Cmd+R';
+    } else {
+      modifierUsed = 'Ctrl';
+      shortcutCombo = 'Ctrl+R';
+    }
+  }
+
+  const clearAction = resolveDedicatedClearFiltersButtonAction({
+    mode: params?.mode,
+    moodFilter: params?.moodFilter,
+    onlyInFocus: params?.onlyInFocus,
+    preferences: params?.preferences,
+  });
+
+  return {
+    matchedShortcut,
+    shouldPreventDefault: shouldTriggerReset,
+    shouldStopPropagation: shouldTriggerReset,
+    shouldTriggerReset,
+    modifierUsed,
+    shortcutCombo,
+    shortcutDisplayLabel: 'Ctrl+R / Cmd+R',
+    ctrlShortcutLabel: 'Ctrl+R',
+    cmdShortcutLabel: 'Cmd+R',
+    macShortcutSymbol: '⌘R',
+    targetButtonId: 'online-directory-clear-filters-btn',
+    targetContainerId: 'online-directory-mood-filter',
+    clearAction,
+    nextMode: clearAction.nextMode,
+    nextMoodFilter: clearAction.nextMoodFilter,
+    nextOnlyInFocus: clearAction.nextOnlyInFocus,
+    isModalOpen: clearAction.isModalOpen,
+    bypassesResetModal: clearAction.bypassesResetModal,
+    chimeSpec: clearAction.chimeSpec,
   };
 }
 

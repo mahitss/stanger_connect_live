@@ -180,6 +180,8 @@ import {
   resolveClearFiltersButtonChime,
   getDedicatedClearFiltersTooltipMeta,
   resolveDedicatedClearFiltersButtonAction,
+  isClearFiltersKeyboardShortcutEvent,
+  resolveClearFiltersKeyboardShortcutAction,
   getOnlineDirectoryQuickFilterMeta,
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
@@ -4772,3 +4774,113 @@ test('evaluateRecentlyAppliedDirectoryFilterMeta, isMoodFilterInRecentDirectoryF
     'Recently Applied'
   );
 });
+
+// ---------------------------------------------------------------------------
+// 74. Ctrl+R / Cmd+R Keyboard Shortcut for Clear Filters in #online-directory-mood-filter
+// ---------------------------------------------------------------------------
+test('isClearFiltersKeyboardShortcutEvent and resolveClearFiltersKeyboardShortcutAction handle Ctrl+R and Cmd+R shortcuts with identical Clear Filters reset logic', () => {
+  // 1. Key event detection for Ctrl+R and Cmd+R
+  assert.equal(
+    isClearFiltersKeyboardShortcutEvent({ key: 'r', ctrlKey: true, metaKey: false }),
+    true
+  );
+  assert.equal(
+    isClearFiltersKeyboardShortcutEvent({ key: 'R', ctrlKey: true, metaKey: false }),
+    true
+  );
+  assert.equal(
+    isClearFiltersKeyboardShortcutEvent({ key: 'r', ctrlKey: false, metaKey: true }),
+    true
+  );
+  assert.equal(
+    isClearFiltersKeyboardShortcutEvent({ code: 'KeyR', ctrlKey: false, metaKey: true }),
+    true
+  );
+
+  // Unmodified 'r', Alt+R, or Ctrl+K should not match
+  assert.equal(
+    isClearFiltersKeyboardShortcutEvent({ key: 'r', ctrlKey: false, metaKey: false }),
+    false
+  );
+  assert.equal(
+    isClearFiltersKeyboardShortcutEvent({
+      key: 'r',
+      ctrlKey: true,
+      metaKey: false,
+      altKey: true,
+    }),
+    false
+  );
+  assert.equal(
+    isClearFiltersKeyboardShortcutEvent({ key: 'k', ctrlKey: true, metaKey: false }),
+    false
+  );
+
+  // 2. Ctrl+R triggers the exact same reset logic as resolveDedicatedClearFiltersButtonAction
+  const buttonAction = resolveDedicatedClearFiltersButtonAction({
+    mode: 'my_connections',
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+    preferences: { ...DEFAULT_UI_SOUND_PREFERENCES, enabled: true, volumePercent: 75 },
+  });
+  const ctrlRAction = resolveClearFiltersKeyboardShortcutAction({
+    key: 'r',
+    code: 'KeyR',
+    ctrlKey: true,
+    metaKey: false,
+    mode: 'my_connections',
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+    preferences: { ...DEFAULT_UI_SOUND_PREFERENCES, enabled: true, volumePercent: 75 },
+    isDirectoryActive: true,
+  });
+
+  assert.equal(ctrlRAction.matchedShortcut, true);
+  assert.equal(ctrlRAction.shouldPreventDefault, true);
+  assert.equal(ctrlRAction.shouldStopPropagation, true);
+  assert.equal(ctrlRAction.shouldTriggerReset, true);
+  assert.equal(ctrlRAction.modifierUsed, 'Ctrl');
+  assert.equal(ctrlRAction.shortcutCombo, 'Ctrl+R');
+  assert.equal(ctrlRAction.targetButtonId, 'online-directory-clear-filters-btn');
+  assert.equal(ctrlRAction.targetContainerId, 'online-directory-mood-filter');
+  assert.equal(ctrlRAction.nextMode, buttonAction.nextMode);
+  assert.equal(ctrlRAction.nextMoodFilter, buttonAction.nextMoodFilter);
+  assert.equal(ctrlRAction.nextOnlyInFocus, buttonAction.nextOnlyInFocus);
+  assert.equal(ctrlRAction.isModalOpen, buttonAction.isModalOpen);
+  assert.equal(ctrlRAction.bypassesResetModal, buttonAction.bypassesResetModal);
+  assert.equal(ctrlRAction.chimeSpec.eventType, buttonAction.chimeSpec.eventType);
+  assert.equal(ctrlRAction.chimeSpec.volumePercent, buttonAction.chimeSpec.volumePercent);
+  assert.equal(
+    ctrlRAction.clearAction.activeCriteriaCount,
+    buttonAction.activeCriteriaCount
+  );
+
+  // 3. Cmd+R (macOS metaKey) triggers the exact same reset logic
+  const cmdRAction = resolveClearFiltersKeyboardShortcutAction({
+    key: 'r',
+    code: 'KeyR',
+    ctrlKey: false,
+    metaKey: true,
+    mode: 'my_connections',
+    moodFilter: 'category:Productive',
+    onlyInFocus: false,
+    preferences: { ...DEFAULT_UI_SOUND_PREFERENCES, enabled: true, volumePercent: 65 },
+    isDirectoryActive: true,
+  });
+
+  assert.equal(cmdRAction.matchedShortcut, true);
+  assert.equal(cmdRAction.shouldPreventDefault, true);
+  assert.equal(cmdRAction.shouldTriggerReset, true);
+  assert.equal(cmdRAction.modifierUsed, 'Cmd');
+  assert.equal(cmdRAction.shortcutCombo, 'Cmd+R');
+  assert.equal(cmdRAction.nextMode, 'everyone');
+  assert.equal(cmdRAction.nextMoodFilter, 'all');
+  assert.equal(cmdRAction.nextOnlyInFocus, false);
+  assert.equal(cmdRAction.bypassesResetModal, true);
+
+  // 4. DedicatedClearFiltersButtonSpec exposes shortcut metadata
+  assert.equal(buttonAction.keyboardShortcutLabel, 'Ctrl+R / Cmd+R');
+  assert.equal(buttonAction.keyboardShortcutBadgeText, 'Ctrl+R');
+  assert.deepEqual(buttonAction.shortcutsSupported, ['Ctrl+R', 'Cmd+R']);
+});
+

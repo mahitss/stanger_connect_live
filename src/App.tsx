@@ -164,6 +164,8 @@ import {
   confirmOnlineDirectoryClearFilterReset,
   resolveSecondaryResetOnlyFilterAction,
   resolveDedicatedClearFiltersButtonAction,
+  isClearFiltersKeyboardShortcutEvent,
+  resolveClearFiltersKeyboardShortcutAction,
   getOnlineDirectoryQuickFilterMeta,
   resolveQuickFilterToggleChime,
   buildOnlineDirectoryFilterShareLink,
@@ -755,6 +757,11 @@ export default function App() {
   const [isShiftKeyHeldForFilter, setIsShiftKeyHeldForFilter] = useState<boolean>(false);
   const [quickResetWithoutModalCount, setQuickResetWithoutModalCount] = useState<number>(0);
   const [lastQuickResetUsedShift, setLastQuickResetUsedShift] = useState<boolean>(false);
+  const [clearFiltersShortcutTriggerCount, setClearFiltersShortcutTriggerCount] =
+    useState<number>(0);
+  const [lastClearFiltersShortcutCombo, setLastClearFiltersShortcutCombo] = useState<
+    'Ctrl+R' | 'Cmd+R' | 'none'
+  >('none');
   const [isShiftResetToastVisible, setIsShiftResetToastVisible] = useState<boolean>(false);
   const [shiftResetToastCount, setShiftResetToastCount] = useState<number>(0);
   const shiftResetToastTimerRef = useRef<number | null>(null);
@@ -973,6 +980,79 @@ export default function App() {
         allowCallsFromConnectionsOnly: accountSession?.allowCallsFromConnectionsOnly ?? true,
       }
     : accountSession;
+
+  const handleDedicatedClearAllActiveFilters = (
+    shiftKeyUsed: boolean = false,
+    shortcutCombo?: 'Ctrl+R' | 'Cmd+R'
+  ) => {
+    const clearResult = resolveDedicatedClearFiltersButtonAction({
+      mode: directoryAudienceFilter,
+      moodFilter: directoryMoodFilter,
+      onlyInFocus: showOnlyInFocusPeers,
+      preferences: uiSoundPrefs,
+    });
+    setIsClearFilterModalOpen(clearResult.isModalOpen);
+    setIsClearFiltersBtnHovered(false);
+    setDirectoryAudienceFilter(clearResult.nextMode);
+    setDirectoryMoodFilter(clearResult.nextMoodFilter);
+    setShowOnlyInFocusPeers(clearResult.nextOnlyInFocus);
+    setQuickResetWithoutModalCount((prev) => prev + 1);
+    setLastQuickResetUsedShift(Boolean(shiftKeyUsed));
+    if (shortcutCombo) {
+      setClearFiltersShortcutTriggerCount((prev) => prev + 1);
+      setLastClearFiltersShortcutCombo(shortcutCombo);
+    }
+    triggerDirectoryFilterResetFlash();
+    triggerShiftResetToastConfirmation();
+    if (clearResult.chimeSpec.shouldPlay) {
+      playSubtleUiChime('ui_chime', clearResult.chimeSpec.volumePercent);
+    }
+    setLastDirectoryFilterChime(clearResult.chimeSpec.chimeType);
+    setDirectoryFilterChimeCount((prev) => prev + 1);
+    setClearFiltersChimeCount((prev) => prev + 1);
+    setLastSoundFeedback(clearResult.chimeSpec.feedbackMessage);
+  };
+
+  useEffect(() => {
+    if (!currentIdentity || activePage !== 'hub') return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!isClearFiltersKeyboardShortcutEvent(e)) return;
+      const shortcutResult = resolveClearFiltersKeyboardShortcutAction({
+        key: e.key,
+        code: e.code,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        altKey: e.altKey,
+        shiftKey: e.shiftKey,
+        mode: directoryAudienceFilter,
+        moodFilter: directoryMoodFilter,
+        onlyInFocus: showOnlyInFocusPeers,
+        preferences: uiSoundPrefs,
+        isDirectoryActive: true,
+      });
+      if (!shortcutResult.shouldTriggerReset) return;
+      if (shortcutResult.shouldPreventDefault) {
+        e.preventDefault();
+      }
+      if (shortcutResult.shouldStopPropagation) {
+        e.stopPropagation();
+      }
+      handleDedicatedClearAllActiveFilters(
+        Boolean(e.shiftKey || isShiftKeyHeldForFilter),
+        shortcutResult.shortcutCombo === 'Cmd+R' ? 'Cmd+R' : 'Ctrl+R'
+      );
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    currentIdentity?.uid,
+    activePage,
+    directoryAudienceFilter,
+    directoryMoodFilter,
+    showOnlyInFocusPeers,
+    uiSoundPrefs,
+    isShiftKeyHeldForFilter,
+  ]);
 
   // Test connection on boot as required by Firebase integration skill
   useEffect(() => {
@@ -3163,31 +3243,6 @@ export default function App() {
     handlePlayDirectoryFilterToggleChime(directoryAudienceFilter, 'everyone');
   };
 
-  const handleDedicatedClearAllActiveFilters = (shiftKeyUsed: boolean = false) => {
-    const clearResult = resolveDedicatedClearFiltersButtonAction({
-      mode: directoryAudienceFilter,
-      moodFilter: directoryMoodFilter,
-      onlyInFocus: showOnlyInFocusPeers,
-      preferences: uiSoundPrefs,
-    });
-    setIsClearFilterModalOpen(clearResult.isModalOpen);
-    setIsClearFiltersBtnHovered(false);
-    setDirectoryAudienceFilter(clearResult.nextMode);
-    setDirectoryMoodFilter(clearResult.nextMoodFilter);
-    setShowOnlyInFocusPeers(clearResult.nextOnlyInFocus);
-    setQuickResetWithoutModalCount((prev) => prev + 1);
-    setLastQuickResetUsedShift(Boolean(shiftKeyUsed));
-    triggerDirectoryFilterResetFlash();
-    triggerShiftResetToastConfirmation();
-    if (clearResult.chimeSpec.shouldPlay) {
-      playSubtleUiChime('ui_chime', clearResult.chimeSpec.volumePercent);
-    }
-    setLastDirectoryFilterChime(clearResult.chimeSpec.chimeType);
-    setDirectoryFilterChimeCount((prev) => prev + 1);
-    setClearFiltersChimeCount((prev) => prev + 1);
-    setLastSoundFeedback(clearResult.chimeSpec.feedbackMessage);
-  };
-
   const handlePlayDirectoryFilterToggleChime = (
     currentMode: OnlineDirectoryAudienceFilter,
     nextMode?: OnlineDirectoryAudienceFilter
@@ -5316,6 +5371,12 @@ export default function App() {
                           data-recently-applied-label={
                             directoryQuickFilterMeta.recentlyAppliedMeta.badgeLabel
                           }
+                          data-clear-shortcut={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                              .keyboardShortcutLabel
+                          }
+                          data-clear-shortcut-count={clearFiltersShortcutTriggerCount}
+                          data-last-clear-shortcut={lastClearFiltersShortcutCombo}
                           className="relative inline-flex flex-wrap items-center gap-2"
                         >
                           <div className="inline-flex flex-wrap items-center gap-1.5">
@@ -5530,6 +5591,12 @@ export default function App() {
                               data-recently-applied-summary={
                                 directoryQuickFilterMeta.recentlyAppliedMeta.statusSummary
                               }
+                              data-clear-shortcut={
+                                directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                  .keyboardShortcutLabel
+                              }
+                              data-clear-shortcut-count={clearFiltersShortcutTriggerCount}
+                              data-last-clear-shortcut={lastClearFiltersShortcutCombo}
                               className={`group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
                                 directoryQuickFilterMeta.isMyConnectionsOnly
                                   ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
@@ -6424,6 +6491,12 @@ export default function App() {
                                     }
                                     data-last-chime-played={lastDirectoryFilterChime || 'none'}
                                     data-chime-play-count={clearFiltersChimeCount}
+                                    data-clear-shortcut={
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .keyboardShortcutLabel
+                                    }
+                                    data-clear-shortcut-count={clearFiltersShortcutTriggerCount}
+                                    data-last-clear-shortcut={lastClearFiltersShortcutCombo}
                                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-emerald-400/50 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 hover:text-white hover:border-emerald-300/80 transition-colors whitespace-nowrap shrink-0 origin-center"
                                   >
                                     <RotateCcw className="w-3 h-3 shrink-0 text-emerald-300" />
@@ -6442,6 +6515,15 @@ export default function App() {
                                           .badgeText
                                       }
                                     </span>
+                                    <kbd
+                                      data-testid="dedicated-clear-filters-shortcut-badge"
+                                      className="px-1 py-0.2 rounded bg-black/50 border border-emerald-400/35 text-[9px] font-mono text-emerald-200 leading-none"
+                                    >
+                                      {
+                                        directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                          .keyboardShortcutBadgeText
+                                      }
+                                    </kbd>
                                   </motion.button>
 
                                   <div
@@ -6467,6 +6549,10 @@ export default function App() {
                                     data-criterion-noun={
                                       directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
                                         .tooltipMeta.criterionNoun
+                                    }
+                                    data-clear-shortcut={
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .tooltipMeta.keyboardShortcutLabel
                                     }
                                     className={`pointer-events-none absolute left-0 top-full mt-1.5 z-50 w-64 rounded-lg border border-emerald-500/40 bg-[#050505] px-2.5 py-2 text-left shadow-2xl transition-all duration-150 ${
                                       directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
@@ -6517,6 +6603,15 @@ export default function App() {
                                           </span>
                                         )
                                       )}
+                                      <kbd
+                                        data-testid="clear-filters-tooltip-shortcut"
+                                        className="inline-flex items-center px-1.5 py-0.5 rounded bg-zinc-950 border border-emerald-500/40 text-[9px] font-mono text-emerald-200"
+                                      >
+                                        {
+                                          directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                            .tooltipMeta.keyboardShortcutLabel
+                                        }
+                                      </kbd>
                                     </div>
                                   </div>
                                 </div>
