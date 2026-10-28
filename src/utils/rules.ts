@@ -9898,6 +9898,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   recentFiltersMeta: RecentDirectoryFiltersDropdownMeta;
   recentlyAppliedMeta: RecentlyAppliedDirectoryFilterMeta;
   secondaryClearAllModalMeta: SecondaryComplexFilterClearModalMeta;
+  pinnedFiltersMeta: PinnedDirectoryFiltersMeta;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -9937,6 +9938,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   isRecentFiltersDropdownOpen?: boolean;
   isClearFiltersHovered?: boolean;
   isSecondaryClearModalOpen?: boolean;
+  pinnedFilters?: RecentDirectoryFilterCombination[] | null;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -10104,6 +10106,12 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       history: params.recentFiltersHistory,
       everyoneCount,
       matchingPeersCount: zeroPeersNotice.displayedPeersCount,
+    }),
+    pinnedFiltersMeta: evaluatePinnedDirectoryFiltersMeta({
+      pinnedFilters: params.pinnedFilters,
+      currentAudienceFilter: mode,
+      currentMoodFilter: params.moodFilter,
+      currentOnlyInFocus: params.onlyInFocus,
     }),
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
@@ -12289,6 +12297,228 @@ export function confirmSecondaryComplexFilterClearAllReset(params?: {
     toastMessage: 'Filters Reset to Default',
   };
 }
+
+export const MAX_PINNED_DIRECTORY_FILTER_CHIPS = 6;
+export const PINNED_DIRECTORY_FILTERS_STORAGE_KEY =
+  'mr_stranger_pinned_directory_filters_v1';
+
+export interface PinnedDirectoryFilterChip extends RecentDirectoryFilterCombination {
+  index: number;
+  chipId: string;
+  chipTestId: 'online-directory-pinned-filter-chip';
+  unpinButtonTestId: 'online-directory-unpin-filter-btn';
+  isCurrentlyActive: boolean;
+  applyAriaLabel: string;
+  unpinAriaLabel: string;
+}
+
+export interface PinnedDirectoryFiltersMeta {
+  saveButtonId: 'online-directory-save-config-btn';
+  saveButtonTestId: 'online-directory-save-config-btn';
+  barId: 'online-directory-pinned-filters-bar';
+  barTestId: 'online-directory-pinned-filters-bar';
+  buttonLabel: 'Save current configuration';
+  savedStateLabel: 'Configuration Saved';
+  activeCombination: RecentDirectoryFilterCombination;
+  isCurrentConfigPinned: boolean;
+  canSaveCurrentConfig: boolean;
+  pinnedCount: number;
+  maxPinnedCount: number;
+  hasPinnedChips: boolean;
+  badgeText: string;
+  saveButtonAriaLabel: string;
+  saveButtonTooltip: string;
+  chips: PinnedDirectoryFilterChip[];
+}
+
+export function saveDirectoryFilterConfigurationAsPinnedChip(
+  currentPinned: RecentDirectoryFilterCombination[] | null | undefined,
+  params?: {
+    audienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+    moodFilter?: string | null;
+    onlyInFocus?: boolean;
+    timestampMs?: number;
+  },
+  maxItems: number = MAX_PINNED_DIRECTORY_FILTER_CHIPS
+): {
+  saved: boolean;
+  alreadyPinned: boolean;
+  pinnedChip: RecentDirectoryFilterCombination;
+  updatedPinned: RecentDirectoryFilterCombination[];
+  statusMessage: string;
+} {
+  const safeMax = Math.max(
+    1,
+    Math.min(12, Math.floor(Number(maxItems) || MAX_PINNED_DIRECTORY_FILTER_CHIPS))
+  );
+  const entry = buildDirectoryFilterCombinationEntry(params);
+  const existing = Array.isArray(currentPinned)
+    ? currentPinned.filter((item): item is RecentDirectoryFilterCombination => Boolean(item))
+    : [];
+  const alreadyPinned = existing.some((item) => item.id === entry.id);
+  const deduplicated = existing.filter((item) => item.id !== entry.id);
+  const updatedPinned = [entry, ...deduplicated].slice(0, safeMax);
+
+  const statusMessage = alreadyPinned
+    ? `Pinned filter updated: ${entry.label}`
+    : `Saved "${entry.label}" as a pinned filter chip`;
+
+  return {
+    saved: true,
+    alreadyPinned,
+    pinnedChip: entry,
+    updatedPinned,
+    statusMessage,
+  };
+}
+
+export function removePinnedDirectoryFilterChip(
+  currentPinned: RecentDirectoryFilterCombination[] | null | undefined,
+  targetIdOrLabel: string
+): {
+  removed: boolean;
+  updatedPinned: RecentDirectoryFilterCombination[];
+} {
+  const existing = Array.isArray(currentPinned)
+    ? currentPinned.filter((item): item is RecentDirectoryFilterCombination => Boolean(item))
+    : [];
+  const cleanTarget = String(targetIdOrLabel ?? '').trim();
+  if (!cleanTarget) {
+    return {
+      removed: false,
+      updatedPinned: existing,
+    };
+  }
+  const updatedPinned = existing.filter(
+    (item) => item.id !== cleanTarget && item.label !== cleanTarget
+  );
+  return {
+    removed: updatedPinned.length < existing.length,
+    updatedPinned,
+  };
+}
+
+export function applyPinnedDirectoryFilterChip(
+  currentPinned: RecentDirectoryFilterCombination[] | null | undefined,
+  targetIdOrIndex: string | number
+): {
+  found: boolean;
+  appliedChip: RecentDirectoryFilterCombination | null;
+  audienceFilter: OnlineDirectoryAudienceFilter;
+  moodFilter: string;
+  onlyInFocus: boolean;
+} {
+  const list = Array.isArray(currentPinned)
+    ? currentPinned.filter((item): item is RecentDirectoryFilterCombination => Boolean(item))
+    : [];
+
+  let matched: RecentDirectoryFilterCombination | undefined;
+  if (typeof targetIdOrIndex === 'number') {
+    matched = list[targetIdOrIndex];
+  } else {
+    const cleanTarget = String(targetIdOrIndex ?? '').trim();
+    matched = list.find(
+      (item) =>
+        item.id === cleanTarget ||
+        item.label === cleanTarget ||
+        item.shortLabel === cleanTarget
+    );
+    if (!matched && /^\d+$/.test(cleanTarget)) {
+      matched = list[Number(cleanTarget)];
+    }
+  }
+
+  if (!matched) {
+    return {
+      found: false,
+      appliedChip: null,
+      audienceFilter: 'everyone',
+      moodFilter: 'all',
+      onlyInFocus: false,
+    };
+  }
+
+  return {
+    found: true,
+    appliedChip: matched,
+    audienceFilter: matched.audienceFilter,
+    moodFilter: matched.moodFilter,
+    onlyInFocus: matched.onlyInFocus,
+  };
+}
+
+export function evaluatePinnedDirectoryFiltersMeta(params?: {
+  pinnedFilters?: RecentDirectoryFilterCombination[] | null;
+  currentAudienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+  currentMoodFilter?: string | null;
+  currentOnlyInFocus?: boolean;
+}): PinnedDirectoryFiltersMeta {
+  const activeCombination = buildDirectoryFilterCombinationEntry({
+    audienceFilter: params?.currentAudienceFilter,
+    moodFilter: params?.currentMoodFilter,
+    onlyInFocus: params?.currentOnlyInFocus,
+  });
+
+  const rawList = Array.isArray(params?.pinnedFilters)
+    ? params.pinnedFilters.filter((item): item is RecentDirectoryFilterCombination => Boolean(item))
+    : [];
+  const trimmed = rawList.slice(0, MAX_PINNED_DIRECTORY_FILTER_CHIPS);
+
+  const chips: PinnedDirectoryFilterChip[] = trimmed.map((item, idx) => {
+    const normalized = buildDirectoryFilterCombinationEntry({
+      audienceFilter: item.audienceFilter,
+      moodFilter: item.moodFilter,
+      onlyInFocus: item.onlyInFocus,
+      timestampMs: item.timestampMs,
+    });
+    const isCurrentlyActive = normalized.id === activeCombination.id;
+    return {
+      ...normalized,
+      index: idx,
+      chipId: `online-directory-pinned-chip-${idx}`,
+      chipTestId: 'online-directory-pinned-filter-chip',
+      unpinButtonTestId: 'online-directory-unpin-filter-btn',
+      isCurrentlyActive,
+      applyAriaLabel: `Apply pinned filter combination: ${normalized.label}`,
+      unpinAriaLabel: `Remove pinned filter chip: ${normalized.label}`,
+    };
+  });
+
+  const isCurrentConfigPinned = chips.some((c) => c.isCurrentlyActive);
+  const pinnedCount = chips.length;
+  const maxPinnedCount = MAX_PINNED_DIRECTORY_FILTER_CHIPS;
+  const hasPinnedChips = pinnedCount > 0;
+  const canSaveCurrentConfig = true;
+  const badgeText = `${pinnedCount}/${maxPinnedCount}`;
+
+  const saveButtonAriaLabel = isCurrentConfigPinned
+    ? `Save current configuration (${activeCombination.label} — already bookmarked as a pinned filter chip)`
+    : `Save current configuration (${activeCombination.label}) as a pinned filter chip for one-click access`;
+
+  const saveButtonTooltip = isCurrentConfigPinned
+    ? `Current configuration (${activeCombination.label}) is bookmarked in your Pinned Filters`
+    : `Bookmark "${activeCombination.label}" as a pinned filter chip for one-click access`;
+
+  return {
+    saveButtonId: 'online-directory-save-config-btn',
+    saveButtonTestId: 'online-directory-save-config-btn',
+    barId: 'online-directory-pinned-filters-bar',
+    barTestId: 'online-directory-pinned-filters-bar',
+    buttonLabel: 'Save current configuration',
+    savedStateLabel: 'Configuration Saved',
+    activeCombination,
+    isCurrentConfigPinned,
+    canSaveCurrentConfig,
+    pinnedCount,
+    maxPinnedCount,
+    hasPinnedChips,
+    badgeText,
+    saveButtonAriaLabel,
+    saveButtonTooltip,
+    chips,
+  };
+}
+
 
 
 

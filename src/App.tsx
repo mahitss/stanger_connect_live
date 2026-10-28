@@ -56,6 +56,7 @@ import {
   Link2,
   Info,
   Search,
+  Bookmark,
 } from 'lucide-react';
 import {
   auth,
@@ -195,6 +196,11 @@ import {
   evaluateSecondaryComplexFilterClearModalMeta,
   resolveSecondaryComplexFilterClearGateAction,
   confirmSecondaryComplexFilterClearAllReset,
+  MAX_PINNED_DIRECTORY_FILTER_CHIPS,
+  PINNED_DIRECTORY_FILTERS_STORAGE_KEY,
+  saveDirectoryFilterConfigurationAsPinnedChip,
+  removePinnedDirectoryFilterChip,
+  applyPinnedDirectoryFilterChip,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -874,6 +880,25 @@ export default function App() {
   });
   const [isRecentFiltersDropdownOpen, setIsRecentFiltersDropdownOpen] =
     useState<boolean>(false);
+
+  const [pinnedDirectoryFilters, setPinnedDirectoryFilters] = useState<
+    RecentDirectoryFilterCombination[]
+  >(() => {
+    try {
+      const raw = localStorage.getItem(PINNED_DIRECTORY_FILTERS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          return parsed.slice(0, MAX_PINNED_DIRECTORY_FILTER_CHIPS);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+  const [lastSavedFilterChipFeedback, setLastSavedFilterChipFeedback] =
+    useState<string>('');
 
   useEffect(() => {
     setRecentDirectoryFilters((prev) => {
@@ -3187,7 +3212,68 @@ export default function App() {
     isRecentFiltersDropdownOpen,
     isClearFiltersHovered: isClearFiltersBtnHovered,
     isSecondaryClearModalOpen: isSecondaryClearFilterModalOpen,
+    pinnedFilters: pinnedDirectoryFilters,
   });
+
+  const handleSaveCurrentFilterConfiguration = () => {
+    const result = saveDirectoryFilterConfigurationAsPinnedChip(
+      pinnedDirectoryFilters,
+      {
+        audienceFilter: directoryAudienceFilter,
+        moodFilter: directoryMoodFilter,
+        onlyInFocus: showOnlyInFocusPeers,
+      },
+      MAX_PINNED_DIRECTORY_FILTER_CHIPS
+    );
+    setPinnedDirectoryFilters(result.updatedPinned);
+    setLastSavedFilterChipFeedback(result.statusMessage);
+    try {
+      localStorage.setItem(
+        PINNED_DIRECTORY_FILTERS_STORAGE_KEY,
+        JSON.stringify(result.updatedPinned)
+      );
+    } catch {
+      // ignore
+    }
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+    setLastSoundFeedback(result.statusMessage);
+  };
+
+  const handleApplyPinnedFilterChip = (targetIdOrIndex: string | number) => {
+    const applied = applyPinnedDirectoryFilterChip(
+      pinnedDirectoryFilters,
+      targetIdOrIndex
+    );
+    if (!applied.found) return;
+    setIsClearFilterModalOpen(false);
+    setIsSecondaryClearFilterModalOpen(false);
+    setIsRecentFiltersDropdownOpen(false);
+    setDirectoryAudienceFilter(applied.audienceFilter);
+    setDirectoryMoodFilter(applied.moodFilter);
+    setShowOnlyInFocusPeers(applied.onlyInFocus);
+    handlePlayDirectoryFilterToggleChime(
+      directoryAudienceFilter,
+      applied.audienceFilter
+    );
+  };
+
+  const handleRemovePinnedFilterChip = (targetIdOrLabel: string) => {
+    const removed = removePinnedDirectoryFilterChip(
+      pinnedDirectoryFilters,
+      targetIdOrLabel
+    );
+    setPinnedDirectoryFilters(removed.updatedPinned);
+    try {
+      localStorage.setItem(
+        PINNED_DIRECTORY_FILTERS_STORAGE_KEY,
+        JSON.stringify(removed.updatedPinned)
+      );
+    } catch {
+      // ignore
+    }
+  };
 
   const handleConfirmSecondaryComplexClearAllFilters = () => {
     const confirmed = confirmSecondaryComplexFilterClearAllReset({
@@ -6853,7 +6939,155 @@ export default function App() {
                                 </motion.button>
                               )}
                             </AnimatePresence>
+
+                            <button
+                              id={directoryQuickFilterMeta.pinnedFiltersMeta.saveButtonId}
+                              type="button"
+                              onClick={handleSaveCurrentFilterConfiguration}
+                              aria-label={
+                                directoryQuickFilterMeta.pinnedFiltersMeta.saveButtonAriaLabel
+                              }
+                              title={
+                                directoryQuickFilterMeta.pinnedFiltersMeta.saveButtonTooltip
+                              }
+                              data-testid={
+                                directoryQuickFilterMeta.pinnedFiltersMeta.saveButtonTestId
+                              }
+                              data-is-pinned={
+                                directoryQuickFilterMeta.pinnedFiltersMeta.isCurrentConfigPinned
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-pinned-count={
+                                directoryQuickFilterMeta.pinnedFiltersMeta.pinnedCount
+                              }
+                              data-active-combination-id={
+                                directoryQuickFilterMeta.pinnedFiltersMeta.activeCombination.id
+                              }
+                              data-active-combination-label={
+                                directoryQuickFilterMeta.pinnedFiltersMeta.activeCombination
+                                  .label
+                              }
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border transition-colors whitespace-nowrap shrink-0 ${
+                                directoryQuickFilterMeta.pinnedFiltersMeta.isCurrentConfigPinned
+                                  ? 'bg-emerald-500/20 border-emerald-400/60 text-emerald-200 hover:bg-emerald-500/30 hover:text-white'
+                                  : 'bg-zinc-900/90 border-zinc-700 text-zinc-200 hover:bg-zinc-800 hover:text-white hover:border-emerald-500/50'
+                              }`}
+                            >
+                              <Bookmark
+                                className={`w-3 h-3 shrink-0 ${
+                                  directoryQuickFilterMeta.pinnedFiltersMeta
+                                    .isCurrentConfigPinned
+                                    ? 'text-emerald-300 fill-emerald-400/30'
+                                    : 'text-emerald-400'
+                                }`}
+                              />
+                              <span>
+                                {directoryQuickFilterMeta.pinnedFiltersMeta.buttonLabel}
+                              </span>
+                              <span
+                                data-testid="online-directory-save-config-badge"
+                                className={`px-1.5 py-0.2 rounded text-[10px] font-mono tabular-nums border ${
+                                  directoryQuickFilterMeta.pinnedFiltersMeta
+                                    .isCurrentConfigPinned
+                                    ? 'bg-emerald-950/90 border-emerald-400/50 text-emerald-300'
+                                    : 'bg-zinc-950/80 border-zinc-700 text-zinc-400'
+                                }`}
+                              >
+                                {directoryQuickFilterMeta.pinnedFiltersMeta
+                                  .isCurrentConfigPinned
+                                  ? 'Pinned'
+                                  : directoryQuickFilterMeta.pinnedFiltersMeta.badgeText}
+                              </span>
+                            </button>
                           </div>
+
+                          {directoryQuickFilterMeta.pinnedFiltersMeta.hasPinnedChips && (
+                            <div
+                              id={directoryQuickFilterMeta.pinnedFiltersMeta.barId}
+                              role="region"
+                              aria-label="Bookmarked Pinned Filter Configurations"
+                              data-testid={
+                                directoryQuickFilterMeta.pinnedFiltersMeta.barTestId
+                              }
+                              data-pinned-count={
+                                directoryQuickFilterMeta.pinnedFiltersMeta.pinnedCount
+                              }
+                              data-last-saved-feedback={lastSavedFilterChipFeedback}
+                              className="w-full flex flex-wrap items-center gap-1.5 pt-1.5 pb-1 px-2.5 rounded-lg bg-[#050505]/90 border border-emerald-500/30"
+                            >
+                              <span className="inline-flex items-center gap-1 text-[10px] font-mono uppercase tracking-wider text-emerald-300 font-semibold mr-1 shrink-0">
+                                <Bookmark className="w-2.5 h-2.5 text-emerald-400 fill-emerald-400/30" />
+                                <span>
+                                  Pinned Filters (
+                                  {directoryQuickFilterMeta.pinnedFiltersMeta.badgeText})
+                                </span>
+                              </span>
+                              {directoryQuickFilterMeta.pinnedFiltersMeta.chips.map(
+                                (chip) => (
+                                  <div
+                                    key={chip.id}
+                                    data-testid="online-directory-pinned-filter-chip-group"
+                                    data-chip-id={chip.id}
+                                    data-is-active={chip.isCurrentlyActive ? 'true' : 'false'}
+                                    className={`inline-flex items-center rounded-md border text-[11px] font-mono transition-colors ${
+                                      chip.isCurrentlyActive
+                                        ? 'bg-emerald-500/20 border-emerald-400/70 text-emerald-100 shadow-sm'
+                                        : 'bg-zinc-900/90 border-zinc-700/80 text-zinc-200 hover:border-emerald-500/50 hover:bg-zinc-800/90'
+                                    }`}
+                                  >
+                                    <button
+                                      id={chip.chipId}
+                                      type="button"
+                                      onClick={() => handleApplyPinnedFilterChip(chip.id)}
+                                      aria-label={chip.applyAriaLabel}
+                                      aria-pressed={chip.isCurrentlyActive}
+                                      title={`One-click apply: ${chip.label}`}
+                                      data-testid={chip.chipTestId}
+                                      data-combination-id={chip.id}
+                                      data-audience-filter={chip.audienceFilter}
+                                      data-mood-filter={chip.moodFilter}
+                                      data-only-in-focus={
+                                        chip.onlyInFocus ? 'true' : 'false'
+                                      }
+                                      data-is-active={
+                                        chip.isCurrentlyActive ? 'true' : 'false'
+                                      }
+                                      className="inline-flex items-center gap-1.5 px-2 py-1 text-left hover:text-white transition-colors"
+                                    >
+                                      <Bookmark
+                                        className={`w-2.5 h-2.5 shrink-0 ${
+                                          chip.isCurrentlyActive
+                                            ? 'text-emerald-300 fill-emerald-300'
+                                            : 'text-emerald-400/80'
+                                        }`}
+                                      />
+                                      <span className="font-semibold">{chip.label}</span>
+                                      {chip.isCurrentlyActive && (
+                                        <span
+                                          data-testid="online-directory-pinned-chip-active-indicator"
+                                          className="px-1 py-0.2 rounded bg-emerald-400/20 border border-emerald-300/40 text-[9px] font-bold text-emerald-200 uppercase"
+                                        >
+                                          Active
+                                        </span>
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemovePinnedFilterChip(chip.id)}
+                                      aria-label={chip.unpinAriaLabel}
+                                      title={chip.unpinAriaLabel}
+                                      data-testid={chip.unpinButtonTestId}
+                                      data-combination-id={chip.id}
+                                      className="px-1.5 py-1 border-l border-zinc-700/60 text-zinc-400 hover:text-rose-300 hover:bg-rose-500/15 rounded-r-md transition-colors"
+                                    >
+                                      <X className="w-2.5 h-2.5" />
+                                    </button>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          )}
 
                           <AnimatePresence>
                             {isClearFilterModalOpen && directoryQuickFilterMeta.isMyConnectionsOnly && (

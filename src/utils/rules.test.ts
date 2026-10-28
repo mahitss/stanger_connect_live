@@ -185,6 +185,12 @@ import {
   evaluateSecondaryComplexFilterClearModalMeta,
   resolveSecondaryComplexFilterClearGateAction,
   confirmSecondaryComplexFilterClearAllReset,
+  MAX_PINNED_DIRECTORY_FILTER_CHIPS,
+  PINNED_DIRECTORY_FILTERS_STORAGE_KEY,
+  saveDirectoryFilterConfigurationAsPinnedChip,
+  removePinnedDirectoryFilterChip,
+  applyPinnedDirectoryFilterChip,
+  evaluatePinnedDirectoryFiltersMeta,
   getOnlineDirectoryQuickFilterMeta,
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
@@ -4988,5 +4994,104 @@ test('evaluateSecondaryComplexFilterClearModalMeta, resolveSecondaryComplexFilte
   assert.equal(confirmedReset.chimeSpec.eventType, 'ui_chime');
   assert.equal(confirmedReset.toastMessage, 'Filters Reset to Default');
 });
+
+// ---------------------------------------------------------------------------
+// 76. Save Current Configuration Button & Pinned Filter Chips (#online-directory-save-config-btn)
+// ---------------------------------------------------------------------------
+test('saveDirectoryFilterConfigurationAsPinnedChip, applyPinnedDirectoryFilterChip, removePinnedDirectoryFilterChip, and evaluatePinnedDirectoryFiltersMeta bookmark mood and audience preferences as pinned filter chips for one-click access', () => {
+  assert.equal(MAX_PINNED_DIRECTORY_FILTER_CHIPS, 6);
+  assert.equal(
+    PINNED_DIRECTORY_FILTERS_STORAGE_KEY,
+    'mr_stranger_pinned_directory_filters_v1'
+  );
+
+  // 1. Save a specific combination of mood and audience preferences (My Connections + Deep Work)
+  const firstSave = saveDirectoryFilterConfigurationAsPinnedChip([], {
+    audienceFilter: 'my_connections',
+    moodFilter: 'Deep Work',
+    onlyInFocus: false,
+    timestampMs: 1_760_000_100_000,
+  });
+  assert.equal(firstSave.saved, true);
+  assert.equal(firstSave.alreadyPinned, false);
+  assert.equal(firstSave.updatedPinned.length, 1);
+  assert.equal(firstSave.pinnedChip.audienceFilter, 'my_connections');
+  assert.equal(firstSave.pinnedChip.moodFilter, 'Deep Work');
+  assert.equal(firstSave.pinnedChip.label, 'Deep Work · My Connections');
+
+  // 2. Save a second combination (Everyone + Productive + In Focus)
+  const secondSave = saveDirectoryFilterConfigurationAsPinnedChip(
+    firstSave.updatedPinned,
+    {
+      audienceFilter: 'everyone',
+      moodFilter: 'category:Productive',
+      onlyInFocus: true,
+      timestampMs: 1_760_000_200_000,
+    }
+  );
+  assert.equal(secondSave.saved, true);
+  assert.equal(secondSave.alreadyPinned, false);
+  assert.equal(secondSave.updatedPinned.length, 2);
+  assert.equal(
+    secondSave.updatedPinned[0].label,
+    'Productive · Everyone · In Focus'
+  );
+
+  // 3. Re-saving an existing combination deduplicates and marks alreadyPinned = true
+  const duplicateSave = saveDirectoryFilterConfigurationAsPinnedChip(
+    secondSave.updatedPinned,
+    {
+      audienceFilter: 'my_connections',
+      moodFilter: 'Deep Work',
+      onlyInFocus: false,
+      timestampMs: 1_760_000_300_000,
+    }
+  );
+  assert.equal(duplicateSave.saved, true);
+  assert.equal(duplicateSave.alreadyPinned, true);
+  assert.equal(duplicateSave.updatedPinned.length, 2);
+  assert.equal(duplicateSave.updatedPinned[0].label, 'Deep Work · My Connections');
+
+  // 4. Evaluate pinned filters metadata & getOnlineDirectoryQuickFilterMeta integration
+  const metaPinned = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'Deep Work',
+    onlyInFocus: false,
+    pinnedFilters: duplicateSave.updatedPinned,
+  });
+  assert.equal(
+    metaPinned.pinnedFiltersMeta.saveButtonId,
+    'online-directory-save-config-btn'
+  );
+  assert.equal(
+    metaPinned.pinnedFiltersMeta.buttonLabel,
+    'Save current configuration'
+  );
+  assert.equal(metaPinned.pinnedFiltersMeta.isCurrentConfigPinned, true);
+  assert.equal(metaPinned.pinnedFiltersMeta.pinnedCount, 2);
+  assert.equal(metaPinned.pinnedFiltersMeta.hasPinnedChips, true);
+  assert.equal(metaPinned.pinnedFiltersMeta.chips[0].isCurrentlyActive, true);
+  assert.equal(metaPinned.pinnedFiltersMeta.chips[1].isCurrentlyActive, false);
+
+  // 5. One-click access via applyPinnedDirectoryFilterChip restores mood & audience preferences
+  const applied = applyPinnedDirectoryFilterChip(
+    duplicateSave.updatedPinned,
+    duplicateSave.updatedPinned[1].id
+  );
+  assert.equal(applied.found, true);
+  assert.equal(applied.audienceFilter, 'everyone');
+  assert.equal(applied.moodFilter, 'category:Productive');
+  assert.equal(applied.onlyInFocus, true);
+
+  // 6. Removing a pinned chip updates the list cleanly
+  const removed = removePinnedDirectoryFilterChip(
+    duplicateSave.updatedPinned,
+    duplicateSave.updatedPinned[0].id
+  );
+  assert.equal(removed.removed, true);
+  assert.equal(removed.updatedPinned.length, 1);
+});
+
 
 
