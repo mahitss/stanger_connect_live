@@ -8761,23 +8761,103 @@ export function resolveSecondaryResetOnlyFilterAction(params?: {
   };
 }
 
+export interface DedicatedClearFiltersExitAnimationSpec {
+  wrapperId: 'online-directory-clear-filters-presence-wrapper';
+  wrapperTestId: 'online-directory-clear-filters-presence-wrapper';
+  buttonKey: 'online-directory-clear-filters-btn';
+  wrapperKey: 'online-directory-clear-filters-presence-wrapper';
+  engine: 'framer-motion';
+  component: 'AnimatePresence';
+  animatePresenceInitial: false;
+  exitAnimationType: 'slide-out-shrink';
+  exitOpacity: number;
+  exitScale: number;
+  exitTranslateX: number;
+  exitTranslateY: number;
+  exitDurationSec: number;
+  exitDurationMs: number;
+  exitEasing: 'easeInOut';
+  initial: { opacity: number; scale: number; x: number };
+  animate: { opacity: number; scale: number; x: number };
+  exit: {
+    opacity: number;
+    scale: number;
+    x: number;
+    y: number;
+    transition: {
+      duration: number;
+      ease: 'easeInOut';
+    };
+  };
+}
+
+export function getDedicatedClearFiltersExitAnimationSpec(): DedicatedClearFiltersExitAnimationSpec {
+  return {
+    wrapperId: 'online-directory-clear-filters-presence-wrapper',
+    wrapperTestId: 'online-directory-clear-filters-presence-wrapper',
+    buttonKey: 'online-directory-clear-filters-btn',
+    wrapperKey: 'online-directory-clear-filters-presence-wrapper',
+    engine: 'framer-motion',
+    component: 'AnimatePresence',
+    animatePresenceInitial: false,
+    exitAnimationType: 'slide-out-shrink',
+    exitOpacity: 0,
+    exitScale: 0.85,
+    exitTranslateX: -10,
+    exitTranslateY: -2,
+    exitDurationSec: 0.18,
+    exitDurationMs: 180,
+    exitEasing: 'easeInOut',
+    initial: { opacity: 0, scale: 0.9, x: -8 },
+    animate: { opacity: 1, scale: 1, x: 0 },
+    exit: {
+      opacity: 0,
+      scale: 0.85,
+      x: -10,
+      y: -2,
+      transition: {
+        duration: 0.18,
+        ease: 'easeInOut',
+      },
+    },
+  };
+}
+
 export interface DedicatedClearFiltersButtonMotionSpec {
   isVisible: boolean;
   animationType: 'fade-in-scale';
+  exitAnimationType: 'slide-out-shrink';
   engine: 'framer-motion';
+  presenceComponent: 'AnimatePresence';
   initialOpacity: number;
   initialScale: number;
   animateOpacity: number;
   animateScale: number;
   exitOpacity: number;
   exitScale: number;
+  exitShrinkScale: number;
+  exitSlideX: number;
+  exitSlideY: number;
   hoverScale: number;
   tapScale: number;
   durationSec: number;
   durationMs: number;
+  exitDurationSec: number;
+  exitDurationMs: number;
   initial: { opacity: number; scale: number };
   animate: { opacity: number; scale: number };
   exit: { opacity: number; scale: number };
+  slideShrinkExit: {
+    opacity: number;
+    scale: number;
+    x: number;
+    y: number;
+    transition: {
+      duration: number;
+      ease: 'easeInOut';
+    };
+  };
+  exitSpec: DedicatedClearFiltersExitAnimationSpec;
   whileHover: { scale: number };
   whileTap: { scale: number };
   transition: {
@@ -8797,23 +8877,33 @@ export function getDedicatedClearFiltersButtonMotionSpec(
   isVisible: boolean = true
 ): DedicatedClearFiltersButtonMotionSpec {
   const visible = Boolean(isVisible);
+  const exitSpec = getDedicatedClearFiltersExitAnimationSpec();
   return {
     isVisible: visible,
     animationType: 'fade-in-scale',
+    exitAnimationType: 'slide-out-shrink',
     engine: 'framer-motion',
+    presenceComponent: 'AnimatePresence',
     initialOpacity: 0,
     initialScale: 0.9,
     animateOpacity: 1,
     animateScale: 1,
     exitOpacity: 0,
     exitScale: 0.9,
+    exitShrinkScale: exitSpec.exitScale,
+    exitSlideX: exitSpec.exitTranslateX,
+    exitSlideY: exitSpec.exitTranslateY,
     hoverScale: 1.03,
     tapScale: 0.97,
     durationSec: 0.18,
     durationMs: 180,
+    exitDurationSec: exitSpec.exitDurationSec,
+    exitDurationMs: exitSpec.exitDurationMs,
     initial: { opacity: 0, scale: 0.9 },
     animate: { opacity: 1, scale: 1 },
     exit: { opacity: 0, scale: 0.9 },
+    slideShrinkExit: exitSpec.exit,
+    exitSpec,
     whileHover: { scale: 1.03 },
     whileTap: { scale: 0.97 },
     transition: {

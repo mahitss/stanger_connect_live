@@ -780,6 +780,10 @@ export default function App() {
   const [isShiftResetToastVisible, setIsShiftResetToastVisible] = useState<boolean>(false);
   const [shiftResetToastCount, setShiftResetToastCount] = useState<number>(0);
   const shiftResetToastTimerRef = useRef<number | null>(null);
+  const [clearFiltersExitCount, setClearFiltersExitCount] = useState<number>(0);
+  const [lastClearFiltersExitState, setLastClearFiltersExitState] = useState<
+    'idle' | 'exiting' | 'completed'
+  >('idle');
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Shift' || e.shiftKey) {
@@ -1029,6 +1033,7 @@ export default function App() {
     setIsClearFilterModalOpen(clearResult.isModalOpen);
     setIsSecondaryClearFilterModalOpen(false);
     setIsClearFiltersBtnHovered(false);
+    setLastClearFiltersExitState('exiting');
     setDirectoryAudienceFilter(clearResult.nextMode);
     setDirectoryMoodFilter(clearResult.nextMoodFilter);
     setShowOnlyInFocusPeers(clearResult.nextOnlyInFocus);
@@ -5642,6 +5647,28 @@ export default function App() {
                               : 'false'
                           }
                           data-secondary-confirm-count={secondaryModalConfirmCount}
+                          data-clear-filters-exit-animation={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                              .exitAnimationType
+                          }
+                          data-clear-filters-exit-presence={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                              .presenceComponent
+                          }
+                          data-clear-filters-exit-scale={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                              .exitShrinkScale
+                          }
+                          data-clear-filters-exit-x={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                              .exitSlideX
+                          }
+                          data-clear-filters-exit-duration-ms={
+                            directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                              .exitDurationMs
+                          }
+                          data-clear-filters-exit-count={clearFiltersExitCount}
+                          data-clear-filters-exit-state={lastClearFiltersExitState}
                           className="relative inline-flex flex-wrap items-center gap-2"
                         >
                           <div className="inline-flex flex-wrap items-center gap-1.5">
@@ -5804,6 +5831,28 @@ export default function App() {
                                   .chimeEventType
                               }
                               data-clear-filters-chime-count={clearFiltersChimeCount}
+                              data-clear-filters-exit-animation={
+                                directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                                  .exitAnimationType
+                              }
+                              data-clear-filters-exit-presence={
+                                directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                                  .presenceComponent
+                              }
+                              data-clear-filters-exit-scale={
+                                directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                                  .exitShrinkScale
+                              }
+                              data-clear-filters-exit-x={
+                                directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                                  .exitSlideX
+                              }
+                              data-clear-filters-exit-duration-ms={
+                                directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta.motion
+                                  .exitDurationMs
+                              }
+                              data-clear-filters-exit-count={clearFiltersExitCount}
+                              data-clear-filters-exit-state={lastClearFiltersExitState}
                               data-directory-constrained={
                                 directoryQuickFilterMeta.isDirectoryConstrained ? 'true' : 'false'
                               }
@@ -6681,10 +6730,67 @@ export default function App() {
                               )}
                             </div>
 
-                            <AnimatePresence initial={false}>
+                            <AnimatePresence
+                              initial={false}
+                              onExitComplete={() => {
+                                setClearFiltersExitCount((prev) => prev + 1);
+                                setLastClearFiltersExitState('completed');
+                              }}
+                            >
                               {directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
                                 .shouldShowButton && (
-                                <div className="relative inline-flex items-center group/clearfilters shrink-0">
+                                <motion.div
+                                  key="online-directory-clear-filters-presence-wrapper"
+                                  id={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exitSpec.wrapperId
+                                  }
+                                  data-testid={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exitSpec.wrapperTestId
+                                  }
+                                  initial={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exitSpec.initial
+                                  }
+                                  animate={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exitSpec.animate
+                                  }
+                                  exit={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.slideShrinkExit
+                                  }
+                                  transition={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.transition
+                                  }
+                                  data-exit-animation={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exitAnimationType
+                                  }
+                                  data-exit-presence={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.presenceComponent
+                                  }
+                                  data-exit-scale={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exitShrinkScale
+                                  }
+                                  data-exit-x={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exitSlideX
+                                  }
+                                  data-exit-y={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exitSlideY
+                                  }
+                                  data-exit-duration-ms={
+                                    directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                      .motion.exitDurationMs
+                                  }
+                                  className="relative inline-flex items-center group/clearfilters shrink-0 origin-left"
+                                >
                                   <motion.button
                                     key="online-directory-clear-filters-btn"
                                     id={
@@ -6702,7 +6808,7 @@ export default function App() {
                                     }
                                     exit={
                                       directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
-                                        .motion.exit
+                                        .motion.slideShrinkExit
                                     }
                                     whileHover={
                                       directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
@@ -6839,6 +6945,30 @@ export default function App() {
                                     }
                                     data-clear-shortcut-count={clearFiltersShortcutTriggerCount}
                                     data-last-clear-shortcut={lastClearFiltersShortcutCombo}
+                                    data-exit-animation={
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .motion.exitAnimationType
+                                    }
+                                    data-exit-presence={
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .motion.presenceComponent
+                                    }
+                                    data-exit-scale={
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .motion.exitShrinkScale
+                                    }
+                                    data-exit-x={
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .motion.exitSlideX
+                                    }
+                                    data-exit-y={
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .motion.exitSlideY
+                                    }
+                                    data-exit-duration-ms={
+                                      directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
+                                        .motion.exitDurationMs
+                                    }
                                     className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-semibold rounded-md border border-emerald-400/50 bg-emerald-500/15 text-emerald-200 hover:bg-emerald-500/25 hover:text-white hover:border-emerald-300/80 transition-colors whitespace-nowrap shrink-0 origin-center"
                                   >
                                     <RotateCcw className="w-3 h-3 shrink-0 text-emerald-300" />
@@ -6956,7 +7086,7 @@ export default function App() {
                                       </kbd>
                                     </div>
                                   </div>
-                                </div>
+                                </motion.div>
                               )}
                             </AnimatePresence>
 

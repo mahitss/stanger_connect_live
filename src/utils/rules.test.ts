@@ -176,6 +176,7 @@ import {
   confirmOnlineDirectoryClearFilterReset,
   resolveShiftResetToastConfirmation,
   resolveSecondaryResetOnlyFilterAction,
+  getDedicatedClearFiltersExitAnimationSpec,
   getDedicatedClearFiltersButtonMotionSpec,
   resolveClearFiltersButtonChime,
   getDedicatedClearFiltersTooltipMeta,
@@ -5212,4 +5213,59 @@ test('evaluateFirstMatchingPeerAutoScrollMeta and shouldTriggerFirstMatchingPeer
   );
   assert.equal(quickMeta.firstMatchingPeerAutoScrollMeta.autoScrollTriggerCount, 1);
   assert.equal(quickMeta.firstMatchingPeerAutoScrollMeta.isHighlighted, true);
+});
+
+// ---------------------------------------------------------------------------
+// 78. Framer Motion AnimatePresence Exit Animation for 'Clear Filters' Button (#online-directory-clear-filters-btn)
+// ---------------------------------------------------------------------------
+test('getDedicatedClearFiltersExitAnimationSpec and getDedicatedClearFiltersButtonMotionSpec configure Framer Motion AnimatePresence slide-out and shrink exit animation when all filters are cleared', () => {
+  const exitSpec = getDedicatedClearFiltersExitAnimationSpec();
+  assert.equal(
+    exitSpec.wrapperId,
+    'online-directory-clear-filters-presence-wrapper'
+  );
+  assert.equal(exitSpec.buttonKey, 'online-directory-clear-filters-btn');
+  assert.equal(exitSpec.engine, 'framer-motion');
+  assert.equal(exitSpec.component, 'AnimatePresence');
+  assert.equal(exitSpec.animatePresenceInitial, false);
+  assert.equal(exitSpec.exitAnimationType, 'slide-out-shrink');
+  assert.equal(exitSpec.exitOpacity, 0);
+  assert.equal(exitSpec.exitScale, 0.85);
+  assert.equal(exitSpec.exitTranslateX, -10);
+  assert.equal(exitSpec.exitTranslateY, -2);
+  assert.equal(exitSpec.exitDurationMs, 180);
+  assert.equal(exitSpec.exitDurationSec, 0.18);
+  assert.equal(exitSpec.exitEasing, 'easeInOut');
+  assert.deepEqual(exitSpec.exit, {
+    opacity: 0,
+    scale: 0.85,
+    x: -10,
+    y: -2,
+    transition: {
+      duration: 0.18,
+      ease: 'easeInOut',
+    },
+  });
+
+  // Verify getDedicatedClearFiltersButtonMotionSpec and resolveDedicatedClearFiltersButtonAction expose exitSpec & slideShrinkExit
+  const motionWhenCleared = getDedicatedClearFiltersButtonMotionSpec(false);
+  assert.equal(motionWhenCleared.isVisible, false);
+  assert.equal(motionWhenCleared.exitAnimationType, 'slide-out-shrink');
+  assert.equal(motionWhenCleared.presenceComponent, 'AnimatePresence');
+  assert.equal(motionWhenCleared.exitShrinkScale, 0.85);
+  assert.equal(motionWhenCleared.exitSlideX, -10);
+  assert.equal(motionWhenCleared.exitDurationMs, 180);
+  assert.deepEqual(motionWhenCleared.slideShrinkExit, exitSpec.exit);
+
+  const clearedButtonAction = resolveDedicatedClearFiltersButtonAction({
+    mode: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+  });
+  assert.equal(clearedButtonAction.shouldShowButton, false);
+  assert.equal(clearedButtonAction.motion.exitAnimationType, 'slide-out-shrink');
+  assert.equal(
+    clearedButtonAction.motion.exitSpec.component,
+    'AnimatePresence'
+  );
 });
