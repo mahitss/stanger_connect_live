@@ -194,6 +194,8 @@ import {
   recordRecentDirectoryFilterCombination,
   applyRecentDirectoryFilterCombination,
   getRecentDirectoryFiltersDropdownMeta,
+  evaluateRecentlyAppliedDirectoryFilterMeta,
+  isMoodFilterInRecentDirectoryFilters,
   getMoodCategoryExpansionMotionSpec,
   getWorkspaceSidebarScrollSpec,
   getMoodPresetTooltipMeta,
@@ -4660,4 +4662,113 @@ test('getDedicatedClearFiltersTooltipMeta and resolveDedicatedClearFiltersButton
   );
 });
 
+// ---------------------------------------------------------------------------
+// 73. Recently Applied Visual Indicator & Badges in #online-directory-mood-filter
+// ---------------------------------------------------------------------------
+test('evaluateRecentlyAppliedDirectoryFilterMeta, isMoodFilterInRecentDirectoryFilters, and getOnlineDirectoryQuickFilterMeta provide "Recently Applied" visual indicator and badges leveraging recentDirectoryFilters state', () => {
+  const customHistory = [
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'my_connections',
+      moodFilter: 'Deep Work',
+      onlyInFocus: true,
+      timestampMs: 1_760_000_050_000,
+    }),
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'everyone',
+      moodFilter: 'category:Productive',
+      onlyInFocus: false,
+      timestampMs: 1_760_000_040_000,
+    }),
+    buildDirectoryFilterCombinationEntry({
+      audienceFilter: 'everyone',
+      moodFilter: 'all',
+      onlyInFocus: false,
+      timestampMs: 1_760_000_030_000,
+    }),
+  ];
 
+  // 1. Matching constrained configuration at rank #1
+  const matchRank1 = evaluateRecentlyAppliedDirectoryFilterMeta({
+    history: customHistory,
+    currentAudienceFilter: 'my_connections',
+    currentMoodFilter: 'Deep Work',
+    currentOnlyInFocus: true,
+  });
+  assert.equal(matchRank1.badgeId, 'online-directory-mood-filter-recently-applied-badge');
+  assert.equal(matchRank1.badgeTestId, 'online-directory-recently-applied-badge');
+  assert.equal(matchRank1.badgeLabel, 'Recently Applied');
+  assert.equal(matchRank1.isRecentlyApplied, true);
+  assert.equal(matchRank1.shouldShowBadge, true);
+  assert.equal(matchRank1.isConstrainedMatch, true);
+  assert.equal(matchRank1.isDefaultCombination, false);
+  assert.equal(matchRank1.matchedIndex, 0);
+  assert.equal(matchRank1.matchedRank, 1);
+  assert.equal(matchRank1.rankBadgeText, '#1');
+  assert.equal(matchRank1.totalRecentCount, 3);
+  assert.equal(
+    matchRank1.matchedCombinationLabel,
+    'Deep Work · My Connections · In Focus'
+  );
+  assert.ok(matchRank1.statusText.includes('Recently Applied (#1 of 3)'));
+  assert.ok(matchRank1.tooltipText.includes('Recently Applied filter configuration (#1 of 3'));
+
+  // 2. Non-matching configuration when history does not contain it
+  const nonMatch = evaluateRecentlyAppliedDirectoryFilterMeta({
+    history: customHistory,
+    currentAudienceFilter: 'my_connections',
+    currentMoodFilter: 'Coffee Break',
+    currentOnlyInFocus: false,
+  });
+  assert.equal(nonMatch.isRecentlyApplied, false);
+  assert.equal(nonMatch.shouldShowBadge, false);
+  assert.equal(nonMatch.matchedIndex, -1);
+  assert.equal(nonMatch.matchedRank, null);
+  assert.equal(nonMatch.rankBadgeText, null);
+  assert.equal(nonMatch.matchedCombination, null);
+
+  // 3. Per-mood check for "Recently Applied" badges on mood categories & presets
+  const deepWorkRecent = isMoodFilterInRecentDirectoryFilters(
+    customHistory,
+    'Deep Work'
+  );
+  assert.equal(deepWorkRecent.isRecentlyUsed, true);
+  assert.equal(deepWorkRecent.badgeLabel, 'Recently Applied');
+  assert.equal(deepWorkRecent.matchedRank, 1);
+
+  const productiveRecent = isMoodFilterInRecentDirectoryFilters(
+    customHistory,
+    'category:Productive'
+  );
+  assert.equal(productiveRecent.isRecentlyUsed, true);
+  assert.equal(productiveRecent.badgeLabel, 'Recently Applied');
+  assert.equal(productiveRecent.matchedRank, 2);
+
+  const coffeeRecent = isMoodFilterInRecentDirectoryFilters(
+    customHistory,
+    'Coffee Break'
+  );
+  assert.equal(coffeeRecent.isRecentlyUsed, false);
+  assert.equal(coffeeRecent.badgeLabel, null);
+  assert.equal(coffeeRecent.matchedRank, null);
+
+  // 4. getOnlineDirectoryQuickFilterMeta exposes recentlyAppliedMeta and recentFiltersMeta badges
+  const quickMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'category:Productive',
+    onlyInFocus: false,
+    recentFiltersHistory: customHistory,
+  });
+  assert.equal(quickMeta.recentlyAppliedMeta.isRecentlyApplied, true);
+  assert.equal(quickMeta.recentlyAppliedMeta.shouldShowBadge, true);
+  assert.equal(quickMeta.recentlyAppliedMeta.badgeLabel, 'Recently Applied');
+  assert.equal(quickMeta.recentlyAppliedMeta.matchedRank, 2);
+  assert.equal(quickMeta.recentlyAppliedMeta.rankBadgeText, '#2');
+  assert.equal(quickMeta.recentFiltersMeta.isCurrentConfigRecentlyApplied, true);
+  assert.equal(quickMeta.recentFiltersMeta.activeCombinationRank, 2);
+  assert.equal(quickMeta.recentFiltersMeta.recentlyAppliedBadgeLabel, 'Recently Applied');
+  assert.equal(
+    quickMeta.recentFiltersMeta.options[0].recentlyAppliedBadgeLabel,
+    'Recently Applied'
+  );
+});

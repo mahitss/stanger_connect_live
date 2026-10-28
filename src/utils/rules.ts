@@ -9776,6 +9776,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   dedicatedClearFiltersButtonMeta: DedicatedClearFiltersButtonSpec;
   shiftResetToast: ShiftResetToastConfirmationSpec;
   recentFiltersMeta: RecentDirectoryFiltersDropdownMeta;
+  recentlyAppliedMeta: RecentlyAppliedDirectoryFilterMeta;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -9966,6 +9967,12 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       currentMoodFilter: params.moodFilter,
       currentOnlyInFocus: params.onlyInFocus,
       isOpen: params.isRecentFiltersDropdownOpen,
+    }),
+    recentlyAppliedMeta: evaluateRecentlyAppliedDirectoryFilterMeta({
+      history: params.recentFiltersHistory,
+      currentAudienceFilter: mode,
+      currentMoodFilter: params.moodFilter,
+      currentOnlyInFocus: params.onlyInFocus,
     }),
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
@@ -11569,6 +11576,8 @@ export interface RecentDirectoryFilterDropdownOption
   extends RecentDirectoryFilterCombination {
   rank: number;
   isCurrentlyActive: boolean;
+  isRecentlyApplied: true;
+  recentlyAppliedBadgeLabel: 'Recently Applied';
 }
 
 export interface RecentDirectoryFiltersDropdownMeta {
@@ -11577,15 +11586,204 @@ export interface RecentDirectoryFiltersDropdownMeta {
   triggerButtonId: 'online-directory-recent-filters-btn';
   menuId: 'online-directory-recent-filters-menu';
   dropdownLabel: 'Recent Filters';
+  recentlyAppliedBadgeLabel: 'Recently Applied';
   maxItems: number;
   count: number;
   hasRecentFilters: boolean;
   isOpen: boolean;
+  isCurrentConfigRecentlyApplied: boolean;
+  activeCombinationRank: number | null;
   activeCombinationId: string;
   activeCombinationLabel: string;
   badgeText: string;
   ariaLabel: string;
   options: RecentDirectoryFilterDropdownOption[];
+}
+
+export interface RecentlyAppliedDirectoryFilterMeta {
+  badgeId: 'online-directory-mood-filter-recently-applied-badge';
+  badgeTestId: 'online-directory-recently-applied-badge';
+  badgeLabel: 'Recently Applied';
+  shortBadgeLabel: 'Recent';
+  isRecentlyApplied: boolean;
+  shouldShowBadge: boolean;
+  isConstrainedMatch: boolean;
+  isNonDefaultRecentlyApplied: boolean;
+  isDefaultCombination: boolean;
+  matchedIndex: number;
+  matchedRank: number | null;
+  rankBadgeText: string | null;
+  totalRecentCount: number;
+  matchedCombination: RecentDirectoryFilterCombination | null;
+  matchedCombinationId: string | null;
+  matchedCombinationLabel: string | null;
+  matchedLabel: string;
+  currentCombination: RecentDirectoryFilterCombination;
+  recentlyAppliedMoodFilters: string[];
+  recentlyAppliedCombinationIds: string[];
+  statusText: string;
+  statusSummary: string;
+  tooltipText: string;
+  ariaLabel: string;
+}
+
+export function evaluateRecentlyAppliedDirectoryFilterMeta(params?: {
+  history?: RecentDirectoryFilterCombination[] | null;
+  currentAudienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+  currentMoodFilter?: string | null;
+  currentOnlyInFocus?: boolean;
+}): RecentlyAppliedDirectoryFilterMeta {
+  const currentCombination = buildDirectoryFilterCombinationEntry({
+    audienceFilter: params?.currentAudienceFilter,
+    moodFilter: params?.currentMoodFilter,
+    onlyInFocus: params?.currentOnlyInFocus,
+  });
+
+  const rawHistory =
+    params?.history === undefined || params?.history === null
+      ? DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS
+      : Array.isArray(params.history)
+        ? params.history
+        : DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS;
+
+  const list = rawHistory
+    .filter((item): item is RecentDirectoryFilterCombination => Boolean(item))
+    .slice(0, MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS);
+
+  const matchedIndex = list.findIndex((item) => {
+    if (item.id === currentCombination.id) return true;
+    const itemEntry = buildDirectoryFilterCombinationEntry({
+      audienceFilter: item.audienceFilter,
+      moodFilter: item.moodFilter,
+      onlyInFocus: item.onlyInFocus,
+    });
+    return itemEntry.id === currentCombination.id;
+  });
+
+  const isRecentlyApplied = matchedIndex !== -1;
+  const shouldShowBadge = isRecentlyApplied;
+  const matchedCombination = isRecentlyApplied ? list[matchedIndex] : null;
+  const matchedRank = isRecentlyApplied ? matchedIndex + 1 : null;
+  const rankBadgeText = matchedRank !== null ? `#${matchedRank}` : null;
+  const totalRecentCount = list.length;
+  const isDefaultCombination = currentCombination.isDefaultAll;
+  const isConstrainedMatch = isRecentlyApplied && !isDefaultCombination;
+
+  const recentlyAppliedCombinationIds = list.map((item) => item.id);
+  const recentlyAppliedMoodFilters = Array.from(
+    new Set(
+      list
+        .map((item) => String(item.moodFilter || 'all').trim())
+        .filter((m) => m && m.toLowerCase() !== 'all')
+    )
+  );
+
+  const statusText = isRecentlyApplied
+    ? `Recently Applied (#${matchedRank} of ${totalRecentCount}): ${currentCombination.label}`
+    : `Filter configuration not in recent history (${currentCombination.label})`;
+
+  const tooltipText = isRecentlyApplied
+    ? `Recently Applied filter configuration (#${matchedRank} of ${totalRecentCount} in Recent Filters): ${currentCombination.label}`
+    : `Current filter configuration (${currentCombination.label}) has not been recently applied`;
+
+  const ariaLabel = isRecentlyApplied
+    ? `Recently Applied badge: ${currentCombination.label} (rank #${matchedRank} of ${totalRecentCount} in recent filters)`
+    : 'Filter configuration not recently applied';
+
+  return {
+    badgeId: 'online-directory-mood-filter-recently-applied-badge',
+    badgeTestId: 'online-directory-recently-applied-badge',
+    badgeLabel: 'Recently Applied',
+    shortBadgeLabel: 'Recent',
+    isRecentlyApplied,
+    shouldShowBadge,
+    isConstrainedMatch,
+    isNonDefaultRecentlyApplied: isConstrainedMatch,
+    isDefaultCombination,
+    matchedIndex,
+    matchedRank,
+    rankBadgeText,
+    totalRecentCount,
+    matchedCombination,
+    matchedCombinationId: matchedCombination ? matchedCombination.id : null,
+    matchedCombinationLabel: matchedCombination ? matchedCombination.label : null,
+    matchedLabel: matchedCombination ? matchedCombination.label : currentCombination.label,
+    currentCombination,
+    recentlyAppliedMoodFilters,
+    recentlyAppliedCombinationIds,
+    statusText,
+    statusSummary: statusText,
+    tooltipText,
+    ariaLabel,
+  };
+}
+
+export function isMoodFilterInRecentDirectoryFilters(
+  history: RecentDirectoryFilterCombination[] | null | undefined,
+  moodFilterOrPreset: string | null | undefined
+): {
+  isRecentlyUsed: boolean;
+  isRecentlyApplied: boolean;
+  badgeLabel: 'Recently Applied' | null;
+  matchedRank: number | null;
+  matchedCombination: RecentDirectoryFilterCombination | null;
+} {
+  const rawTarget = String(moodFilterOrPreset ?? '').trim();
+  if (!rawTarget) {
+    return {
+      isRecentlyUsed: false,
+      isRecentlyApplied: false,
+      badgeLabel: null,
+      matchedRank: null,
+      matchedCombination: null,
+    };
+  }
+
+  const targetEntry = buildDirectoryFilterCombinationEntry({
+    audienceFilter: 'everyone',
+    moodFilter: rawTarget,
+    onlyInFocus: false,
+  });
+  const targetMoodLower = targetEntry.moodFilter.toLowerCase();
+  const targetDisplayLower = targetEntry.moodDisplayLabel.toLowerCase();
+
+  const rawHistory =
+    history === undefined || history === null
+      ? DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS
+      : Array.isArray(history)
+        ? history
+        : DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS;
+
+  const list = rawHistory
+    .filter((item): item is RecentDirectoryFilterCombination => Boolean(item))
+    .slice(0, MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS);
+
+  const matchedIndex = list.findIndex((item) => {
+    const itemMoodLower = String(item.moodFilter || 'all').trim().toLowerCase();
+    const itemDisplayLower = String(item.moodDisplayLabel || '').trim().toLowerCase();
+    return (
+      itemMoodLower === targetMoodLower ||
+      (targetDisplayLower !== 'all moods' && itemDisplayLower === targetDisplayLower)
+    );
+  });
+
+  if (matchedIndex === -1) {
+    return {
+      isRecentlyUsed: false,
+      isRecentlyApplied: false,
+      badgeLabel: null,
+      matchedRank: null,
+      matchedCombination: null,
+    };
+  }
+
+  return {
+    isRecentlyUsed: true,
+    isRecentlyApplied: true,
+    badgeLabel: 'Recently Applied',
+    matchedRank: matchedIndex + 1,
+    matchedCombination: list[matchedIndex],
+  };
 }
 
 export function getRecentDirectoryFiltersDropdownMeta(params?: {
@@ -11612,8 +11810,14 @@ export function getRecentDirectoryFiltersDropdownMeta(params?: {
       ...item,
       rank: idx + 1,
       isCurrentlyActive: item.id === currentActive.id,
+      isRecentlyApplied: true,
+      recentlyAppliedBadgeLabel: 'Recently Applied',
     })
   );
+
+  const activeIdx = options.findIndex((opt) => opt.isCurrentlyActive);
+  const isCurrentConfigRecentlyApplied = activeIdx !== -1;
+  const activeCombinationRank = isCurrentConfigRecentlyApplied ? activeIdx + 1 : null;
 
   const count = options.length;
   const maxItems = MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS;
@@ -11624,10 +11828,13 @@ export function getRecentDirectoryFiltersDropdownMeta(params?: {
     triggerButtonId: 'online-directory-recent-filters-btn',
     menuId: 'online-directory-recent-filters-menu',
     dropdownLabel: 'Recent Filters',
+    recentlyAppliedBadgeLabel: 'Recently Applied',
     maxItems,
     count,
     hasRecentFilters: count > 0,
     isOpen: Boolean(params?.isOpen),
+    isCurrentConfigRecentlyApplied,
+    activeCombinationRank,
     activeCombinationId: currentActive.id,
     activeCombinationLabel: currentActive.label,
     badgeText: `${count}/${maxItems}`,
@@ -11635,4 +11842,5 @@ export function getRecentDirectoryFiltersDropdownMeta(params?: {
     options,
   };
 }
+
 

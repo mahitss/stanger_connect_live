@@ -188,6 +188,8 @@ import {
   recordRecentDirectoryFilterCombination,
   applyRecentDirectoryFilterCombination,
   getRecentDirectoryFiltersDropdownMeta,
+  evaluateRecentlyAppliedDirectoryFilterMeta,
+  isMoodFilterInRecentDirectoryFilters,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -5300,6 +5302,20 @@ export default function App() {
                           }
                           data-clear-filters-chime-count={clearFiltersChimeCount}
                           data-last-chime-played={lastDirectoryFilterChime || 'none'}
+                          data-recently-applied={
+                            directoryQuickFilterMeta.recentlyAppliedMeta.isRecentlyApplied
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-recently-applied-rank={
+                            directoryQuickFilterMeta.recentlyAppliedMeta.matchedRank ?? 'none'
+                          }
+                          data-recently-applied-id={
+                            directoryQuickFilterMeta.recentlyAppliedMeta.matchedCombinationId
+                          }
+                          data-recently-applied-label={
+                            directoryQuickFilterMeta.recentlyAppliedMeta.badgeLabel
+                          }
                           className="relative inline-flex flex-wrap items-center gap-2"
                         >
                           <div className="inline-flex flex-wrap items-center gap-1.5">
@@ -5491,6 +5507,28 @@ export default function App() {
                               }
                               data-hover-brightness={
                                 directoryQuickFilterMeta.toggleHoverMotion.hoverBrightness
+                              }
+                              data-recently-applied={
+                                directoryQuickFilterMeta.recentlyAppliedMeta.isRecentlyApplied
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-recently-applied-badge-visible={
+                                directoryQuickFilterMeta.recentlyAppliedMeta.shouldShowBadge
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-recently-applied-rank={
+                                directoryQuickFilterMeta.recentlyAppliedMeta.matchedRank ?? 'none'
+                              }
+                              data-recently-applied-id={
+                                directoryQuickFilterMeta.recentlyAppliedMeta.matchedCombinationId
+                              }
+                              data-recently-applied-label={
+                                directoryQuickFilterMeta.recentlyAppliedMeta.badgeLabel
+                              }
+                              data-recently-applied-summary={
+                                directoryQuickFilterMeta.recentlyAppliedMeta.statusSummary
                               }
                               className={`group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
                                 directoryQuickFilterMeta.isMyConnectionsOnly
@@ -5879,6 +5917,62 @@ export default function App() {
                                 <span>{directoryQuickFilterMeta.toggleStateIndicator}</span>
                               </span>
 
+                              {directoryQuickFilterMeta.recentlyAppliedMeta.shouldShowBadge && (
+                                <span
+                                  id={directoryQuickFilterMeta.recentlyAppliedMeta.badgeId}
+                                  data-testid={
+                                    directoryQuickFilterMeta.recentlyAppliedMeta.badgeTestId
+                                  }
+                                  data-recently-applied="true"
+                                  data-badge-label={
+                                    directoryQuickFilterMeta.recentlyAppliedMeta.badgeLabel
+                                  }
+                                  data-matched-rank={
+                                    directoryQuickFilterMeta.recentlyAppliedMeta.matchedRank ??
+                                    'none'
+                                  }
+                                  data-matched-id={
+                                    directoryQuickFilterMeta.recentlyAppliedMeta
+                                      .matchedCombinationId
+                                  }
+                                  data-matched-label={
+                                    directoryQuickFilterMeta.recentlyAppliedMeta.matchedLabel
+                                  }
+                                  data-is-non-default={
+                                    directoryQuickFilterMeta.recentlyAppliedMeta
+                                      .isNonDefaultRecentlyApplied
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  title={
+                                    directoryQuickFilterMeta.recentlyAppliedMeta.tooltipText
+                                  }
+                                  aria-label={
+                                    directoryQuickFilterMeta.recentlyAppliedMeta.ariaLabel
+                                  }
+                                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border transition-colors ${
+                                    directoryQuickFilterMeta.recentlyAppliedMeta
+                                      .isNonDefaultRecentlyApplied
+                                      ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/60'
+                                      : 'bg-sky-500/15 text-sky-200 border-sky-400/45'
+                                  }`}
+                                >
+                                  <Clock
+                                    aria-hidden="true"
+                                    className="w-2.5 h-2.5 shrink-0"
+                                  />
+                                  <span>
+                                    {directoryQuickFilterMeta.recentlyAppliedMeta.badgeLabel}
+                                  </span>
+                                  <span
+                                    data-testid="online-directory-recently-applied-rank"
+                                    className="px-1 py-0.1 rounded bg-black/40 border border-current/25 text-[9px] tabular-nums leading-none"
+                                  >
+                                    {directoryQuickFilterMeta.recentlyAppliedMeta.rankBadgeText}
+                                  </span>
+                                </span>
+                              )}
+
                               <span
                                 id="online-directory-mood-filter-reset-only"
                                 role="button"
@@ -6022,6 +6116,16 @@ export default function App() {
                                 directoryQuickFilterMeta.recentFiltersMeta
                                   .activeCombinationLabel
                               }
+                              data-recently-applied={
+                                directoryQuickFilterMeta.recentFiltersMeta
+                                  .isCurrentConfigRecentlyApplied
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-active-combination-rank={
+                                directoryQuickFilterMeta.recentFiltersMeta
+                                  .activeCombinationRank ?? 'none'
+                              }
                               data-dropdown-open={
                                 directoryQuickFilterMeta.recentFiltersMeta.isOpen
                                   ? 'true'
@@ -6092,8 +6196,11 @@ export default function App() {
                                       data-only-in-focus={
                                         opt.onlyInFocus ? 'true' : 'false'
                                       }
+                                      data-recently-applied={
+                                        opt.isRecentlyApplied ? 'true' : 'false'
+                                      }
                                     >
-                                      {opt.rank}. {opt.label}
+                                      {opt.rank}. {opt.label} ({opt.recentlyAppliedBadgeLabel})
                                     </option>
                                   )
                                 )}
@@ -6105,7 +6212,7 @@ export default function App() {
                                   role="listbox"
                                   aria-label="Last 5 Recent Filter Combinations"
                                   data-testid="online-directory-recent-filters-menu"
-                                  className="absolute top-full left-0 mt-1.5 z-40 w-72 rounded-md bg-[#050505] border border-zinc-700/90 shadow-2xl p-1.5 space-y-1 text-left"
+                                  className="absolute top-full left-0 mt-1.5 z-40 w-80 rounded-md bg-[#050505] border border-zinc-700/90 shadow-2xl p-1.5 space-y-1 text-left"
                                 >
                                   <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono text-zinc-400 border-b border-zinc-800/80">
                                     <span>Last 5 Filter Combinations</span>
@@ -6130,6 +6237,10 @@ export default function App() {
                                         data-only-in-focus={
                                           opt.onlyInFocus ? 'true' : 'false'
                                         }
+                                        data-recently-applied={
+                                          opt.isRecentlyApplied ? 'true' : 'false'
+                                        }
+                                        data-badge-label={opt.recentlyAppliedBadgeLabel}
                                         className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors text-left ${
                                           opt.isCurrentlyActive
                                             ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/50 font-semibold'
@@ -6139,8 +6250,20 @@ export default function App() {
                                         <span className="truncate">
                                           {opt.rank}. {opt.label}
                                         </span>
-                                        <span className="text-[10px] font-mono shrink-0 opacity-80">
-                                          {opt.isCurrentlyActive ? 'Active' : 'Apply'}
+                                        <span className="inline-flex items-center gap-1 shrink-0">
+                                          <span
+                                            data-testid={`recent-filter-option-badge-${idx}`}
+                                            className={`px-1 py-0.2 rounded text-[9px] font-mono border ${
+                                              opt.isCurrentlyActive
+                                                ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
+                                                : 'bg-sky-500/15 text-sky-200 border-sky-400/40'
+                                            }`}
+                                          >
+                                            {opt.recentlyAppliedBadgeLabel}
+                                          </span>
+                                          <span className="text-[10px] font-mono opacity-80">
+                                            {opt.isCurrentlyActive ? 'Active' : 'Apply'}
+                                          </span>
                                         </span>
                                       </button>
                                     )
@@ -6713,6 +6836,23 @@ export default function App() {
                                 </span>
                               </div>
                             )}
+                            {directoryQuickFilterMeta.recentlyAppliedMeta.isRecentlyApplied && (
+                              <div
+                                data-testid="online-directory-quick-filter-tooltip-recently-applied"
+                                className="pt-1 mt-1 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-[10px] font-mono text-sky-300"
+                              >
+                                <span className="inline-flex items-center gap-1 truncate">
+                                  <Clock className="w-2.5 h-2.5 shrink-0" />
+                                  <span>
+                                    {directoryQuickFilterMeta.recentlyAppliedMeta.badgeLabel} (
+                                    {directoryQuickFilterMeta.recentlyAppliedMeta.rankBadgeText})
+                                  </span>
+                                </span>
+                                <span className="text-zinc-400 truncate max-w-[140px]">
+                                  {directoryQuickFilterMeta.recentlyAppliedMeta.matchedLabel}
+                                </span>
+                              </div>
+                            )}
                             <div
                               data-testid="online-directory-quick-filter-tooltip-share-info"
                               className="pt-1 mt-1 border-t border-zinc-800/80 flex items-center justify-between gap-2 text-[10px] font-mono text-zinc-400"
@@ -6765,6 +6905,10 @@ export default function App() {
                               directoryMoodFilter === group.categoryFilterValue ||
                               directoryMoodFilter.toLowerCase() ===
                                 group.category.toLowerCase();
+                            const categoryRecentMeta = isMoodFilterInRecentDirectoryFilters(
+                              recentDirectoryFilters,
+                              group.categoryFilterValue
+                            );
                             return (
                               <motion.button
                                 key={group.category}
@@ -6780,11 +6924,21 @@ export default function App() {
                                 aria-pressed={isCatActive}
                                 title={`${group.label}: ${group.presets
                                   .map((p) => p.label)
-                                  .join(', ')} — ${group.description}`}
+                                  .join(', ')} — ${group.description}${
+                                  categoryRecentMeta.isRecentlyApplied
+                                    ? ` (${categoryRecentMeta.badgeLabel} #${categoryRecentMeta.matchedRank})`
+                                    : ''
+                                }`}
                                 data-testid={`mood-category-filter-${group.category.toLowerCase()}`}
                                 data-mood-category={group.category}
                                 data-category-count={group.activeCount}
                                 data-stagger-delay={headerMotion.transition.delay}
+                                data-recently-applied={
+                                  categoryRecentMeta.isRecentlyApplied ? 'true' : 'false'
+                                }
+                                data-recently-applied-rank={
+                                  categoryRecentMeta.matchedRank ?? 'none'
+                                }
                                 className={`inline-flex items-center gap-1 px-2 py-1 text-[11px] font-semibold rounded transition-colors whitespace-nowrap shrink-0 ${
                                   isCatActive
                                     ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/60'
@@ -6795,6 +6949,14 @@ export default function App() {
                                 <span className="font-mono text-[10px] opacity-80">
                                   ({group.activeCount})
                                 </span>
+                                {categoryRecentMeta.isRecentlyApplied && (
+                                  <span
+                                    data-testid={`mood-category-recently-applied-badge-${group.category.toLowerCase()}`}
+                                    className="px-1 py-0.1 rounded bg-sky-500/15 border border-sky-400/40 text-[9px] font-mono text-sky-200 leading-none"
+                                  >
+                                    {categoryRecentMeta.badgeLabel}
+                                  </span>
+                                )}
                               </motion.button>
                             );
                           })}
@@ -7127,6 +7289,11 @@ export default function App() {
                                             currentUid: currentIdentity.uid,
                                             currentUserMood: userMood,
                                           });
+                                        const presetRecentMeta =
+                                          isMoodFilterInRecentDirectoryFilters(
+                                            recentDirectoryFilters,
+                                            preset.label
+                                          );
                                         return (
                                           <div
                                             key={preset.id}
@@ -7162,11 +7329,23 @@ export default function App() {
                                               }
                                               aria-pressed={isPresetActive}
                                               aria-describedby={tooltipMeta.tooltipId}
-                                              title={`${tooltipMeta.fullDefinitionText} · ${presetUsage24h.usageSummaryText}`}
+                                              title={`${tooltipMeta.fullDefinitionText} · ${presetUsage24h.usageSummaryText}${
+                                                presetRecentMeta.isRecentlyApplied
+                                                  ? ` · ${presetRecentMeta.badgeLabel} (#${presetRecentMeta.matchedRank})`
+                                                  : ''
+                                              }`}
                                               data-testid={`mood-category-preset-${preset.id}`}
                                               data-mood-category={group.category}
                                               data-mood-definition={tooltipMeta.definition}
                                               data-usage-count-24h={presetUsage24h.usageCount24h}
+                                              data-recently-applied={
+                                                presetRecentMeta.isRecentlyApplied
+                                                  ? 'true'
+                                                  : 'false'
+                                              }
+                                              data-recently-applied-rank={
+                                                presetRecentMeta.matchedRank ?? 'none'
+                                              }
                                               data-tooltip-visible={
                                                 tooltipMeta.isVisible ? 'true' : 'false'
                                               }
@@ -7181,6 +7360,18 @@ export default function App() {
                                               <span className="font-mono text-[10px] opacity-75">
                                                 ({presetCount})
                                               </span>
+                                              {presetRecentMeta.isRecentlyApplied && (
+                                                <span
+                                                  data-testid={`mood-category-preset-recently-applied-${preset.id}`}
+                                                  className={`px-1 py-0.1 rounded text-[9px] font-mono border leading-none ${
+                                                    isPresetActive
+                                                      ? 'bg-black/15 text-zinc-900 border-black/30'
+                                                      : 'bg-sky-500/15 text-sky-200 border-sky-400/40'
+                                                  }`}
+                                                >
+                                                  {presetRecentMeta.badgeLabel}
+                                                </span>
+                                              )}
                                               <span
                                                 data-testid={`mood-category-preset-usage-count-${preset.id}`}
                                                 data-usage-count-24h={presetUsage24h.usageCount24h}
