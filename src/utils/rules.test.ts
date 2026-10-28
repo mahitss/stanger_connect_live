@@ -191,6 +191,9 @@ import {
   removePinnedDirectoryFilterChip,
   applyPinnedDirectoryFilterChip,
   evaluatePinnedDirectoryFiltersMeta,
+  FIRST_MATCHING_PEER_AUTO_SCROLL_HIGHLIGHT_MS,
+  evaluateFirstMatchingPeerAutoScrollMeta,
+  shouldTriggerFirstMatchingPeerAutoScroll,
   getOnlineDirectoryQuickFilterMeta,
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
@@ -5093,5 +5096,120 @@ test('saveDirectoryFilterConfigurationAsPinnedChip, applyPinnedDirectoryFilterCh
   assert.equal(removed.updatedPinned.length, 1);
 });
 
+// ---------------------------------------------------------------------------
+// 77. Smooth Auto-Scroll to First Matching Peer When #online-directory-mood-filter Criteria Update
+// ---------------------------------------------------------------------------
+test('evaluateFirstMatchingPeerAutoScrollMeta and shouldTriggerFirstMatchingPeerAutoScroll smoothly bring the first matching peer into view when #online-directory-mood-filter criteria are updated', () => {
+  assert.equal(FIRST_MATCHING_PEER_AUTO_SCROLL_HIGHLIGHT_MS, 1400);
 
+  // 1. Initial mount records signature without triggering scroll
+  const initialDecision = shouldTriggerFirstMatchingPeerAutoScroll({
+    previousSignature: null,
+    currentAudienceFilter: 'everyone',
+    currentMoodFilter: 'all',
+    currentOnlyInFocus: false,
+    isInitialMount: true,
+    matchingPeersCount: 2,
+    firstMatchingPeerUid: 'peer_1',
+    firstMatchingPeerDisplayName: 'Alex Scholar',
+  });
+  assert.equal(initialDecision.shouldScroll, false);
+  assert.equal(initialDecision.reason, 'initial_mount');
+  assert.equal(initialDecision.nextSignature, 'everyone|all|0');
+  assert.deepEqual(initialDecision.scrollIntoViewOptions, {
+    behavior: 'smooth',
+    block: 'nearest',
+    inline: 'nearest',
+  });
 
+  // 2. Updating filter criteria in #online-directory-mood-filter with a matching peer triggers smooth auto-scroll
+  const updatedDecision = shouldTriggerFirstMatchingPeerAutoScroll({
+    previousSignature: initialDecision.nextSignature,
+    currentAudienceFilter: 'everyone',
+    currentMoodFilter: 'category:Productive',
+    currentOnlyInFocus: false,
+    isInitialMount: false,
+    matchingPeersCount: 1,
+    firstMatchingPeerUid: 'peer_1',
+    firstMatchingPeerDisplayName: 'Alex Scholar',
+  });
+  assert.equal(updatedDecision.shouldScroll, true);
+  assert.equal(updatedDecision.reason, 'criteria_updated_with_match');
+  assert.equal(
+    updatedDecision.targetRowId,
+    'online-directory-first-matching-peer-row'
+  );
+  assert.equal(updatedDecision.targetPeerUid, 'peer_1');
+  assert.equal(updatedDecision.targetPeerDisplayName, 'Alex Scholar');
+  assert.equal(updatedDecision.scrollIntoViewOptions.behavior, 'smooth');
+  assert.ok(updatedDecision.feedbackText.includes('Alex Scholar'));
+
+  // 3. Re-evaluating with unchanged signature does not re-trigger scroll
+  const unchangedDecision = shouldTriggerFirstMatchingPeerAutoScroll({
+    previousSignature: updatedDecision.nextSignature,
+    currentAudienceFilter: 'everyone',
+    currentMoodFilter: 'category:Productive',
+    currentOnlyInFocus: false,
+    isInitialMount: false,
+    matchingPeersCount: 1,
+    firstMatchingPeerUid: 'peer_1',
+    firstMatchingPeerDisplayName: 'Alex Scholar',
+  });
+  assert.equal(unchangedDecision.shouldScroll, false);
+  assert.equal(unchangedDecision.reason, 'unchanged_criteria');
+
+  // 4. Updating filter criteria when 0 peers match does not scroll
+  const zeroMatchDecision = shouldTriggerFirstMatchingPeerAutoScroll({
+    previousSignature: updatedDecision.nextSignature,
+    currentAudienceFilter: 'my_connections',
+    currentMoodFilter: 'Taking a Break',
+    currentOnlyInFocus: false,
+    isInitialMount: false,
+    matchingPeersCount: 0,
+    firstMatchingPeerUid: null,
+  });
+  assert.equal(zeroMatchDecision.shouldScroll, false);
+  assert.equal(zeroMatchDecision.reason, 'no_matching_peers');
+  assert.equal(zeroMatchDecision.targetPeerUid, null);
+
+  // 5. Verify getOnlineDirectoryQuickFilterMeta exposes firstMatchingPeerAutoScrollMeta
+  const quickMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'peer_1', mood: 'Deep Work' }],
+    moodFilter: 'category:Productive',
+    onlyInFocus: false,
+    displayedPeersCount: 1,
+    firstMatchingPeer: {
+      uid: 'peer_1',
+      displayName: 'Alex Scholar',
+      mood: 'Deep Work',
+    },
+    autoScrollTriggerCount: 1,
+    lastAutoScrolledPeerUid: 'peer_1',
+    isFirstPeerAutoScrollHighlighted: true,
+  });
+  assert.equal(quickMeta.firstMatchingPeerAutoScrollMeta.enabled, true);
+  assert.equal(
+    quickMeta.firstMatchingPeerAutoScrollMeta.sourceFilterId,
+    'online-directory-mood-filter'
+  );
+  assert.equal(
+    quickMeta.firstMatchingPeerAutoScrollMeta.targetRowId,
+    'online-directory-first-matching-peer-row'
+  );
+  assert.equal(
+    quickMeta.firstMatchingPeerAutoScrollMeta.scrollBehavior,
+    'smooth'
+  );
+  assert.equal(quickMeta.firstMatchingPeerAutoScrollMeta.hasMatchingPeers, true);
+  assert.equal(
+    quickMeta.firstMatchingPeerAutoScrollMeta.firstMatchingPeerUid,
+    'peer_1'
+  );
+  assert.equal(
+    quickMeta.firstMatchingPeerAutoScrollMeta.firstMatchingPeerDisplayName,
+    'Alex Scholar'
+  );
+  assert.equal(quickMeta.firstMatchingPeerAutoScrollMeta.autoScrollTriggerCount, 1);
+  assert.equal(quickMeta.firstMatchingPeerAutoScrollMeta.isHighlighted, true);
+});

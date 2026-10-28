@@ -201,6 +201,8 @@ import {
   saveDirectoryFilterConfigurationAsPinnedChip,
   removePinnedDirectoryFilterChip,
   applyPinnedDirectoryFilterChip,
+  FIRST_MATCHING_PEER_AUTO_SCROLL_HIGHLIGHT_MS,
+  shouldTriggerFirstMatchingPeerAutoScroll,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -1086,6 +1088,120 @@ export default function App() {
     showOnlyInFocusPeers,
     uiSoundPrefs,
     isShiftKeyHeldForFilter,
+  ]);
+
+  const firstMatchingPeerRowRef = useRef<HTMLDivElement | null>(null);
+  const prevFilterSignatureForAutoScrollRef = useRef<string | null>(null);
+  const autoScrollHighlightTimerRef = useRef<number | null>(null);
+  const [autoScrollTriggerCount, setAutoScrollTriggerCount] = useState<number>(0);
+  const [lastAutoScrolledPeerUid, setLastAutoScrolledPeerUid] = useState<string | null>(
+    null
+  );
+  const [lastAutoScrolledPeerName, setLastAutoScrolledPeerName] = useState<string | null>(
+    null
+  );
+  const [isFirstPeerAutoScrollHighlighted, setIsFirstPeerAutoScrollHighlighted] =
+    useState<boolean>(false);
+
+  useEffect(() => {
+    return () => {
+      if (autoScrollHighlightTimerRef.current !== null) {
+        window.clearTimeout(autoScrollHighlightTimerRef.current);
+      }
+    };
+  }, []);
+
+  const triggerSmoothScrollToFirstMatchingPeer = (
+    targetPeerUid: string | null,
+    targetPeerDisplayName: string | null,
+    scrollOptions: ScrollIntoViewOptions = {
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    }
+  ) => {
+    setAutoScrollTriggerCount((prev) => prev + 1);
+    setLastAutoScrolledPeerUid(targetPeerUid);
+    setLastAutoScrolledPeerName(targetPeerDisplayName);
+    setIsFirstPeerAutoScrollHighlighted(true);
+    if (autoScrollHighlightTimerRef.current !== null) {
+      window.clearTimeout(autoScrollHighlightTimerRef.current);
+    }
+    autoScrollHighlightTimerRef.current = window.setTimeout(() => {
+      setIsFirstPeerAutoScrollHighlighted(false);
+      autoScrollHighlightTimerRef.current = null;
+    }, FIRST_MATCHING_PEER_AUTO_SCROLL_HIGHLIGHT_MS);
+
+    const performScroll = () => {
+      const targetEl =
+        firstMatchingPeerRowRef.current ||
+        (typeof document !== 'undefined'
+          ? (document.getElementById(
+              'online-directory-first-matching-peer-row'
+            ) as HTMLElement | null) ||
+            (document.querySelector(
+              '[data-first-matching-peer="true"]'
+            ) as HTMLElement | null)
+          : null);
+      if (targetEl && typeof targetEl.scrollIntoView === 'function') {
+        targetEl.scrollIntoView(scrollOptions);
+      }
+    };
+
+    if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+      window.requestAnimationFrame(() => {
+        performScroll();
+      });
+    } else {
+      performScroll();
+    }
+  };
+
+  useEffect(() => {
+    if (!currentIdentity) return;
+    const statusMap = buildConnectionRequestStatusMap(currentIdentity.uid, requests);
+    const acceptedSet = new Set(
+      requests
+        .filter((r) => r.status === 'accepted')
+        .map((r) => (r.fromUid === currentIdentity.uid ? r.toUid : r.fromUid))
+    );
+    const matchingPeers = filterOnlinePeersByDirectoryCriteria(
+      onlinePeers,
+      studyDesks,
+      {
+        onlyInFocus: showOnlyInFocusPeers,
+        moodFilter: directoryMoodFilter === 'all' ? null : directoryMoodFilter,
+        audienceFilter: directoryAudienceFilter,
+        currentUid: currentIdentity.uid,
+        acceptedPeerUids: acceptedSet,
+        connectionStatusMap: statusMap,
+      }
+    );
+    const firstPeer = matchingPeers[0] ?? null;
+    const decision = shouldTriggerFirstMatchingPeerAutoScroll({
+      previousSignature: prevFilterSignatureForAutoScrollRef.current,
+      currentAudienceFilter: directoryAudienceFilter,
+      currentMoodFilter: directoryMoodFilter,
+      currentOnlyInFocus: showOnlyInFocusPeers,
+      isInitialMount: prevFilterSignatureForAutoScrollRef.current === null,
+      matchingPeersCount: matchingPeers.length,
+      firstMatchingPeerUid: firstPeer ? firstPeer.uid : null,
+      firstMatchingPeerDisplayName: firstPeer ? firstPeer.displayName : null,
+    });
+    prevFilterSignatureForAutoScrollRef.current = decision.nextSignature;
+
+    if (decision.shouldScroll) {
+      triggerSmoothScrollToFirstMatchingPeer(
+        decision.targetPeerUid,
+        decision.targetPeerDisplayName,
+        decision.scrollIntoViewOptions
+      );
+    }
+  }, [
+    currentIdentity?.uid,
+    directoryAudienceFilter,
+    directoryMoodFilter,
+    showOnlyInFocusPeers,
   ]);
 
   // Test connection on boot as required by Firebase integration skill
@@ -3213,6 +3329,16 @@ export default function App() {
     isClearFiltersHovered: isClearFiltersBtnHovered,
     isSecondaryClearModalOpen: isSecondaryClearFilterModalOpen,
     pinnedFilters: pinnedDirectoryFilters,
+    firstMatchingPeer: displayedOnlinePeers[0]
+      ? {
+          uid: displayedOnlinePeers[0].uid,
+          displayName: displayedOnlinePeers[0].displayName,
+          mood: displayedOnlinePeers[0].mood,
+        }
+      : null,
+    autoScrollTriggerCount,
+    lastAutoScrolledPeerUid,
+    isFirstPeerAutoScrollHighlighted,
   });
 
   const handleSaveCurrentFilterConfiguration = () => {
@@ -5788,6 +5914,31 @@ export default function App() {
                                   : 'false'
                               }
                               data-secondary-confirm-count={secondaryModalConfirmCount}
+                              data-auto-scroll-enabled={
+                                directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta.enabled
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-auto-scroll-behavior={
+                                directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                  .scrollBehavior
+                              }
+                              data-auto-scroll-target-id={
+                                directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                  .targetRowId
+                              }
+                              data-first-matching-peer-uid={
+                                directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                  .firstMatchingPeerUid ?? 'none'
+                              }
+                              data-first-matching-peer-name={
+                                directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                  .firstMatchingPeerDisplayName ?? 'none'
+                              }
+                              data-auto-scroll-count={autoScrollTriggerCount}
+                              data-last-auto-scrolled-peer-uid={
+                                lastAutoScrolledPeerUid ?? 'none'
+                              }
                               className={`group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
                                 directoryQuickFilterMeta.isMyConnectionsOnly
                                   ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
@@ -7000,6 +7151,76 @@ export default function App() {
                                   : directoryQuickFilterMeta.pinnedFiltersMeta.badgeText}
                               </span>
                             </button>
+
+                            {directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                              .hasMatchingPeers && (
+                              <button
+                                id={
+                                  directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                    .statusBadgeId
+                                }
+                                type="button"
+                                onClick={() =>
+                                  triggerSmoothScrollToFirstMatchingPeer(
+                                    directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                      .firstMatchingPeerUid,
+                                    directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                      .firstMatchingPeerDisplayName,
+                                    directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                      .scrollIntoViewOptions
+                                  )
+                                }
+                                aria-label={
+                                  directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                    .ariaLabel
+                                }
+                                title={
+                                  directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                    .statusLabel
+                                }
+                                data-testid={
+                                  directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                    .statusBadgeTestId
+                                }
+                                data-scroll-behavior={
+                                  directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                    .scrollBehavior
+                                }
+                                data-target-row-id={
+                                  directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                    .targetRowId
+                                }
+                                data-first-matching-peer-uid={
+                                  directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                    .firstMatchingPeerUid ?? 'none'
+                                }
+                                data-auto-scroll-count={autoScrollTriggerCount}
+                                data-is-highlighted={
+                                  isFirstPeerAutoScrollHighlighted ? 'true' : 'false'
+                                }
+                                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[11px] font-mono rounded-md border transition-colors whitespace-nowrap shrink-0 ${
+                                  isFirstPeerAutoScrollHighlighted || autoScrollTriggerCount > 0
+                                    ? 'bg-emerald-500/15 border-emerald-400/50 text-emerald-200 hover:bg-emerald-500/25 hover:text-white'
+                                    : 'bg-zinc-900/90 border-zinc-800 text-zinc-300 hover:bg-zinc-800 hover:text-white'
+                                }`}
+                              >
+                                <CornerDownRight className="w-3 h-3 shrink-0 text-emerald-400" />
+                                <span>
+                                  {
+                                    directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                      .badgeText
+                                  }
+                                </span>
+                                {autoScrollTriggerCount > 0 && (
+                                  <span
+                                    data-testid="online-directory-auto-scroll-triggered-pill"
+                                    className="px-1.5 py-0.2 rounded bg-emerald-950/90 border border-emerald-400/40 text-[9px] font-bold text-emerald-300 uppercase"
+                                  >
+                                    Auto-Scrolled
+                                  </span>
+                                )}
+                              </button>
+                            )}
                           </div>
 
                           {directoryQuickFilterMeta.pinnedFiltersMeta.hasPinnedChips && (
@@ -8249,8 +8470,24 @@ export default function App() {
                     </AnimatePresence>
                   </div>
 
-                  <div className="space-y-3">
-                    {displayedOnlinePeers.map((peer) => {
+                  <div
+                    id={
+                      directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                        .listContainerId
+                    }
+                    data-testid={
+                      directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                        .listContainerTestId
+                    }
+                    data-matching-peers-count={displayedOnlinePeers.length}
+                    data-first-matching-peer-uid={
+                      displayedOnlinePeers[0]?.uid ?? 'none'
+                    }
+                    data-auto-scroll-count={autoScrollTriggerCount}
+                    className="space-y-3"
+                  >
+                    {displayedOnlinePeers.map((peer, peerIdx) => {
+                      const isFirstMatchingPeer = peerIdx === 0;
                       const isMe = peer.uid === currentIdentity.uid;
                       const focusStatus =
                         directoryFocusSummary.byUid[peer.uid] ||
@@ -8273,9 +8510,33 @@ export default function App() {
                       return (
                         <div
                           key={peer.uid}
+                          id={
+                            isFirstMatchingPeer
+                              ? directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                  .targetRowId
+                              : undefined
+                          }
+                          ref={isFirstMatchingPeer ? firstMatchingPeerRowRef : undefined}
                           data-testid={`online-directory-peer-row-${peer.uid}`}
+                          data-first-matching-peer={isFirstMatchingPeer ? 'true' : 'false'}
+                          data-auto-scroll-target={isFirstMatchingPeer ? 'true' : 'false'}
+                          data-auto-scroll-behavior={
+                            isFirstMatchingPeer ? 'smooth' : undefined
+                          }
+                          data-auto-scroll-highlighted={
+                            isFirstMatchingPeer && isFirstPeerAutoScrollHighlighted
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-auto-scroll-count={
+                            isFirstMatchingPeer ? autoScrollTriggerCount : undefined
+                          }
                           data-connection-status={peerDmShortcut.status}
-                          className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3"
+                          className={`p-4 rounded-md bg-[#050505] border space-y-3 transition-all duration-300 scroll-mt-24 ${
+                            isFirstMatchingPeer && isFirstPeerAutoScrollHighlighted
+                              ? 'border-emerald-400/80 ring-1 ring-emerald-400/40 shadow-lg shadow-emerald-950/40'
+                              : 'border-zinc-800/80'
+                          }`}
                         >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="space-y-1 min-w-0 flex-1">
@@ -8283,6 +8544,20 @@ export default function App() {
                                 <span className="text-sm font-bold text-white truncate">
                                   {peer.displayName} {isMe ? '(You — Online)' : ''}
                                 </span>
+
+                                {isFirstMatchingPeer && autoScrollTriggerCount > 0 && (
+                                  <span
+                                    data-testid="online-directory-first-matching-peer-badge"
+                                    data-auto-scroll-count={autoScrollTriggerCount}
+                                    data-last-auto-scrolled-peer={
+                                      lastAutoScrolledPeerName ?? peer.displayName
+                                    }
+                                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/50 text-[10px] font-mono font-semibold text-emerald-300 whitespace-nowrap shrink-0"
+                                  >
+                                    <CornerDownRight className="w-2.5 h-2.5 shrink-0" />
+                                    <span>First Matching Peer · Brought into View</span>
+                                  </span>
+                                )}
 
                                 {peerDmShortcut.isAcceptedConnection && (
                                   <span

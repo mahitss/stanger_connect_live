@@ -9899,6 +9899,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   recentlyAppliedMeta: RecentlyAppliedDirectoryFilterMeta;
   secondaryClearAllModalMeta: SecondaryComplexFilterClearModalMeta;
   pinnedFiltersMeta: PinnedDirectoryFiltersMeta;
+  firstMatchingPeerAutoScrollMeta: FirstMatchingPeerAutoScrollMeta;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -9939,6 +9940,10 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   isClearFiltersHovered?: boolean;
   isSecondaryClearModalOpen?: boolean;
   pinnedFilters?: RecentDirectoryFilterCombination[] | null;
+  firstMatchingPeer?: { uid: string; displayName?: string | null; mood?: string | null } | null;
+  autoScrollTriggerCount?: number;
+  lastAutoScrolledPeerUid?: string | null;
+  isFirstPeerAutoScrollHighlighted?: boolean;
 }): OnlineDirectoryQuickFilterMeta {
   const mode: OnlineDirectoryAudienceFilter =
     params.mode === 'my_connections' ? 'my_connections' : 'everyone';
@@ -10112,6 +10117,21 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       currentAudienceFilter: mode,
       currentMoodFilter: params.moodFilter,
       currentOnlyInFocus: params.onlyInFocus,
+    }),
+    firstMatchingPeerAutoScrollMeta: evaluateFirstMatchingPeerAutoScrollMeta({
+      currentAudienceFilter: mode,
+      currentMoodFilter: params.moodFilter,
+      currentOnlyInFocus: params.onlyInFocus,
+      displayedPeersCount: zeroPeersNotice.displayedPeersCount,
+      firstMatchingPeer:
+        params.firstMatchingPeer !== undefined
+          ? params.firstMatchingPeer
+          : peers[0]
+            ? { uid: peers[0].uid, mood: peers[0].mood }
+            : null,
+      autoScrollTriggerCount: params.autoScrollTriggerCount,
+      lastAutoScrolledPeerUid: params.lastAutoScrolledPeerUid,
+      isHighlighted: params.isFirstPeerAutoScrollHighlighted,
     }),
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
@@ -12519,6 +12539,262 @@ export function evaluatePinnedDirectoryFiltersMeta(params?: {
   };
 }
 
+export const FIRST_MATCHING_PEER_AUTO_SCROLL_HIGHLIGHT_MS = 1400;
 
+export interface FirstMatchingPeerAutoScrollMeta {
+  enabled: true;
+  sourceFilterId: 'online-directory-mood-filter';
+  targetRowId: 'online-directory-first-matching-peer-row';
+  targetRowTestId: 'online-directory-first-matching-peer-row';
+  listContainerId: 'online-directory-matching-peers-list';
+  listContainerTestId: 'online-directory-matching-peers-list';
+  statusBadgeId: 'online-directory-auto-scroll-status-badge';
+  statusBadgeTestId: 'online-directory-auto-scroll-status-badge';
+  scrollBehavior: 'smooth';
+  scrollBlock: 'nearest';
+  scrollInline: 'nearest';
+  scrollIntoViewOptions: {
+    behavior: 'smooth';
+    block: 'nearest';
+    inline: 'nearest';
+  };
+  activeFilterSignature: string;
+  activeFilterLabel: string;
+  hasMatchingPeers: boolean;
+  matchingPeersCount: number;
+  firstMatchingPeerUid: string | null;
+  firstMatchingPeerDisplayName: string | null;
+  autoScrollTriggerCount: number;
+  lastAutoScrolledPeerUid: string | null;
+  isHighlighted: boolean;
+  highlightDurationMs: number;
+  statusLabel: string;
+  badgeText: string;
+  ariaLabel: string;
+}
 
+export interface FirstMatchingPeerAutoScrollDecision {
+  shouldScroll: boolean;
+  reason:
+    | 'initial_mount'
+    | 'unchanged_criteria'
+    | 'no_matching_peers'
+    | 'criteria_updated_with_match';
+  previousSignature: string | null;
+  nextSignature: string;
+  targetRowId: 'online-directory-first-matching-peer-row';
+  targetPeerUid: string | null;
+  targetPeerDisplayName: string | null;
+  matchingPeersCount: number;
+  scrollIntoViewOptions: {
+    behavior: 'smooth';
+    block: 'nearest';
+    inline: 'nearest';
+  };
+  feedbackText: string;
+}
 
+export function evaluateFirstMatchingPeerAutoScrollMeta(params?: {
+  currentAudienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+  currentMoodFilter?: string | null;
+  currentOnlyInFocus?: boolean;
+  displayedPeersCount?: number | null;
+  firstMatchingPeer?: {
+    uid?: string | null;
+    displayName?: string | null;
+    mood?: string | null;
+  } | null;
+  autoScrollTriggerCount?: number;
+  lastAutoScrolledPeerUid?: string | null;
+  isHighlighted?: boolean;
+}): FirstMatchingPeerAutoScrollMeta {
+  const combination = buildDirectoryFilterCombinationEntry({
+    audienceFilter: params?.currentAudienceFilter,
+    moodFilter: params?.currentMoodFilter,
+    onlyInFocus: params?.currentOnlyInFocus,
+  });
+
+  const peerUid = params?.firstMatchingPeer?.uid
+    ? String(params.firstMatchingPeer.uid).trim() || null
+    : null;
+  const peerName = params?.firstMatchingPeer?.displayName
+    ? String(params.firstMatchingPeer.displayName).trim() || 'First Matching Peer'
+    : peerUid
+      ? 'First Matching Peer'
+      : null;
+
+  const rawCount =
+    params?.displayedPeersCount !== undefined && params?.displayedPeersCount !== null
+      ? Math.max(0, Math.floor(Number(params.displayedPeersCount) || 0))
+      : peerUid
+        ? 1
+        : 0;
+
+  const hasMatchingPeers = rawCount > 0 && Boolean(peerUid);
+  const matchingPeersCount = hasMatchingPeers ? Math.max(1, rawCount) : 0;
+  const firstMatchingPeerUid = hasMatchingPeers ? peerUid : null;
+  const firstMatchingPeerDisplayName = hasMatchingPeers ? peerName : null;
+
+  const autoScrollTriggerCount = Math.max(
+    0,
+    Math.floor(Number(params?.autoScrollTriggerCount) || 0)
+  );
+  const lastAutoScrolledPeerUid = params?.lastAutoScrolledPeerUid
+    ? String(params.lastAutoScrolledPeerUid).trim() || null
+    : null;
+  const isHighlighted = Boolean(params?.isHighlighted) && hasMatchingPeers;
+
+  const statusLabel = hasMatchingPeers
+    ? autoScrollTriggerCount > 0
+      ? `Auto-scrolled smoothly to first matching peer: ${firstMatchingPeerDisplayName}`
+      : `Ready to auto-scroll smoothly to first matching peer: ${firstMatchingPeerDisplayName}`
+    : 'No matching peers available to auto-scroll into view';
+
+  const badgeText = hasMatchingPeers
+    ? `First Match: ${firstMatchingPeerDisplayName}`
+    : '0 Matching Peers';
+
+  const ariaLabel = hasMatchingPeers
+    ? `Smooth auto-scroll target: ${firstMatchingPeerDisplayName} (${matchingPeersCount} matching ${
+        matchingPeersCount === 1 ? 'peer' : 'peers'
+      } for ${combination.label})`
+    : `No matching peers for ${combination.label}`;
+
+  return {
+    enabled: true,
+    sourceFilterId: 'online-directory-mood-filter',
+    targetRowId: 'online-directory-first-matching-peer-row',
+    targetRowTestId: 'online-directory-first-matching-peer-row',
+    listContainerId: 'online-directory-matching-peers-list',
+    listContainerTestId: 'online-directory-matching-peers-list',
+    statusBadgeId: 'online-directory-auto-scroll-status-badge',
+    statusBadgeTestId: 'online-directory-auto-scroll-status-badge',
+    scrollBehavior: 'smooth',
+    scrollBlock: 'nearest',
+    scrollInline: 'nearest',
+    scrollIntoViewOptions: {
+      behavior: 'smooth',
+      block: 'nearest',
+      inline: 'nearest',
+    },
+    activeFilterSignature: combination.id,
+    activeFilterLabel: combination.label,
+    hasMatchingPeers,
+    matchingPeersCount,
+    firstMatchingPeerUid,
+    firstMatchingPeerDisplayName,
+    autoScrollTriggerCount,
+    lastAutoScrolledPeerUid,
+    isHighlighted,
+    highlightDurationMs: FIRST_MATCHING_PEER_AUTO_SCROLL_HIGHLIGHT_MS,
+    statusLabel,
+    badgeText,
+    ariaLabel,
+  };
+}
+
+export function shouldTriggerFirstMatchingPeerAutoScroll(params: {
+  previousSignature?: string | null;
+  currentAudienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+  currentMoodFilter?: string | null;
+  currentOnlyInFocus?: boolean;
+  isInitialMount?: boolean;
+  matchingPeersCount?: number | null;
+  firstMatchingPeerUid?: string | null;
+  firstMatchingPeerDisplayName?: string | null;
+}): FirstMatchingPeerAutoScrollDecision {
+  const combination = buildDirectoryFilterCombinationEntry({
+    audienceFilter: params.currentAudienceFilter,
+    moodFilter: params.currentMoodFilter,
+    onlyInFocus: params.currentOnlyInFocus,
+  });
+  const nextSignature = combination.id;
+  const previousSignature =
+    params.previousSignature !== undefined && params.previousSignature !== null
+      ? String(params.previousSignature).trim() || null
+      : null;
+
+  const cleanUid = params.firstMatchingPeerUid
+    ? String(params.firstMatchingPeerUid).trim() || null
+    : null;
+  const cleanName = params.firstMatchingPeerDisplayName
+    ? String(params.firstMatchingPeerDisplayName).trim() || 'First Matching Peer'
+    : cleanUid
+      ? 'First Matching Peer'
+      : null;
+  const safeCount =
+    params.matchingPeersCount !== undefined && params.matchingPeersCount !== null
+      ? Math.max(0, Math.floor(Number(params.matchingPeersCount) || 0))
+      : cleanUid
+        ? 1
+        : 0;
+  const hasMatch = safeCount > 0 && Boolean(cleanUid);
+
+  const scrollIntoViewOptions: {
+    behavior: 'smooth';
+    block: 'nearest';
+    inline: 'nearest';
+  } = {
+    behavior: 'smooth',
+    block: 'nearest',
+    inline: 'nearest',
+  };
+
+  if (params.isInitialMount || previousSignature === null) {
+    return {
+      shouldScroll: false,
+      reason: 'initial_mount',
+      previousSignature,
+      nextSignature,
+      targetRowId: 'online-directory-first-matching-peer-row',
+      targetPeerUid: hasMatch ? cleanUid : null,
+      targetPeerDisplayName: hasMatch ? cleanName : null,
+      matchingPeersCount: hasMatch ? safeCount : 0,
+      scrollIntoViewOptions,
+      feedbackText: 'Initial directory render — auto-scroll armed for filter updates.',
+    };
+  }
+
+  if (previousSignature === nextSignature) {
+    return {
+      shouldScroll: false,
+      reason: 'unchanged_criteria',
+      previousSignature,
+      nextSignature,
+      targetRowId: 'online-directory-first-matching-peer-row',
+      targetPeerUid: hasMatch ? cleanUid : null,
+      targetPeerDisplayName: hasMatch ? cleanName : null,
+      matchingPeersCount: hasMatch ? safeCount : 0,
+      scrollIntoViewOptions,
+      feedbackText: 'Filter criteria unchanged — no auto-scroll triggered.',
+    };
+  }
+
+  if (!hasMatch) {
+    return {
+      shouldScroll: false,
+      reason: 'no_matching_peers',
+      previousSignature,
+      nextSignature,
+      targetRowId: 'online-directory-first-matching-peer-row',
+      targetPeerUid: null,
+      targetPeerDisplayName: null,
+      matchingPeersCount: 0,
+      scrollIntoViewOptions,
+      feedbackText: `Filter criteria updated to "${combination.label}" — 0 matching peers to scroll into view.`,
+    };
+  }
+
+  return {
+    shouldScroll: true,
+    reason: 'criteria_updated_with_match',
+    previousSignature,
+    nextSignature,
+    targetRowId: 'online-directory-first-matching-peer-row',
+    targetPeerUid: cleanUid,
+    targetPeerDisplayName: cleanName,
+    matchingPeersCount: safeCount,
+    scrollIntoViewOptions,
+    feedbackText: `Auto-scrolled smoothly to first matching peer (${cleanName}) for "${combination.label}".`,
+  };
+}
