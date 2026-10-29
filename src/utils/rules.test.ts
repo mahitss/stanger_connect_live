@@ -4135,24 +4135,39 @@ test('resolveZeroPeersMoodFilterNotice and getOnlineDirectoryQuickFilterMeta dis
 });
 
 test('evaluateMoodCategoryDrawersToggleState, toggleAllMoodCategoryDrawers, and toggleSingleMoodCategoryDrawer simultaneously expand or collapse all mood category drawers', () => {
-  // Default state: all 3 category drawers expanded (3/3)
+  // Default state on first load: only Productive category drawer expanded (1/3), keeping Social & Away collapsed
   const initialState = evaluateMoodCategoryDrawersToggleState({
     isMainDrawerExpanded: true,
     categoryExpansionMap: DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP,
   });
   assert.equal(initialState.isMainDrawerExpanded, true);
-  assert.equal(initialState.areAllDrawersExpanded, true);
+  assert.equal(initialState.defaultOpenedCategory, 'Productive');
+  assert.equal(initialState.isDefaultSingleCategoryState, true);
+  assert.equal(initialState.areAllDrawersExpanded, false);
   assert.equal(initialState.isAnyDrawerExpanded, true);
-  assert.equal(initialState.expandedCount, 3);
+  assert.equal(initialState.expandedCount, 1);
   assert.equal(initialState.totalCount, 3);
-  assert.equal(initialState.nextAction, 'collapse_all');
+  assert.deepEqual(initialState.expandedCategories, ['Productive']);
+  assert.deepEqual(initialState.collapsedCategories, ['Social', 'Away']);
+  assert.equal(initialState.nextAction, 'expand_all');
   assert.equal(initialState.toggleAllButtonLabel, 'Toggle All');
-  assert.equal(initialState.statusBadgeLabel, 'Toggle All (3/3)');
+  assert.equal(initialState.statusBadgeLabel, 'Toggle All (1/3)');
+
+  // Clicking Toggle All from the default 1/3 state expands every category drawer simultaneously (3/3)
+  const expandedAllFromDefault = toggleAllMoodCategoryDrawers({
+    isMainDrawerExpanded: initialState.isMainDrawerExpanded,
+    categoryExpansionMap: initialState.categoryExpansionMap,
+  });
+  assert.equal(expandedAllFromDefault.isMainDrawerExpanded, true);
+  assert.equal(expandedAllFromDefault.areAllDrawersExpanded, true);
+  assert.equal(expandedAllFromDefault.expandedCount, 3);
+  assert.equal(expandedAllFromDefault.nextAction, 'collapse_all');
+  assert.equal(expandedAllFromDefault.statusBadgeLabel, 'Toggle All (3/3)');
 
   // Clicking Toggle All when all expanded collapses every category drawer simultaneously (0/3)
   const collapsedAllState = toggleAllMoodCategoryDrawers({
-    isMainDrawerExpanded: initialState.isMainDrawerExpanded,
-    categoryExpansionMap: initialState.categoryExpansionMap,
+    isMainDrawerExpanded: expandedAllFromDefault.isMainDrawerExpanded,
+    categoryExpansionMap: expandedAllFromDefault.categoryExpansionMap,
   });
   assert.equal(collapsedAllState.isMainDrawerExpanded, false);
   assert.equal(collapsedAllState.areAllDrawersExpanded, false);
@@ -5404,6 +5419,60 @@ test('getQuickFilterHistoryIconButtonSpec and getOnlineDirectoryQuickFilterMeta 
   assert.equal(applied.onlyInFocus, thirdOption.onlyInFocus);
   assert.equal(applied.updatedHistory.length, 5);
   assert.equal(applied.updatedHistory[0].id, thirdOption.id);
+});
+
+// ---------------------------------------------------------------------------
+// 81. Default State of Mood Category Drawers Opens Only 'Productive' on First Load
+// ---------------------------------------------------------------------------
+test('DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP, evaluateMoodCategoryDrawersToggleState, and getOnlineDirectoryQuickFilterMeta open only the Productive category drawer on first load', () => {
+  // 1. Verify DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP opens only Productive
+  assert.deepEqual(DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP, {
+    Productive: true,
+    Social: false,
+    Away: false,
+  });
+
+  // 2. Verify evaluateMoodCategoryDrawersToggleState with no arguments defaults to Productive only (1/3)
+  const defaultDrawerState = evaluateMoodCategoryDrawersToggleState();
+  assert.equal(defaultDrawerState.isMainDrawerExpanded, true);
+  assert.equal(defaultDrawerState.defaultOpenedCategory, 'Productive');
+  assert.equal(defaultDrawerState.isDefaultSingleCategoryState, true);
+  assert.deepEqual(defaultDrawerState.categoryExpansionMap, {
+    Productive: true,
+    Social: false,
+    Away: false,
+  });
+  assert.deepEqual(defaultDrawerState.expandedCategories, ['Productive']);
+  assert.deepEqual(defaultDrawerState.collapsedCategories, ['Social', 'Away']);
+  assert.equal(defaultDrawerState.expandedCount, 1);
+  assert.equal(defaultDrawerState.totalCount, 3);
+  assert.equal(defaultDrawerState.areAllDrawersExpanded, false);
+  assert.equal(defaultDrawerState.areAllDrawersCollapsed, false);
+  assert.equal(defaultDrawerState.isAnyDrawerExpanded, true);
+  assert.equal(defaultDrawerState.nextAction, 'expand_all');
+  assert.equal(defaultDrawerState.statusBadgeLabel, 'Toggle All (1/3)');
+
+  // 3. Verify getOnlineDirectoryQuickFilterMeta on first load reflects Productive-only default
+  const firstLoadMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+  });
+  assert.equal(
+    firstLoadMeta.moodDrawersToggleAll.defaultOpenedCategory,
+    'Productive'
+  );
+  assert.equal(
+    firstLoadMeta.moodDrawersToggleAll.isDefaultSingleCategoryState,
+    true
+  );
+  assert.equal(firstLoadMeta.moodDrawersToggleAll.expandedCount, 1);
+  assert.deepEqual(firstLoadMeta.moodDrawersToggleAll.expandedCategories, [
+    'Productive',
+  ]);
+  assert.deepEqual(firstLoadMeta.moodDrawersToggleAll.collapsedCategories, [
+    'Social',
+    'Away',
+  ]);
 });
 
 

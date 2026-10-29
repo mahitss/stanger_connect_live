@@ -10325,12 +10325,14 @@ export type MoodCategoryDrawerExpansionMap = Record<OnlineMoodCategory, boolean>
 export const DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP: MoodCategoryDrawerExpansionMap =
   {
     Productive: true,
-    Social: true,
-    Away: true,
+    Social: false,
+    Away: false,
   };
 
 export interface MoodCategoryDrawersToggleAllState {
   isMainDrawerExpanded: boolean;
+  defaultOpenedCategory: OnlineMoodCategory;
+  isDefaultSingleCategoryState: boolean;
   categoryExpansionMap: MoodCategoryDrawerExpansionMap;
   expandedCategories: OnlineMoodCategory[];
   collapsedCategories: OnlineMoodCategory[];
@@ -10365,17 +10367,17 @@ export function evaluateMoodCategoryDrawersToggleState(params?: {
     Productive: isMainDrawerExpanded
       ? rawMap.Productive !== undefined
         ? Boolean(rawMap.Productive)
-        : true
+        : DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP.Productive
       : false,
     Social: isMainDrawerExpanded
       ? rawMap.Social !== undefined
         ? Boolean(rawMap.Social)
-        : true
+        : DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP.Social
       : false,
     Away: isMainDrawerExpanded
       ? rawMap.Away !== undefined
         ? Boolean(rawMap.Away)
-        : true
+        : DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP.Away
       : false,
   };
 
@@ -10391,6 +10393,11 @@ export function evaluateMoodCategoryDrawersToggleState(params?: {
     isMainDrawerExpanded && expandedCount === totalCategoriesCount;
   const areAllDrawersCollapsed = !isMainDrawerExpanded || expandedCount === 0;
   const isAnyDrawerExpanded = !areAllDrawersCollapsed;
+  const isDefaultSingleCategoryState =
+    isMainDrawerExpanded &&
+    categoryExpansionMap.Productive === true &&
+    categoryExpansionMap.Social === false &&
+    categoryExpansionMap.Away === false;
   const nextToggleAction: 'collapse_all' | 'expand_all' = areAllDrawersExpanded
     ? 'collapse_all'
     : 'expand_all';
@@ -10407,6 +10414,8 @@ export function evaluateMoodCategoryDrawersToggleState(params?: {
 
   return {
     isMainDrawerExpanded: !areAllDrawersCollapsed,
+    defaultOpenedCategory: 'Productive',
+    isDefaultSingleCategoryState,
     categoryExpansionMap,
     expandedCategories,
     collapsedCategories,

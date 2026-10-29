@@ -5582,6 +5582,9 @@ export default function App() {
 
                         <div
                           data-testid="online-directory-quick-filter-area"
+                          data-default-opened-category={
+                            directoryQuickFilterMeta.moodDrawersToggleAll.defaultOpenedCategory
+                          }
                           data-drawers-all-expanded={
                             directoryQuickFilterMeta.moodDrawersToggleAll.areAllDrawersExpanded
                               ? 'true'
@@ -5589,6 +5592,16 @@ export default function App() {
                           }
                           data-expanded-drawers-count={
                             directoryQuickFilterMeta.moodDrawersToggleAll.expandedCount
+                          }
+                          data-expanded-categories={
+                            directoryQuickFilterMeta.moodDrawersToggleAll.expandedCategories.join(
+                              ','
+                            ) || 'none'
+                          }
+                          data-collapsed-categories={
+                            directoryQuickFilterMeta.moodDrawersToggleAll.collapsedCategories.join(
+                              ','
+                            ) || 'none'
                           }
                           data-clear-filters-visible={
                             directoryQuickFilterMeta.dedicatedClearFiltersButtonMeta
@@ -6033,6 +6046,22 @@ export default function App() {
                               }
                               data-history-max={
                                 directoryQuickFilterMeta.historyIconButtonMeta.maxItems
+                              }
+                              data-default-opened-category={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.defaultOpenedCategory
+                              }
+                              data-expanded-drawers-count={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.expandedCount
+                              }
+                              data-expanded-categories={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.expandedCategories.join(
+                                  ','
+                                ) || 'none'
+                              }
+                              data-collapsed-categories={
+                                directoryQuickFilterMeta.moodDrawersToggleAll.collapsedCategories.join(
+                                  ','
+                                ) || 'none'
                               }
                               className={`relative group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
                                 directoryQuickFilterMeta.historyIconButtonMeta.isOpen
@@ -8387,6 +8416,22 @@ export default function App() {
                           key="online-directory-mood-category-drawer"
                           id="online-directory-mood-category-drawer"
                           data-testid="online-directory-mood-category-drawer"
+                          data-default-opened-category={
+                            directoryQuickFilterMeta.moodDrawersToggleAll.defaultOpenedCategory
+                          }
+                          data-expanded-drawers-count={
+                            directoryQuickFilterMeta.moodDrawersToggleAll.expandedCount
+                          }
+                          data-expanded-categories={
+                            directoryQuickFilterMeta.moodDrawersToggleAll.expandedCategories.join(
+                              ','
+                            ) || 'none'
+                          }
+                          data-collapsed-categories={
+                            directoryQuickFilterMeta.moodDrawersToggleAll.collapsedCategories.join(
+                              ','
+                            ) || 'none'
+                          }
                           data-stagger-children={
                             getMoodCategoryExpansionMotionSpec(true).staggerChildrenSec
                           }
