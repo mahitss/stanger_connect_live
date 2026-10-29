@@ -57,6 +57,7 @@ import {
   Info,
   Search,
   Bookmark,
+  History,
 } from 'lucide-react';
 import {
   auth,
@@ -6019,7 +6020,25 @@ export default function App() {
                               data-last-auto-scrolled-peer-uid={
                                 lastAutoScrolledPeerUid ?? 'none'
                               }
-                              className={`group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
+                              data-history-button-id={
+                                directoryQuickFilterMeta.historyIconButtonMeta.buttonId
+                              }
+                              data-history-menu-open={
+                                directoryQuickFilterMeta.historyIconButtonMeta.isOpen
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-history-count={
+                                directoryQuickFilterMeta.historyIconButtonMeta.count
+                              }
+                              data-history-max={
+                                directoryQuickFilterMeta.historyIconButtonMeta.maxItems
+                              }
+                              className={`relative group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
+                                directoryQuickFilterMeta.historyIconButtonMeta.isOpen
+                                  ? 'z-50'
+                                  : 'z-10'
+                              } ${
                                 directoryQuickFilterMeta.isMyConnectionsOnly
                                   ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
                                   : directoryQuickFilterMeta.breathPulseSpec.isBreathPulseActive
@@ -6526,6 +6545,178 @@ export default function App() {
                                   {directoryQuickFilterMeta.resetOnlyButtonMeta.shortcutLabel}
                                 </span>
                               </span>
+
+                              <span
+                                id={directoryQuickFilterMeta.historyIconButtonMeta.buttonId}
+                                role="button"
+                                tabIndex={0}
+                                onMouseEnter={(e) => {
+                                  e.stopPropagation();
+                                  setIsQuickFilterHovered(false);
+                                }}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setIsQuickFilterHovered(false);
+                                  setIsRecentFiltersDropdownOpen((prev) => !prev);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setIsQuickFilterHovered(false);
+                                    setIsRecentFiltersDropdownOpen((prev) => !prev);
+                                  } else if (e.key === 'Escape' && isRecentFiltersDropdownOpen) {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setIsRecentFiltersDropdownOpen(false);
+                                  }
+                                }}
+                                title={directoryQuickFilterMeta.historyIconButtonMeta.tooltipText}
+                                aria-label={directoryQuickFilterMeta.historyIconButtonMeta.ariaLabel}
+                                aria-haspopup="listbox"
+                                aria-expanded={directoryQuickFilterMeta.historyIconButtonMeta.isOpen}
+                                aria-controls={directoryQuickFilterMeta.historyIconButtonMeta.menuId}
+                                data-testid={
+                                  directoryQuickFilterMeta.historyIconButtonMeta.buttonTestId
+                                }
+                                data-icon-component={
+                                  directoryQuickFilterMeta.historyIconButtonMeta.iconComponent
+                                }
+                                data-dropdown-open={
+                                  directoryQuickFilterMeta.historyIconButtonMeta.isOpen
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-recent-count={
+                                  directoryQuickFilterMeta.historyIconButtonMeta.count
+                                }
+                                data-max-recent={
+                                  directoryQuickFilterMeta.historyIconButtonMeta.maxItems
+                                }
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border transition-colors cursor-pointer ${
+                                  directoryQuickFilterMeta.historyIconButtonMeta.isOpen
+                                    ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/70 shadow-sm'
+                                    : 'bg-zinc-900/90 text-zinc-300 border-zinc-800 hover:bg-emerald-500/15 hover:text-emerald-200 hover:border-emerald-400/50'
+                                }`}
+                              >
+                                <History
+                                  aria-hidden="true"
+                                  data-testid={
+                                    directoryQuickFilterMeta.historyIconButtonMeta.iconTestId
+                                  }
+                                  className="w-2.5 h-2.5 shrink-0 text-emerald-300"
+                                />
+                                <span>
+                                  {directoryQuickFilterMeta.historyIconButtonMeta.label}
+                                </span>
+                                <span
+                                  data-testid="online-directory-mood-filter-history-badge"
+                                  className="px-1 py-0.1 rounded bg-black/40 border border-current/25 text-[9px] tabular-nums leading-none"
+                                >
+                                  {directoryQuickFilterMeta.historyIconButtonMeta.badgeText}
+                                </span>
+                              </span>
+
+                              {directoryQuickFilterMeta.historyIconButtonMeta.isOpen && (
+                                <span
+                                  id={directoryQuickFilterMeta.historyIconButtonMeta.menuId}
+                                  role="listbox"
+                                  aria-label={
+                                    directoryQuickFilterMeta.historyIconButtonMeta.menuHeadline
+                                  }
+                                  data-testid={
+                                    directoryQuickFilterMeta.historyIconButtonMeta.menuTestId
+                                  }
+                                  data-recent-count={
+                                    directoryQuickFilterMeta.historyIconButtonMeta.count
+                                  }
+                                  data-max-recent={
+                                    directoryQuickFilterMeta.historyIconButtonMeta.maxItems
+                                  }
+                                  onMouseEnter={(e) => {
+                                    e.stopPropagation();
+                                    setIsQuickFilterHovered(false);
+                                  }}
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                  }}
+                                  className="absolute top-full right-0 mt-1.5 z-50 w-80 rounded-md bg-[#050505] border border-emerald-500/40 shadow-2xl p-1.5 flex flex-col gap-1 text-left cursor-default"
+                                >
+                                  <span className="px-2 py-1 flex items-center justify-between text-[10px] font-mono text-zinc-300 border-b border-zinc-800/80">
+                                    <span className="inline-flex items-center gap-1.5 font-semibold text-emerald-200">
+                                      <History
+                                        aria-hidden="true"
+                                        className="w-3 h-3 shrink-0 text-emerald-300"
+                                      />
+                                      <span>
+                                        {
+                                          directoryQuickFilterMeta.historyIconButtonMeta
+                                            .menuHeadline
+                                        }
+                                      </span>
+                                    </span>
+                                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-[9px] text-emerald-300 tabular-nums">
+                                      {directoryQuickFilterMeta.historyIconButtonMeta.badgeText}
+                                    </span>
+                                  </span>
+                                  {directoryQuickFilterMeta.historyIconButtonMeta.options.map(
+                                    (opt, idx) => (
+                                      <span
+                                        key={opt.id}
+                                        role="option"
+                                        tabIndex={0}
+                                        aria-selected={opt.isCurrentlyActive}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          handleApplyRecentDirectoryFilter(opt.id);
+                                        }}
+                                        onKeyDown={(e) => {
+                                          if (e.key === 'Enter' || e.key === ' ') {
+                                            e.preventDefault();
+                                            e.stopPropagation();
+                                            handleApplyRecentDirectoryFilter(opt.id);
+                                          }
+                                        }}
+                                        data-testid={`${directoryQuickFilterMeta.historyIconButtonMeta.optionTestIdPrefix}-${idx}`}
+                                        data-combination-id={opt.id}
+                                        data-combination-rank={opt.rank}
+                                        data-audience-filter={opt.audienceFilter}
+                                        data-mood-filter={opt.moodFilter}
+                                        data-only-in-focus={opt.onlyInFocus ? 'true' : 'false'}
+                                        data-currently-active={
+                                          opt.isCurrentlyActive ? 'true' : 'false'
+                                        }
+                                        className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors text-left cursor-pointer ${
+                                          opt.isCurrentlyActive
+                                            ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/50 font-semibold'
+                                            : 'text-zinc-300 hover:bg-zinc-900 hover:text-white border border-transparent'
+                                        }`}
+                                      >
+                                        <span className="truncate">
+                                          {opt.rank}. {opt.label}
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 shrink-0">
+                                          <span
+                                            className={`px-1 py-0.2 rounded text-[9px] font-mono border ${
+                                              opt.isCurrentlyActive
+                                                ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
+                                                : 'bg-sky-500/15 text-sky-200 border-sky-400/40'
+                                            }`}
+                                          >
+                                            {opt.recentlyAppliedBadgeLabel}
+                                          </span>
+                                          <span className="text-[10px] font-mono opacity-80">
+                                            {opt.isCurrentlyActive ? 'Active' : 'Apply'}
+                                          </span>
+                                        </span>
+                                      </span>
+                                    )
+                                  )}
+                                </span>
+                              )}
                             </motion.button>
 
                             <button
@@ -6695,72 +6886,7 @@ export default function App() {
                                     </option>
                                   )
                                 )}
-                              </select>
-
-                              {directoryQuickFilterMeta.recentFiltersMeta.isOpen && (
-                                <div
-                                  id="online-directory-recent-filters-menu"
-                                  role="listbox"
-                                  aria-label="Last 5 Recent Filter Combinations"
-                                  data-testid="online-directory-recent-filters-menu"
-                                  className="absolute top-full left-0 mt-1.5 z-40 w-80 rounded-md bg-[#050505] border border-zinc-700/90 shadow-2xl p-1.5 space-y-1 text-left"
-                                >
-                                  <div className="px-2 py-1 flex items-center justify-between text-[10px] font-mono text-zinc-400 border-b border-zinc-800/80">
-                                    <span>Last 5 Filter Combinations</span>
-                                    <span className="text-emerald-300">
-                                      {directoryQuickFilterMeta.recentFiltersMeta.badgeText}
-                                    </span>
-                                  </div>
-                                  {directoryQuickFilterMeta.recentFiltersMeta.options.map(
-                                    (opt, idx) => (
-                                      <button
-                                        key={opt.id}
-                                        type="button"
-                                        role="option"
-                                        aria-selected={opt.isCurrentlyActive}
-                                        onClick={() =>
-                                          handleApplyRecentDirectoryFilter(opt.id)
-                                        }
-                                        data-testid={`recent-filter-option-${idx}`}
-                                        data-combination-id={opt.id}
-                                        data-audience-filter={opt.audienceFilter}
-                                        data-mood-filter={opt.moodFilter}
-                                        data-only-in-focus={
-                                          opt.onlyInFocus ? 'true' : 'false'
-                                        }
-                                        data-recently-applied={
-                                          opt.isRecentlyApplied ? 'true' : 'false'
-                                        }
-                                        data-badge-label={opt.recentlyAppliedBadgeLabel}
-                                        className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors text-left ${
-                                          opt.isCurrentlyActive
-                                            ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/50 font-semibold'
-                                            : 'text-zinc-300 hover:bg-zinc-900 hover:text-white'
-                                        }`}
-                                      >
-                                        <span className="truncate">
-                                          {opt.rank}. {opt.label}
-                                        </span>
-                                        <span className="inline-flex items-center gap-1 shrink-0">
-                                          <span
-                                            data-testid={`recent-filter-option-badge-${idx}`}
-                                            className={`px-1 py-0.2 rounded text-[9px] font-mono border ${
-                                              opt.isCurrentlyActive
-                                                ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
-                                                : 'bg-sky-500/15 text-sky-200 border-sky-400/40'
-                                            }`}
-                                          >
-                                            {opt.recentlyAppliedBadgeLabel}
-                                          </span>
-                                          <span className="text-[10px] font-mono opacity-80">
-                                            {opt.isCurrentlyActive ? 'Active' : 'Apply'}
-                                          </span>
-                                        </span>
-                                      </button>
-                                    )
-                                  )}
-                                </div>
-                              )}
+                                </select>
                             </div>
 
                             <AnimatePresence

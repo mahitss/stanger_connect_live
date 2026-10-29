@@ -10058,6 +10058,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   dedicatedClearFiltersButtonMeta: DedicatedClearFiltersButtonSpec;
   shiftResetToast: ShiftResetToastConfirmationSpec;
   recentFiltersMeta: RecentDirectoryFiltersDropdownMeta;
+  historyIconButtonMeta: QuickFilterHistoryIconButtonSpec;
   recentlyAppliedMeta: RecentlyAppliedDirectoryFilterMeta;
   secondaryClearAllModalMeta: SecondaryComplexFilterClearModalMeta;
   pinnedFiltersMeta: PinnedDirectoryFiltersMeta;
@@ -10259,6 +10260,13 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       triggerCount: params.shiftResetToastCount,
     }),
     recentFiltersMeta: getRecentDirectoryFiltersDropdownMeta({
+      history: params.recentFiltersHistory,
+      currentAudienceFilter: mode,
+      currentMoodFilter: params.moodFilter,
+      currentOnlyInFocus: params.onlyInFocus,
+      isOpen: params.isRecentFiltersDropdownOpen,
+    }),
+    historyIconButtonMeta: getQuickFilterHistoryIconButtonSpec({
       history: params.recentFiltersHistory,
       currentAudienceFilter: mode,
       currentMoodFilter: params.moodFilter,
@@ -11907,11 +11915,41 @@ export interface RecentDirectoryFilterDropdownOption
   recentlyAppliedBadgeLabel: 'Recently Applied';
 }
 
+export interface QuickFilterHistoryIconButtonSpec {
+  parentFilterId: 'online-directory-mood-filter';
+  buttonId: 'online-directory-mood-filter-history-btn';
+  buttonTestId: 'online-directory-mood-filter-history-btn';
+  iconTestId: 'online-directory-mood-filter-history-icon';
+  iconComponent: 'History';
+  label: 'History';
+  menuId: 'online-directory-mood-filter-history-menu';
+  menuTestId: 'online-directory-mood-filter-history-menu';
+  optionTestIdPrefix: 'online-directory-history-filter-option';
+  menuHeadline: '5 Most Recently Used Filter Combinations';
+  isOpen: boolean;
+  maxItems: number;
+  count: number;
+  hasRecentFilters: boolean;
+  badgeText: string;
+  activeCombinationId: string;
+  activeCombinationLabel: string;
+  activeCombinationRank: number | null;
+  ariaLabel: string;
+  tooltipText: string;
+  options: RecentDirectoryFilterDropdownOption[];
+}
+
 export interface RecentDirectoryFiltersDropdownMeta {
   dropdownId: 'online-directory-recent-filters-dropdown';
   selectId: 'online-directory-recent-filters-select';
   triggerButtonId: 'online-directory-recent-filters-btn';
   menuId: 'online-directory-recent-filters-menu';
+  historyButtonId: 'online-directory-mood-filter-history-btn';
+  historyButtonTestId: 'online-directory-mood-filter-history-btn';
+  historyMenuId: 'online-directory-mood-filter-history-menu';
+  historyMenuTestId: 'online-directory-mood-filter-history-menu';
+  historyIconComponent: 'History';
+  historyButtonLabel: 'History';
   dropdownLabel: 'Recent Filters';
   recentlyAppliedBadgeLabel: 'Recently Applied';
   maxItems: number;
@@ -11925,6 +11963,7 @@ export interface RecentDirectoryFiltersDropdownMeta {
   badgeText: string;
   ariaLabel: string;
   options: RecentDirectoryFilterDropdownOption[];
+  historyIconButtonMeta: QuickFilterHistoryIconButtonSpec;
 }
 
 export interface RecentlyAppliedDirectoryFilterMeta {
@@ -12113,13 +12152,13 @@ export function isMoodFilterInRecentDirectoryFilters(
   };
 }
 
-export function getRecentDirectoryFiltersDropdownMeta(params?: {
+export function getQuickFilterHistoryIconButtonSpec(params?: {
   history?: RecentDirectoryFilterCombination[] | null;
   currentAudienceFilter?: OnlineDirectoryAudienceFilter | string | null;
   currentMoodFilter?: string | null;
   currentOnlyInFocus?: boolean;
   isOpen?: boolean;
-}): RecentDirectoryFiltersDropdownMeta {
+}): QuickFilterHistoryIconButtonSpec {
   const currentActive = buildDirectoryFilterCombinationEntry({
     audienceFilter: params?.currentAudienceFilter,
     moodFilter: params?.currentMoodFilter,
@@ -12143,30 +12182,84 @@ export function getRecentDirectoryFiltersDropdownMeta(params?: {
   );
 
   const activeIdx = options.findIndex((opt) => opt.isCurrentlyActive);
-  const isCurrentConfigRecentlyApplied = activeIdx !== -1;
-  const activeCombinationRank = isCurrentConfigRecentlyApplied ? activeIdx + 1 : null;
-
+  const activeCombinationRank = activeIdx !== -1 ? activeIdx + 1 : null;
   const count = options.length;
   const maxItems = MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS;
+  const isOpen = Boolean(params?.isOpen);
+  const badgeText = `${count}/${maxItems}`;
+
+  return {
+    parentFilterId: 'online-directory-mood-filter',
+    buttonId: 'online-directory-mood-filter-history-btn',
+    buttonTestId: 'online-directory-mood-filter-history-btn',
+    iconTestId: 'online-directory-mood-filter-history-icon',
+    iconComponent: 'History',
+    label: 'History',
+    menuId: 'online-directory-mood-filter-history-menu',
+    menuTestId: 'online-directory-mood-filter-history-menu',
+    optionTestIdPrefix: 'online-directory-history-filter-option',
+    menuHeadline: '5 Most Recently Used Filter Combinations',
+    isOpen,
+    maxItems,
+    count,
+    hasRecentFilters: count > 0,
+    badgeText,
+    activeCombinationId: currentActive.id,
+    activeCombinationLabel: currentActive.label,
+    activeCombinationRank,
+    ariaLabel: `History (${count} of ${maxItems} recently used filter combinations) — ${
+      isOpen ? 'close' : 'open'
+    } dropdown list for quick re-application`,
+    tooltipText: `History (${badgeText}): Open dropdown list of the 5 most recently used filter combinations for quick re-application`,
+    options,
+  };
+}
+
+export function getRecentDirectoryFiltersDropdownMeta(params?: {
+  history?: RecentDirectoryFilterCombination[] | null;
+  currentAudienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+  currentMoodFilter?: string | null;
+  currentOnlyInFocus?: boolean;
+  isOpen?: boolean;
+}): RecentDirectoryFiltersDropdownMeta {
+  const historyIconButtonMeta = getQuickFilterHistoryIconButtonSpec(params);
+  const {
+    options,
+    activeCombinationRank,
+    activeCombinationId,
+    activeCombinationLabel,
+    count,
+    maxItems,
+    isOpen,
+    badgeText,
+  } = historyIconButtonMeta;
+  const isCurrentConfigRecentlyApplied = activeCombinationRank !== null;
 
   return {
     dropdownId: 'online-directory-recent-filters-dropdown',
     selectId: 'online-directory-recent-filters-select',
     triggerButtonId: 'online-directory-recent-filters-btn',
     menuId: 'online-directory-recent-filters-menu',
+    historyButtonId: 'online-directory-mood-filter-history-btn',
+    historyButtonTestId: 'online-directory-mood-filter-history-btn',
+    historyMenuId: 'online-directory-mood-filter-history-menu',
+    historyMenuTestId: 'online-directory-mood-filter-history-menu',
+    historyIconComponent: 'History',
+    historyButtonLabel: 'History',
     dropdownLabel: 'Recent Filters',
     recentlyAppliedBadgeLabel: 'Recently Applied',
     maxItems,
     count,
     hasRecentFilters: count > 0,
-    isOpen: Boolean(params?.isOpen),
+    isOpen,
     isCurrentConfigRecentlyApplied,
     activeCombinationRank,
-    activeCombinationId: currentActive.id,
-    activeCombinationLabel: currentActive.label,
-    badgeText: `${count}/${maxItems}`,
-    ariaLabel: `Recent Filters dropdown (${count} of ${maxItems} recent filter combinations). Currently active: ${currentActive.label}.`,
+    activeCombinationId,
+    activeCombinationLabel,
+    badgeText,
+    ariaLabel: `Recent Filters dropdown (${count} of ${maxItems} recent filter combinations). Currently active: ${activeCombinationLabel}.`,
     options,
+    historyIconButtonMeta,
   };
 }
 

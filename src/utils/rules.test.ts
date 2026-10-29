@@ -209,6 +209,7 @@ import {
   buildDirectoryFilterCombinationEntry,
   recordRecentDirectoryFilterCombination,
   applyRecentDirectoryFilterCombination,
+  getQuickFilterHistoryIconButtonSpec,
   getRecentDirectoryFiltersDropdownMeta,
   evaluateRecentlyAppliedDirectoryFilterMeta,
   isMoodFilterInRecentDirectoryFilters,
@@ -5333,4 +5334,76 @@ test('getQuickFilterBreathPulseSpec and getOnlineDirectoryQuickFilterMeta config
     multiMeta.breathPulseSpec.statusLabel.includes('3 active filters')
   );
 });
+
+// ---------------------------------------------------------------------------
+// 80. Small 'History' Icon Button Inside #online-directory-mood-filter Opening Dropdown of 5 Most Recently Used Filter Combinations
+// ---------------------------------------------------------------------------
+test('getQuickFilterHistoryIconButtonSpec and getOnlineDirectoryQuickFilterMeta configure the small History icon button inside #online-directory-mood-filter with a 5-item dropdown list for quick re-application', () => {
+  // 1. Default closed state with 5 recently used filter combinations
+  const closedSpec = getQuickFilterHistoryIconButtonSpec({
+    currentAudienceFilter: 'everyone',
+    currentMoodFilter: 'all',
+    currentOnlyInFocus: false,
+    isOpen: false,
+  });
+  assert.equal(closedSpec.parentFilterId, 'online-directory-mood-filter');
+  assert.equal(closedSpec.buttonId, 'online-directory-mood-filter-history-btn');
+  assert.equal(
+    closedSpec.buttonTestId,
+    'online-directory-mood-filter-history-btn'
+  );
+  assert.equal(
+    closedSpec.iconTestId,
+    'online-directory-mood-filter-history-icon'
+  );
+  assert.equal(closedSpec.iconComponent, 'History');
+  assert.equal(closedSpec.label, 'History');
+  assert.equal(closedSpec.menuId, 'online-directory-mood-filter-history-menu');
+  assert.equal(
+    closedSpec.menuTestId,
+    'online-directory-mood-filter-history-menu'
+  );
+  assert.equal(closedSpec.isOpen, false);
+  assert.equal(closedSpec.maxItems, 5);
+  assert.equal(closedSpec.count, 5);
+  assert.equal(closedSpec.badgeText, '5/5');
+  assert.equal(closedSpec.options.length, 5);
+  assert.equal(closedSpec.options[0].rank, 1);
+  assert.equal(closedSpec.options[4].rank, 5);
+
+  // 2. Open state via getOnlineDirectoryQuickFilterMeta
+  const openMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+    isRecentFiltersDropdownOpen: true,
+  });
+  assert.equal(openMeta.historyIconButtonMeta.isOpen, true);
+  assert.equal(
+    openMeta.historyIconButtonMeta.buttonId,
+    'online-directory-mood-filter-history-btn'
+  );
+  assert.equal(openMeta.historyIconButtonMeta.iconComponent, 'History');
+  assert.equal(openMeta.historyIconButtonMeta.label, 'History');
+  assert.equal(openMeta.historyIconButtonMeta.options.length, 5);
+  assert.equal(
+    openMeta.recentFiltersMeta.historyButtonId,
+    'online-directory-mood-filter-history-btn'
+  );
+
+  // 3. Re-applying one of the 5 combinations from the History dropdown updates active combination
+  const thirdOption = openMeta.historyIconButtonMeta.options[2];
+  const applied = applyRecentDirectoryFilterCombination(
+    DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS,
+    thirdOption.id
+  );
+  assert.equal(applied.found, true);
+  assert.equal(applied.audienceFilter, thirdOption.audienceFilter);
+  assert.equal(applied.moodFilter, thirdOption.moodFilter);
+  assert.equal(applied.onlyInFocus, thirdOption.onlyInFocus);
+  assert.equal(applied.updatedHistory.length, 5);
+  assert.equal(applied.updatedHistory[0].id, thirdOption.id);
+});
+
 
