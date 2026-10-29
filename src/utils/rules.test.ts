@@ -231,6 +231,7 @@ import {
   buildMrStrangerStudyTogetherLobby,
   resolveStudyTogetherQuickJoinAction,
   filterMoodCategoryGroupsBySearchQuery,
+  getOnlineDirectoryPeerFilterLayoutAnimationSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -5774,6 +5775,126 @@ test('getResetOnlyButtonBouncePopSpec, resolveSecondaryResetOnlyFilterAction, an
     'reset-only-button-bounce-pop-active'
   );
 });
+
+test('Framer Motion layout animation spec for #online-directory-mood-filter and directory peer items configures smooth layout reordering and fade transitions', () => {
+  // 1. Default unfiltered state
+  const defaultLayoutSpec = getOnlineDirectoryPeerFilterLayoutAnimationSpec({
+    audienceFilter: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+    displayedPeersCount: 4,
+    totalPeersCount: 4,
+    filterTransitionCount: 0,
+  });
+
+  assert.equal(
+    defaultLayoutSpec.filterElementId,
+    'online-directory-mood-filter'
+  );
+  assert.equal(
+    defaultLayoutSpec.filterElementSelector,
+    '#online-directory-mood-filter'
+  );
+  assert.equal(
+    defaultLayoutSpec.peerListContainerId,
+    'online-directory-matching-peers-list'
+  );
+  assert.equal(defaultLayoutSpec.engine, 'framer-motion');
+  assert.equal(defaultLayoutSpec.animationType, 'layout-reorder-fade');
+  assert.equal(defaultLayoutSpec.presenceComponent, 'AnimatePresence');
+  assert.equal(defaultLayoutSpec.presenceMode, 'popLayout');
+  assert.equal(defaultLayoutSpec.presenceInitial, false);
+  assert.equal(defaultLayoutSpec.layout, true);
+  assert.equal(defaultLayoutSpec.peerItemLayout, true);
+  assert.equal(defaultLayoutSpec.isFiltered, false);
+  assert.equal(defaultLayoutSpec.activeFilterSignature, 'everyone|all|0');
+  assert.equal(defaultLayoutSpec.displayedPeersCount, 4);
+  assert.equal(defaultLayoutSpec.totalPeersCount, 4);
+  assert.equal(defaultLayoutSpec.hiddenByFilterCount, 0);
+  assert.deepEqual(defaultLayoutSpec.layoutSpring, {
+    type: 'spring',
+    stiffness: 360,
+    damping: 30,
+    mass: 0.75,
+  });
+  assert.equal(defaultLayoutSpec.fadeDurationSec, 0.24);
+  assert.equal(defaultLayoutSpec.fadeDurationMs, 240);
+  assert.equal(defaultLayoutSpec.fadeEasing, 'easeOut');
+  assert.deepEqual(defaultLayoutSpec.peerItemInitial, {
+    opacity: 0,
+    y: 10,
+    scale: 0.98,
+  });
+  assert.deepEqual(defaultLayoutSpec.peerItemAnimate, {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+  });
+  assert.deepEqual(defaultLayoutSpec.peerItemExit, {
+    opacity: 0,
+    y: -8,
+    scale: 0.96,
+  });
+  assert.equal(
+    defaultLayoutSpec.statusSummary,
+    'Framer Motion layout reorder + fade ready (All 4 peers visible)'
+  );
+
+  // 2. Per-peer item motion with stagger and layout spring
+  const firstPeerMotion = defaultLayoutSpec.getPeerItemMotion(0);
+  assert.equal(firstPeerMotion.peerIndex, 0);
+  assert.equal(firstPeerMotion.layout, true);
+  assert.equal(firstPeerMotion.staggerDelaySec, 0);
+  assert.deepEqual(firstPeerMotion.transition.layout, {
+    type: 'spring',
+    stiffness: 360,
+    damping: 30,
+    mass: 0.75,
+  });
+  assert.deepEqual(firstPeerMotion.transition.opacity, {
+    duration: 0.24,
+    ease: 'easeOut',
+    delay: 0,
+  });
+
+  const thirdPeerMotion = defaultLayoutSpec.getPeerItemMotion(2);
+  assert.equal(thirdPeerMotion.peerIndex, 2);
+  assert.equal(thirdPeerMotion.staggerDelaySec, 0.06);
+  assert.equal(thirdPeerMotion.transition.opacity.delay, 0.06);
+
+  // 3. Filtered state through getOnlineDirectoryQuickFilterMeta
+  const metaFiltered = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [
+      { uid: 'p1', mood: 'Deep Work' },
+      { uid: 'p2', mood: 'Casual Chat' },
+      { uid: 'p3', mood: 'Deep Work' },
+    ],
+    moodFilter: 'Deep Work',
+    onlyInFocus: false,
+    displayedPeersCount: 2,
+    autoScrollTriggerCount: 1,
+  });
+
+  assert.equal(
+    metaFiltered.peerLayoutAnimationSpec.filterElementId,
+    'online-directory-mood-filter'
+  );
+  assert.equal(metaFiltered.peerLayoutAnimationSpec.isFiltered, true);
+  assert.equal(metaFiltered.peerLayoutAnimationSpec.displayedPeersCount, 2);
+  assert.equal(metaFiltered.peerLayoutAnimationSpec.totalPeersCount, 3);
+  assert.equal(metaFiltered.peerLayoutAnimationSpec.hiddenByFilterCount, 1);
+  assert.equal(metaFiltered.peerLayoutAnimationSpec.filterTransitionCount, 1);
+  assert.equal(
+    metaFiltered.peerLayoutAnimationSpec.activeFilterSignature,
+    'everyone|deep work|0'
+  );
+  assert.match(
+    metaFiltered.peerLayoutAnimationSpec.statusSummary,
+    /Framer Motion layout reorder \+ fade active/
+  );
+});
+
 
 
 

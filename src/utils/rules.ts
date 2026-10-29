@@ -10254,6 +10254,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   secondaryClearAllModalMeta: SecondaryComplexFilterClearModalMeta;
   pinnedFiltersMeta: PinnedDirectoryFiltersMeta;
   firstMatchingPeerAutoScrollMeta: FirstMatchingPeerAutoScrollMeta;
+  peerLayoutAnimationSpec: OnlineDirectoryPeerFilterLayoutAnimationSpec;
   shareLinkMeta: OnlineDirectoryFilterShareLinkMeta;
 }
 
@@ -10503,6 +10504,14 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       autoScrollTriggerCount: params.autoScrollTriggerCount,
       lastAutoScrolledPeerUid: params.lastAutoScrolledPeerUid,
       isHighlighted: params.isFirstPeerAutoScrollHighlighted,
+    }),
+    peerLayoutAnimationSpec: getOnlineDirectoryPeerFilterLayoutAnimationSpec({
+      audienceFilter: mode,
+      moodFilter: params.moodFilter,
+      onlyInFocus: params.onlyInFocus,
+      displayedPeersCount: zeroPeersNotice.displayedPeersCount,
+      totalPeersCount: everyoneCount,
+      filterTransitionCount: params.autoScrollTriggerCount,
     }),
     shareLinkMeta: buildOnlineDirectoryFilterShareLink({
       origin: params.origin,
@@ -13371,3 +13380,290 @@ export function shouldTriggerFirstMatchingPeerAutoScroll(params: {
     feedbackText: `Auto-scrolled smoothly to first matching peer (${cleanName}) for "${combination.label}".`,
   };
 }
+
+export interface OnlineDirectoryPeerItemLayoutMotionSpec {
+  peerIndex: number;
+  engine: 'framer-motion';
+  animationType: 'layout-reorder-fade';
+  layout: true;
+  staggerDelaySec: number;
+  fadeDurationSec: number;
+  fadeDurationMs: number;
+  initial: {
+    opacity: number;
+    y: number;
+    scale: number;
+  };
+  animate: {
+    opacity: number;
+    y: number;
+    scale: number;
+  };
+  exit: {
+    opacity: number;
+    y: number;
+    scale: number;
+  };
+  transition: {
+    layout: {
+      type: 'spring';
+      stiffness: number;
+      damping: number;
+      mass: number;
+    };
+    opacity: {
+      duration: number;
+      ease: 'easeOut';
+      delay: number;
+    };
+    y: {
+      duration: number;
+      ease: 'easeOut';
+      delay: number;
+    };
+    scale: {
+      duration: number;
+      ease: 'easeOut';
+      delay: number;
+    };
+  };
+}
+
+export interface OnlineDirectoryPeerFilterLayoutAnimationSpec {
+  filterElementId: 'online-directory-mood-filter';
+  filterElementSelector: '#online-directory-mood-filter';
+  peerListContainerId: 'online-directory-matching-peers-list';
+  peerListContainerTestId: 'online-directory-matching-peers-list';
+  peerRowTestIdPrefix: 'online-directory-peer-row-';
+  engine: 'framer-motion';
+  animationType: 'layout-reorder-fade';
+  presenceComponent: 'AnimatePresence';
+  presenceMode: 'popLayout';
+  presenceInitial: false;
+  layout: true;
+  peerItemLayout: true;
+  isFiltered: boolean;
+  activeFilterSignature: string;
+  activeFilterLabel: string;
+  displayedPeersCount: number;
+  totalPeersCount: number;
+  hiddenByFilterCount: number;
+  filterTransitionCount: number;
+  layoutSpring: {
+    type: 'spring';
+    stiffness: number;
+    damping: number;
+    mass: number;
+  };
+  fadeDurationSec: number;
+  fadeDurationMs: number;
+  fadeEasing: 'easeOut';
+  staggerStepSec: number;
+  maxStaggerDelaySec: number;
+  filterControlLayoutTransition: {
+    layout: {
+      type: 'spring';
+      stiffness: number;
+      damping: number;
+      mass: number;
+    };
+    duration: number;
+    ease: 'easeOut';
+  };
+  peerItemInitial: {
+    opacity: number;
+    y: number;
+    scale: number;
+  };
+  peerItemAnimate: {
+    opacity: number;
+    y: number;
+    scale: number;
+  };
+  peerItemExit: {
+    opacity: number;
+    y: number;
+    scale: number;
+  };
+  peerItemTransition: {
+    layout: {
+      type: 'spring';
+      stiffness: number;
+      damping: number;
+      mass: number;
+    };
+    opacity: {
+      duration: number;
+      ease: 'easeOut';
+    };
+    y: {
+      duration: number;
+      ease: 'easeOut';
+    };
+    scale: {
+      duration: number;
+      ease: 'easeOut';
+    };
+  };
+  getPeerItemMotion: (peerIndex: number) => OnlineDirectoryPeerItemLayoutMotionSpec;
+  statusSummary: string;
+}
+
+export function getOnlineDirectoryPeerFilterLayoutAnimationSpec(params?: {
+  audienceFilter?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+  displayedPeersCount?: number | null;
+  totalPeersCount?: number | null;
+  filterTransitionCount?: number | null;
+}): OnlineDirectoryPeerFilterLayoutAnimationSpec {
+  const combination = buildDirectoryFilterCombinationEntry({
+    audienceFilter: params?.audienceFilter,
+    moodFilter: params?.moodFilter,
+    onlyInFocus: params?.onlyInFocus,
+  });
+
+  const isFiltered = !combination.isDefaultAll;
+  const totalPeersCount =
+    params?.totalPeersCount !== undefined && params?.totalPeersCount !== null
+      ? Math.max(0, Math.floor(Number(params.totalPeersCount) || 0))
+      : 0;
+  const displayedPeersCount =
+    params?.displayedPeersCount !== undefined && params?.displayedPeersCount !== null
+      ? Math.max(0, Math.floor(Number(params.displayedPeersCount) || 0))
+      : totalPeersCount;
+  const hiddenByFilterCount = Math.max(0, totalPeersCount - displayedPeersCount);
+  const filterTransitionCount =
+    params?.filterTransitionCount !== undefined && params?.filterTransitionCount !== null
+      ? Math.max(0, Math.floor(Number(params.filterTransitionCount) || 0))
+      : 0;
+
+  const layoutSpring = {
+    type: 'spring' as const,
+    stiffness: 360,
+    damping: 30,
+    mass: 0.75,
+  };
+  const fadeDurationSec = 0.24;
+  const fadeDurationMs = 240;
+  const staggerStepSec = 0.03;
+  const maxStaggerDelaySec = 0.18;
+
+  const peerItemInitial = {
+    opacity: 0,
+    y: 10,
+    scale: 0.98,
+  };
+  const peerItemAnimate = {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+  };
+  const peerItemExit = {
+    opacity: 0,
+    y: -8,
+    scale: 0.96,
+  };
+
+  const getPeerItemMotion = (
+    peerIndex: number
+  ): OnlineDirectoryPeerItemLayoutMotionSpec => {
+    const safeIndex = Math.max(0, Math.floor(Number(peerIndex) || 0));
+    const staggerDelaySec = Number(
+      Math.min(maxStaggerDelaySec, safeIndex * staggerStepSec).toFixed(3)
+    );
+    return {
+      peerIndex: safeIndex,
+      engine: 'framer-motion',
+      animationType: 'layout-reorder-fade',
+      layout: true,
+      staggerDelaySec,
+      fadeDurationSec,
+      fadeDurationMs,
+      initial: peerItemInitial,
+      animate: peerItemAnimate,
+      exit: peerItemExit,
+      transition: {
+        layout: layoutSpring,
+        opacity: {
+          duration: fadeDurationSec,
+          ease: 'easeOut',
+          delay: staggerDelaySec,
+        },
+        y: {
+          duration: fadeDurationSec,
+          ease: 'easeOut',
+          delay: staggerDelaySec,
+        },
+        scale: {
+          duration: 0.22,
+          ease: 'easeOut',
+          delay: staggerDelaySec,
+        },
+      },
+    };
+  };
+
+  const statusSummary = isFiltered
+    ? `Framer Motion layout reorder + fade active (${combination.label} · ${displayedPeersCount}/${totalPeersCount} peers)`
+    : `Framer Motion layout reorder + fade ready (All ${displayedPeersCount} peers visible)`;
+
+  return {
+    filterElementId: 'online-directory-mood-filter',
+    filterElementSelector: '#online-directory-mood-filter',
+    peerListContainerId: 'online-directory-matching-peers-list',
+    peerListContainerTestId: 'online-directory-matching-peers-list',
+    peerRowTestIdPrefix: 'online-directory-peer-row-',
+    engine: 'framer-motion',
+    animationType: 'layout-reorder-fade',
+    presenceComponent: 'AnimatePresence',
+    presenceMode: 'popLayout',
+    presenceInitial: false,
+    layout: true,
+    peerItemLayout: true,
+    isFiltered,
+    activeFilterSignature: combination.id,
+    activeFilterLabel: combination.label,
+    displayedPeersCount,
+    totalPeersCount,
+    hiddenByFilterCount,
+    filterTransitionCount,
+    layoutSpring,
+    fadeDurationSec,
+    fadeDurationMs,
+    fadeEasing: 'easeOut',
+    staggerStepSec,
+    maxStaggerDelaySec,
+    filterControlLayoutTransition: {
+      layout: {
+        type: 'spring',
+        stiffness: 380,
+        damping: 32,
+        mass: 0.7,
+      },
+      duration: 0.16,
+      ease: 'easeOut',
+    },
+    peerItemInitial,
+    peerItemAnimate,
+    peerItemExit,
+    peerItemTransition: {
+      layout: layoutSpring,
+      opacity: {
+        duration: fadeDurationSec,
+        ease: 'easeOut',
+      },
+      y: {
+        duration: fadeDurationSec,
+        ease: 'easeOut',
+      },
+      scale: {
+        duration: 0.22,
+        ease: 'easeOut',
+      },
+    },
+    getPeerItemMotion,
+    statusSummary,
+  };
+}
+

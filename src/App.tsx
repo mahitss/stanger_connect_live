@@ -5753,12 +5753,22 @@ export default function App() {
                           data-breath-pulse-duration-ms={
                             directoryQuickFilterMeta.breathPulseSpec.durationMs
                           }
+                          data-layout-animation={
+                            directoryQuickFilterMeta.peerLayoutAnimationSpec.animationType
+                          }
+                          data-peer-layout-signature={
+                            directoryQuickFilterMeta.peerLayoutAnimationSpec
+                              .activeFilterSignature
+                          }
                           className="relative inline-flex flex-wrap items-center gap-2"
                         >
                           <div className="inline-flex flex-wrap items-center gap-1.5">
                             <motion.button
                               id="online-directory-mood-filter"
                               type="button"
+                              layout={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec.layout
+                              }
                               whileHover={
                                 getQuickFilterToggleHoverMotionSpec(isQuickFilterHovered)
                                   .whileHover
@@ -5771,10 +5781,14 @@ export default function App() {
                                 getQuickFilterToggleHoverMotionSpec(isQuickFilterHovered)
                                   .animate
                               }
-                              transition={
-                                getQuickFilterToggleHoverMotionSpec(isQuickFilterHovered)
-                                  .transition
-                              }
+                              transition={{
+                                ...getQuickFilterToggleHoverMotionSpec(
+                                  isQuickFilterHovered
+                                ).transition,
+                                layout:
+                                  directoryQuickFilterMeta.peerLayoutAnimationSpec
+                                    .filterControlLayoutTransition.layout,
+                              }}
                               onClick={(e) => {
                                 const shiftHeld = Boolean(e.shiftKey || isShiftKeyHeldForFilter);
                                 if (shiftHeld) {
@@ -6126,6 +6140,47 @@ export default function App() {
                                 directoryQuickFilterMeta.moodDrawersToggleAll.collapsedCategories.join(
                                   ','
                                 ) || 'none'
+                              }
+                              data-layout-animation={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec
+                                  .animationType
+                              }
+                              data-layout-engine={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec.engine
+                              }
+                              data-layout-enabled={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec.layout
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-layout-presence-mode={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec
+                                  .presenceMode
+                              }
+                              data-layout-spring-stiffness={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec
+                                  .layoutSpring.stiffness
+                              }
+                              data-layout-spring-damping={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec
+                                  .layoutSpring.damping
+                              }
+                              data-layout-fade-duration-ms={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec
+                                  .fadeDurationMs
+                              }
+                              data-peer-layout-signature={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec
+                                  .activeFilterSignature
+                              }
+                              data-peer-layout-filtered={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec.isFiltered
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-peer-layout-status={
+                                directoryQuickFilterMeta.peerLayoutAnimationSpec
+                                  .statusSummary
                               }
                               className={`relative group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
                                 directoryQuickFilterMeta.historyIconButtonMeta.isOpen
@@ -9024,7 +9079,12 @@ export default function App() {
                     </AnimatePresence>
                   </div>
 
-                  <div
+                  <motion.div
+                    layout={directoryQuickFilterMeta.peerLayoutAnimationSpec.layout}
+                    transition={{
+                      layout:
+                        directoryQuickFilterMeta.peerLayoutAnimationSpec.layoutSpring,
+                    }}
                     id={
                       directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
                         .listContainerId
@@ -9038,60 +9098,106 @@ export default function App() {
                       displayedOnlinePeers[0]?.uid ?? 'none'
                     }
                     data-auto-scroll-count={autoScrollTriggerCount}
+                    data-layout-animation={
+                      directoryQuickFilterMeta.peerLayoutAnimationSpec.animationType
+                    }
+                    data-layout-engine={
+                      directoryQuickFilterMeta.peerLayoutAnimationSpec.engine
+                    }
+                    data-layout-presence-mode={
+                      directoryQuickFilterMeta.peerLayoutAnimationSpec.presenceMode
+                    }
+                    data-peer-layout-signature={
+                      directoryQuickFilterMeta.peerLayoutAnimationSpec
+                        .activeFilterSignature
+                    }
+                    data-peer-layout-filtered={
+                      directoryQuickFilterMeta.peerLayoutAnimationSpec.isFiltered
+                        ? 'true'
+                        : 'false'
+                    }
                     className="space-y-3"
                   >
-                    {displayedOnlinePeers.map((peer, peerIdx) => {
-                      const isFirstMatchingPeer = peerIdx === 0;
-                      const isMe = peer.uid === currentIdentity.uid;
-                      const focusStatus =
-                        directoryFocusSummary.byUid[peer.uid] ||
-                        getOnlinePeerFocusStatus(peer, studyDesks);
-                      const peerMoodMeta =
-                        directoryMoodSummary.byUid[peer.uid] ||
-                        getOnlinePeerMoodMeta(isMe ? peer.mood ?? userMood : peer.mood);
-                      const existingReq = requests.find(
-                        (r) =>
-                          (r.fromUid === currentIdentity.uid && r.toUid === peer.uid) ||
-                          (r.fromUid === peer.uid && r.toUid === currentIdentity.uid)
-                      );
-                      const peerDmShortcut = resolveOnlineDirectoryPeerDmShortcut({
-                        currentUid: currentIdentity.uid,
-                        peerUid: peer.uid,
-                        peerDisplayName: peer.displayName,
-                        connectionStatusMap: connectionRequestStatusMap,
-                      });
+                    <AnimatePresence
+                      mode={
+                        directoryQuickFilterMeta.peerLayoutAnimationSpec.presenceMode
+                      }
+                      initial={
+                        directoryQuickFilterMeta.peerLayoutAnimationSpec
+                          .presenceInitial
+                      }
+                    >
+                      {displayedOnlinePeers.map((peer, peerIdx) => {
+                        const isFirstMatchingPeer = peerIdx === 0;
+                        const peerItemMotion =
+                          directoryQuickFilterMeta.peerLayoutAnimationSpec.getPeerItemMotion(
+                            peerIdx
+                          );
+                        const isMe = peer.uid === currentIdentity.uid;
+                        const focusStatus =
+                          directoryFocusSummary.byUid[peer.uid] ||
+                          getOnlinePeerFocusStatus(peer, studyDesks);
+                        const peerMoodMeta =
+                          directoryMoodSummary.byUid[peer.uid] ||
+                          getOnlinePeerMoodMeta(isMe ? peer.mood ?? userMood : peer.mood);
+                        const existingReq = requests.find(
+                          (r) =>
+                            (r.fromUid === currentIdentity.uid && r.toUid === peer.uid) ||
+                            (r.fromUid === peer.uid && r.toUid === currentIdentity.uid)
+                        );
+                        const peerDmShortcut = resolveOnlineDirectoryPeerDmShortcut({
+                          currentUid: currentIdentity.uid,
+                          peerUid: peer.uid,
+                          peerDisplayName: peer.displayName,
+                          connectionStatusMap: connectionRequestStatusMap,
+                        });
 
-                      return (
-                        <div
-                          key={peer.uid}
-                          id={
-                            isFirstMatchingPeer
-                              ? directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
-                                  .targetRowId
-                              : undefined
-                          }
-                          ref={isFirstMatchingPeer ? firstMatchingPeerRowRef : undefined}
-                          data-testid={`online-directory-peer-row-${peer.uid}`}
-                          data-first-matching-peer={isFirstMatchingPeer ? 'true' : 'false'}
-                          data-auto-scroll-target={isFirstMatchingPeer ? 'true' : 'false'}
-                          data-auto-scroll-behavior={
-                            isFirstMatchingPeer ? 'smooth' : undefined
-                          }
-                          data-auto-scroll-highlighted={
-                            isFirstMatchingPeer && isFirstPeerAutoScrollHighlighted
-                              ? 'true'
-                              : 'false'
-                          }
-                          data-auto-scroll-count={
-                            isFirstMatchingPeer ? autoScrollTriggerCount : undefined
-                          }
-                          data-connection-status={peerDmShortcut.status}
-                          className={`p-4 rounded-md bg-[#050505] border space-y-3 transition-all duration-300 scroll-mt-24 ${
-                            isFirstMatchingPeer && isFirstPeerAutoScrollHighlighted
-                              ? 'border-emerald-400/80 ring-1 ring-emerald-400/40 shadow-lg shadow-emerald-950/40'
-                              : 'border-zinc-800/80'
-                          }`}
-                        >
+                        return (
+                          <motion.div
+                            key={peer.uid}
+                            layout={peerItemMotion.layout}
+                            initial={peerItemMotion.initial}
+                            animate={peerItemMotion.animate}
+                            exit={peerItemMotion.exit}
+                            transition={peerItemMotion.transition}
+                            id={
+                              isFirstMatchingPeer
+                                ? directoryQuickFilterMeta.firstMatchingPeerAutoScrollMeta
+                                    .targetRowId
+                                : undefined
+                            }
+                            ref={isFirstMatchingPeer ? firstMatchingPeerRowRef : undefined}
+                            data-testid={`online-directory-peer-row-${peer.uid}`}
+                            data-first-matching-peer={isFirstMatchingPeer ? 'true' : 'false'}
+                            data-auto-scroll-target={isFirstMatchingPeer ? 'true' : 'false'}
+                            data-auto-scroll-behavior={
+                              isFirstMatchingPeer ? 'smooth' : undefined
+                            }
+                            data-auto-scroll-highlighted={
+                              isFirstMatchingPeer && isFirstPeerAutoScrollHighlighted
+                                ? 'true'
+                                : 'false'
+                            }
+                            data-auto-scroll-count={
+                              isFirstMatchingPeer ? autoScrollTriggerCount : undefined
+                            }
+                            data-connection-status={peerDmShortcut.status}
+                            data-layout-animation={peerItemMotion.animationType}
+                            data-layout-engine={peerItemMotion.engine}
+                            data-layout-enabled={peerItemMotion.layout ? 'true' : 'false'}
+                            data-layout-order-index={peerItemMotion.peerIndex}
+                            data-layout-stagger-delay={peerItemMotion.staggerDelaySec}
+                            data-layout-fade-duration-ms={peerItemMotion.fadeDurationMs}
+                            data-peer-layout-signature={
+                              directoryQuickFilterMeta.peerLayoutAnimationSpec
+                                .activeFilterSignature
+                            }
+                            className={`p-4 rounded-md bg-[#050505] border space-y-3 transition-colors duration-300 scroll-mt-24 ${
+                              isFirstMatchingPeer && isFirstPeerAutoScrollHighlighted
+                                ? 'border-emerald-400/80 ring-1 ring-emerald-400/40 shadow-lg shadow-emerald-950/40'
+                                : 'border-zinc-800/80'
+                            }`}
+                          >
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="space-y-1 min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -9251,9 +9357,10 @@ export default function App() {
                               </div>
                             )}
                           </div>
-                        </div>
+                        </motion.div>
                       );
                     })}
+                    </AnimatePresence>
 
                     {(showOnlyInFocusPeers ||
                       directoryMoodFilter !== 'all' ||
@@ -9308,7 +9415,7 @@ export default function App() {
                         Open this app link in another browser window or share your Study Room invite link with friends to see live multi-user presence and exchange real-time requests.
                       </div>
                     )}
-                  </div>
+                  </motion.div>
 
                   {/* Bottom of Directory View — Animated Shift-Reset Toast Confirmation */}
                   <div
