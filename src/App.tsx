@@ -5669,6 +5669,20 @@ export default function App() {
                           }
                           data-clear-filters-exit-count={clearFiltersExitCount}
                           data-clear-filters-exit-state={lastClearFiltersExitState}
+                          data-breath-pulse-active={
+                            directoryQuickFilterMeta.breathPulseSpec.isBreathPulseActive
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-breath-pulse-animation={
+                            directoryQuickFilterMeta.breathPulseSpec.animationName
+                          }
+                          data-breath-pulse-type={
+                            directoryQuickFilterMeta.breathPulseSpec.animationType
+                          }
+                          data-breath-pulse-duration-ms={
+                            directoryQuickFilterMeta.breathPulseSpec.durationMs
+                          }
                           className="relative inline-flex flex-wrap items-center gap-2"
                         >
                           <div className="inline-flex flex-wrap items-center gap-1.5">
@@ -5870,6 +5884,23 @@ export default function App() {
                               data-icon-emerald-glow={
                                 directoryQuickFilterMeta.iconPulseSpec.emeraldGlowDropShadow
                               }
+                              data-breath-pulse-active={
+                                directoryQuickFilterMeta.breathPulseSpec.isBreathPulseActive
+                                  ? 'true'
+                                  : 'false'
+                              }
+                              data-breath-pulse-animation={
+                                directoryQuickFilterMeta.breathPulseSpec.animationName
+                              }
+                              data-breath-pulse-type={
+                                directoryQuickFilterMeta.breathPulseSpec.animationType
+                              }
+                              data-breath-pulse-glow={
+                                directoryQuickFilterMeta.breathPulseSpec.peakEmeraldGlowShadow
+                              }
+                              data-breath-pulse-duration-ms={
+                                directoryQuickFilterMeta.breathPulseSpec.durationMs
+                              }
                               data-reset-flash-active={
                                 directoryQuickFilterMeta.resetFlashSpec.isResetFlashActive
                                   ? 'true'
@@ -5991,8 +6022,10 @@ export default function App() {
                               className={`group inline-flex items-center gap-2 px-3 py-1.5 text-xs font-semibold rounded-md border whitespace-nowrap shrink-0 origin-center ${
                                 directoryQuickFilterMeta.isMyConnectionsOnly
                                   ? 'bg-emerald-500/15 text-emerald-200 border-emerald-400/60 hover:bg-emerald-500/25'
-                                  : 'bg-[#050505] text-zinc-200 border-zinc-800 hover:border-zinc-600 hover:text-white'
-                              } ${directoryQuickFilterMeta.resetFlashSpec.cssClassName}`}
+                                  : directoryQuickFilterMeta.breathPulseSpec.isBreathPulseActive
+                                    ? 'bg-[#050505] text-emerald-100 border-emerald-400/50 hover:border-emerald-300/80 hover:text-white'
+                                    : 'bg-[#050505] text-zinc-200 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                              } ${directoryQuickFilterMeta.breathPulseSpec.cssClassName} ${directoryQuickFilterMeta.resetFlashSpec.cssClassName}`.trim()}
                             >
                               <span
                                 id="online-directory-mood-filter-icon-share-wrapper"

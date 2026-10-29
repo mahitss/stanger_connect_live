@@ -167,6 +167,7 @@ import {
   getQuickFilterIconCrossFadeSpec,
   getQuickFilterIconHoverGlowSpec,
   getQuickFilterIconPulseSpec,
+  getQuickFilterBreathPulseSpec,
   getQuickFilterIconActiveBadgeSpec,
   resolveQuickFilterToggleChime,
   getQuickFilterResetFlashBounceSpec,
@@ -5269,3 +5270,67 @@ test('getDedicatedClearFiltersExitAnimationSpec and getDedicatedClearFiltersButt
     'AnimatePresence'
   );
 });
+
+// ---------------------------------------------------------------------------
+// 79. Rhythmic 'Breath' Pulse Animation on #online-directory-mood-filter When Active Filters Are Detected
+// ---------------------------------------------------------------------------
+test('getQuickFilterBreathPulseSpec and getOnlineDirectoryQuickFilterMeta configure a rhythmic emerald glow breath pulse animation on #online-directory-mood-filter when active filters are detected', () => {
+  // 1. Default idle state (no active filters)
+  const idleSpec = getQuickFilterBreathPulseSpec({
+    mode: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+  });
+  assert.equal(idleSpec.targetElementId, 'online-directory-mood-filter');
+  assert.equal(idleSpec.isBreathPulseActive, false);
+  assert.equal(idleSpec.hasActiveFilters, false);
+  assert.equal(idleSpec.activeCriteriaCount, 0);
+  assert.equal(idleSpec.animationName, 'none');
+  assert.equal(idleSpec.animationType, 'rhythmic-breath-pulse');
+  assert.equal(idleSpec.cssClassName, '');
+  assert.equal(idleSpec.glowTone, 'none');
+  assert.equal(idleSpec.iterationCount, '1');
+  assert.equal(idleSpec.peakEmeraldGlowShadow, 'none');
+
+  // 2. Single active filter (Mood filter active while mode is 'everyone')
+  const moodActiveSpec = getQuickFilterBreathPulseSpec({
+    mode: 'everyone',
+    moodFilter: 'category:Productive',
+    onlyInFocus: false,
+  });
+  assert.equal(moodActiveSpec.isBreathPulseActive, true);
+  assert.equal(moodActiveSpec.hasActiveFilters, true);
+  assert.equal(moodActiveSpec.activeCriteriaCount, 1);
+  assert.deepEqual(moodActiveSpec.activeCriteriaKeys, ['mood']);
+  assert.equal(moodActiveSpec.animationName, 'quickFilterEmeraldBreathPulse');
+  assert.equal(moodActiveSpec.cssClassName, 'quick-filter-emerald-breath-pulse');
+  assert.equal(moodActiveSpec.glowTone, 'emerald-soft');
+  assert.equal(moodActiveSpec.durationMs, 2800);
+  assert.equal(moodActiveSpec.durationSec, 2.8);
+  assert.equal(moodActiveSpec.easing, 'ease-in-out');
+  assert.equal(moodActiveSpec.iterationCount, 'infinite');
+  assert.ok(moodActiveSpec.peakEmeraldGlowShadow.includes('rgba(52, 211, 153'));
+  assert.equal(moodActiveSpec.boxShadowKeyframes.length, 3);
+
+  // 3. Multiple active filters via getOnlineDirectoryQuickFilterMeta
+  const multiMeta = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+  });
+  assert.equal(multiMeta.breathPulseSpec.isBreathPulseActive, true);
+  assert.equal(multiMeta.breathPulseSpec.activeCriteriaCount, 3);
+  assert.equal(
+    multiMeta.breathPulseSpec.animationName,
+    'quickFilterEmeraldBreathPulse'
+  );
+  assert.equal(
+    multiMeta.breathPulseSpec.cssClassName,
+    'quick-filter-emerald-breath-pulse'
+  );
+  assert.ok(
+    multiMeta.breathPulseSpec.statusLabel.includes('3 active filters')
+  );
+});
+

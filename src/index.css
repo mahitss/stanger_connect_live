@@ -369,6 +369,27 @@ html.light textarea::placeholder {
   box-shadow: 0 0 8px rgba(52, 211, 153, 0.45);
 }
 
+@keyframes quickFilterEmeraldBreathPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(52, 211, 153, 0.08),
+      0 0 8px rgba(16, 185, 129, 0.16);
+    border-color: rgba(52, 211, 153, 0.45);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px rgba(52, 211, 153, 0.28),
+      0 0 18px rgba(52, 211, 153, 0.42);
+    border-color: rgba(110, 231, 183, 0.88);
+  }
+}
+
+#online-directory-mood-filter[data-breath-pulse-active='true']:not([data-reset-flash-active='true']),
+#online-directory-mood-filter.quick-filter-emerald-breath-pulse:not(.quick-filter-reset-flash-bounce) {
+  animation: quickFilterEmeraldBreathPulse 2800ms ease-in-out infinite;
+}
+
 @keyframes quickFilterResetFlashBounce {
   0% {
     transform: scale(1) translateY(0);
@@ -432,9 +453,11 @@ html.light textarea::placeholder {
   .quick-filter-icon-crossfade,
   .quick-filter-icon-pulse-active,
   .quick-filter-icon-svg-pulse,
+  .quick-filter-emerald-breath-pulse,
   .quick-filter-reset-flash-bounce,
   .shift-reset-toast-animated,
   #online-directory-shift-reset-toast,
+  #online-directory-mood-filter[data-breath-pulse-active='true'],
   #online-directory-mood-filter[data-reset-flash-active='true'],
   #online-directory-mood-select[data-reset-flash-active='true'],
   #online-directory-mood-filter [data-testid='online-directory-quick-filter-icon'],

@@ -9550,10 +9550,81 @@ export function getQuickFilterIconPulseSpec(params?: {
     iterationCount: isPulseActive ? 'infinite' : '1',
     scaleKeyframes: isPulseActive ? [1, 1.08, 1] : [1, 1, 1],
     opacityKeyframes: isPulseActive ? [1, 0.94, 1] : [1, 1, 1],
-    constraintStatusLabel: isPulseActive
+      constraintStatusLabel: isPulseActive
       ? 'Directory constrained by active filter'
       : 'Showing all peers (unconstrained)',
     activeBadgeSpec,
+  };
+}
+
+export interface QuickFilterBreathPulseSpec {
+  targetElementId: 'online-directory-mood-filter';
+  isBreathPulseActive: boolean;
+  hasActiveFilters: boolean;
+  activeCriteriaCount: number;
+  activeCriteriaKeys: QuickFilterAppliedCriterionKey[];
+  animationName: 'quickFilterEmeraldBreathPulse' | 'none';
+  animationType: 'rhythmic-breath-pulse';
+  cssClassName: string;
+  glowTone: 'emerald-soft' | 'none';
+  durationMs: number;
+  durationSec: number;
+  easing: 'ease-in-out';
+  iterationCount: 'infinite' | '1';
+  scaleKeyframes: [number, number, number];
+  boxShadowKeyframes: [string, string, string];
+  borderColorKeyframes: [string, string, string];
+  restingEmeraldGlowShadow: string;
+  peakEmeraldGlowShadow: string;
+  statusLabel: string;
+}
+
+export function getQuickFilterBreathPulseSpec(params?: {
+  mode?: OnlineDirectoryAudienceFilter | string | null;
+  moodFilter?: string | null;
+  onlyInFocus?: boolean;
+}): QuickFilterBreathPulseSpec {
+  const activeBadgeSpec = getQuickFilterIconActiveBadgeSpec(params);
+  const hasActiveFilters = activeBadgeSpec.isAnyCriteriaApplied;
+  const isBreathPulseActive = hasActiveFilters;
+
+  const restingEmeraldGlowShadow =
+    '0 0 0 0 rgba(52, 211, 153, 0.08), 0 0 8px rgba(16, 185, 129, 0.16)';
+  const peakEmeraldGlowShadow =
+    '0 0 0 3px rgba(52, 211, 153, 0.28), 0 0 18px rgba(52, 211, 153, 0.42)';
+
+  return {
+    targetElementId: 'online-directory-mood-filter',
+    isBreathPulseActive,
+    hasActiveFilters,
+    activeCriteriaCount: activeBadgeSpec.appliedCriteriaCount,
+    activeCriteriaKeys: activeBadgeSpec.appliedCriteriaKeys,
+    animationName: isBreathPulseActive ? 'quickFilterEmeraldBreathPulse' : 'none',
+    animationType: 'rhythmic-breath-pulse',
+    cssClassName: isBreathPulseActive ? 'quick-filter-emerald-breath-pulse' : '',
+    glowTone: isBreathPulseActive ? 'emerald-soft' : 'none',
+    durationMs: 2800,
+    durationSec: 2.8,
+    easing: 'ease-in-out',
+    iterationCount: isBreathPulseActive ? 'infinite' : '1',
+    scaleKeyframes: isBreathPulseActive ? [1, 1.015, 1] : [1, 1, 1],
+    boxShadowKeyframes: isBreathPulseActive
+      ? [restingEmeraldGlowShadow, peakEmeraldGlowShadow, restingEmeraldGlowShadow]
+      : ['none', 'none', 'none'],
+    borderColorKeyframes: isBreathPulseActive
+      ? [
+          'rgba(52, 211, 153, 0.45)',
+          'rgba(110, 231, 183, 0.88)',
+          'rgba(52, 211, 153, 0.45)',
+        ]
+      : ['rgba(39, 39, 42, 1)', 'rgba(39, 39, 42, 1)', 'rgba(39, 39, 42, 1)'],
+    restingEmeraldGlowShadow: isBreathPulseActive ? restingEmeraldGlowShadow : 'none',
+    peakEmeraldGlowShadow: isBreathPulseActive ? peakEmeraldGlowShadow : 'none',
+    statusLabel: isBreathPulseActive
+      ? `Rhythmic emerald breath pulse active (${activeBadgeSpec.appliedCriteriaCount} active ${
+          activeBadgeSpec.appliedCriteriaCount === 1 ? 'filter' : 'filters'
+        })`
+      : 'Breath pulse idle (no active filters)',
   };
 }
 
@@ -9977,6 +10048,7 @@ export interface OnlineDirectoryQuickFilterMeta {
   iconCrossFadeMotion: QuickFilterIconCrossFadeMotionSpec;
   iconHoverGlow: QuickFilterIconHoverGlowSpec;
   iconPulseSpec: QuickFilterIconPulseSpec;
+  breathPulseSpec: QuickFilterBreathPulseSpec;
   iconActiveBadgeSpec: QuickFilterIconActiveBadgeSpec;
   toggleChimeSpec: QuickFilterToggleChimeResult;
   resetFlashSpec: QuickFilterResetFlashBounceSpec;
@@ -10058,6 +10130,11 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
 
   const isMyConnectionsOnly = mode === 'my_connections';
   const iconPulseSpec = getQuickFilterIconPulseSpec({
+    mode,
+    moodFilter: params.moodFilter,
+    onlyInFocus: params.onlyInFocus,
+  });
+  const breathPulseSpec = getQuickFilterBreathPulseSpec({
     mode,
     moodFilter: params.moodFilter,
     onlyInFocus: params.onlyInFocus,
@@ -10151,6 +10228,7 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       isHovered: Boolean(params.isHovered),
     }),
     iconPulseSpec,
+    breathPulseSpec,
     iconActiveBadgeSpec: iconPulseSpec.activeBadgeSpec,
     toggleChimeSpec,
     resetFlashSpec,
