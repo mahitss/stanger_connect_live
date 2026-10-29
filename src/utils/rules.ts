@@ -11916,12 +11916,100 @@ export function applyRecentDirectoryFilterCombination(
   };
 }
 
+export interface RemoveRecentDirectoryFilterResult {
+  removed: boolean;
+  removedCombination: RecentDirectoryFilterCombination | null;
+  removedId: string | null;
+  removedLabel: string | null;
+  removedRank: number | null;
+  previousCount: number;
+  remainingCount: number;
+  storageKey: typeof RECENT_DIRECTORY_FILTERS_STORAGE_KEY;
+  serializedHistoryJson: string;
+  updatedHistory: RecentDirectoryFilterCombination[];
+  statusMessage: string;
+}
+
+export function removeRecentDirectoryFilterCombination(
+  currentHistory: RecentDirectoryFilterCombination[] | null | undefined,
+  targetIdOrIndex: string | number
+): RemoveRecentDirectoryFilterResult {
+  const rawList =
+    currentHistory !== undefined && currentHistory !== null && Array.isArray(currentHistory)
+      ? currentHistory
+      : DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS;
+
+  const list = rawList
+    .filter((item): item is RecentDirectoryFilterCombination => Boolean(item))
+    .slice(0, MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS);
+
+  let matchedIndex = -1;
+  if (typeof targetIdOrIndex === 'number') {
+    const idx = Math.floor(targetIdOrIndex);
+    if (idx >= 0 && idx < list.length) {
+      matchedIndex = idx;
+    }
+  } else {
+    const cleanTarget = String(targetIdOrIndex || '').trim();
+    if (cleanTarget) {
+      matchedIndex = list.findIndex(
+        (item) => item.id === cleanTarget || item.label === cleanTarget
+      );
+      if (matchedIndex === -1 && /^\d+$/.test(cleanTarget)) {
+        const numericIdx = Number(cleanTarget);
+        if (numericIdx >= 0 && numericIdx < list.length) {
+          matchedIndex = numericIdx;
+        }
+      }
+    }
+  }
+
+  if (matchedIndex === -1) {
+    return {
+      removed: false,
+      removedCombination: null,
+      removedId: null,
+      removedLabel: null,
+      removedRank: null,
+      previousCount: list.length,
+      remainingCount: list.length,
+      storageKey: RECENT_DIRECTORY_FILTERS_STORAGE_KEY,
+      serializedHistoryJson: JSON.stringify(list),
+      updatedHistory: list,
+      statusMessage: 'Recent filter combination not found in history.',
+    };
+  }
+
+  const removedCombination = list[matchedIndex];
+  const updatedHistory = list.filter((_, idx) => idx !== matchedIndex);
+
+  return {
+    removed: true,
+    removedCombination,
+    removedId: removedCombination.id,
+    removedLabel: removedCombination.label,
+    removedRank: matchedIndex + 1,
+    previousCount: list.length,
+    remainingCount: updatedHistory.length,
+    storageKey: RECENT_DIRECTORY_FILTERS_STORAGE_KEY,
+    serializedHistoryJson: JSON.stringify(updatedHistory),
+    updatedHistory,
+    statusMessage: `Removed "${removedCombination.label}" from recent filter history (${updatedHistory.length}/${MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS} remaining).`,
+  };
+}
+
 export interface RecentDirectoryFilterDropdownOption
   extends RecentDirectoryFilterCombination {
   rank: number;
   isCurrentlyActive: boolean;
   isRecentlyApplied: true;
   recentlyAppliedBadgeLabel: 'Recently Applied';
+  deleteButtonId: string;
+  deleteButtonTestId: string;
+  deleteIconTestId: string;
+  deleteIconComponent: 'Trash2';
+  deleteAriaLabel: string;
+  deleteTooltipText: string;
 }
 
 export interface QuickFilterHistoryIconButtonSpec {
@@ -11934,6 +12022,12 @@ export interface QuickFilterHistoryIconButtonSpec {
   menuId: 'online-directory-mood-filter-history-menu';
   menuTestId: 'online-directory-mood-filter-history-menu';
   optionTestIdPrefix: 'online-directory-history-filter-option';
+  deleteButtonTestIdPrefix: 'online-directory-history-filter-delete';
+  deleteIconTestIdPrefix: 'online-directory-history-filter-trash-icon';
+  deleteIconComponent: 'Trash2';
+  storageKey: typeof RECENT_DIRECTORY_FILTERS_STORAGE_KEY;
+  canClearIndividualItems: true;
+  emptyStateText: 'No recent filter combinations in history.';
   menuHeadline: '5 Most Recently Used Filter Combinations';
   isOpen: boolean;
   maxItems: number;
@@ -12175,11 +12269,13 @@ export function getQuickFilterHistoryIconButtonSpec(params?: {
   });
 
   const rawHistory =
-    Array.isArray(params?.history) && params.history.length > 0
+    params?.history !== undefined && params?.history !== null && Array.isArray(params.history)
       ? params.history
       : DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS;
 
-  const trimmedHistory = rawHistory.slice(0, MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS);
+  const trimmedHistory = rawHistory
+    .filter((item): item is RecentDirectoryFilterCombination => Boolean(item))
+    .slice(0, MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS);
   const options: RecentDirectoryFilterDropdownOption[] = trimmedHistory.map(
     (item, idx) => ({
       ...item,
@@ -12187,6 +12283,12 @@ export function getQuickFilterHistoryIconButtonSpec(params?: {
       isCurrentlyActive: item.id === currentActive.id,
       isRecentlyApplied: true,
       recentlyAppliedBadgeLabel: 'Recently Applied',
+      deleteButtonId: `online-directory-history-filter-delete-${idx}`,
+      deleteButtonTestId: `online-directory-history-filter-delete-${idx}`,
+      deleteIconTestId: `online-directory-history-filter-trash-icon-${idx}`,
+      deleteIconComponent: 'Trash2',
+      deleteAriaLabel: `Remove "${item.label}" (#${idx + 1}) from recent filter history`,
+      deleteTooltipText: `Clear "${item.label}" from local storage filter history`,
     })
   );
 
@@ -12207,6 +12309,12 @@ export function getQuickFilterHistoryIconButtonSpec(params?: {
     menuId: 'online-directory-mood-filter-history-menu',
     menuTestId: 'online-directory-mood-filter-history-menu',
     optionTestIdPrefix: 'online-directory-history-filter-option',
+    deleteButtonTestIdPrefix: 'online-directory-history-filter-delete',
+    deleteIconTestIdPrefix: 'online-directory-history-filter-trash-icon',
+    deleteIconComponent: 'Trash2',
+    storageKey: RECENT_DIRECTORY_FILTERS_STORAGE_KEY,
+    canClearIndividualItems: true,
+    emptyStateText: 'No recent filter combinations in history.',
     menuHeadline: '5 Most Recently Used Filter Combinations',
     isOpen,
     maxItems,

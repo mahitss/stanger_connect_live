@@ -58,6 +58,7 @@ import {
   Search,
   Bookmark,
   History,
+  Trash2,
 } from 'lucide-react';
 import {
   auth,
@@ -191,6 +192,7 @@ import {
   DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS,
   recordRecentDirectoryFilterCombination,
   applyRecentDirectoryFilterCombination,
+  removeRecentDirectoryFilterCombination,
   getRecentDirectoryFiltersDropdownMeta,
   evaluateRecentlyAppliedDirectoryFilterMeta,
   isMoodFilterInRecentDirectoryFilters,
@@ -874,9 +876,9 @@ export default function App() {
   >(() => {
     try {
       const raw = localStorage.getItem(RECENT_DIRECTORY_FILTERS_STORAGE_KEY);
-      if (raw) {
+      if (raw !== null) {
         const parsed = JSON.parse(raw);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed.slice(0, MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS);
         }
       }
@@ -887,6 +889,11 @@ export default function App() {
   });
   const [isRecentFiltersDropdownOpen, setIsRecentFiltersDropdownOpen] =
     useState<boolean>(false);
+  const [removedHistoryFilterCount, setRemovedHistoryFilterCount] =
+    useState<number>(0);
+  const [lastRemovedHistoryFilterId, setLastRemovedHistoryFilterId] = useState<
+    string | null
+  >(null);
 
   const [pinnedDirectoryFilters, setPinnedDirectoryFilters] = useState<
     RecentDirectoryFilterCombination[]
@@ -3456,6 +3463,26 @@ export default function App() {
       directoryAudienceFilter,
       applied.audienceFilter
     );
+  };
+
+  const handleRemoveRecentDirectoryFilter = (targetIdOrIndex: string | number) => {
+    const removedResult = removeRecentDirectoryFilterCombination(
+      recentDirectoryFilters,
+      targetIdOrIndex
+    );
+    if (!removedResult.removed) return;
+    setRecentDirectoryFilters(removedResult.updatedHistory);
+    setRemovedHistoryFilterCount((prev) => prev + 1);
+    setLastRemovedHistoryFilterId(removedResult.removedId);
+    try {
+      localStorage.setItem(
+        RECENT_DIRECTORY_FILTERS_STORAGE_KEY,
+        removedResult.serializedHistoryJson
+      );
+    } catch {
+      // ignore
+    }
+    setLastSoundFeedback(removedResult.statusMessage);
   };
 
   const handleToggleAllMoodCategoryDrawers = () => {
@@ -6047,6 +6074,14 @@ export default function App() {
                               data-history-max={
                                 directoryQuickFilterMeta.historyIconButtonMeta.maxItems
                               }
+                              data-history-delete-icon={
+                                directoryQuickFilterMeta.historyIconButtonMeta
+                                  .deleteIconComponent
+                              }
+                              data-removed-history-count={removedHistoryFilterCount}
+                              data-last-removed-history-id={
+                                lastRemovedHistoryFilterId ?? 'none'
+                              }
                               data-default-opened-category={
                                 directoryQuickFilterMeta.moodDrawersToggleAll.defaultOpenedCategory
                               }
@@ -6663,6 +6698,17 @@ export default function App() {
                                   data-max-recent={
                                     directoryQuickFilterMeta.historyIconButtonMeta.maxItems
                                   }
+                                  data-storage-key={
+                                    directoryQuickFilterMeta.historyIconButtonMeta.storageKey
+                                  }
+                                  data-delete-icon={
+                                    directoryQuickFilterMeta.historyIconButtonMeta
+                                      .deleteIconComponent
+                                  }
+                                  data-removed-history-count={removedHistoryFilterCount}
+                                  data-last-removed-history-id={
+                                    lastRemovedHistoryFilterId ?? 'none'
+                                  }
                                   onMouseEnter={(e) => {
                                     e.stopPropagation();
                                     setIsQuickFilterHovered(false);
@@ -6690,58 +6736,108 @@ export default function App() {
                                       {directoryQuickFilterMeta.historyIconButtonMeta.badgeText}
                                     </span>
                                   </span>
-                                  {directoryQuickFilterMeta.historyIconButtonMeta.options.map(
-                                    (opt, idx) => (
-                                      <span
-                                        key={opt.id}
-                                        role="option"
-                                        tabIndex={0}
-                                        aria-selected={opt.isCurrentlyActive}
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          e.stopPropagation();
-                                          handleApplyRecentDirectoryFilter(opt.id);
-                                        }}
-                                        onKeyDown={(e) => {
-                                          if (e.key === 'Enter' || e.key === ' ') {
+                                  {directoryQuickFilterMeta.historyIconButtonMeta.options.length ===
+                                  0 ? (
+                                    <span
+                                      data-testid="online-directory-mood-filter-history-empty"
+                                      className="px-2 py-2.5 text-[11px] font-mono text-zinc-400 text-center"
+                                    >
+                                      {
+                                        directoryQuickFilterMeta.historyIconButtonMeta
+                                          .emptyStateText
+                                      }
+                                    </span>
+                                  ) : (
+                                    directoryQuickFilterMeta.historyIconButtonMeta.options.map(
+                                      (opt, idx) => (
+                                        <span
+                                          key={opt.id}
+                                          role="option"
+                                          tabIndex={0}
+                                          aria-selected={opt.isCurrentlyActive}
+                                          onClick={(e) => {
                                             e.preventDefault();
                                             e.stopPropagation();
                                             handleApplyRecentDirectoryFilter(opt.id);
+                                          }}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === ' ') {
+                                              e.preventDefault();
+                                              e.stopPropagation();
+                                              handleApplyRecentDirectoryFilter(opt.id);
+                                            }
+                                          }}
+                                          data-testid={`${directoryQuickFilterMeta.historyIconButtonMeta.optionTestIdPrefix}-${idx}`}
+                                          data-combination-id={opt.id}
+                                          data-combination-rank={opt.rank}
+                                          data-audience-filter={opt.audienceFilter}
+                                          data-mood-filter={opt.moodFilter}
+                                          data-only-in-focus={
+                                            opt.onlyInFocus ? 'true' : 'false'
                                           }
-                                        }}
-                                        data-testid={`${directoryQuickFilterMeta.historyIconButtonMeta.optionTestIdPrefix}-${idx}`}
-                                        data-combination-id={opt.id}
-                                        data-combination-rank={opt.rank}
-                                        data-audience-filter={opt.audienceFilter}
-                                        data-mood-filter={opt.moodFilter}
-                                        data-only-in-focus={opt.onlyInFocus ? 'true' : 'false'}
-                                        data-currently-active={
-                                          opt.isCurrentlyActive ? 'true' : 'false'
-                                        }
-                                        className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors text-left cursor-pointer ${
-                                          opt.isCurrentlyActive
-                                            ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/50 font-semibold'
-                                            : 'text-zinc-300 hover:bg-zinc-900 hover:text-white border border-transparent'
-                                        }`}
-                                      >
-                                        <span className="truncate">
-                                          {opt.rank}. {opt.label}
-                                        </span>
-                                        <span className="inline-flex items-center gap-1 shrink-0">
-                                          <span
-                                            className={`px-1 py-0.2 rounded text-[9px] font-mono border ${
-                                              opt.isCurrentlyActive
-                                                ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
-                                                : 'bg-sky-500/15 text-sky-200 border-sky-400/40'
-                                            }`}
-                                          >
-                                            {opt.recentlyAppliedBadgeLabel}
+                                          data-currently-active={
+                                            opt.isCurrentlyActive ? 'true' : 'false'
+                                          }
+                                          className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded text-xs transition-colors text-left cursor-pointer ${
+                                            opt.isCurrentlyActive
+                                              ? 'bg-emerald-500/20 text-emerald-200 border border-emerald-400/50 font-semibold'
+                                              : 'text-zinc-300 hover:bg-zinc-900 hover:text-white border border-transparent'
+                                          }`}
+                                        >
+                                          <span className="truncate">
+                                            {opt.rank}. {opt.label}
                                           </span>
-                                          <span className="text-[10px] font-mono opacity-80">
-                                            {opt.isCurrentlyActive ? 'Active' : 'Apply'}
+                                          <span className="inline-flex items-center gap-1 shrink-0">
+                                            <span
+                                              className={`px-1 py-0.2 rounded text-[9px] font-mono border ${
+                                                opt.isCurrentlyActive
+                                                  ? 'bg-emerald-500/25 text-emerald-200 border-emerald-400/50'
+                                                  : 'bg-sky-500/15 text-sky-200 border-sky-400/40'
+                                              }`}
+                                            >
+                                              {opt.recentlyAppliedBadgeLabel}
+                                            </span>
+                                            <span className="text-[10px] font-mono opacity-80">
+                                              {opt.isCurrentlyActive ? 'Active' : 'Apply'}
+                                            </span>
+                                            <span
+                                              id={opt.deleteButtonId}
+                                              role="button"
+                                              tabIndex={0}
+                                              title={opt.deleteTooltipText}
+                                              aria-label={opt.deleteAriaLabel}
+                                              data-testid={opt.deleteButtonTestId}
+                                              data-delete-combination-id={opt.id}
+                                              data-delete-combination-rank={opt.rank}
+                                              data-delete-combination-label={opt.label}
+                                              data-icon-component={opt.deleteIconComponent}
+                                              data-storage-key={
+                                                directoryQuickFilterMeta.historyIconButtonMeta
+                                                  .storageKey
+                                              }
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                handleRemoveRecentDirectoryFilter(opt.id);
+                                              }}
+                                              onKeyDown={(e) => {
+                                                if (e.key === 'Enter' || e.key === ' ') {
+                                                  e.preventDefault();
+                                                  e.stopPropagation();
+                                                  handleRemoveRecentDirectoryFilter(opt.id);
+                                                }
+                                              }}
+                                              className="inline-flex items-center justify-center p-1 rounded bg-zinc-900/90 hover:bg-rose-500/20 text-zinc-400 hover:text-rose-300 border border-zinc-800 hover:border-rose-400/50 transition-colors cursor-pointer shrink-0"
+                                            >
+                                              <Trash2
+                                                aria-hidden="true"
+                                                data-testid={opt.deleteIconTestId}
+                                                className="w-3 h-3 shrink-0"
+                                              />
+                                            </span>
                                           </span>
                                         </span>
-                                      </span>
+                                      )
                                     )
                                   )}
                                 </span>

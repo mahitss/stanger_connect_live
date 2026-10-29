@@ -205,10 +205,12 @@ import {
   toggleAllMoodCategoryDrawers,
   toggleSingleMoodCategoryDrawer,
   MAX_RECENT_DIRECTORY_FILTER_COMBINATIONS,
+  RECENT_DIRECTORY_FILTERS_STORAGE_KEY,
   DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS,
   buildDirectoryFilterCombinationEntry,
   recordRecentDirectoryFilterCombination,
   applyRecentDirectoryFilterCombination,
+  removeRecentDirectoryFilterCombination,
   getQuickFilterHistoryIconButtonSpec,
   getRecentDirectoryFiltersDropdownMeta,
   evaluateRecentlyAppliedDirectoryFilterMeta,
@@ -5474,5 +5476,100 @@ test('DEFAULT_MOOD_CATEGORY_DRAWER_EXPANSION_MAP, evaluateMoodCategoryDrawersTog
     'Away',
   ]);
 });
+
+// ---------------------------------------------------------------------------
+// 82. Small 'Trash' Icon Button in History Dropdown of #online-directory-mood-filter
+// ---------------------------------------------------------------------------
+test('removeRecentDirectoryFilterCombination and getQuickFilterHistoryIconButtonSpec allow clearing individual recent filter combinations from local storage history', () => {
+  // 1. Verify getQuickFilterHistoryIconButtonSpec exposes per-item trash button metadata
+  const initialSpec = getQuickFilterHistoryIconButtonSpec({
+    history: DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS,
+    currentAudienceFilter: 'everyone',
+    currentMoodFilter: 'all',
+    currentOnlyInFocus: false,
+    isOpen: true,
+  });
+  assert.equal(initialSpec.deleteIconComponent, 'Trash2');
+  assert.equal(initialSpec.canClearIndividualItems, true);
+  assert.equal(
+    initialSpec.storageKey,
+    RECENT_DIRECTORY_FILTERS_STORAGE_KEY
+  );
+  assert.equal(initialSpec.options.length, 5);
+  assert.equal(
+    initialSpec.options[1].deleteButtonId,
+    'online-directory-history-filter-delete-1'
+  );
+  assert.equal(
+    initialSpec.options[1].deleteButtonTestId,
+    'online-directory-history-filter-delete-1'
+  );
+  assert.equal(
+    initialSpec.options[1].deleteIconTestId,
+    'online-directory-history-filter-trash-icon-1'
+  );
+  assert.equal(initialSpec.options[1].deleteIconComponent, 'Trash2');
+  assert.ok(
+    initialSpec.options[1].deleteAriaLabel.includes(
+      initialSpec.options[1].label
+    )
+  );
+
+  // 2. Remove an individual recent filter combination by ID
+  const secondCombo = DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS[1];
+  const removalResult = removeRecentDirectoryFilterCombination(
+    DEFAULT_RECENT_DIRECTORY_FILTER_COMBINATIONS,
+    secondCombo.id
+  );
+  assert.equal(removalResult.removed, true);
+  assert.equal(removalResult.removedId, secondCombo.id);
+  assert.equal(removalResult.removedLabel, secondCombo.label);
+  assert.equal(removalResult.removedRank, 2);
+  assert.equal(removalResult.previousCount, 5);
+  assert.equal(removalResult.remainingCount, 4);
+  assert.equal(removalResult.updatedHistory.length, 4);
+  assert.equal(
+    removalResult.updatedHistory.some((item) => item.id === secondCombo.id),
+    false
+  );
+  assert.deepEqual(
+    JSON.parse(removalResult.serializedHistoryJson).map(
+      (item: { id: string }) => item.id
+    ),
+    removalResult.updatedHistory.map((item) => item.id)
+  );
+
+  // 3. Re-evaluating getQuickFilterHistoryIconButtonSpec with the updated history reflects 4/5 items and re-indexes delete button IDs
+  const afterOneRemovalSpec = getQuickFilterHistoryIconButtonSpec({
+    history: removalResult.updatedHistory,
+    currentAudienceFilter: 'everyone',
+    currentMoodFilter: 'all',
+    currentOnlyInFocus: false,
+    isOpen: true,
+  });
+  assert.equal(afterOneRemovalSpec.count, 4);
+  assert.equal(afterOneRemovalSpec.badgeText, '4/5');
+  assert.equal(afterOneRemovalSpec.options.length, 4);
+  assert.equal(afterOneRemovalSpec.options[0].rank, 1);
+  assert.equal(afterOneRemovalSpec.options[3].rank, 4);
+
+  // 4. Clearing all remaining items yields an empty history list with 0/5 badge
+  const emptySpec = getQuickFilterHistoryIconButtonSpec({
+    history: [],
+    currentAudienceFilter: 'everyone',
+    currentMoodFilter: 'all',
+    currentOnlyInFocus: false,
+    isOpen: true,
+  });
+  assert.equal(emptySpec.count, 0);
+  assert.equal(emptySpec.hasRecentFilters, false);
+  assert.equal(emptySpec.badgeText, '0/5');
+  assert.equal(emptySpec.options.length, 0);
+  assert.equal(
+    emptySpec.emptyStateText,
+    'No recent filter combinations in history.'
+  );
+});
+
 
 
