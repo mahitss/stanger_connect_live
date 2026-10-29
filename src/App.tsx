@@ -206,6 +206,7 @@ import {
   applyPinnedDirectoryFilterChip,
   FIRST_MATCHING_PEER_AUTO_SCROLL_HIGHLIGHT_MS,
   shouldTriggerFirstMatchingPeerAutoScroll,
+  RESET_ONLY_BUTTON_POP_DURATION_MS,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -838,6 +839,31 @@ export default function App() {
       setIsDirectoryFilterResetFlashActive(false);
       filterResetFlashTimerRef.current = null;
     }, 650);
+  };
+
+  const [isResetOnlyBouncePopActive, setIsResetOnlyBouncePopActive] =
+    useState<boolean>(false);
+  const [resetOnlyBouncePopCount, setResetOnlyBouncePopCount] = useState<number>(0);
+  const resetOnlyBouncePopTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetOnlyBouncePopTimerRef.current !== null) {
+        window.clearTimeout(resetOnlyBouncePopTimerRef.current);
+      }
+    };
+  }, []);
+
+  const triggerResetOnlyButtonBouncePop = () => {
+    setIsResetOnlyBouncePopActive(true);
+    setResetOnlyBouncePopCount((prev) => prev + 1);
+    if (resetOnlyBouncePopTimerRef.current !== null) {
+      window.clearTimeout(resetOnlyBouncePopTimerRef.current);
+    }
+    resetOnlyBouncePopTimerRef.current = window.setTimeout(() => {
+      setIsResetOnlyBouncePopActive(false);
+      resetOnlyBouncePopTimerRef.current = null;
+    }, RESET_ONLY_BUTTON_POP_DURATION_MS + 40);
   };
 
   const triggerShiftResetToastConfirmation = () => {
@@ -3337,6 +3363,8 @@ export default function App() {
     isShiftKeyHeld: isShiftKeyHeldForFilter,
     isShiftResetToastVisible,
     shiftResetToastCount,
+    isResetOnlyBouncePopActive,
+    resetOnlyBouncePopCount,
     recentFiltersHistory: recentDirectoryFilters,
     isRecentFiltersDropdownOpen,
     isClearFiltersHovered: isClearFiltersBtnHovered,
@@ -3518,6 +3546,7 @@ export default function App() {
     setShowOnlyInFocusPeers(resetResult.nextOnlyInFocus);
     setQuickResetWithoutModalCount((prev) => prev + 1);
     setLastQuickResetUsedShift(Boolean(shiftKeyUsed));
+    triggerResetOnlyButtonBouncePop();
     triggerDirectoryFilterResetFlash();
     triggerShiftResetToastConfirmation();
     handlePlayDirectoryFilterToggleChime(directoryAudienceFilter, 'everyone');
@@ -6604,10 +6633,26 @@ export default function App() {
                                 </span>
                               )}
 
-                              <span
+                              <motion.span
                                 id="online-directory-mood-filter-reset-only"
                                 role="button"
                                 tabIndex={0}
+                                whileHover={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec
+                                    .whileHover
+                                }
+                                whileTap={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec
+                                    .whileTap
+                                }
+                                animate={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec
+                                    .animate
+                                }
+                                transition={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec
+                                    .transition
+                                }
                                 onClick={(e) => {
                                   e.preventDefault();
                                   e.stopPropagation();
@@ -6627,6 +6672,24 @@ export default function App() {
                                 data-testid="online-directory-mood-filter-reset-only"
                                 data-reset-only="true"
                                 data-bypasses-modal="true"
+                                data-bounce-pop-active={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec
+                                    .isBouncePopActive
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-bounce-pop-animation={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec
+                                    .animationName
+                                }
+                                data-bounce-pop-count={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec
+                                    .triggerCount
+                                }
+                                data-bounce-pop-duration-ms={
+                                  directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec
+                                    .durationMs
+                                }
                                 data-modifier-key={
                                   directoryQuickFilterMeta.resetOnlyButtonMeta.modifierKey
                                 }
@@ -6653,19 +6716,23 @@ export default function App() {
                                 data-shift-reset-toast-message={
                                   directoryQuickFilterMeta.shiftResetToast.message
                                 }
-                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border transition-colors ${
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border transition-colors origin-center ${
                                   directoryQuickFilterMeta.resetOnlyButtonMeta.isShiftHeld
                                     ? 'bg-emerald-500/30 text-emerald-200 border-emerald-400/70 shadow-sm'
                                     : directoryQuickFilterMeta.resetOnlyButtonMeta.isAnyFilterActive
                                       ? 'bg-amber-500/15 text-amber-200 border-amber-400/40 hover:bg-amber-500/25 hover:border-amber-300/70'
                                       : 'bg-zinc-900/90 text-zinc-400 border-zinc-800 hover:text-zinc-200 hover:border-zinc-600'
-                                }`}
+                                } ${directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec.cssClassName}`.trim()}
                               >
-                                <RotateCcw className="w-2.5 h-2.5 shrink-0" />
+                                <RotateCcw
+                                  aria-hidden="true"
+                                  data-testid="online-directory-mood-filter-reset-only-icon"
+                                  className={`w-2.5 h-2.5 shrink-0 ${directoryQuickFilterMeta.resetOnlyButtonMeta.bouncePopSpec.iconCssClassName}`.trim()}
+                                />
                                 <span>
                                   {directoryQuickFilterMeta.resetOnlyButtonMeta.shortcutLabel}
                                 </span>
-                              </span>
+                              </motion.span>
 
                               <span
                                 id={directoryQuickFilterMeta.historyIconButtonMeta.buttonId}

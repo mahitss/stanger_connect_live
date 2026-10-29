@@ -468,6 +468,54 @@ html.light textarea::placeholder {
   will-change: transform, opacity;
 }
 
+@keyframes resetOnlyButtonSubtleBouncePop {
+  0% {
+    transform: scale(1) translateY(0);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+  28% {
+    transform: scale(0.92) translateY(1px);
+    box-shadow: 0 0 0 1.5px rgba(52, 211, 153, 0.28);
+  }
+  64% {
+    transform: scale(1.12) translateY(-2px);
+    box-shadow:
+      0 0 0 2px rgba(52, 211, 153, 0.42),
+      0 0 12px rgba(52, 211, 153, 0.35);
+    border-color: rgba(110, 231, 183, 0.85);
+    color: #a7f3d0;
+  }
+  100% {
+    transform: scale(1) translateY(0);
+    box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+  }
+}
+
+@keyframes resetOnlyIconSpinPop {
+  0% {
+    transform: rotate(0deg) scale(1);
+  }
+  55% {
+    transform: rotate(-200deg) scale(1.15);
+  }
+  100% {
+    transform: rotate(-360deg) scale(1);
+  }
+}
+
+#online-directory-mood-filter-reset-only[data-bounce-pop-active='true'],
+#online-directory-mood-filter-reset-only.reset-only-button-bounce-pop-active,
+.reset-only-button-bounce-pop-active {
+  animation: resetOnlyButtonSubtleBouncePop 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, box-shadow;
+}
+
+#online-directory-mood-filter-reset-only[data-bounce-pop-active='true'] [data-testid='online-directory-mood-filter-reset-only-icon'],
+.reset-only-icon-spin-pop-active {
+  animation: resetOnlyIconSpinPop 380ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  transform-origin: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .moment-thread-collapse-grid,
   .moment-thread-slide-in,
@@ -479,6 +527,9 @@ html.light textarea::placeholder {
   .quick-filter-reset-flash-bounce,
   .shift-reset-toast-animated,
   .share-link-checkmark-transient-pop,
+  .reset-only-button-bounce-pop-active,
+  .reset-only-icon-spin-pop-active,
+  #online-directory-mood-filter-reset-only[data-bounce-pop-active='true'],
   #online-directory-quick-filter-icon-share-container #online-directory-quick-filter-share-checkmark,
   #online-directory-shift-reset-toast,
   #online-directory-mood-filter[data-breath-pulse-active='true'],

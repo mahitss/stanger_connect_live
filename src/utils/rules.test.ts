@@ -176,6 +176,8 @@ import {
   resolveOnlineDirectoryFilterToggleAction,
   confirmOnlineDirectoryClearFilterReset,
   resolveShiftResetToastConfirmation,
+  RESET_ONLY_BUTTON_POP_DURATION_MS,
+  getResetOnlyButtonBouncePopSpec,
   resolveSecondaryResetOnlyFilterAction,
   getDedicatedClearFiltersExitAnimationSpec,
   getDedicatedClearFiltersButtonMotionSpec,
@@ -5673,6 +5675,106 @@ test('getQuickFilterShareLinkCheckmarkAnimationSpec and buildOnlineDirectoryFilt
     'online-directory-quick-filter-share-checkmark'
   );
 });
+
+// ---------------------------------------------------------------------------
+// 84. Subtle 'Bounce' / 'Pop' Animation for #online-directory-mood-filter-reset-only When Clicked
+// ---------------------------------------------------------------------------
+test('getResetOnlyButtonBouncePopSpec, resolveSecondaryResetOnlyFilterAction, and getOnlineDirectoryQuickFilterMeta configure a subtle bounce/pop animation for #online-directory-mood-filter-reset-only when clicked', () => {
+  // 1. Idle state (before button click)
+  const idlePopSpec = getResetOnlyButtonBouncePopSpec({
+    isBouncePopActive: false,
+    triggerCount: 0,
+  });
+  assert.equal(
+    idlePopSpec.buttonId,
+    'online-directory-mood-filter-reset-only'
+  );
+  assert.equal(
+    idlePopSpec.buttonSelector,
+    '#online-directory-mood-filter-reset-only'
+  );
+  assert.equal(
+    idlePopSpec.iconTestId,
+    'online-directory-mood-filter-reset-only-icon'
+  );
+  assert.equal(idlePopSpec.isBouncePopActive, false);
+  assert.equal(idlePopSpec.triggerCount, 0);
+  assert.equal(idlePopSpec.animationName, 'none');
+  assert.equal(idlePopSpec.iconAnimationName, 'none');
+  assert.equal(idlePopSpec.animationType, 'subtle-bounce-pop');
+  assert.equal(idlePopSpec.cssClassName, '');
+  assert.equal(idlePopSpec.iconCssClassName, '');
+  assert.equal(idlePopSpec.durationMs, RESET_ONLY_BUTTON_POP_DURATION_MS);
+  assert.equal(idlePopSpec.durationMs, 380);
+  assert.equal(idlePopSpec.durationSec, 0.38);
+  assert.deepEqual(idlePopSpec.scaleKeyframes, [1, 1, 1, 1]);
+  assert.deepEqual(idlePopSpec.translateYKeyframes, [0, 0, 0, 0]);
+  assert.deepEqual(idlePopSpec.animate, { scale: 1, y: 0 });
+  assert.deepEqual(idlePopSpec.whileHover, { scale: 1.04, y: -0.5 });
+  assert.deepEqual(idlePopSpec.whileTap, { scale: 0.92, y: 0.5 });
+
+  // 2. Active bounce/pop state when #online-directory-mood-filter-reset-only is clicked
+  const activePopSpec = getResetOnlyButtonBouncePopSpec({
+    isBouncePopActive: true,
+    triggerCount: 2,
+  });
+  assert.equal(activePopSpec.isBouncePopActive, true);
+  assert.equal(activePopSpec.triggerCount, 2);
+  assert.equal(
+    activePopSpec.animationName,
+    'resetOnlyButtonSubtleBouncePop'
+  );
+  assert.equal(activePopSpec.iconAnimationName, 'resetOnlyIconSpinPop');
+  assert.equal(
+    activePopSpec.cssClassName,
+    'reset-only-button-bounce-pop-active'
+  );
+  assert.equal(
+    activePopSpec.iconCssClassName,
+    'reset-only-icon-spin-pop-active'
+  );
+  assert.deepEqual(activePopSpec.scaleKeyframes, [1, 0.92, 1.12, 1]);
+  assert.deepEqual(activePopSpec.translateYKeyframes, [0, 1, -2, 0]);
+  assert.deepEqual(activePopSpec.iconRotateKeyframes, [0, -180, -360]);
+  assert.deepEqual(activePopSpec.animate, {
+    scale: [1, 0.92, 1.12, 1],
+    y: [0, 1, -2, 0],
+  });
+  assert.equal(
+    activePopSpec.feedbackText,
+    'Filters reset · Bounce pop feedback active'
+  );
+
+  // 3. Verify integration through resolveSecondaryResetOnlyFilterAction and getOnlineDirectoryQuickFilterMeta
+  const metaWithResetPop = getOnlineDirectoryQuickFilterMeta({
+    mode: 'everyone',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'all',
+    isResetOnlyBouncePopActive: true,
+    resetOnlyBouncePopCount: 3,
+  });
+  assert.equal(
+    metaWithResetPop.resetOnlyButtonMeta.buttonId,
+    'online-directory-mood-filter-reset-only'
+  );
+  assert.equal(
+    metaWithResetPop.resetOnlyButtonMeta.bouncePopSpec.isBouncePopActive,
+    true
+  );
+  assert.equal(
+    metaWithResetPop.resetOnlyButtonMeta.bouncePopSpec.triggerCount,
+    3
+  );
+  assert.equal(
+    metaWithResetPop.resetOnlyButtonMeta.bouncePopSpec.animationName,
+    'resetOnlyButtonSubtleBouncePop'
+  );
+  assert.equal(
+    metaWithResetPop.resetOnlyButtonMeta.bouncePopSpec.cssClassName,
+    'reset-only-button-bounce-pop-active'
+  );
+});
+
 
 
 

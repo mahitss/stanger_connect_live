@@ -8644,6 +8644,83 @@ export function resolveShiftResetToastConfirmation(params?: {
   };
 }
 
+export const RESET_ONLY_BUTTON_POP_DURATION_MS = 380;
+
+export interface ResetOnlyButtonBouncePopAnimationSpec {
+  buttonId: 'online-directory-mood-filter-reset-only';
+  buttonSelector: '#online-directory-mood-filter-reset-only';
+  iconTestId: 'online-directory-mood-filter-reset-only-icon';
+  isBouncePopActive: boolean;
+  triggerCount: number;
+  animationName: 'resetOnlyButtonSubtleBouncePop' | 'none';
+  iconAnimationName: 'resetOnlyIconSpinPop' | 'none';
+  animationType: 'subtle-bounce-pop';
+  cssClassName: string;
+  iconCssClassName: string;
+  durationMs: number;
+  durationSec: number;
+  easing: 'cubic-bezier(0.22, 1, 0.36, 1)';
+  scaleKeyframes: [number, number, number, number];
+  translateYKeyframes: [number, number, number, number];
+  iconRotateKeyframes: [number, number, number];
+  popBoxShadow: string;
+  whileHover: { scale: number; y: number };
+  whileTap: { scale: number; y: number };
+  animate: {
+    scale: number | [number, number, number, number];
+    y: number | [number, number, number, number];
+  };
+  transition: {
+    duration: number;
+    ease: [number, number, number, number];
+  };
+  feedbackText: string;
+}
+
+export function getResetOnlyButtonBouncePopSpec(params?: {
+  isBouncePopActive?: boolean;
+  triggerCount?: number;
+}): ResetOnlyButtonBouncePopAnimationSpec {
+  const isBouncePopActive = Boolean(params?.isBouncePopActive);
+  const rawCount = Number(params?.triggerCount);
+  const triggerCount =
+    Number.isFinite(rawCount) && rawCount > 0 ? Math.floor(rawCount) : 0;
+
+  return {
+    buttonId: 'online-directory-mood-filter-reset-only',
+    buttonSelector: '#online-directory-mood-filter-reset-only',
+    iconTestId: 'online-directory-mood-filter-reset-only-icon',
+    isBouncePopActive,
+    triggerCount,
+    animationName: isBouncePopActive ? 'resetOnlyButtonSubtleBouncePop' : 'none',
+    iconAnimationName: isBouncePopActive ? 'resetOnlyIconSpinPop' : 'none',
+    animationType: 'subtle-bounce-pop',
+    cssClassName: isBouncePopActive ? 'reset-only-button-bounce-pop-active' : '',
+    iconCssClassName: isBouncePopActive ? 'reset-only-icon-spin-pop-active' : '',
+    durationMs: RESET_ONLY_BUTTON_POP_DURATION_MS,
+    durationSec: 0.38,
+    easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    scaleKeyframes: isBouncePopActive ? [1, 0.92, 1.12, 1] : [1, 1, 1, 1],
+    translateYKeyframes: isBouncePopActive ? [0, 1, -2, 0] : [0, 0, 0, 0],
+    iconRotateKeyframes: isBouncePopActive ? [0, -180, -360] : [0, 0, 0],
+    popBoxShadow: isBouncePopActive
+      ? '0 0 0 2px rgba(52, 211, 153, 0.42), 0 0 12px rgba(52, 211, 153, 0.35)'
+      : 'none',
+    whileHover: { scale: 1.04, y: -0.5 },
+    whileTap: { scale: 0.92, y: 0.5 },
+    animate: isBouncePopActive
+      ? { scale: [1, 0.92, 1.12, 1], y: [0, 1, -2, 0] }
+      : { scale: 1, y: 0 },
+    transition: {
+      duration: 0.38,
+      ease: [0.22, 1, 0.36, 1],
+    },
+    feedbackText: isBouncePopActive
+      ? 'Filters reset · Bounce pop feedback active'
+      : 'Click to reset active filters',
+  };
+}
+
 export interface SecondaryResetOnlyFilterSpec {
   buttonId: 'online-directory-mood-filter-reset-only';
   buttonTestId: 'online-directory-mood-filter-reset-only';
@@ -8662,6 +8739,7 @@ export interface SecondaryResetOnlyFilterSpec {
   shouldTriggerShiftResetToast: boolean;
   toastConfirmationText: 'Filters Reset to Default';
   shiftResetToastSpec: ShiftResetToastConfirmationSpec;
+  bouncePopSpec: ResetOnlyButtonBouncePopAnimationSpec;
   nextMode: OnlineDirectoryAudienceFilter;
   nextMoodFilter: 'all' | string;
   nextOnlyInFocus: boolean;
@@ -8677,6 +8755,8 @@ export function resolveSecondaryResetOnlyFilterAction(params?: {
   moodFilter?: string | null;
   onlyInFocus?: boolean;
   requireShiftKeyForModalBypass?: boolean;
+  isBouncePopActive?: boolean;
+  bouncePopTriggerCount?: number;
 }): SecondaryResetOnlyFilterSpec {
   const isShiftHeld = Boolean(params?.shiftKey);
   const rawMode = String(params?.currentMode ?? 'everyone').trim().toLowerCase();
@@ -8707,6 +8787,11 @@ export function resolveSecondaryResetOnlyFilterAction(params?: {
     isVisible: shouldTriggerShiftResetToast,
     shiftKeyUsed: isShiftHeld,
     triggerCount: shouldTriggerShiftResetToast ? 1 : 0,
+  });
+
+  const bouncePopSpec = getResetOnlyButtonBouncePopSpec({
+    isBouncePopActive: Boolean(params?.isBouncePopActive),
+    triggerCount: params?.bouncePopTriggerCount,
   });
 
   const nextMode: OnlineDirectoryAudienceFilter = didQuickReset
@@ -8751,6 +8836,7 @@ export function resolveSecondaryResetOnlyFilterAction(params?: {
     shouldTriggerShiftResetToast,
     toastConfirmationText: 'Filters Reset to Default',
     shiftResetToastSpec,
+    bouncePopSpec,
     nextMode,
     nextMoodFilter,
     nextOnlyInFocus,
@@ -10203,6 +10289,8 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
   isShiftKeyHeld?: boolean;
   isShiftResetToastVisible?: boolean;
   shiftResetToastCount?: number;
+  isResetOnlyBouncePopActive?: boolean;
+  resetOnlyBouncePopCount?: number;
   recentFiltersHistory?: RecentDirectoryFilterCombination[] | null;
   isRecentFiltersDropdownOpen?: boolean;
   isClearFiltersHovered?: boolean;
@@ -10351,6 +10439,8 @@ export function getOnlineDirectoryQuickFilterMeta(params: {
       currentMode: mode,
       moodFilter: params.moodFilter,
       onlyInFocus: params.onlyInFocus,
+      isBouncePopActive: Boolean(params.isResetOnlyBouncePopActive),
+      bouncePopTriggerCount: params.resetOnlyBouncePopCount,
     }),
     dedicatedClearFiltersButtonMeta: resolveDedicatedClearFiltersButtonAction({
       mode,
