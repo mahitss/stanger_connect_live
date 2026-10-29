@@ -197,6 +197,8 @@ import {
   evaluateFirstMatchingPeerAutoScrollMeta,
   shouldTriggerFirstMatchingPeerAutoScroll,
   getOnlineDirectoryQuickFilterMeta,
+  QUICK_FILTER_SHARE_LINK_CHECKMARK_DURATION_MS,
+  getQuickFilterShareLinkCheckmarkAnimationSpec,
   buildOnlineDirectoryFilterShareLink,
   parseOnlineDirectoryFilterShareParams,
   toggleMoodCategoryDrawerExpanded,
@@ -5570,6 +5572,108 @@ test('removeRecentDirectoryFilterCombination and getQuickFilterHistoryIconButton
     'No recent filter combinations in history.'
   );
 });
+
+// ---------------------------------------------------------------------------
+// 83. Transient Checkmark Animation Next to 'Link' Label in #online-directory-quick-filter-icon-share-container
+// ---------------------------------------------------------------------------
+test('getQuickFilterShareLinkCheckmarkAnimationSpec and buildOnlineDirectoryFilterShareLink configure a transient checkmark animation next to the Link label in #online-directory-quick-filter-icon-share-container when copied', () => {
+  // 1. Idle state (before copying filter link)
+  const idleSpec = getQuickFilterShareLinkCheckmarkAnimationSpec(false);
+  assert.equal(
+    idleSpec.containerId,
+    'online-directory-quick-filter-icon-share-container'
+  );
+  assert.equal(
+    idleSpec.containerSelector,
+    '#online-directory-quick-filter-icon-share-container'
+  );
+  assert.equal(idleSpec.linkLabelText, 'Link');
+  assert.equal(idleSpec.alwaysShowLinkLabel, true);
+  assert.equal(
+    idleSpec.linkLabelTestId,
+    'online-directory-quick-filter-share-link-label'
+  );
+  assert.equal(
+    idleSpec.checkmarkId,
+    'online-directory-quick-filter-share-checkmark'
+  );
+  assert.equal(
+    idleSpec.checkmarkTestId,
+    'online-directory-quick-filter-share-checkmark'
+  );
+  assert.equal(idleSpec.iconComponent, 'Check');
+  assert.equal(idleSpec.placement, 'next-to-link-label');
+  assert.equal(idleSpec.isCopied, false);
+  assert.equal(idleSpec.isVisible, false);
+  assert.equal(idleSpec.isTransient, true);
+  assert.equal(
+    idleSpec.transientDurationMs,
+    QUICK_FILTER_SHARE_LINK_CHECKMARK_DURATION_MS
+  );
+  assert.equal(idleSpec.transientDurationMs, 3000);
+  assert.equal(idleSpec.animationName, 'none');
+  assert.equal(idleSpec.cssClassName, '');
+
+  // 2. Copied state (when filter link is copied to clipboard)
+  const copiedSpec = getQuickFilterShareLinkCheckmarkAnimationSpec(true);
+  assert.equal(copiedSpec.isCopied, true);
+  assert.equal(copiedSpec.isVisible, true);
+  assert.equal(copiedSpec.alwaysShowLinkLabel, true);
+  assert.equal(copiedSpec.linkLabelText, 'Link');
+  assert.equal(copiedSpec.placement, 'next-to-link-label');
+  assert.equal(copiedSpec.animationName, 'shareLinkCheckmarkPop');
+  assert.equal(copiedSpec.animationType, 'transient-checkmark-pop');
+  assert.equal(
+    copiedSpec.cssClassName,
+    'share-link-checkmark-transient-pop'
+  );
+  assert.deepEqual(copiedSpec.initial, {
+    opacity: 0,
+    scale: 0.4,
+    rotate: -20,
+    x: -2,
+  });
+  assert.deepEqual(copiedSpec.animate, {
+    opacity: 1,
+    scale: 1,
+    rotate: 0,
+    x: 0,
+  });
+  assert.deepEqual(copiedSpec.exit, {
+    opacity: 0,
+    scale: 0.5,
+    rotate: 10,
+    x: 2,
+  });
+  assert.deepEqual(copiedSpec.transition, {
+    duration: 0.22,
+    ease: 'easeOut',
+  });
+  assert.deepEqual(copiedSpec.scaleKeyframes, [0.4, 1.18, 1]);
+
+  // 3. Verify integration through buildOnlineDirectoryFilterShareLink and getOnlineDirectoryQuickFilterMeta
+  const metaCopied = getOnlineDirectoryQuickFilterMeta({
+    mode: 'my_connections',
+    onlinePeers: [{ uid: 'p1', mood: 'Deep Work' }],
+    moodFilter: 'category:Productive',
+    isShareLinkCopied: true,
+  });
+  assert.equal(metaCopied.shareLinkMeta.isCopied, true);
+  assert.equal(metaCopied.shareLinkMeta.checkmarkAnimation.isVisible, true);
+  assert.equal(
+    metaCopied.shareLinkMeta.checkmarkAnimation.linkLabelText,
+    'Link'
+  );
+  assert.equal(
+    metaCopied.shareLinkMeta.checkmarkAnimation.containerId,
+    'online-directory-quick-filter-icon-share-container'
+  );
+  assert.equal(
+    metaCopied.shareLinkMeta.checkmarkAnimation.checkmarkId,
+    'online-directory-quick-filter-share-checkmark'
+  );
+});
+
 
 
 

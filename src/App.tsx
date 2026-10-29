@@ -6111,7 +6111,7 @@ export default function App() {
                               } ${directoryQuickFilterMeta.breathPulseSpec.cssClassName} ${directoryQuickFilterMeta.resetFlashSpec.cssClassName}`.trim()}
                             >
                               <span
-                                id="online-directory-mood-filter-icon-share-wrapper"
+                                id="online-directory-quick-filter-icon-share-container"
                                 data-testid="online-directory-quick-filter-icon-share-container"
                                 data-share-url={directoryQuickFilterMeta.shareLinkMeta.shareUrl}
                                 data-last-copied-url={lastCopiedDirectoryFilterUrl}
@@ -6121,6 +6121,20 @@ export default function App() {
                                 data-share-summary={directoryQuickFilterMeta.shareLinkMeta.summaryLabel}
                                 data-share-copied={
                                   directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
+                                }
+                                data-checkmark-visible={
+                                  directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation.isVisible
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-checkmark-animation={
+                                  directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation.animationName
+                                }
+                                data-checkmark-duration-ms={
+                                  directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation.transientDurationMs
+                                }
+                                data-link-label={
+                                  directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation.linkLabelText
                                 }
                                 data-feedback-state={
                                   directoryQuickFilterMeta.shareLinkMeta.iconFeedbackState
@@ -6433,6 +6447,11 @@ export default function App() {
                                   data-copied={
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied ? 'true' : 'false'
                                   }
+                                  data-checkmark-visible={
+                                    directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation.isVisible
+                                      ? 'true'
+                                      : 'false'
+                                  }
                                   data-feedback-state={
                                     directoryQuickFilterMeta.shareLinkMeta.iconFeedbackState
                                   }
@@ -6442,17 +6461,55 @@ export default function App() {
                                       : 'bg-zinc-900/90 text-zinc-400 border border-zinc-800 group-hover:text-emerald-200 group-hover:border-emerald-500/40'
                                   }`}
                                 >
-                                  {directoryQuickFilterMeta.shareLinkMeta.isCopied ? (
-                                    <>
-                                      <Check className="w-2.5 h-2.5 shrink-0 text-emerald-300" />
-                                      <span>Copied!</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Link2 className="w-2.5 h-2.5 shrink-0" />
-                                      <span>Link</span>
-                                    </>
-                                  )}
+                                  <Link2 aria-hidden="true" className="w-2.5 h-2.5 shrink-0" />
+                                  <span
+                                    id="online-directory-quick-filter-share-link-label"
+                                    data-testid="online-directory-quick-filter-share-link-label"
+                                  >
+                                    {directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation.linkLabelText}
+                                  </span>
+                                  <AnimatePresence initial={false}>
+                                    {directoryQuickFilterMeta.shareLinkMeta.isCopied && (
+                                      <motion.span
+                                        key="share-link-transient-checkmark"
+                                        id="online-directory-quick-filter-share-checkmark"
+                                        data-testid="online-directory-quick-filter-share-checkmark"
+                                        data-transient="true"
+                                        data-duration-ms={
+                                          directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation
+                                            .transientDurationMs
+                                        }
+                                        data-animation-name={
+                                          directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation
+                                            .animationName
+                                        }
+                                        initial={
+                                          directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation
+                                            .initial
+                                        }
+                                        animate={
+                                          directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation
+                                            .animate
+                                        }
+                                        exit={
+                                          directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation
+                                            .exit
+                                        }
+                                        transition={
+                                          directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation
+                                            .transition
+                                        }
+                                        className={`inline-flex items-center justify-center ml-0.5 text-emerald-300 ${directoryQuickFilterMeta.shareLinkMeta.checkmarkAnimation.cssClassName}`.trim()}
+                                        aria-label="Filter link copied checkmark"
+                                      >
+                                        <Check
+                                          aria-hidden="true"
+                                          data-testid="online-directory-quick-filter-share-checkmark-icon"
+                                          className="w-2.5 h-2.5 shrink-0 text-emerald-300 stroke-[2.5]"
+                                        />
+                                      </motion.span>
+                                    )}
+                                  </AnimatePresence>
                                 </span>
                               </span>
 

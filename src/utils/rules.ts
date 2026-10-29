@@ -9628,6 +9628,107 @@ export function getQuickFilterBreathPulseSpec(params?: {
   };
 }
 
+export const QUICK_FILTER_SHARE_LINK_CHECKMARK_DURATION_MS = 3000;
+
+export interface QuickFilterShareLinkCheckmarkAnimationSpec {
+  containerId: 'online-directory-quick-filter-icon-share-container';
+  containerSelector: '#online-directory-quick-filter-icon-share-container';
+  shareBadgeTestId: 'online-directory-quick-filter-share-badge';
+  linkLabelId: 'online-directory-quick-filter-share-link-label';
+  linkLabelTestId: 'online-directory-quick-filter-share-link-label';
+  linkLabelText: 'Link';
+  alwaysShowLinkLabel: true;
+  checkmarkId: 'online-directory-quick-filter-share-checkmark';
+  checkmarkTestId: 'online-directory-quick-filter-share-checkmark';
+  checkmarkIconTestId: 'online-directory-quick-filter-share-checkmark-icon';
+  iconComponent: 'Check';
+  placement: 'next-to-link-label';
+  isCopied: boolean;
+  isVisible: boolean;
+  isTransient: true;
+  transientDurationMs: number;
+  animationName: 'shareLinkCheckmarkPop' | 'none';
+  animationType: 'transient-checkmark-pop';
+  cssClassName: string;
+  initial: {
+    opacity: number;
+    scale: number;
+    rotate: number;
+    x: number;
+  };
+  animate: {
+    opacity: number;
+    scale: number;
+    rotate: number;
+    x: number;
+  };
+  exit: {
+    opacity: number;
+    scale: number;
+    rotate: number;
+    x: number;
+  };
+  transition: {
+    duration: number;
+    ease: 'easeOut';
+  };
+  scaleKeyframes: [number, number, number];
+  statusText: string;
+}
+
+export function getQuickFilterShareLinkCheckmarkAnimationSpec(
+  isCopied?: boolean
+): QuickFilterShareLinkCheckmarkAnimationSpec {
+  const active = Boolean(isCopied);
+  return {
+    containerId: 'online-directory-quick-filter-icon-share-container',
+    containerSelector: '#online-directory-quick-filter-icon-share-container',
+    shareBadgeTestId: 'online-directory-quick-filter-share-badge',
+    linkLabelId: 'online-directory-quick-filter-share-link-label',
+    linkLabelTestId: 'online-directory-quick-filter-share-link-label',
+    linkLabelText: 'Link',
+    alwaysShowLinkLabel: true,
+    checkmarkId: 'online-directory-quick-filter-share-checkmark',
+    checkmarkTestId: 'online-directory-quick-filter-share-checkmark',
+    checkmarkIconTestId: 'online-directory-quick-filter-share-checkmark-icon',
+    iconComponent: 'Check',
+    placement: 'next-to-link-label',
+    isCopied: active,
+    isVisible: active,
+    isTransient: true,
+    transientDurationMs: QUICK_FILTER_SHARE_LINK_CHECKMARK_DURATION_MS,
+    animationName: active ? 'shareLinkCheckmarkPop' : 'none',
+    animationType: 'transient-checkmark-pop',
+    cssClassName: active ? 'share-link-checkmark-transient-pop' : '',
+    initial: {
+      opacity: 0,
+      scale: 0.4,
+      rotate: -20,
+      x: -2,
+    },
+    animate: {
+      opacity: 1,
+      scale: 1,
+      rotate: 0,
+      x: 0,
+    },
+    exit: {
+      opacity: 0,
+      scale: 0.5,
+      rotate: 10,
+      x: 2,
+    },
+    transition: {
+      duration: 0.22,
+      ease: 'easeOut',
+    },
+    scaleKeyframes: active ? [0.4, 1.18, 1] : [1, 1, 1],
+    statusText: active
+      ? 'Link copied · Transient checkmark active'
+      : 'Click to copy filter link',
+  };
+}
+
 export interface OnlineDirectoryFilterShareLinkMeta {
   shareUrl: string;
   audienceMode: OnlineDirectoryAudienceFilter;
@@ -9645,6 +9746,7 @@ export interface OnlineDirectoryFilterShareLinkMeta {
   containerTitle: string;
   copiedBadgeText: 'Copied!';
   hoverHintText: 'Copy Link';
+  checkmarkAnimation: QuickFilterShareLinkCheckmarkAnimationSpec;
 }
 
 export function buildOnlineDirectoryFilterShareLink(params?: {
@@ -9702,6 +9804,8 @@ export function buildOnlineDirectoryFilterShareLink(params?: {
     ? `Copied! (${shareUrl})`
     : `Click icon to copy shareable link for ${summaryLabel} (${shareUrl})`;
 
+  const checkmarkAnimation = getQuickFilterShareLinkCheckmarkAnimationSpec(isCopied);
+
   return {
     shareUrl,
     audienceMode,
@@ -9719,6 +9823,7 @@ export function buildOnlineDirectoryFilterShareLink(params?: {
     containerTitle,
     copiedBadgeText: 'Copied!',
     hoverHintText: 'Copy Link',
+    checkmarkAnimation,
   };
 }
 
