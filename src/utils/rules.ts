@@ -14400,16 +14400,159 @@ export function buildWorkspaceQrRecentScansSpec(
   };
 }
 
+export const WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY =
+  'mr_stranger_qr_search_history_v1';
+export const MAX_WORKSPACE_QR_SEARCH_HISTORY = 5;
+
 export interface WorkspaceQrHistorySectionItemSpec
   extends WorkspaceQrRecentScanEntry {
   itemElementId: string;
   itemTestId: string;
   joinLinkElementId: string;
   joinLinkTestId: string;
+  searchHistoryItemElementId: string;
+  searchHistoryItemTestId: string;
+  searchHistoryJoinLinkElementId: string;
+  searchHistoryJoinLinkTestId: string;
   joinLinkLabel: 'Join';
   joinLinkHref: string;
   joinLinkAriaLabel: string;
   rankOrder: number;
+}
+
+export interface WorkspaceQrSearchHistoryItemSpec
+  extends WorkspaceQrHistorySectionItemSpec {}
+
+export interface WorkspaceQrSearchHistorySpec {
+  sectionElementId: 'workspace-header-qr-search-history-section';
+  sectionTestId: 'workspace-header-qr-search-history-section';
+  headingElementId: 'workspace-header-qr-search-history-heading';
+  headingTestId: 'workspace-header-qr-search-history-heading';
+  searchInputElementId: 'workspace-header-qr-search-history-input';
+  searchInputTestId: 'workspace-header-qr-search-history-input';
+  clearSearchButtonElementId: 'workspace-header-qr-search-history-clear-query-btn';
+  clearSearchButtonTestId: 'workspace-header-qr-search-history-clear-query-btn';
+  listElementId: 'workspace-header-qr-search-history-list';
+  listTestId: 'workspace-header-qr-search-history-list';
+  emptyStateElementId: 'workspace-header-qr-search-history-empty';
+  emptyStateTestId: 'workspace-header-qr-search-history-empty';
+  storageKey: typeof WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY;
+  legacyStorageKey: typeof WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY;
+  heading: 'Search History';
+  searchPlaceholder: 'Search History (last 5 room codes)...';
+  searchAriaLabel: 'Search History room codes';
+  joinLinkLabel: 'Join';
+  maxItems: number;
+  searchQuery: string;
+  hasActiveSearchQuery: boolean;
+  totalSavedCount: number;
+  filteredCount: number;
+  countBadgeLabel: string;
+  emptyMessage: string;
+  noMatchMessage: string;
+  savedRoomCodes: string[];
+  items: WorkspaceQrSearchHistoryItemSpec[];
+  hasSavedItems: boolean;
+  hasFilteredItems: boolean;
+}
+
+export function filterWorkspaceQrSearchHistory(
+  entries: WorkspaceQrRecentScanEntry[] | unknown,
+  searchQuery?: string | null,
+  maxItems = MAX_WORKSPACE_QR_SEARCH_HISTORY
+): WorkspaceQrRecentScanEntry[] {
+  const cap = Math.max(
+    1,
+    Math.min(20, Math.floor(maxItems || MAX_WORKSPACE_QR_SEARCH_HISTORY))
+  );
+  const savedEntries = normalizeStoredWorkspaceQrRecentScans(entries, cap);
+  const normalizedQuery = (searchQuery ?? '').trim().toLowerCase();
+  if (!normalizedQuery) {
+    return savedEntries;
+  }
+  return savedEntries.filter(
+    (entry) =>
+      entry.roomCode.toLowerCase().includes(normalizedQuery) ||
+      entry.workspaceUrl.toLowerCase().includes(normalizedQuery) ||
+      entry.moodFilter.toLowerCase().includes(normalizedQuery)
+  );
+}
+
+export function buildWorkspaceQrSearchHistorySpec(input?: {
+  recentScans?: WorkspaceQrRecentScanEntry[] | unknown;
+  searchQuery?: string | null;
+  maxItems?: number;
+}): WorkspaceQrSearchHistorySpec {
+  const cap = Math.max(
+    1,
+    Math.min(20, Math.floor(input?.maxItems || MAX_WORKSPACE_QR_SEARCH_HISTORY))
+  );
+  const savedEntries = normalizeStoredWorkspaceQrRecentScans(
+    input?.recentScans,
+    cap
+  );
+  const rawQuery = (input?.searchQuery ?? '').trim();
+  const filteredEntries = filterWorkspaceQrSearchHistory(
+    savedEntries,
+    rawQuery,
+    cap
+  );
+
+  const items: WorkspaceQrSearchHistoryItemSpec[] = filteredEntries.map(
+    (entry, idx) => ({
+      ...entry,
+      itemElementId: `workspace-header-qr-history-item-${idx}`,
+      itemTestId: `workspace-header-qr-history-item-${idx}`,
+      joinLinkElementId: `workspace-header-qr-history-join-link-${idx}`,
+      joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
+      searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
+      searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
+      searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
+      searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
+      joinLinkLabel: 'Join',
+      joinLinkHref: entry.workspaceUrl,
+      joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
+      rankOrder: idx + 1,
+    })
+  );
+
+  return {
+    sectionElementId: 'workspace-header-qr-search-history-section',
+    sectionTestId: 'workspace-header-qr-search-history-section',
+    headingElementId: 'workspace-header-qr-search-history-heading',
+    headingTestId: 'workspace-header-qr-search-history-heading',
+    searchInputElementId: 'workspace-header-qr-search-history-input',
+    searchInputTestId: 'workspace-header-qr-search-history-input',
+    clearSearchButtonElementId:
+      'workspace-header-qr-search-history-clear-query-btn',
+    clearSearchButtonTestId:
+      'workspace-header-qr-search-history-clear-query-btn',
+    listElementId: 'workspace-header-qr-search-history-list',
+    listTestId: 'workspace-header-qr-search-history-list',
+    emptyStateElementId: 'workspace-header-qr-search-history-empty',
+    emptyStateTestId: 'workspace-header-qr-search-history-empty',
+    storageKey: WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
+    legacyStorageKey: WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+    heading: 'Search History',
+    searchPlaceholder: 'Search History (last 5 room codes)...',
+    searchAriaLabel: 'Search History room codes',
+    joinLinkLabel: 'Join',
+    maxItems: cap,
+    searchQuery: rawQuery,
+    hasActiveSearchQuery: rawQuery.length > 0,
+    totalSavedCount: savedEntries.length,
+    filteredCount: items.length,
+    countBadgeLabel: `${savedEntries.length}/${cap}`,
+    emptyMessage:
+      'No scanned room codes in Search History yet. Scan up to 5 QR codes to revisit and join them here.',
+    noMatchMessage: rawQuery
+      ? `No saved room codes matching "${rawQuery}".`
+      : 'No matching room codes in Search History.',
+    savedRoomCodes: savedEntries.map((entry) => entry.roomCode),
+    items,
+    hasSavedItems: savedEntries.length > 0,
+    hasFilteredItems: items.length > 0,
+  };
 }
 
 export interface WorkspaceQrHistorySectionSpec {
@@ -14426,7 +14569,7 @@ export interface WorkspaceQrHistorySectionSpec {
   clearButtonElementId: 'workspace-header-qr-history-clear-btn';
   clearButtonTestId: 'workspace-header-qr-history-clear-btn';
   heading: 'History';
-  subtitle: 'Recent Scans';
+  subtitle: 'Search History';
   joinLinkLabel: 'Join';
   isCollapsible: true;
   isExpanded: boolean;
@@ -14448,11 +14591,20 @@ export function toggleWorkspaceQrHistorySectionExpanded(
 export function buildWorkspaceQrHistorySectionSpec(input?: {
   recentScans?: WorkspaceQrRecentScanEntry[] | unknown;
   isExpanded?: boolean;
+  searchQuery?: string | null;
   maxItems?: number;
 }): WorkspaceQrHistorySectionSpec {
-  const cap = Math.max(1, Math.min(20, Math.floor(input?.maxItems || MAX_WORKSPACE_QR_RECENT_SCANS)));
-  const sortedEntries = normalizeStoredWorkspaceQrRecentScans(
+  const cap = Math.max(
+    1,
+    Math.min(20, Math.floor(input?.maxItems || MAX_WORKSPACE_QR_RECENT_SCANS))
+  );
+  const allSortedEntries = normalizeStoredWorkspaceQrRecentScans(
     input?.recentScans,
+    cap
+  );
+  const sortedEntries = filterWorkspaceQrSearchHistory(
+    allSortedEntries,
+    input?.searchQuery,
     cap
   );
   const isExpanded = input?.isExpanded ?? true;
@@ -14464,6 +14616,10 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
       itemTestId: `workspace-header-qr-history-item-${idx}`,
       joinLinkElementId: `workspace-header-qr-history-join-link-${idx}`,
       joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
+      searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
+      searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
+      searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
+      searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
       joinLinkLabel: 'Join',
       joinLinkHref: entry.workspaceUrl,
       joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
@@ -14485,7 +14641,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     clearButtonElementId: 'workspace-header-qr-history-clear-btn',
     clearButtonTestId: 'workspace-header-qr-history-clear-btn',
     heading: 'History',
-    subtitle: 'Recent Scans',
+    subtitle: 'Search History',
     joinLinkLabel: 'Join',
     isCollapsible: true,
     isExpanded,
@@ -14494,11 +14650,11 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
       : 'Expand QR scanner History section',
     sortedBy: 'most_recent_desc',
     maxItems: cap,
-    countBadgeLabel: `${items.length}/${cap}`,
+    countBadgeLabel: `${allSortedEntries.length}/${cap}`,
     emptyMessage:
       'No scanned room codes in history yet. Scan up to 5 QR codes to quickly join them here.',
     items,
-    hasItems: items.length > 0,
+    hasItems: allSortedEntries.length > 0,
   };
 }
 
@@ -14561,6 +14717,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   scanToast: WorkspaceQrScanToastSpec;
   recentScans: WorkspaceQrRecentScansSpec;
   historySection: WorkspaceQrHistorySectionSpec;
+  searchHistory: WorkspaceQrSearchHistorySpec;
   scanConfirmationChime: WorkspaceQrScanConfirmationChimeSpec;
   scanChimePlayedCount: number;
   popoverElementId: 'workspace-header-qr-popover';
@@ -14644,6 +14801,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   isScanToastVisible?: boolean;
   recentScans?: WorkspaceQrRecentScanEntry[] | null;
   isHistoryExpanded?: boolean;
+  historySearchQuery?: string | null;
   uiSoundPreferences?: UiSoundEffectPreferences | null;
   scanChimePlayedCount?: number;
   generationCount?: number;
@@ -14685,6 +14843,11 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   const historySection = buildWorkspaceQrHistorySectionSpec({
     recentScans: input?.recentScans ?? [],
     isExpanded: input?.isHistoryExpanded ?? true,
+    searchQuery: input?.historySearchQuery,
+  });
+  const searchHistory = buildWorkspaceQrSearchHistorySpec({
+    recentScans: input?.recentScans ?? [],
+    searchQuery: input?.historySearchQuery,
   });
   const scanConfirmationChime = resolveWorkspaceQrScanConfirmationChime({
     preferences: input?.uiSoundPreferences,
@@ -14724,6 +14887,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     scanToast,
     recentScans,
     historySection,
+    searchHistory,
     scanConfirmationChime,
     scanChimePlayedCount,
     popoverElementId: 'workspace-header-qr-popover',

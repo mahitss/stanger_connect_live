@@ -258,6 +258,10 @@ import {
   buildWorkspaceQrRecentScansSpec,
   toggleWorkspaceQrHistorySectionExpanded,
   buildWorkspaceQrHistorySectionSpec,
+  WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
+  MAX_WORKSPACE_QR_SEARCH_HISTORY,
+  filterWorkspaceQrSearchHistory,
+  buildWorkspaceQrSearchHistorySpec,
   WORKSPACE_QR_SCAN_HIGH_FREQ_HZ,
   resolveWorkspaceQrScanConfirmationChime,
 } from './rules.ts';
@@ -6561,5 +6565,83 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     collapsedMeta.historySection.toggleAriaLabel,
     'Expand QR scanner History section'
   );
+
+  // 10. 'Search History' feature in #workspace-shell QR scanner popover saving last 5 scanned room codes in localStorage with 'Join' links
+  assert.equal(MAX_WORKSPACE_QR_SEARCH_HISTORY, 5);
+  assert.equal(
+    WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
+    'mr_stranger_qr_search_history_v1'
+  );
+  const fullSearchHistorySpec = buildWorkspaceQrSearchHistorySpec({
+    recentScans: rescanned.updatedScans,
+    searchQuery: '',
+  });
+  assert.equal(
+    fullSearchHistorySpec.sectionElementId,
+    'workspace-header-qr-search-history-section'
+  );
+  assert.equal(
+    fullSearchHistorySpec.headingElementId,
+    'workspace-header-qr-search-history-heading'
+  );
+  assert.equal(
+    fullSearchHistorySpec.searchInputElementId,
+    'workspace-header-qr-search-history-input'
+  );
+  assert.equal(fullSearchHistorySpec.heading, 'Search History');
+  assert.equal(fullSearchHistorySpec.joinLinkLabel, 'Join');
+  assert.equal(fullSearchHistorySpec.maxItems, 5);
+  assert.equal(fullSearchHistorySpec.totalSavedCount, 5);
+  assert.equal(fullSearchHistorySpec.filteredCount, 5);
+  assert.equal(fullSearchHistorySpec.hasSavedItems, true);
+  assert.equal(fullSearchHistorySpec.hasFilteredItems, true);
+  assert.deepEqual(fullSearchHistorySpec.savedRoomCodes, [
+    'STUDY-ROOM3',
+    'STUDY-ROOM6',
+    'STUDY-ROOM5',
+    'STUDY-ROOM4',
+    'STUDY-ROOM2',
+  ]);
+  assert.equal(fullSearchHistorySpec.items.length, 5);
+  for (let i = 0; i < fullSearchHistorySpec.items.length; i += 1) {
+    assert.equal(fullSearchHistorySpec.items[i].joinLinkLabel, 'Join');
+    assert.equal(
+      fullSearchHistorySpec.items[i].joinLinkElementId,
+      `workspace-header-qr-history-join-link-${i}`
+    );
+    assert.equal(
+      fullSearchHistorySpec.items[i].searchHistoryJoinLinkElementId,
+      `workspace-header-qr-search-history-join-link-${i}`
+    );
+    assert.ok(
+      fullSearchHistorySpec.items[i].joinLinkHref.includes(
+        fullSearchHistorySpec.items[i].roomCode
+      )
+    );
+  }
+
+  // Filtering 'Search History' by query
+  const filteredByRoom4 = filterWorkspaceQrSearchHistory(
+    rescanned.updatedScans,
+    'room4'
+  );
+  assert.equal(filteredByRoom4.length, 1);
+  assert.equal(filteredByRoom4[0].roomCode, 'STUDY-ROOM4');
+
+  const metaWithSearchQuery = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    recentScans: rescanned.updatedScans,
+    isHistoryExpanded: true,
+    historySearchQuery: 'ROOM5',
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(metaWithSearchQuery.searchHistory.heading, 'Search History');
+  assert.equal(metaWithSearchQuery.searchHistory.searchQuery, 'ROOM5');
+  assert.equal(metaWithSearchQuery.searchHistory.hasActiveSearchQuery, true);
+  assert.equal(metaWithSearchQuery.searchHistory.totalSavedCount, 5);
+  assert.equal(metaWithSearchQuery.searchHistory.filteredCount, 1);
+  assert.equal(metaWithSearchQuery.searchHistory.items[0].roomCode, 'STUDY-ROOM5');
+  assert.equal(metaWithSearchQuery.searchHistory.items[0].joinLinkLabel, 'Join');
 });
 
