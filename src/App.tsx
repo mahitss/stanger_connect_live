@@ -213,11 +213,13 @@ import {
   resolveWorkspaceHeaderShareUrl,
   getWorkspaceHeaderShareButtonMeta,
   WORKSPACE_HEADER_QR_PNG_FEEDBACK_DURATION_MS,
+  WORKSPACE_QR_SCAN_TOAST_DURATION_MS,
   generateWorkspaceHeaderQrPngDataUrl,
   getWorkspaceHeaderQrCodeMeta,
   buildWorkspaceCameraConstraints,
   parseScannedWorkspaceQrPayload,
   decodeWorkspaceQrFromRgbaFrame,
+  resolveWorkspaceQrScanToastJoinAction,
   WorkspaceHeaderQrCameraScanStatus,
   ParsedWorkspaceQrScanResult,
 } from './utils/rules';
@@ -801,6 +803,9 @@ export default function App() {
     useState<WorkspaceHeaderQrCameraScanStatus>('idle');
   const [lastScannedWorkspaceQrResult, setLastScannedWorkspaceQrResult] =
     useState<ParsedWorkspaceQrScanResult | null>(null);
+  const [isWorkspaceHeaderQrScanToastVisible, setIsWorkspaceHeaderQrScanToastVisible] =
+    useState<boolean>(false);
+  const workspaceHeaderQrScanToastTimerRef = useRef<number | null>(null);
   const [workspaceHeaderQrCameraError, setWorkspaceHeaderQrCameraError] =
     useState<string>('');
   const workspaceHeaderQrVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -841,6 +846,9 @@ export default function App() {
       }
       if (workspaceHeaderQrPngTimerRef.current !== null) {
         window.clearTimeout(workspaceHeaderQrPngTimerRef.current);
+      }
+      if (workspaceHeaderQrScanToastTimerRef.current !== null) {
+        window.clearTimeout(workspaceHeaderQrScanToastTimerRef.current);
       }
       stopWorkspaceHeaderQrCameraStream();
     };
@@ -3781,10 +3789,70 @@ export default function App() {
     cameraScanStatus: workspaceHeaderQrCameraStatus,
     lastScannedWorkspaceUrl: lastScannedWorkspaceQrResult?.workspaceUrl ?? null,
     lastJoinedWorkspaceRoomCode: lastScannedWorkspaceQrResult?.roomCode ?? null,
+    lastScannedResult: lastScannedWorkspaceQrResult,
+    isScanToastVisible: isWorkspaceHeaderQrScanToastVisible,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
   });
+
+  const handleDismissWorkspaceQrScanToast = () => {
+    if (workspaceHeaderQrScanToastTimerRef.current !== null) {
+      window.clearTimeout(workspaceHeaderQrScanToastTimerRef.current);
+      workspaceHeaderQrScanToastTimerRef.current = null;
+    }
+    setIsWorkspaceHeaderQrScanToastVisible(false);
+  };
+
+  const handleJoinFromWorkspaceQrScanToast = () => {
+    const action = resolveWorkspaceQrScanToastJoinAction({
+      scannedResult: lastScannedWorkspaceQrResult,
+      fallbackRoomCode: activeStudyRoomCode,
+      fallbackWorkspaceUrl: workspaceHeaderQrMeta.workspaceUrl,
+    });
+    handleDismissWorkspaceQrScanToast();
+    setIsWorkspaceHeaderQrOpen(false);
+    setActiveStudyRoomCode(action.roomCode);
+    setWorkspaceHeaderQrHref(action.workspaceUrl);
+    setActivePage(action.targetPage);
+
+    if (currentIdentity) {
+      const nextDesk: StudyDeskItem = {
+        uid: currentIdentity.uid,
+        displayName: currentIdentity.displayName,
+        roomCode: action.roomCode,
+        roomName: `Study Room ${action.roomCode}`,
+        subject: 'Deep Work & Problem Solving',
+        positiveNote: `Joined room ${action.roomCode} via QR scan Join Now shortcut`,
+        timerMinutes: 25,
+        startedAt: Date.now(),
+      };
+      setStudyDesks((prev) => [
+        ...prev.filter((d) => d.uid !== currentIdentity.uid),
+        nextDesk,
+      ]);
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        wsRef.current.send(
+          JSON.stringify({
+            type: 'study:join',
+            roomCode: action.roomCode,
+            roomName: `Study Room ${action.roomCode}`,
+            displayName: currentIdentity.displayName,
+            subject: 'Deep Work & Problem Solving',
+            positiveNote: `Joined room ${action.roomCode} via QR scan Join Now shortcut`,
+            timerMinutes: 25,
+          })
+        );
+      }
+      markFocusSessionStartedToday();
+      awardParticipation(10);
+    }
+
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+    setLastSoundFeedback(action.joinedFeedbackMessage);
+  };
 
   const handleToggleWorkspaceHeaderQrCode = () => {
     const resolvedHref = resolveWorkspaceHeaderShareUrl(
@@ -3837,6 +3905,14 @@ export default function App() {
     setLastScannedWorkspaceQrResult(parsed);
     setActiveStudyRoomCode(parsed.roomCode);
     setWorkspaceHeaderQrHref(parsed.workspaceUrl);
+    setIsWorkspaceHeaderQrScanToastVisible(true);
+    if (workspaceHeaderQrScanToastTimerRef.current !== null) {
+      window.clearTimeout(workspaceHeaderQrScanToastTimerRef.current);
+    }
+    workspaceHeaderQrScanToastTimerRef.current = window.setTimeout(() => {
+      setIsWorkspaceHeaderQrScanToastVisible(false);
+      workspaceHeaderQrScanToastTimerRef.current = null;
+    }, WORKSPACE_QR_SCAN_TOAST_DURATION_MS);
 
     if (parsed.hasFilterParams) {
       setDirectoryAudienceFilter(parsed.audienceFilter);
@@ -11591,6 +11667,78 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Temporary Toast Notification in #workspace-shell after a Successful QR Scan */}
+      <AnimatePresence initial={false}>
+        {workspaceHeaderQrMeta.scanToast.isVisible && (
+          <motion.aside
+            key={`workspace-qr-scan-toast-${workspaceHeaderQrMeta.scanToast.roomCode}`}
+            id={workspaceHeaderQrMeta.scanToast.toastElementId}
+            data-testid={workspaceHeaderQrMeta.scanToast.toastTestId}
+            data-room-code={workspaceHeaderQrMeta.scanToast.roomCode}
+            data-workspace-url={workspaceHeaderQrMeta.scanToast.workspaceUrl}
+            data-duration-ms={String(workspaceHeaderQrMeta.scanToast.durationMs)}
+            role={workspaceHeaderQrMeta.scanToast.statusRole}
+            aria-live={workspaceHeaderQrMeta.scanToast.ariaLive}
+            initial={{ opacity: 0, y: -12, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -12, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="fixed top-20 right-6 z-50 w-[calc(100vw-3rem)] max-w-sm rounded-xl border border-emerald-500/50 bg-white/95 dark:bg-[#0A0A0C]/95 backdrop-blur-md p-3.5 shadow-2xl font-sans"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 mt-0.5">
+                  <QrCode className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-xs font-bold text-slate-900 dark:text-white tracking-tight">
+                      {workspaceHeaderQrMeta.scanToast.title}
+                    </span>
+                    <span
+                      id={workspaceHeaderQrMeta.scanToast.roomCodeElementId}
+                      data-testid={workspaceHeaderQrMeta.scanToast.roomCodeTestId}
+                      data-room-code={workspaceHeaderQrMeta.scanToast.roomCode}
+                      className="inline-flex items-center px-1.5 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/15 text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-300"
+                    >
+                      {workspaceHeaderQrMeta.scanToast.roomCode}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-zinc-300 leading-snug">
+                    {workspaceHeaderQrMeta.scanToast.message}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  id={workspaceHeaderQrMeta.scanToast.joinButtonElementId}
+                  data-testid={workspaceHeaderQrMeta.scanToast.joinButtonTestId}
+                  data-room-code={workspaceHeaderQrMeta.scanToast.roomCode}
+                  aria-label={workspaceHeaderQrMeta.scanToast.joinButtonAriaLabel}
+                  onClick={handleJoinFromWorkspaceQrScanToast}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold shadow-sm transition-colors whitespace-nowrap"
+                >
+                  <Check className="w-3.5 h-3.5 shrink-0" />
+                  <span>{workspaceHeaderQrMeta.scanToast.joinButtonLabel}</span>
+                </button>
+                <button
+                  type="button"
+                  id={workspaceHeaderQrMeta.scanToast.dismissButtonElementId}
+                  data-testid={workspaceHeaderQrMeta.scanToast.dismissButtonTestId}
+                  aria-label={workspaceHeaderQrMeta.scanToast.dismissButtonAriaLabel}
+                  onClick={handleDismissWorkspaceQrScanToast}
+                  className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/80 transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
       {/* Subtle, Non-Intrusive Daily Streak Focus Reminder Toast */}
       {streakReminderEvaluation.shouldShowToast && (

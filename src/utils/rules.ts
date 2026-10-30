@@ -14084,6 +14084,111 @@ export function resolveWorkspaceHeaderCameraStatusDotSpec(
   };
 }
 
+export const WORKSPACE_QR_SCAN_TOAST_DURATION_MS = 6000;
+
+export interface WorkspaceQrScanToastSpec {
+  shellSelector: '#workspace-shell';
+  toastElementId: 'workspace-qr-scan-toast';
+  toastTestId: 'workspace-qr-scan-toast';
+  roomCodeElementId: 'workspace-qr-scan-toast-room-code';
+  roomCodeTestId: 'workspace-qr-scan-toast-room-code';
+  joinButtonElementId: 'workspace-qr-scan-toast-join-btn';
+  joinButtonTestId: 'workspace-qr-scan-toast-join-btn';
+  dismissButtonElementId: 'workspace-qr-scan-toast-dismiss-btn';
+  dismissButtonTestId: 'workspace-qr-scan-toast-dismiss-btn';
+  isVisible: boolean;
+  roomCode: string;
+  workspaceUrl: string;
+  title: 'QR Code Scanned';
+  message: string;
+  joinButtonLabel: 'Join Now';
+  joinButtonAriaLabel: string;
+  dismissButtonAriaLabel: 'Dismiss QR scan notification';
+  durationMs: number;
+  statusRole: 'status';
+  ariaLive: 'polite';
+}
+
+export function buildWorkspaceQrScanToastSpec(input?: {
+  isVisible?: boolean;
+  scannedResult?: ParsedWorkspaceQrScanResult | null;
+  roomCode?: string | null;
+  workspaceUrl?: string | null;
+  durationMs?: number;
+}): WorkspaceQrScanToastSpec {
+  const scanned = input?.scannedResult ?? null;
+  const resolvedRoomCode = normalizeStudyRoomCode(
+    scanned?.roomCode || input?.roomCode || 'STUDY-GLOBAL'
+  );
+  const resolvedWorkspaceUrl =
+    (scanned?.workspaceUrl || input?.workspaceUrl || '').trim() ||
+    `https://mrstranger.app/?room=${encodeURIComponent(resolvedRoomCode)}`;
+  const isVisible = Boolean(
+    input?.isVisible && (scanned?.isValid ?? Boolean(resolvedRoomCode))
+  );
+  const durationMs =
+    typeof input?.durationMs === 'number' && input.durationMs > 0
+      ? Math.round(input.durationMs)
+      : WORKSPACE_QR_SCAN_TOAST_DURATION_MS;
+
+  return {
+    shellSelector: '#workspace-shell',
+    toastElementId: 'workspace-qr-scan-toast',
+    toastTestId: 'workspace-qr-scan-toast',
+    roomCodeElementId: 'workspace-qr-scan-toast-room-code',
+    roomCodeTestId: 'workspace-qr-scan-toast-room-code',
+    joinButtonElementId: 'workspace-qr-scan-toast-join-btn',
+    joinButtonTestId: 'workspace-qr-scan-toast-join-btn',
+    dismissButtonElementId: 'workspace-qr-scan-toast-dismiss-btn',
+    dismissButtonTestId: 'workspace-qr-scan-toast-dismiss-btn',
+    isVisible,
+    roomCode: resolvedRoomCode,
+    workspaceUrl: resolvedWorkspaceUrl,
+    title: 'QR Code Scanned',
+    message: `Detected workspace room ${resolvedRoomCode}`,
+    joinButtonLabel: 'Join Now',
+    joinButtonAriaLabel: `Join Now: Enter detected room ${resolvedRoomCode}`,
+    dismissButtonAriaLabel: 'Dismiss QR scan notification',
+    durationMs,
+    statusRole: 'status',
+    ariaLive: 'polite',
+  };
+}
+
+export interface WorkspaceQrScanToastJoinActionResult {
+  targetPage: 'study';
+  roomCode: string;
+  workspaceUrl: string;
+  shouldJoinStudyDesk: true;
+  shouldDismissToast: true;
+  shouldCloseQrPopover: true;
+  joinedFeedbackMessage: string;
+}
+
+export function resolveWorkspaceQrScanToastJoinAction(input?: {
+  scannedResult?: ParsedWorkspaceQrScanResult | null;
+  fallbackRoomCode?: string | null;
+  fallbackWorkspaceUrl?: string | null;
+}): WorkspaceQrScanToastJoinActionResult {
+  const scanned = input?.scannedResult ?? null;
+  const roomCode = normalizeStudyRoomCode(
+    scanned?.roomCode || input?.fallbackRoomCode || 'STUDY-GLOBAL'
+  );
+  const workspaceUrl =
+    (scanned?.workspaceUrl || input?.fallbackWorkspaceUrl || '').trim() ||
+    `https://mrstranger.app/?room=${encodeURIComponent(roomCode)}`;
+
+  return {
+    targetPage: 'study',
+    roomCode,
+    workspaceUrl,
+    shouldJoinStudyDesk: true,
+    shouldDismissToast: true,
+    shouldCloseQrPopover: true,
+    joinedFeedbackMessage: `Joined room ${roomCode} via QR scan shortcut`,
+  };
+}
+
 export interface WorkspaceHeaderQrCodeMeta {
   shellSelector: '#workspace-shell';
   headerElementId: 'workspace-top-header';
@@ -14094,6 +14199,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   headerCameraScanIconId: 'workspace-header-qr-camera-scan-icon';
   headerCameraScanIconTestId: 'workspace-header-qr-camera-scan-icon';
   headerCameraStatusDot: WorkspaceHeaderCameraStatusDotSpec;
+  scanToast: WorkspaceQrScanToastSpec;
   popoverElementId: 'workspace-header-qr-popover';
   popoverTestId: 'workspace-header-qr-popover';
   generationCountHiddenInputId: 'workspace-header-qr-generation-count-state';
@@ -14171,6 +14277,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   cameraScanStatus?: WorkspaceHeaderQrCameraScanStatus;
   lastScannedWorkspaceUrl?: string | null;
   lastJoinedWorkspaceRoomCode?: string | null;
+  lastScannedResult?: ParsedWorkspaceQrScanResult | null;
+  isScanToastVisible?: boolean;
   generationCount?: number;
   downloadCount?: number;
   roomCode?: string | null;
@@ -14196,6 +14304,12 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   const downloadCount = Math.max(0, Math.floor(input?.downloadCount ?? 0));
   const roomCode = (input?.roomCode ?? '').trim() || 'STUDY-GLOBAL';
   const downloadFilename = buildWorkspaceHeaderQrPngFilename(roomCode);
+  const scanToast = buildWorkspaceQrScanToastSpec({
+    isVisible: Boolean(input?.isScanToastVisible),
+    scannedResult: input?.lastScannedResult ?? null,
+    roomCode: lastJoinedWorkspaceRoomCode || roomCode,
+    workspaceUrl: lastScannedWorkspaceUrl || workspaceUrl,
+  });
 
   const cameraScanStatusLabel =
     cameraScanStatus === 'requesting_camera'
@@ -14227,6 +14341,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     headerCameraScanIconId: 'workspace-header-qr-camera-scan-icon',
     headerCameraScanIconTestId: 'workspace-header-qr-camera-scan-icon',
     headerCameraStatusDot,
+    scanToast,
     popoverElementId: 'workspace-header-qr-popover',
     popoverTestId: 'workspace-header-qr-popover',
     generationCountHiddenInputId: 'workspace-header-qr-generation-count-state',

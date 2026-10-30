@@ -247,6 +247,9 @@ import {
   renderWorkspaceQrMatrixToRgba,
   decodeWorkspaceQrFromRgbaFrame,
   resolveWorkspaceHeaderCameraStatusDotSpec,
+  WORKSPACE_QR_SCAN_TOAST_DURATION_MS,
+  buildWorkspaceQrScanToastSpec,
+  resolveWorkspaceQrScanToastJoinAction,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -6318,4 +6321,37 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   assert.equal(detectedDot.color, 'green');
   assert.equal(detectedDot.stateCategory, 'scanning_or_detected');
   assert.equal(detectedDot.label, 'QR Code Detected');
+
+  // 6. Temporary toast notification in #workspace-shell after successful QR scan with 'Join Now' shortcut
+  assert.equal(idleScanMeta.scanToast.isVisible, false);
+  const scannedPayload = parseScannedWorkspaceQrPayload(
+    'http://localhost:3000/?room=study-algo',
+    'http://localhost:3000'
+  );
+  const toastSpec = buildWorkspaceQrScanToastSpec({
+    isVisible: true,
+    scannedResult: scannedPayload,
+  });
+  assert.equal(toastSpec.shellSelector, '#workspace-shell');
+  assert.equal(toastSpec.toastElementId, 'workspace-qr-scan-toast');
+  assert.equal(toastSpec.roomCodeElementId, 'workspace-qr-scan-toast-room-code');
+  assert.equal(toastSpec.joinButtonElementId, 'workspace-qr-scan-toast-join-btn');
+  assert.equal(
+    toastSpec.dismissButtonElementId,
+    'workspace-qr-scan-toast-dismiss-btn'
+  );
+  assert.equal(toastSpec.isVisible, true);
+  assert.equal(toastSpec.roomCode, 'STUDY-ALGO');
+  assert.equal(toastSpec.joinButtonLabel, 'Join Now');
+  assert.equal(toastSpec.durationMs, WORKSPACE_QR_SCAN_TOAST_DURATION_MS);
+  assert.equal(toastSpec.message, 'Detected workspace room STUDY-ALGO');
+
+  const joinAction = resolveWorkspaceQrScanToastJoinAction({
+    scannedResult: scannedPayload,
+  });
+  assert.equal(joinAction.targetPage, 'study');
+  assert.equal(joinAction.roomCode, 'STUDY-ALGO');
+  assert.equal(joinAction.shouldJoinStudyDesk, true);
+  assert.equal(joinAction.shouldDismissToast, true);
+  assert.equal(joinAction.shouldCloseQrPopover, true);
 });
