@@ -215,6 +215,11 @@ import {
   WORKSPACE_HEADER_QR_PNG_FEEDBACK_DURATION_MS,
   generateWorkspaceHeaderQrPngDataUrl,
   getWorkspaceHeaderQrCodeMeta,
+  buildWorkspaceCameraConstraints,
+  parseScannedWorkspaceQrPayload,
+  decodeWorkspaceQrFromRgbaFrame,
+  WorkspaceHeaderQrCameraScanStatus,
+  ParsedWorkspaceQrScanResult,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -790,6 +795,45 @@ export default function App() {
     useState<string>('');
   const workspaceHeaderQrPngTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrContainerRef = useRef<HTMLDivElement | null>(null);
+  const [isWorkspaceHeaderQrCameraScanning, setIsWorkspaceHeaderQrCameraScanning] =
+    useState<boolean>(false);
+  const [workspaceHeaderQrCameraStatus, setWorkspaceHeaderQrCameraStatus] =
+    useState<WorkspaceHeaderQrCameraScanStatus>('idle');
+  const [lastScannedWorkspaceQrResult, setLastScannedWorkspaceQrResult] =
+    useState<ParsedWorkspaceQrScanResult | null>(null);
+  const [workspaceHeaderQrCameraError, setWorkspaceHeaderQrCameraError] =
+    useState<string>('');
+  const workspaceHeaderQrVideoRef = useRef<HTMLVideoElement | null>(null);
+  const workspaceHeaderQrCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const workspaceHeaderQrFileInputRef = useRef<HTMLInputElement | null>(null);
+  const workspaceHeaderQrCameraStreamRef = useRef<MediaStream | null>(null);
+  const workspaceHeaderQrScanIntervalRef = useRef<number | null>(null);
+
+  const stopWorkspaceHeaderQrCameraStream = () => {
+    if (workspaceHeaderQrScanIntervalRef.current !== null) {
+      window.clearInterval(workspaceHeaderQrScanIntervalRef.current);
+      workspaceHeaderQrScanIntervalRef.current = null;
+    }
+    if (workspaceHeaderQrCameraStreamRef.current) {
+      workspaceHeaderQrCameraStreamRef.current.getTracks().forEach((track) => {
+        try {
+          track.stop();
+        } catch {
+          // ignore track stop error
+        }
+      });
+      workspaceHeaderQrCameraStreamRef.current = null;
+    }
+    if (workspaceHeaderQrVideoRef.current) {
+      try {
+        workspaceHeaderQrVideoRef.current.pause();
+        workspaceHeaderQrVideoRef.current.srcObject = null;
+      } catch {
+        // ignore video cleanup error
+      }
+    }
+  };
+
   useEffect(() => {
     return () => {
       if (workspaceHeaderShareTimerRef.current !== null) {
@@ -798,10 +842,15 @@ export default function App() {
       if (workspaceHeaderQrPngTimerRef.current !== null) {
         window.clearTimeout(workspaceHeaderQrPngTimerRef.current);
       }
+      stopWorkspaceHeaderQrCameraStream();
     };
   }, []);
   useEffect(() => {
-    if (!isWorkspaceHeaderQrOpen) return;
+    if (!isWorkspaceHeaderQrOpen) {
+      stopWorkspaceHeaderQrCameraStream();
+      setIsWorkspaceHeaderQrCameraScanning(false);
+      return;
+    }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -3728,6 +3777,10 @@ export default function App() {
     isOpen: isWorkspaceHeaderQrOpen,
     isCopied: isWorkspaceHeaderUrlCopied,
     isDownloaded: isWorkspaceHeaderQrPngDownloaded,
+    isCameraScanning: isWorkspaceHeaderQrCameraScanning,
+    cameraScanStatus: workspaceHeaderQrCameraStatus,
+    lastScannedWorkspaceUrl: lastScannedWorkspaceQrResult?.workspaceUrl ?? null,
+    lastJoinedWorkspaceRoomCode: lastScannedWorkspaceQrResult?.roomCode ?? null,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
@@ -3750,6 +3803,288 @@ export default function App() {
       }
       return next;
     });
+  };
+
+  const handleApplyScannedWorkspaceQrPayload = (rawScannedValue: string): boolean => {
+    const fallbackOrigin =
+      typeof window !== 'undefined' && window.location?.origin
+        ? window.location.origin
+        : 'http://localhost:3000';
+    const parsed = parseScannedWorkspaceQrPayload(rawScannedValue, fallbackOrigin);
+    if (!parsed.isValid) {
+      setWorkspaceHeaderQrCameraError(parsed.errorMessage);
+      return false;
+    }
+
+    stopWorkspaceHeaderQrCameraStream();
+    setIsWorkspaceHeaderQrCameraScanning(false);
+    setWorkspaceHeaderQrCameraStatus('detected');
+    setWorkspaceHeaderQrCameraError('');
+    setLastScannedWorkspaceQrResult(parsed);
+    setActiveStudyRoomCode(parsed.roomCode);
+    setWorkspaceHeaderQrHref(parsed.workspaceUrl);
+
+    if (parsed.hasFilterParams) {
+      setDirectoryAudienceFilter(parsed.audienceFilter);
+      setDirectoryMoodFilter(parsed.moodFilter);
+      setShowOnlyInFocusPeers(parsed.onlyInFocus);
+    }
+
+    if (typeof window !== 'undefined' && window.history?.replaceState) {
+      try {
+        const parsedTargetUrl = new URL(parsed.workspaceUrl);
+        if (parsedTargetUrl.origin === window.location.origin) {
+          window.history.replaceState(
+            null,
+            '',
+            `${parsedTargetUrl.pathname}${parsedTargetUrl.search}${parsedTargetUrl.hash}`
+          );
+        } else {
+          window.history.replaceState(
+            null,
+            '',
+            `/?room=${encodeURIComponent(parsed.roomCode)}`
+          );
+        }
+      } catch {
+        // ignore history error
+      }
+    }
+
+    if (
+      currentIdentity &&
+      wsRef.current &&
+      wsRef.current.readyState === WebSocket.OPEN
+    ) {
+      wsRef.current.send(
+        JSON.stringify({
+          type: 'study:join',
+          roomCode: parsed.roomCode,
+          roomName: `Study Room ${parsed.roomCode}`,
+          displayName: currentIdentity.displayName,
+          subject: 'Deep Work & Problem Solving',
+          positiveNote: `Joined room ${parsed.roomCode} via mobile QR scan`,
+          timerMinutes: 25,
+        })
+      );
+    }
+
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+
+    return true;
+  };
+
+  const handleToggleWorkspaceHeaderQrCameraScanner = async () => {
+    if (isWorkspaceHeaderQrCameraScanning) {
+      stopWorkspaceHeaderQrCameraStream();
+      setIsWorkspaceHeaderQrCameraScanning(false);
+      setWorkspaceHeaderQrCameraStatus(
+        lastScannedWorkspaceQrResult ? 'detected' : 'idle'
+      );
+      setWorkspaceHeaderQrCameraError('');
+      return;
+    }
+
+    setWorkspaceHeaderQrCameraError('');
+    setIsWorkspaceHeaderQrCameraScanning(true);
+    setWorkspaceHeaderQrCameraStatus('requesting_camera');
+
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== 'function'
+    ) {
+      setWorkspaceHeaderQrCameraStatus('camera_unavailable');
+      return;
+    }
+
+    try {
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(
+          buildWorkspaceCameraConstraints('environment')
+        );
+      } catch (primaryErr) {
+        const errName =
+          primaryErr && typeof primaryErr === 'object' && 'name' in primaryErr
+            ? String((primaryErr as { name?: string }).name)
+            : '';
+        if (
+          errName === 'NotAllowedError' ||
+          errName === 'PermissionDeniedError'
+        ) {
+          throw primaryErr;
+        }
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: true,
+        });
+      }
+
+      workspaceHeaderQrCameraStreamRef.current = stream;
+      setWorkspaceHeaderQrCameraStatus('scanning');
+
+      const attachAndScan = async () => {
+        const videoEl = workspaceHeaderQrVideoRef.current;
+        if (videoEl) {
+          videoEl.srcObject = stream;
+          try {
+            await videoEl.play();
+          } catch {
+            // ignore play interruption
+          }
+        }
+
+        type NativeBarcodeDetectorInstance = {
+          detect: (
+            source: HTMLVideoElement | HTMLCanvasElement
+          ) => Promise<Array<{ rawValue?: string }>>;
+        };
+        type NativeBarcodeDetectorConstructor = new (options?: {
+          formats?: string[];
+        }) => NativeBarcodeDetectorInstance;
+
+        let nativeDetector: NativeBarcodeDetectorInstance | null = null;
+        if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+          try {
+            const DetectorCtor = (
+              window as unknown as {
+                BarcodeDetector?: NativeBarcodeDetectorConstructor;
+              }
+            ).BarcodeDetector;
+            if (DetectorCtor) {
+              nativeDetector = new DetectorCtor({ formats: ['qr_code'] });
+            }
+          } catch {
+            nativeDetector = null;
+          }
+        }
+
+        if (workspaceHeaderQrScanIntervalRef.current !== null) {
+          window.clearInterval(workspaceHeaderQrScanIntervalRef.current);
+        }
+
+        workspaceHeaderQrScanIntervalRef.current = window.setInterval(async () => {
+          const activeVideo = workspaceHeaderQrVideoRef.current;
+          const activeCanvas = workspaceHeaderQrCanvasRef.current;
+          if (!activeVideo) return;
+
+          if (
+            workspaceHeaderQrCameraStreamRef.current &&
+            activeVideo.srcObject !== workspaceHeaderQrCameraStreamRef.current
+          ) {
+            activeVideo.srcObject = workspaceHeaderQrCameraStreamRef.current;
+            try {
+              await activeVideo.play();
+            } catch {
+              // ignore play interruption
+            }
+          }
+
+          if (nativeDetector && activeVideo.readyState >= 2) {
+            try {
+              const barcodes = await nativeDetector.detect(activeVideo);
+              const firstRaw = barcodes?.[0]?.rawValue?.trim();
+              if (firstRaw && handleApplyScannedWorkspaceQrPayload(firstRaw)) {
+                return;
+              }
+            } catch {
+              // fall through to canvas jsQR frame decode
+            }
+          }
+
+          if (
+            activeCanvas &&
+            activeVideo.readyState >= 2 &&
+            activeVideo.videoWidth > 0 &&
+            activeVideo.videoHeight > 0
+          ) {
+            const width = activeVideo.videoWidth;
+            const height = activeVideo.videoHeight;
+            activeCanvas.width = width;
+            activeCanvas.height = height;
+            const ctx = activeCanvas.getContext('2d', {
+              willReadFrequently: true,
+            });
+            if (ctx) {
+              ctx.drawImage(activeVideo, 0, 0, width, height);
+              const imageData = ctx.getImageData(0, 0, width, height);
+              const decoded = decodeWorkspaceQrFromRgbaFrame(
+                imageData.data,
+                width,
+                height
+              );
+              if (decoded) {
+                handleApplyScannedWorkspaceQrPayload(decoded);
+              }
+            }
+          }
+        }, 160);
+      };
+
+      if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+        window.requestAnimationFrame(() => {
+          void attachAndScan();
+        });
+      } else {
+        await attachAndScan();
+      }
+    } catch (err) {
+      const errName =
+        err && typeof err === 'object' && 'name' in err
+          ? String((err as { name?: string }).name)
+          : '';
+      if (
+        errName === 'NotAllowedError' ||
+        errName === 'PermissionDeniedError' ||
+        errName === 'SecurityError'
+      ) {
+        setWorkspaceHeaderQrCameraStatus('permission_denied');
+      } else {
+        setWorkspaceHeaderQrCameraStatus('camera_unavailable');
+      }
+    }
+  };
+
+  const handleWorkspaceHeaderQrImageFileScan = (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result !== 'string') return;
+      const img = new Image();
+      img.onload = () => {
+        const canvas =
+          workspaceHeaderQrCanvasRef.current || document.createElement('canvas');
+        const width = Math.max(1, img.naturalWidth || img.width || 300);
+        const height = Math.max(1, img.naturalHeight || img.height || 300);
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, width, height);
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const decoded = decodeWorkspaceQrFromRgbaFrame(
+          imageData.data,
+          width,
+          height
+        );
+        if (decoded) {
+          handleApplyScannedWorkspaceQrPayload(decoded);
+        } else {
+          setWorkspaceHeaderQrCameraError(
+            'Could not detect a valid QR code in that image frame.'
+          );
+        }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
   };
 
   const handleDownloadWorkspaceHeaderQrPng = async () => {
@@ -4845,7 +5180,13 @@ export default function App() {
                         </button>
                       </div>
 
-                      <div className="flex flex-col items-center justify-center rounded-lg border border-slate-200 dark:border-zinc-800 bg-white p-3">
+                      <div
+                        className={`flex flex-col items-center justify-center rounded-lg border ${
+                          workspaceHeaderQrMeta.isCameraScanning
+                            ? 'border-emerald-500/40 bg-slate-950 p-2.5 text-zinc-100'
+                            : 'border-slate-200 dark:border-zinc-800 bg-white p-3'
+                        }`}
+                      >
                         <svg
                           id={workspaceHeaderQrMeta.svgElementId}
                           data-testid={workspaceHeaderQrMeta.svgTestId}
@@ -4860,7 +5201,11 @@ export default function App() {
                           shapeRendering="crispEdges"
                           role="img"
                           aria-label={`QR code for workspace URL ${workspaceHeaderQrMeta.workspaceUrl}`}
-                          className="w-44 h-44"
+                          className={
+                            workspaceHeaderQrMeta.isCameraScanning
+                              ? 'sr-only'
+                              : 'w-44 h-44'
+                          }
                         >
                           <rect
                             width={workspaceHeaderQrMeta.qrMatrix.viewBoxSize}
@@ -4872,20 +5217,99 @@ export default function App() {
                             fill="#09090B"
                           />
                         </svg>
-                        <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-mono text-slate-600 whitespace-nowrap">
-                          <span className="font-semibold text-emerald-700">
-                            Room: {workspaceHeaderQrMeta.roomCode}
-                          </span>
-                          <span>·</span>
-                          <span>Mobile Instant Access</span>
-                        </div>
-                        <p
-                          id={workspaceHeaderQrMeta.instructionElementId}
-                          data-testid={workspaceHeaderQrMeta.instructionTestId}
-                          className="mt-1.5 text-center text-[11px] leading-snug text-slate-700 font-medium"
-                        >
-                          {workspaceHeaderQrMeta.instructionText}
-                        </p>
+
+                        {workspaceHeaderQrMeta.isCameraScanning ? (
+                          <div
+                            id={workspaceHeaderQrMeta.cameraScannerContainerId}
+                            data-testid={workspaceHeaderQrMeta.cameraScannerContainerTestId}
+                            data-camera-status={workspaceHeaderQrMeta.cameraScanStatus}
+                            className="w-full space-y-2 text-zinc-100"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <span
+                                id={workspaceHeaderQrMeta.scanStatusBadgeId}
+                                data-testid={workspaceHeaderQrMeta.scanStatusBadgeTestId}
+                                data-status={workspaceHeaderQrMeta.cameraScanStatus}
+                                className="inline-flex items-center gap-1.5 text-[10px] font-mono font-semibold text-emerald-400"
+                              >
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                                <span>{workspaceHeaderQrMeta.cameraScanStatusLabel}</span>
+                              </span>
+                              <button
+                                type="button"
+                                data-testid="workspace-header-qr-capture-frame-btn"
+                                onClick={() =>
+                                  workspaceHeaderQrFileInputRef.current?.click()
+                                }
+                                className="px-2 py-0.5 rounded border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-[10px] font-mono text-zinc-300 transition-colors"
+                              >
+                                Capture QR Frame
+                              </button>
+                              <input
+                                ref={workspaceHeaderQrFileInputRef}
+                                id="workspace-header-qr-camera-file-input"
+                                data-testid="workspace-header-qr-camera-file-input"
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                onChange={handleWorkspaceHeaderQrImageFileScan}
+                                className="hidden"
+                              />
+                            </div>
+
+                            <div className="relative overflow-hidden rounded-md border border-zinc-800 bg-black w-44 h-44 mx-auto flex items-center justify-center">
+                              <video
+                                ref={workspaceHeaderQrVideoRef}
+                                id={workspaceHeaderQrMeta.cameraVideoElementId}
+                                data-testid={workspaceHeaderQrMeta.cameraVideoElementTestId}
+                                autoPlay
+                                playsInline
+                                muted
+                                className="w-full h-full object-cover"
+                              />
+                              <canvas
+                                ref={workspaceHeaderQrCanvasRef}
+                                id={workspaceHeaderQrMeta.cameraCanvasElementId}
+                                data-testid={workspaceHeaderQrMeta.cameraCanvasElementTestId}
+                                className="hidden"
+                              />
+                              <div
+                                aria-hidden="true"
+                                className="pointer-events-none absolute inset-3 rounded-md border-2 border-emerald-400/70 shadow-[0_0_0_9999px_rgba(0,0,0,0.35)]"
+                              />
+                            </div>
+
+                            <p className="text-[10px] leading-snug text-zinc-400 text-center">
+                              {workspaceHeaderQrMeta.cameraScanHelperText}
+                            </p>
+
+                            {workspaceHeaderQrCameraError && (
+                              <p
+                                data-testid="workspace-header-qr-scan-error"
+                                className="text-[10px] font-medium text-rose-400 text-center"
+                              >
+                                {workspaceHeaderQrCameraError}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <>
+                            <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-mono text-slate-600 whitespace-nowrap">
+                              <span className="font-semibold text-emerald-700">
+                                Room: {workspaceHeaderQrMeta.roomCode}
+                              </span>
+                              <span>·</span>
+                              <span>Mobile Instant Access</span>
+                            </div>
+                            <p
+                              id={workspaceHeaderQrMeta.instructionElementId}
+                              data-testid={workspaceHeaderQrMeta.instructionTestId}
+                              className="mt-1.5 text-center text-[11px] leading-snug text-slate-700 font-medium"
+                            >
+                              {workspaceHeaderQrMeta.instructionText}
+                            </p>
+                          </>
+                        )}
                       </div>
 
                       <div className="space-y-2">
@@ -4961,6 +5385,60 @@ export default function App() {
                             )}
                           </button>
                         </div>
+
+                        <button
+                          type="button"
+                          id={workspaceHeaderQrMeta.scanCameraButtonId}
+                          data-testid={workspaceHeaderQrMeta.scanCameraButtonTestId}
+                          data-camera-scanning={
+                            workspaceHeaderQrMeta.isCameraScanning ? 'true' : 'false'
+                          }
+                          data-camera-status={workspaceHeaderQrMeta.cameraScanStatus}
+                          data-facing-mode={workspaceHeaderQrMeta.cameraFacingMode}
+                          aria-pressed={workspaceHeaderQrMeta.isCameraScanning}
+                          aria-label={workspaceHeaderQrMeta.scanCameraAriaLabel}
+                          title={workspaceHeaderQrMeta.scanCameraTitle}
+                          onClick={handleToggleWorkspaceHeaderQrCameraScanner}
+                          className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
+                            workspaceHeaderQrMeta.isCameraScanning
+                              ? 'border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300'
+                              : 'border-slate-300 dark:border-zinc-700 bg-slate-900 hover:bg-slate-800 text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-100'
+                          }`}
+                        >
+                          {workspaceHeaderQrMeta.isCameraScanning ? (
+                            <>
+                              <X className="w-3.5 h-3.5 shrink-0" />
+                              <span>{workspaceHeaderQrMeta.stopCameraButtonLabel}</span>
+                            </>
+                          ) : (
+                            <>
+                              <Camera className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              <span>{workspaceHeaderQrMeta.scanCameraButtonLabel}</span>
+                            </>
+                          )}
+                        </button>
+
+                        {lastScannedWorkspaceQrResult && (
+                          <div
+                            id={workspaceHeaderQrMeta.scanResultBannerId}
+                            data-testid={workspaceHeaderQrMeta.scanResultBannerTestId}
+                            data-joined-room={lastScannedWorkspaceQrResult.roomCode}
+                            data-scanned-url={lastScannedWorkspaceQrResult.workspaceUrl}
+                            role="status"
+                            aria-live="polite"
+                            className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
+                          >
+                            <span className="inline-flex items-center gap-1.5 truncate">
+                              <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                              <span className="truncate">
+                                {lastScannedWorkspaceQrResult.joinedStatusMessage}
+                              </span>
+                            </span>
+                            <span className="font-mono text-[10px] font-bold shrink-0">
+                              {lastScannedWorkspaceQrResult.roomCode}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     </motion.div>
                   )}

@@ -242,6 +242,10 @@ import {
   generateWorkspaceHeaderQrPngDataUrl,
   generateWorkspaceUrlQrMatrix,
   getWorkspaceHeaderQrCodeMeta,
+  buildWorkspaceCameraConstraints,
+  parseScannedWorkspaceQrPayload,
+  renderWorkspaceQrMatrixToRgba,
+  decodeWorkspaceQrFromRgbaFrame,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -6146,5 +6150,105 @@ test('Workspace shell (#workspace-shell) header QR Code tracks hidden generation
   assert.equal(
     thirdGenMeta.generationBadgeTitle,
     'QR code generated 3 times in this session'
+  );
+});
+
+test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR scanning, RGBA frame decoding, and joining scanned workspaces', () => {
+  // 1. Camera API constraints default to environment (rear mobile camera)
+  const cameraConstraints = buildWorkspaceCameraConstraints();
+  assert.deepEqual(cameraConstraints, {
+    audio: false,
+    video: {
+      facingMode: { ideal: 'environment' },
+      width: { ideal: 640 },
+      height: { ideal: 640 },
+    },
+  });
+
+  // 2. End-to-end QR matrix -> RGBA camera frame -> jsQR decode -> workspace payload parse
+  const targetWorkspaceUrl =
+    'http://localhost:3000/?room=MOBILE-SYNC-99&mood=Deep+Work&focus=1';
+  const rgbaFrame = renderWorkspaceQrMatrixToRgba(targetWorkspaceUrl, 6);
+  assert.equal(rgbaFrame.width > 100, true);
+  assert.equal(rgbaFrame.height, rgbaFrame.width);
+
+  const decodedUrl = decodeWorkspaceQrFromRgbaFrame(
+    rgbaFrame.data,
+    rgbaFrame.width,
+    rgbaFrame.height
+  );
+  assert.equal(decodedUrl, targetWorkspaceUrl);
+
+  const parsedScan = parseScannedWorkspaceQrPayload(
+    decodedUrl,
+    'http://localhost:3000'
+  );
+  assert.equal(parsedScan.isValid, true);
+  assert.equal(parsedScan.roomCode, 'MOBILE-SYNC-99');
+  assert.equal(parsedScan.hasRoomParam, true);
+  assert.equal(parsedScan.hasFilterParams, true);
+  assert.equal(parsedScan.moodFilter, 'Deep Work');
+  assert.equal(parsedScan.onlyInFocus, true);
+  assert.equal(
+    parsedScan.joinedStatusMessage,
+    'Joined workspace room MOBILE-SYNC-99 via QR scan'
+  );
+
+  // 3. Direct room code and unsafe scheme handling
+  const directRoomScan = parseScannedWorkspaceQrPayload(
+    'focus-pod-7',
+    'http://localhost:3000'
+  );
+  assert.equal(directRoomScan.isValid, true);
+  assert.equal(directRoomScan.roomCode, 'FOCUS-POD-7');
+  assert.equal(
+    directRoomScan.workspaceUrl,
+    'http://localhost:3000/?room=FOCUS-POD-7'
+  );
+
+  const unsafeScan = parseScannedWorkspaceQrPayload('javascript:alert(1)');
+  assert.equal(unsafeScan.isValid, false);
+
+  // 4. Camera scanner button and viewfinder metadata in getWorkspaceHeaderQrCodeMeta
+  const idleScanMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-GLOBAL',
+    isOpen: true,
+    isCameraScanning: false,
+    cameraScanStatus: 'idle',
+    roomCode: 'STUDY-GLOBAL',
+  });
+  assert.equal(
+    idleScanMeta.scanCameraButtonId,
+    'workspace-header-qr-scan-camera-btn'
+  );
+  assert.equal(
+    idleScanMeta.scanCameraButtonTestId,
+    'workspace-header-qr-scan-camera-btn'
+  );
+  assert.equal(
+    idleScanMeta.cameraScannerContainerId,
+    'workspace-header-qr-camera-scanner'
+  );
+  assert.equal(
+    idleScanMeta.cameraVideoElementId,
+    'workspace-header-qr-camera-video'
+  );
+  assert.equal(idleScanMeta.scanCameraButtonLabel, 'Scan QR with Camera');
+  assert.equal(idleScanMeta.stopCameraButtonLabel, 'Stop Camera Scanner');
+  assert.equal(idleScanMeta.isCameraScanning, false);
+  assert.equal(idleScanMeta.cameraFacingMode, 'environment');
+
+  const activeScanMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-GLOBAL',
+    isOpen: true,
+    isCameraScanning: true,
+    cameraScanStatus: 'scanning',
+    roomCode: 'STUDY-GLOBAL',
+  });
+  assert.equal(activeScanMeta.isCameraScanning, true);
+  assert.equal(activeScanMeta.cameraScanStatus, 'scanning');
+  assert.equal(
+    activeScanMeta.cameraScanStatusLabel,
+    'Camera Active · Scanning QR'
   );
 });

@@ -12,6 +12,7 @@
  */
 
 import QRCode from 'qrcode';
+import jsQR from 'jsqr';
 
 export const APP_LOGO_URL = '/assets/aistudio/image_18838782.png';
 export const APP_BRAND_NAME = 'Mr. Stranger';
@@ -13821,6 +13822,197 @@ export async function generateWorkspaceHeaderQrPngDataUrl(
   });
 }
 
+export type WorkspaceHeaderQrCameraScanStatus =
+  | 'idle'
+  | 'requesting_camera'
+  | 'scanning'
+  | 'detected'
+  | 'permission_denied'
+  | 'camera_unavailable';
+
+export interface ParsedWorkspaceQrScanResult {
+  isValid: boolean;
+  rawValue: string;
+  workspaceUrl: string;
+  roomCode: string;
+  hasRoomParam: boolean;
+  hasFilterParams: boolean;
+  audienceFilter: OnlineDirectoryAudienceFilter;
+  moodFilter: string;
+  onlyInFocus: boolean;
+  joinedStatusMessage: string;
+  errorMessage: string;
+}
+
+export function buildWorkspaceCameraConstraints(
+  facingMode: 'environment' | 'user' = 'environment'
+): MediaStreamConstraints {
+  return {
+    audio: false,
+    video: {
+      facingMode: { ideal: facingMode },
+      width: { ideal: 640 },
+      height: { ideal: 640 },
+    },
+  };
+}
+
+export function parseScannedWorkspaceQrPayload(
+  rawScannedValue?: string | null,
+  fallbackOrigin = 'http://localhost:3000'
+): ParsedWorkspaceQrScanResult {
+  const trimmed = (rawScannedValue ?? '').trim();
+  const baseOrigin =
+    (fallbackOrigin || '').trim().replace(/\/+$/, '') || 'http://localhost:3000';
+
+  const makeInvalid = (errorMessage: string): ParsedWorkspaceQrScanResult => ({
+    isValid: false,
+    rawValue: trimmed,
+    workspaceUrl: '',
+    roomCode: 'STUDY-GLOBAL',
+    hasRoomParam: false,
+    hasFilterParams: false,
+    audienceFilter: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+    joinedStatusMessage: '',
+    errorMessage,
+  });
+
+  if (!trimmed) {
+    return makeInvalid('No QR code payload detected.');
+  }
+
+  const lower = trimmed.toLowerCase();
+  if (
+    lower.startsWith('javascript:') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('vbscript:')
+  ) {
+    return makeInvalid('Unsupported or unsafe QR code scheme.');
+  }
+
+  let parsedUrl: URL | null = null;
+  if (/^https?:\/\//i.test(trimmed)) {
+    try {
+      parsedUrl = new URL(trimmed);
+    } catch {
+      return makeInvalid('Scanned QR code contains an invalid URL.');
+    }
+  } else if (trimmed.startsWith('/') || trimmed.startsWith('?')) {
+    try {
+      parsedUrl = new URL(
+        trimmed.startsWith('?') ? `/${trimmed}` : trimmed,
+        baseOrigin
+      );
+    } catch {
+      return makeInvalid('Scanned QR code contains an invalid relative path.');
+    }
+  } else if (/^[A-Za-z0-9][A-Za-z0-9_-]{1,31}$/.test(trimmed)) {
+    const normalizedRoom = normalizeStudyRoomCode(trimmed);
+    try {
+      parsedUrl = new URL(
+        `/?room=${encodeURIComponent(normalizedRoom)}`,
+        baseOrigin
+      );
+    } catch {
+      return makeInvalid('Scanned QR code contains an invalid room code.');
+    }
+  } else {
+    return makeInvalid(
+      'Scanned QR code does not contain a valid workspace URL or room code.'
+    );
+  }
+
+  const rawRoomParam = parsedUrl.searchParams.get('room');
+  const hasRoomParam = Boolean(rawRoomParam && rawRoomParam.trim().length > 0);
+  const roomCode = normalizeStudyRoomCode(rawRoomParam || 'STUDY-GLOBAL');
+  parsedUrl.searchParams.set('room', roomCode);
+
+  const filterParams = parseOnlineDirectoryFilterShareParams(parsedUrl.search);
+  const workspaceUrl = parsedUrl.toString();
+
+  return {
+    isValid: true,
+    rawValue: trimmed,
+    workspaceUrl,
+    roomCode,
+    hasRoomParam,
+    hasFilterParams: filterParams.hasFilterParams,
+    audienceFilter: filterParams.audienceFilter,
+    moodFilter: filterParams.moodFilter,
+    onlyInFocus: filterParams.onlyInFocus,
+    joinedStatusMessage: `Joined workspace room ${roomCode} via QR scan`,
+    errorMessage: '',
+  };
+}
+
+export function renderWorkspaceQrMatrixToRgba(
+  urlOrHref?: string | null,
+  pixelScale = 4
+): {
+  data: Uint8ClampedArray;
+  width: number;
+  height: number;
+  matrixSpec: WorkspaceHeaderQrMatrixSpec;
+} {
+  const matrixSpec = generateWorkspaceUrlQrMatrix(urlOrHref);
+  const scale = Math.max(2, Math.min(16, Math.floor(pixelScale)));
+  const totalModules = matrixSpec.viewBoxSize;
+  const width = totalModules * scale;
+  const height = totalModules * scale;
+  const data = new Uint8ClampedArray(width * height * 4);
+
+  // Fill white quiet-zone & background (RGBA: 255, 255, 255, 255)
+  data.fill(255);
+
+  const qz = matrixSpec.quietZone;
+  for (let r = 0; r < matrixSpec.moduleSize; r += 1) {
+    for (let c = 0; c < matrixSpec.moduleSize; c += 1) {
+      if (!matrixSpec.matrix[r]?.[c]) continue;
+      const startY = (r + qz) * scale;
+      const startX = (c + qz) * scale;
+      for (let dy = 0; dy < scale; dy += 1) {
+        for (let dx = 0; dx < scale; dx += 1) {
+          const idx = ((startY + dy) * width + (startX + dx)) * 4;
+          data[idx] = 9;
+          data[idx + 1] = 9;
+          data[idx + 2] = 11;
+          data[idx + 3] = 255;
+        }
+      }
+    }
+  }
+
+  return { data, width, height, matrixSpec };
+}
+
+export function decodeWorkspaceQrFromRgbaFrame(
+  rgbaData: Uint8ClampedArray,
+  width: number,
+  height: number
+): string | null {
+  if (
+    !rgbaData ||
+    width <= 0 ||
+    height <= 0 ||
+    rgbaData.length !== width * height * 4
+  ) {
+    return null;
+  }
+  try {
+    const result = jsQR(rgbaData, width, height, {
+      inversionAttempts: 'attemptBoth',
+    });
+    if (result && typeof result.data === 'string' && result.data.trim()) {
+      return result.data.trim();
+    }
+  } catch {
+    // ignore frame decode error
+  }
+  return null;
+}
+
 export interface WorkspaceHeaderQrCodeMeta {
   shellSelector: '#workspace-shell';
   headerElementId: 'workspace-top-header';
@@ -13842,6 +14034,18 @@ export interface WorkspaceHeaderQrCodeMeta {
   copyButtonTestId: 'workspace-header-qr-copy-btn';
   downloadButtonId: 'workspace-header-qr-download-btn';
   downloadButtonTestId: 'workspace-header-qr-download-btn';
+  scanCameraButtonId: 'workspace-header-qr-scan-camera-btn';
+  scanCameraButtonTestId: 'workspace-header-qr-scan-camera-btn';
+  cameraScannerContainerId: 'workspace-header-qr-camera-scanner';
+  cameraScannerContainerTestId: 'workspace-header-qr-camera-scanner';
+  cameraVideoElementId: 'workspace-header-qr-camera-video';
+  cameraVideoElementTestId: 'workspace-header-qr-camera-video';
+  cameraCanvasElementId: 'workspace-header-qr-camera-canvas';
+  cameraCanvasElementTestId: 'workspace-header-qr-camera-canvas';
+  scanStatusBadgeId: 'workspace-header-qr-scan-status';
+  scanStatusBadgeTestId: 'workspace-header-qr-scan-status';
+  scanResultBannerId: 'workspace-header-qr-scan-result';
+  scanResultBannerTestId: 'workspace-header-qr-scan-result';
   closeButtonId: 'workspace-header-qr-close-btn';
   closeButtonTestId: 'workspace-header-qr-close-btn';
   workspaceUrl: string;
@@ -13849,6 +14053,13 @@ export interface WorkspaceHeaderQrCodeMeta {
   isOpen: boolean;
   isCopied: boolean;
   isDownloaded: boolean;
+  isCameraScanning: boolean;
+  cameraScanStatus: WorkspaceHeaderQrCameraScanStatus;
+  cameraScanStatusLabel: string;
+  cameraScanHelperText: string;
+  cameraFacingMode: 'environment';
+  lastScannedWorkspaceUrl: string | null;
+  lastJoinedWorkspaceRoomCode: string | null;
   generationCount: number;
   generationBadgeLabel: string;
   generationBadgeTitle: string;
@@ -13858,6 +14069,8 @@ export interface WorkspaceHeaderQrCodeMeta {
   buttonLabel: 'QR Code';
   downloadButtonLabel: 'Download PNG';
   downloadedButtonLabel: 'Downloaded PNG!';
+  scanCameraButtonLabel: 'Scan QR with Camera';
+  stopCameraButtonLabel: 'Stop Camera Scanner';
   dialogTitle: 'Mobile & Nearby Access QR Code';
   dialogSubtitle: string;
   instructionText: string;
@@ -13865,6 +14078,8 @@ export interface WorkspaceHeaderQrCodeMeta {
   title: string;
   downloadAriaLabel: string;
   downloadTitle: string;
+  scanCameraAriaLabel: string;
+  scanCameraTitle: string;
   qrMatrix: WorkspaceHeaderQrMatrixSpec;
 }
 
@@ -13873,6 +14088,10 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   isOpen?: boolean;
   isCopied?: boolean;
   isDownloaded?: boolean;
+  isCameraScanning?: boolean;
+  cameraScanStatus?: WorkspaceHeaderQrCameraScanStatus;
+  lastScannedWorkspaceUrl?: string | null;
+  lastJoinedWorkspaceRoomCode?: string | null;
   generationCount?: number;
   downloadCount?: number;
   roomCode?: string | null;
@@ -13882,6 +14101,13 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   const isOpen = Boolean(input?.isOpen);
   const isCopied = Boolean(input?.isCopied);
   const isDownloaded = Boolean(input?.isDownloaded);
+  const isCameraScanning = Boolean(input?.isCameraScanning);
+  const cameraScanStatus: WorkspaceHeaderQrCameraScanStatus =
+    input?.cameraScanStatus ?? (isCameraScanning ? 'scanning' : 'idle');
+  const lastScannedWorkspaceUrl =
+    (input?.lastScannedWorkspaceUrl ?? '').trim() || null;
+  const lastJoinedWorkspaceRoomCode =
+    (input?.lastJoinedWorkspaceRoomCode ?? '').trim() || null;
   const generationCount = Math.max(
     0,
     Math.floor(input?.generationCount ?? (isOpen ? 1 : 0))
@@ -13889,6 +14115,26 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   const downloadCount = Math.max(0, Math.floor(input?.downloadCount ?? 0));
   const roomCode = (input?.roomCode ?? '').trim() || 'STUDY-GLOBAL';
   const downloadFilename = buildWorkspaceHeaderQrPngFilename(roomCode);
+
+  const cameraScanStatusLabel =
+    cameraScanStatus === 'requesting_camera'
+      ? 'Requesting Camera...'
+      : cameraScanStatus === 'scanning'
+        ? 'Camera Active · Scanning QR'
+        : cameraScanStatus === 'detected'
+          ? `Joined ${lastJoinedWorkspaceRoomCode || roomCode}`
+          : cameraScanStatus === 'permission_denied'
+            ? 'Camera Permission Denied'
+            : cameraScanStatus === 'camera_unavailable'
+              ? 'Camera Unavailable'
+              : 'Ready to Scan';
+
+  const cameraScanHelperText =
+    cameraScanStatus === 'permission_denied'
+      ? 'Camera access was blocked. Allow browser camera permissions or capture a QR image frame below.'
+      : cameraScanStatus === 'camera_unavailable'
+        ? 'No camera feed detected on this device. Capture or select a QR code image below to join.'
+        : 'Point your camera at another device’s workspace QR code to join their workspace automatically.';
 
   return {
     shellSelector: '#workspace-shell',
@@ -13911,6 +14157,18 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     copyButtonTestId: 'workspace-header-qr-copy-btn',
     downloadButtonId: 'workspace-header-qr-download-btn',
     downloadButtonTestId: 'workspace-header-qr-download-btn',
+    scanCameraButtonId: 'workspace-header-qr-scan-camera-btn',
+    scanCameraButtonTestId: 'workspace-header-qr-scan-camera-btn',
+    cameraScannerContainerId: 'workspace-header-qr-camera-scanner',
+    cameraScannerContainerTestId: 'workspace-header-qr-camera-scanner',
+    cameraVideoElementId: 'workspace-header-qr-camera-video',
+    cameraVideoElementTestId: 'workspace-header-qr-camera-video',
+    cameraCanvasElementId: 'workspace-header-qr-camera-canvas',
+    cameraCanvasElementTestId: 'workspace-header-qr-camera-canvas',
+    scanStatusBadgeId: 'workspace-header-qr-scan-status',
+    scanStatusBadgeTestId: 'workspace-header-qr-scan-status',
+    scanResultBannerId: 'workspace-header-qr-scan-result',
+    scanResultBannerTestId: 'workspace-header-qr-scan-result',
     closeButtonId: 'workspace-header-qr-close-btn',
     closeButtonTestId: 'workspace-header-qr-close-btn',
     workspaceUrl,
@@ -13918,6 +14176,13 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     isOpen,
     isCopied,
     isDownloaded,
+    isCameraScanning,
+    cameraScanStatus,
+    cameraScanStatusLabel,
+    cameraScanHelperText,
+    cameraFacingMode: 'environment',
+    lastScannedWorkspaceUrl,
+    lastJoinedWorkspaceRoomCode,
     generationCount,
     generationBadgeLabel: `${generationCount}x generated`,
     generationBadgeTitle: `QR code generated ${generationCount} ${
@@ -13929,6 +14194,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     buttonLabel: 'QR Code',
     downloadButtonLabel: 'Download PNG',
     downloadedButtonLabel: 'Downloaded PNG!',
+    scanCameraButtonLabel: 'Scan QR with Camera',
+    stopCameraButtonLabel: 'Stop Camera Scanner',
     dialogTitle: 'Mobile & Nearby Access QR Code',
     dialogSubtitle:
       'Share this workspace link with people nearby or access it on mobile.',
@@ -13946,6 +14213,12 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     downloadTitle: isDownloaded
       ? `Saved ${downloadFilename}`
       : `Download QR code image as ${downloadFilename}`,
+    scanCameraAriaLabel: isCameraScanning
+      ? 'Stop camera QR code scanner'
+      : 'Scan a workspace QR code using the browser Camera API',
+    scanCameraTitle: isCameraScanning
+      ? 'Stop browser camera QR scanner'
+      : 'Use your camera to scan another device’s QR code and join their workspace',
     qrMatrix,
   };
 }
