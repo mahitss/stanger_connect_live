@@ -6226,6 +6226,31 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     'workspace-header-qr-scan-camera-btn'
   );
   assert.equal(
+    idleScanMeta.headerCameraScanButtonId,
+    'workspace-header-qr-camera-scan-btn'
+  );
+  assert.equal(
+    idleScanMeta.headerCameraScanButtonTestId,
+    'workspace-header-qr-camera-scan-btn'
+  );
+  assert.equal(
+    idleScanMeta.headerCameraScanIconId,
+    'workspace-header-qr-camera-scan-icon'
+  );
+  assert.equal(
+    idleScanMeta.headerCameraScanIconTestId,
+    'workspace-header-qr-camera-scan-icon'
+  );
+  assert.equal(idleScanMeta.includesScannerClarification, true);
+  assert.equal(
+    idleScanMeta.headerCameraScanAriaLabel,
+    'Open QR code popover and scan QR code with camera'
+  );
+  assert.equal(
+    idleScanMeta.headerCameraScanTitle,
+    'QR code popover includes a Camera QR Scanner — click to open & scan'
+  );
+  assert.equal(
     idleScanMeta.cameraScannerContainerId,
     'workspace-header-qr-camera-scanner'
   );
@@ -6250,5 +6275,9 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   assert.equal(
     activeScanMeta.cameraScanStatusLabel,
     'Camera Active · Scanning QR'
+  );
+  assert.equal(
+    activeScanMeta.headerCameraScanAriaLabel,
+    'Stop camera QR scanner in popover'
   );
 });

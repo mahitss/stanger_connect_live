@@ -14018,6 +14018,10 @@ export interface WorkspaceHeaderQrCodeMeta {
   headerElementId: 'workspace-top-header';
   buttonElementId: 'workspace-header-qr-btn';
   buttonTestId: 'workspace-header-qr-btn';
+  headerCameraScanButtonId: 'workspace-header-qr-camera-scan-btn';
+  headerCameraScanButtonTestId: 'workspace-header-qr-camera-scan-btn';
+  headerCameraScanIconId: 'workspace-header-qr-camera-scan-icon';
+  headerCameraScanIconTestId: 'workspace-header-qr-camera-scan-icon';
   popoverElementId: 'workspace-header-qr-popover';
   popoverTestId: 'workspace-header-qr-popover';
   generationCountHiddenInputId: 'workspace-header-qr-generation-count-state';
@@ -14054,6 +14058,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   isCopied: boolean;
   isDownloaded: boolean;
   isCameraScanning: boolean;
+  includesScannerClarification: true;
   cameraScanStatus: WorkspaceHeaderQrCameraScanStatus;
   cameraScanStatusLabel: string;
   cameraScanHelperText: string;
@@ -14076,6 +14081,8 @@ export interface WorkspaceHeaderQrCodeMeta {
   instructionText: string;
   ariaLabel: string;
   title: string;
+  headerCameraScanAriaLabel: string;
+  headerCameraScanTitle: string;
   downloadAriaLabel: string;
   downloadTitle: string;
   scanCameraAriaLabel: string;
@@ -14141,6 +14148,10 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     headerElementId: 'workspace-top-header',
     buttonElementId: 'workspace-header-qr-btn',
     buttonTestId: 'workspace-header-qr-btn',
+    headerCameraScanButtonId: 'workspace-header-qr-camera-scan-btn',
+    headerCameraScanButtonTestId: 'workspace-header-qr-camera-scan-btn',
+    headerCameraScanIconId: 'workspace-header-qr-camera-scan-icon',
+    headerCameraScanIconTestId: 'workspace-header-qr-camera-scan-icon',
     popoverElementId: 'workspace-header-qr-popover',
     popoverTestId: 'workspace-header-qr-popover',
     generationCountHiddenInputId: 'workspace-header-qr-generation-count-state',
@@ -14177,6 +14188,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     isCopied,
     isDownloaded,
     isCameraScanning,
+    includesScannerClarification: true,
     cameraScanStatus,
     cameraScanStatusLabel,
     cameraScanHelperText,
@@ -14207,6 +14219,14 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     title: isOpen
       ? `Close QR code for ${workspaceUrl}`
       : `Generate and display QR code for ${workspaceUrl}`,
+    headerCameraScanAriaLabel:
+      isOpen && isCameraScanning
+        ? 'Stop camera QR scanner in popover'
+        : 'Open QR code popover and scan QR code with camera',
+    headerCameraScanTitle:
+      isOpen && isCameraScanning
+        ? 'Camera QR scanner is active — click to stop'
+        : 'QR code popover includes a Camera QR Scanner — click to open & scan',
     downloadAriaLabel: isDownloaded
       ? `QR code PNG downloaded (${downloadFilename})`
       : `Download QR code image as PNG (${downloadFilename})`,

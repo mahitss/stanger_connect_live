@@ -3805,6 +3805,20 @@ export default function App() {
     });
   };
 
+  const handleOpenWorkspaceHeaderQrCameraScannerFromHeader = () => {
+    const resolvedHref = resolveWorkspaceHeaderShareUrl(
+      typeof window !== 'undefined' && window.location?.href
+        ? window.location.href
+        : 'https://mrstranger.app/'
+    );
+    setWorkspaceHeaderQrHref(resolvedHref);
+    if (!isWorkspaceHeaderQrOpen) {
+      setWorkspaceHeaderQrGenerationCount((c) => c + 1);
+      setIsWorkspaceHeaderQrOpen(true);
+    }
+    void handleToggleWorkspaceHeaderQrCameraScanner();
+  };
+
   const handleApplyScannedWorkspaceQrPayload = (rawScannedValue: string): boolean => {
     const fallbackOrigin =
       typeof window !== 'undefined' && window.location?.origin
@@ -5077,10 +5091,10 @@ export default function App() {
                 )}
               </AnimatePresence>
 
-              {/* Workspace URL QR Code Generator Button & Popover */}
+              {/* Workspace URL QR Code Generator Button & Adjacent Camera Scan Icon */}
               <div
                 ref={workspaceHeaderQrContainerRef}
-                className="relative inline-flex items-center"
+                className="relative inline-flex items-center gap-1"
               >
                 <input
                   type="hidden"
@@ -5098,6 +5112,7 @@ export default function App() {
                   data-testid={workspaceHeaderQrMeta.buttonTestId}
                   data-open={workspaceHeaderQrMeta.isOpen ? 'true' : 'false'}
                   data-qr-url={workspaceHeaderQrMeta.workspaceUrl}
+                  data-includes-scanner="true"
                   data-generation-count={String(
                     workspaceHeaderQrMeta.generationCount
                   )}
@@ -5122,6 +5137,41 @@ export default function App() {
                     data-testid="workspace-header-qr-icon"
                   />
                   <span>{workspaceHeaderQrMeta.buttonLabel}</span>
+                </button>
+
+                <button
+                  type="button"
+                  id={workspaceHeaderQrMeta.headerCameraScanButtonId}
+                  data-testid={workspaceHeaderQrMeta.headerCameraScanButtonTestId}
+                  data-camera-scanning={
+                    workspaceHeaderQrMeta.isCameraScanning ? 'true' : 'false'
+                  }
+                  data-includes-qr-scanner="true"
+                  aria-expanded={
+                    workspaceHeaderQrMeta.isOpen &&
+                    workspaceHeaderQrMeta.isCameraScanning
+                  }
+                  aria-controls={workspaceHeaderQrMeta.popoverElementId}
+                  aria-label={workspaceHeaderQrMeta.headerCameraScanAriaLabel}
+                  title={workspaceHeaderQrMeta.headerCameraScanTitle}
+                  onClick={handleOpenWorkspaceHeaderQrCameraScannerFromHeader}
+                  className={`inline-flex items-center justify-center p-1.5 rounded-md border text-xs font-sans font-semibold transition-colors shrink-0 ${
+                    workspaceHeaderQrMeta.isOpen &&
+                    workspaceHeaderQrMeta.isCameraScanning
+                      ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
+                      : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-emerald-400 dark:hover:border-emerald-500/60'
+                  }`}
+                >
+                  <Camera
+                    id={workspaceHeaderQrMeta.headerCameraScanIconId}
+                    data-testid={workspaceHeaderQrMeta.headerCameraScanIconTestId}
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      workspaceHeaderQrMeta.isOpen &&
+                      workspaceHeaderQrMeta.isCameraScanning
+                        ? 'text-emerald-600 dark:text-emerald-300'
+                        : 'text-emerald-600 dark:text-emerald-400'
+                    }`}
+                  />
                 </button>
 
                 <AnimatePresence initial={false}>
