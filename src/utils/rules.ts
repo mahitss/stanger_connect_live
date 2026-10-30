@@ -14189,6 +14189,177 @@ export function resolveWorkspaceQrScanToastJoinAction(input?: {
   };
 }
 
+export const WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY =
+  'mr_stranger_recent_qr_scans_v1';
+export const MAX_WORKSPACE_QR_RECENT_SCANS = 5;
+
+export interface WorkspaceQrRecentScanEntry {
+  id: string;
+  roomCode: string;
+  workspaceUrl: string;
+  rawValue: string;
+  scannedAtMs: number;
+  hasFilterParams: boolean;
+  audienceFilter: OnlineDirectoryAudienceFilter;
+  moodFilter: string;
+  onlyInFocus: boolean;
+}
+
+export interface WorkspaceQrRecentScansSpec {
+  sectionElementId: 'workspace-header-qr-recent-scans';
+  sectionTestId: 'workspace-header-qr-recent-scans';
+  listElementId: 'workspace-header-qr-recent-scans-list';
+  listTestId: 'workspace-header-qr-recent-scans-list';
+  emptyStateElementId: 'workspace-header-qr-recent-scans-empty';
+  emptyStateTestId: 'workspace-header-qr-recent-scans-empty';
+  clearButtonElementId: 'workspace-header-qr-recent-scans-clear-btn';
+  clearButtonTestId: 'workspace-header-qr-recent-scans-clear-btn';
+  storageKey: typeof WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY;
+  maxItems: number;
+  heading: 'Recent Scans';
+  countBadgeLabel: string;
+  emptyMessage: string;
+  items: WorkspaceQrRecentScanEntry[];
+  hasItems: boolean;
+}
+
+export function normalizeStoredWorkspaceQrRecentScans(
+  rawList: unknown,
+  maxItems = MAX_WORKSPACE_QR_RECENT_SCANS
+): WorkspaceQrRecentScanEntry[] {
+  const cap = Math.max(1, Math.min(20, Math.floor(maxItems || 5)));
+  if (!Array.isArray(rawList)) return [];
+
+  const deduped: WorkspaceQrRecentScanEntry[] = [];
+  const seenKeys = new Set<string>();
+
+  for (const item of rawList) {
+    if (!item || typeof item !== 'object') continue;
+    const rec = item as Partial<WorkspaceQrRecentScanEntry>;
+    const rawUrl = typeof rec.workspaceUrl === 'string' ? rec.workspaceUrl.trim() : '';
+    const rawRoom = typeof rec.roomCode === 'string' ? rec.roomCode.trim() : '';
+    if (!rawUrl && !rawRoom) continue;
+
+    const roomCode = normalizeStudyRoomCode(rawRoom || 'STUDY-GLOBAL');
+    const workspaceUrl =
+      rawUrl || `https://mrstranger.app/?room=${encodeURIComponent(roomCode)}`;
+    const dedupeKey = `${roomCode}::${workspaceUrl}`;
+    if (seenKeys.has(dedupeKey)) continue;
+    seenKeys.add(dedupeKey);
+
+    deduped.push({
+      id:
+        typeof rec.id === 'string' && rec.id.trim()
+          ? rec.id.trim()
+          : `qrscan_${roomCode.toLowerCase()}_${deduped.length + 1}`,
+      roomCode,
+      workspaceUrl,
+      rawValue:
+        typeof rec.rawValue === 'string' && rec.rawValue.trim()
+          ? rec.rawValue.trim()
+          : workspaceUrl,
+      scannedAtMs:
+        typeof rec.scannedAtMs === 'number' && Number.isFinite(rec.scannedAtMs)
+          ? Math.max(0, Math.floor(rec.scannedAtMs))
+          : 0,
+      hasFilterParams: Boolean(rec.hasFilterParams),
+      audienceFilter:
+        rec.audienceFilter === 'my_connections' ? 'my_connections' : 'everyone',
+      moodFilter:
+        typeof rec.moodFilter === 'string' && rec.moodFilter.trim()
+          ? rec.moodFilter.trim()
+          : 'all',
+      onlyInFocus: Boolean(rec.onlyInFocus),
+    });
+
+    if (deduped.length >= cap) break;
+  }
+
+  return deduped;
+}
+
+export function recordWorkspaceQrRecentScan(
+  existing: WorkspaceQrRecentScanEntry[] | unknown,
+  scanned: ParsedWorkspaceQrScanResult | null | undefined,
+  nowMs = Date.now(),
+  maxItems = MAX_WORKSPACE_QR_RECENT_SCANS
+): {
+  updatedScans: WorkspaceQrRecentScanEntry[];
+  addedEntry: WorkspaceQrRecentScanEntry | null;
+  serializedJson: string;
+} {
+  const cap = Math.max(1, Math.min(20, Math.floor(maxItems || 5)));
+  const normalizedExisting = normalizeStoredWorkspaceQrRecentScans(existing, cap);
+  if (!scanned || !scanned.isValid) {
+    return {
+      updatedScans: normalizedExisting,
+      addedEntry: null,
+      serializedJson: JSON.stringify(normalizedExisting),
+    };
+  }
+
+  const safeNow =
+    typeof nowMs === 'number' && Number.isFinite(nowMs)
+      ? Math.max(0, Math.floor(nowMs))
+      : Date.now();
+  const roomCode = normalizeStudyRoomCode(scanned.roomCode || 'STUDY-GLOBAL');
+  const workspaceUrl =
+    (scanned.workspaceUrl || '').trim() ||
+    `https://mrstranger.app/?room=${encodeURIComponent(roomCode)}`;
+
+  const addedEntry: WorkspaceQrRecentScanEntry = {
+    id: `qrscan_${roomCode.toLowerCase()}_${safeNow}`,
+    roomCode,
+    workspaceUrl,
+    rawValue: (scanned.rawValue || '').trim() || workspaceUrl,
+    scannedAtMs: safeNow,
+    hasFilterParams: Boolean(scanned.hasFilterParams),
+    audienceFilter: scanned.audienceFilter,
+    moodFilter: scanned.moodFilter || 'all',
+    onlyInFocus: Boolean(scanned.onlyInFocus),
+  };
+
+  const filtered = normalizedExisting.filter(
+    (entry) =>
+      !(entry.roomCode === roomCode && entry.workspaceUrl === workspaceUrl) &&
+      entry.roomCode !== roomCode
+  );
+  const updatedScans = [addedEntry, ...filtered].slice(0, cap);
+
+  return {
+    updatedScans,
+    addedEntry,
+    serializedJson: JSON.stringify(updatedScans),
+  };
+}
+
+export function buildWorkspaceQrRecentScansSpec(
+  recentScans?: WorkspaceQrRecentScanEntry[] | unknown,
+  maxItems = MAX_WORKSPACE_QR_RECENT_SCANS
+): WorkspaceQrRecentScansSpec {
+  const cap = Math.max(1, Math.min(20, Math.floor(maxItems || 5)));
+  const items = normalizeStoredWorkspaceQrRecentScans(recentScans, cap);
+
+  return {
+    sectionElementId: 'workspace-header-qr-recent-scans',
+    sectionTestId: 'workspace-header-qr-recent-scans',
+    listElementId: 'workspace-header-qr-recent-scans-list',
+    listTestId: 'workspace-header-qr-recent-scans-list',
+    emptyStateElementId: 'workspace-header-qr-recent-scans-empty',
+    emptyStateTestId: 'workspace-header-qr-recent-scans-empty',
+    clearButtonElementId: 'workspace-header-qr-recent-scans-clear-btn',
+    clearButtonTestId: 'workspace-header-qr-recent-scans-clear-btn',
+    storageKey: WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+    maxItems: cap,
+    heading: 'Recent Scans',
+    countBadgeLabel: `${items.length}/${cap}`,
+    emptyMessage:
+      'No recent QR scans yet. Scan a workspace QR code to save up to 5 rooms for quick access.',
+    items,
+    hasItems: items.length > 0,
+  };
+}
+
 export interface WorkspaceHeaderQrCodeMeta {
   shellSelector: '#workspace-shell';
   headerElementId: 'workspace-top-header';
@@ -14200,6 +14371,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   headerCameraScanIconTestId: 'workspace-header-qr-camera-scan-icon';
   headerCameraStatusDot: WorkspaceHeaderCameraStatusDotSpec;
   scanToast: WorkspaceQrScanToastSpec;
+  recentScans: WorkspaceQrRecentScansSpec;
   popoverElementId: 'workspace-header-qr-popover';
   popoverTestId: 'workspace-header-qr-popover';
   generationCountHiddenInputId: 'workspace-header-qr-generation-count-state';
@@ -14279,6 +14451,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   lastJoinedWorkspaceRoomCode?: string | null;
   lastScannedResult?: ParsedWorkspaceQrScanResult | null;
   isScanToastVisible?: boolean;
+  recentScans?: WorkspaceQrRecentScanEntry[] | null;
   generationCount?: number;
   downloadCount?: number;
   roomCode?: string | null;
@@ -14310,6 +14483,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     roomCode: lastJoinedWorkspaceRoomCode || roomCode,
     workspaceUrl: lastScannedWorkspaceUrl || workspaceUrl,
   });
+  const recentScans = buildWorkspaceQrRecentScansSpec(input?.recentScans ?? []);
 
   const cameraScanStatusLabel =
     cameraScanStatus === 'requesting_camera'
@@ -14342,6 +14516,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     headerCameraScanIconTestId: 'workspace-header-qr-camera-scan-icon',
     headerCameraStatusDot,
     scanToast,
+    recentScans,
     popoverElementId: 'workspace-header-qr-popover',
     popoverTestId: 'workspace-header-qr-popover',
     generationCountHiddenInputId: 'workspace-header-qr-generation-count-state',

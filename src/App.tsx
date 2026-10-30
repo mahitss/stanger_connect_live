@@ -220,6 +220,11 @@ import {
   parseScannedWorkspaceQrPayload,
   decodeWorkspaceQrFromRgbaFrame,
   resolveWorkspaceQrScanToastJoinAction,
+  WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+  MAX_WORKSPACE_QR_RECENT_SCANS,
+  WorkspaceQrRecentScanEntry,
+  normalizeStoredWorkspaceQrRecentScans,
+  recordWorkspaceQrRecentScan,
   WorkspaceHeaderQrCameraScanStatus,
   ParsedWorkspaceQrScanResult,
 } from './utils/rules';
@@ -803,6 +808,22 @@ export default function App() {
     useState<WorkspaceHeaderQrCameraScanStatus>('idle');
   const [lastScannedWorkspaceQrResult, setLastScannedWorkspaceQrResult] =
     useState<ParsedWorkspaceQrScanResult | null>(null);
+  const [recentWorkspaceQrScans, setRecentWorkspaceQrScans] = useState<
+    WorkspaceQrRecentScanEntry[]
+  >(() => {
+    try {
+      const raw = localStorage.getItem(WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY);
+      if (raw) {
+        return normalizeStoredWorkspaceQrRecentScans(
+          JSON.parse(raw),
+          MAX_WORKSPACE_QR_RECENT_SCANS
+        );
+      }
+    } catch {
+      // ignore localStorage read error
+    }
+    return [];
+  });
   const [isWorkspaceHeaderQrScanToastVisible, setIsWorkspaceHeaderQrScanToastVisible] =
     useState<boolean>(false);
   const workspaceHeaderQrScanToastTimerRef = useRef<number | null>(null);
@@ -3791,10 +3812,24 @@ export default function App() {
     lastJoinedWorkspaceRoomCode: lastScannedWorkspaceQrResult?.roomCode ?? null,
     lastScannedResult: lastScannedWorkspaceQrResult,
     isScanToastVisible: isWorkspaceHeaderQrScanToastVisible,
+    recentScans: recentWorkspaceQrScans,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
   });
+
+  const handleClearRecentWorkspaceQrScans = () => {
+    setRecentWorkspaceQrScans([]);
+    try {
+      localStorage.setItem(WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY, '[]');
+    } catch {
+      // ignore localStorage error
+    }
+  };
+
+  const handleSelectRecentWorkspaceQrScan = (entry: WorkspaceQrRecentScanEntry) => {
+    handleApplyScannedWorkspaceQrPayload(entry.workspaceUrl || entry.roomCode);
+  };
 
   const handleDismissWorkspaceQrScanToast = () => {
     if (workspaceHeaderQrScanToastTimerRef.current !== null) {
@@ -3905,6 +3940,23 @@ export default function App() {
     setLastScannedWorkspaceQrResult(parsed);
     setActiveStudyRoomCode(parsed.roomCode);
     setWorkspaceHeaderQrHref(parsed.workspaceUrl);
+    setRecentWorkspaceQrScans((prev) => {
+      const recorded = recordWorkspaceQrRecentScan(
+        prev,
+        parsed,
+        Date.now(),
+        MAX_WORKSPACE_QR_RECENT_SCANS
+      );
+      try {
+        localStorage.setItem(
+          WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+          recorded.serializedJson
+        );
+      } catch {
+        // ignore localStorage write error
+      }
+      return recorded.updatedScans;
+    });
     setIsWorkspaceHeaderQrScanToastVisible(true);
     if (workspaceHeaderQrScanToastTimerRef.current !== null) {
       window.clearTimeout(workspaceHeaderQrScanToastTimerRef.current);
@@ -5590,6 +5642,105 @@ export default function App() {
                             </span>
                           </div>
                         )}
+
+                        {/* Recent Scans List (Last 5 Successful Scan Results Stored in localStorage) */}
+                        <div
+                          id={workspaceHeaderQrMeta.recentScans.sectionElementId}
+                          data-testid={workspaceHeaderQrMeta.recentScans.sectionTestId}
+                          data-storage-key={workspaceHeaderQrMeta.recentScans.storageKey}
+                          data-recent-scans-count={String(
+                            workspaceHeaderQrMeta.recentScans.items.length
+                          )}
+                          data-max-items={String(
+                            workspaceHeaderQrMeta.recentScans.maxItems
+                          )}
+                          className="pt-2 border-t border-slate-200 dark:border-zinc-800/80 space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold text-slate-700 dark:text-zinc-200">
+                              <History className="w-3 h-3 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                              <span>{workspaceHeaderQrMeta.recentScans.heading}</span>
+                              <span
+                                data-testid="workspace-header-qr-recent-scans-count-badge"
+                                className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[10px] font-mono font-semibold text-slate-600 dark:text-zinc-400"
+                              >
+                                {workspaceHeaderQrMeta.recentScans.countBadgeLabel}
+                              </span>
+                            </div>
+
+                            {workspaceHeaderQrMeta.recentScans.hasItems && (
+                              <button
+                                type="button"
+                                id={
+                                  workspaceHeaderQrMeta.recentScans
+                                    .clearButtonElementId
+                                }
+                                data-testid={
+                                  workspaceHeaderQrMeta.recentScans.clearButtonTestId
+                                }
+                                onClick={handleClearRecentWorkspaceQrScans}
+                                aria-label="Clear recent QR scans"
+                                className="text-[10px] font-mono font-medium text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 transition-colors"
+                              >
+                                Clear
+                              </button>
+                            )}
+                          </div>
+
+                          {workspaceHeaderQrMeta.recentScans.hasItems ? (
+                            <ul
+                              id={workspaceHeaderQrMeta.recentScans.listElementId}
+                              data-testid={
+                                workspaceHeaderQrMeta.recentScans.listTestId
+                              }
+                              className="space-y-1 max-h-52 overflow-y-auto pr-0.5"
+                            >
+                              {workspaceHeaderQrMeta.recentScans.items.map(
+                                (scanItem, idx) => (
+                                  <li key={scanItem.id}>
+                                    <button
+                                      type="button"
+                                      id={`workspace-header-qr-recent-scan-item-${idx}`}
+                                      data-testid={`workspace-header-qr-recent-scan-item-${idx}`}
+                                      data-room-code={scanItem.roomCode}
+                                      data-workspace-url={scanItem.workspaceUrl}
+                                      onClick={() =>
+                                        handleSelectRecentWorkspaceQrScan(scanItem)
+                                      }
+                                      aria-label={`Quick access to scanned room ${scanItem.roomCode}`}
+                                      className="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-emerald-50/70 hover:border-emerald-500/40 dark:bg-[#050505] dark:hover:bg-emerald-950/30 dark:hover:border-emerald-500/40 text-left transition-colors group"
+                                    >
+                                      <div className="min-w-0 flex items-center gap-1.5">
+                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-300 shrink-0">
+                                          {scanItem.roomCode}
+                                        </span>
+                                        <span className="text-[10px] font-mono text-slate-500 dark:text-zinc-400 truncate">
+                                          {scanItem.workspaceUrl}
+                                        </span>
+                                      </div>
+                                      <span className="text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 shrink-0 group-hover:underline">
+                                        Open
+                                      </span>
+                                    </button>
+                                  </li>
+                                )
+                              )}
+                            </ul>
+                          ) : (
+                            <p
+                              id={
+                                workspaceHeaderQrMeta.recentScans
+                                  .emptyStateElementId
+                              }
+                              data-testid={
+                                workspaceHeaderQrMeta.recentScans.emptyStateTestId
+                              }
+                              className="text-[10px] text-slate-500 dark:text-zinc-500 leading-snug"
+                            >
+                              {workspaceHeaderQrMeta.recentScans.emptyMessage}
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </motion.div>
                   )}

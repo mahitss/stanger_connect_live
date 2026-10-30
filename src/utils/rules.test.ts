@@ -250,6 +250,11 @@ import {
   WORKSPACE_QR_SCAN_TOAST_DURATION_MS,
   buildWorkspaceQrScanToastSpec,
   resolveWorkspaceQrScanToastJoinAction,
+  WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+  MAX_WORKSPACE_QR_RECENT_SCANS,
+  normalizeStoredWorkspaceQrRecentScans,
+  recordWorkspaceQrRecentScan,
+  buildWorkspaceQrRecentScansSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -6354,4 +6359,69 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   assert.equal(joinAction.shouldJoinStudyDesk, true);
   assert.equal(joinAction.shouldDismissToast, true);
   assert.equal(joinAction.shouldCloseQrPopover, true);
+
+  // 7. Store last 5 successful QR scan results in localStorage and expose 'Recent Scans' spec
+  assert.equal(MAX_WORKSPACE_QR_RECENT_SCANS, 5);
+  assert.equal(
+    WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+    'mr_stranger_recent_qr_scans_v1'
+  );
+  assert.equal(idleScanMeta.recentScans.heading, 'Recent Scans');
+  assert.equal(idleScanMeta.recentScans.hasItems, false);
+  assert.equal(idleScanMeta.recentScans.countBadgeLabel, '0/5');
+
+  let history: ReturnType<typeof normalizeStoredWorkspaceQrRecentScans> = [];
+  const sampleRooms = [
+    'STUDY-ROOM1',
+    'STUDY-ROOM2',
+    'STUDY-ROOM3',
+    'STUDY-ROOM4',
+    'STUDY-ROOM5',
+    'STUDY-ROOM6',
+  ];
+  for (let i = 0; i < sampleRooms.length; i += 1) {
+    const parsed = parseScannedWorkspaceQrPayload(
+      `http://localhost:3000/?room=${sampleRooms[i]}`,
+      'http://localhost:3000'
+    );
+    const recorded = recordWorkspaceQrRecentScan(
+      history,
+      parsed,
+      1_760_000_000_000 + i * 1000
+    );
+    history = normalizeStoredWorkspaceQrRecentScans(
+      JSON.parse(recorded.serializedJson)
+    );
+  }
+  assert.equal(history.length, 5);
+  assert.deepEqual(
+    history.map((h) => h.roomCode),
+    ['STUDY-ROOM6', 'STUDY-ROOM5', 'STUDY-ROOM4', 'STUDY-ROOM3', 'STUDY-ROOM2']
+  );
+
+  // Re-scanning an existing room moves it to the top without duplicating
+  const rescanRoom3 = parseScannedWorkspaceQrPayload(
+    'http://localhost:3000/?room=STUDY-ROOM3',
+    'http://localhost:3000'
+  );
+  const rescanned = recordWorkspaceQrRecentScan(
+    history,
+    rescanRoom3,
+    1_760_000_010_000
+  );
+  assert.equal(rescanned.updatedScans.length, 5);
+  assert.deepEqual(
+    rescanned.updatedScans.map((h) => h.roomCode),
+    ['STUDY-ROOM3', 'STUDY-ROOM6', 'STUDY-ROOM5', 'STUDY-ROOM4', 'STUDY-ROOM2']
+  );
+
+  const populatedRecentSpec = buildWorkspaceQrRecentScansSpec(
+    rescanned.updatedScans
+  );
+  assert.equal(populatedRecentSpec.hasItems, true);
+  assert.equal(populatedRecentSpec.countBadgeLabel, '5/5');
+  assert.equal(
+    populatedRecentSpec.sectionElementId,
+    'workspace-header-qr-recent-scans'
+  );
 });
