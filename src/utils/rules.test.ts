@@ -235,6 +235,9 @@ import {
   WORKSPACE_HEADER_SHARE_FEEDBACK_DURATION_MS,
   resolveWorkspaceHeaderShareUrl,
   getWorkspaceHeaderShareButtonMeta,
+  WORKSPACE_HEADER_QR_QUIET_ZONE,
+  generateWorkspaceUrlQrMatrix,
+  getWorkspaceHeaderQrCodeMeta,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -5948,4 +5951,69 @@ test('Workspace shell (#workspace-shell) top header Share link button resolves c
   assert.equal(copiedMeta.feedbackMessage, 'Page link copied to clipboard!');
   assert.equal(copiedMeta.ariaLabel, 'Current page URL copied to clipboard');
   assert.match(copiedMeta.title, /Page link copied to clipboard/);
+});
+
+test('Workspace shell (#workspace-shell) header QR Code button generates ISO/IEC 18004 QR matrix, SVG path, and popover metadata for current workspace URL', () => {
+  assert.equal(WORKSPACE_HEADER_QR_QUIET_ZONE, 2);
+
+  // 1. Generate QR matrix for a current workspace URL
+  const qrMatrix = generateWorkspaceUrlQrMatrix(
+    'http://localhost:3000/?room=STUDY-GLOBAL&mood=Deep+Work'
+  );
+  assert.equal(
+    qrMatrix.url,
+    'http://localhost:3000/?room=STUDY-GLOBAL&mood=Deep+Work'
+  );
+  assert.equal(qrMatrix.quietZone, 2);
+  assert.equal(qrMatrix.moduleSize >= 21, true);
+  assert.equal(qrMatrix.viewBoxSize, qrMatrix.moduleSize + 4);
+  assert.equal(
+    qrMatrix.viewBox,
+    `0 0 ${qrMatrix.viewBoxSize} ${qrMatrix.viewBoxSize}`
+  );
+  assert.equal(qrMatrix.matrix.length, qrMatrix.moduleSize);
+  assert.equal(qrMatrix.matrix[0].length, qrMatrix.moduleSize);
+  assert.equal(qrMatrix.darkModulesCount > 100, true);
+  assert.match(qrMatrix.svgPathData, /^M2,2h1v1h-1z/);
+
+  // Finder pattern top-left corner (7x7 outer ring) must have dark modules at (0,0), (0,6), (6,0), (6,6)
+  assert.equal(qrMatrix.matrix[0][0], true);
+  assert.equal(qrMatrix.matrix[0][6], true);
+  assert.equal(qrMatrix.matrix[6][0], true);
+  assert.equal(qrMatrix.matrix[6][6], true);
+
+  // 2. Closed vs Open metadata for #workspace-header-qr-btn and #workspace-header-qr-popover
+  const closedMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=FOCUS-77',
+    isOpen: false,
+    isCopied: false,
+    roomCode: 'FOCUS-77',
+  });
+  assert.equal(closedMeta.shellSelector, '#workspace-shell');
+  assert.equal(closedMeta.headerElementId, 'workspace-top-header');
+  assert.equal(closedMeta.buttonElementId, 'workspace-header-qr-btn');
+  assert.equal(closedMeta.buttonTestId, 'workspace-header-qr-btn');
+  assert.equal(closedMeta.popoverElementId, 'workspace-header-qr-popover');
+  assert.equal(closedMeta.svgElementId, 'workspace-header-qr-svg');
+  assert.equal(closedMeta.urlDisplayId, 'workspace-header-qr-url');
+  assert.equal(closedMeta.copyButtonId, 'workspace-header-qr-copy-btn');
+  assert.equal(closedMeta.closeButtonId, 'workspace-header-qr-close-btn');
+  assert.equal(closedMeta.workspaceUrl, 'http://localhost:3000/?room=FOCUS-77');
+  assert.equal(closedMeta.roomCode, 'FOCUS-77');
+  assert.equal(closedMeta.isOpen, false);
+  assert.equal(closedMeta.isCopied, false);
+  assert.equal(closedMeta.buttonLabel, 'QR Code');
+  assert.equal(closedMeta.dialogTitle, 'Mobile & Nearby Access QR Code');
+  assert.equal(closedMeta.ariaLabel, 'Show QR code for current workspace URL');
+
+  const openMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=FOCUS-77',
+    isOpen: true,
+    isCopied: true,
+    roomCode: 'FOCUS-77',
+  });
+  assert.equal(openMeta.isOpen, true);
+  assert.equal(openMeta.isCopied, true);
+  assert.equal(openMeta.ariaLabel, 'Hide workspace URL QR code');
+  assert.equal(openMeta.qrMatrix.moduleSize, closedMeta.qrMatrix.moduleSize);
 });

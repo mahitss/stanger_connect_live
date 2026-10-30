@@ -11,6 +11,8 @@
  * 9. Privacy visibility filtering & password strength validation
  */
 
+import QRCode from 'qrcode';
+
 export const APP_LOGO_URL = '/assets/aistudio/image_18838782.png';
 export const APP_BRAND_NAME = 'Mr. Stranger';
 
@@ -13731,5 +13733,129 @@ export function getWorkspaceHeaderShareButtonMeta(input?: {
       : `Copy current page URL (${shareUrl}) to clipboard`,
     statusRole: 'status',
     ariaLive: 'polite',
+  };
+}
+
+export const WORKSPACE_HEADER_QR_QUIET_ZONE = 2;
+
+export interface WorkspaceHeaderQrMatrixSpec {
+  url: string;
+  moduleSize: number;
+  quietZone: number;
+  viewBoxSize: number;
+  viewBox: string;
+  darkModulesCount: number;
+  svgPathData: string;
+  matrix: boolean[][];
+}
+
+export function generateWorkspaceUrlQrMatrix(
+  currentHref?: string | null
+): WorkspaceHeaderQrMatrixSpec {
+  const url = resolveWorkspaceHeaderShareUrl(currentHref);
+  const qr = QRCode.create(url, { errorCorrectionLevel: 'M' });
+  const moduleSize = qr.modules.size;
+  const quietZone = WORKSPACE_HEADER_QR_QUIET_ZONE;
+  const viewBoxSize = moduleSize + quietZone * 2;
+  const matrix: boolean[][] = [];
+  const pathSegments: string[] = [];
+  let darkModulesCount = 0;
+
+  for (let row = 0; row < moduleSize; row++) {
+    const rowCells: boolean[] = [];
+    for (let col = 0; col < moduleSize; col++) {
+      const isDark = Boolean(qr.modules.get(row, col));
+      rowCells.push(isDark);
+      if (isDark) {
+        darkModulesCount++;
+        const x = col + quietZone;
+        const y = row + quietZone;
+        pathSegments.push(`M${x},${y}h1v1h-1z`);
+      }
+    }
+    matrix.push(rowCells);
+  }
+
+  return {
+    url,
+    moduleSize,
+    quietZone,
+    viewBoxSize,
+    viewBox: `0 0 ${viewBoxSize} ${viewBoxSize}`,
+    darkModulesCount,
+    svgPathData: pathSegments.join(''),
+    matrix,
+  };
+}
+
+export interface WorkspaceHeaderQrCodeMeta {
+  shellSelector: '#workspace-shell';
+  headerElementId: 'workspace-top-header';
+  buttonElementId: 'workspace-header-qr-btn';
+  buttonTestId: 'workspace-header-qr-btn';
+  popoverElementId: 'workspace-header-qr-popover';
+  popoverTestId: 'workspace-header-qr-popover';
+  svgElementId: 'workspace-header-qr-svg';
+  svgTestId: 'workspace-header-qr-svg';
+  urlDisplayId: 'workspace-header-qr-url';
+  urlDisplayTestId: 'workspace-header-qr-url';
+  copyButtonId: 'workspace-header-qr-copy-btn';
+  copyButtonTestId: 'workspace-header-qr-copy-btn';
+  closeButtonId: 'workspace-header-qr-close-btn';
+  closeButtonTestId: 'workspace-header-qr-close-btn';
+  workspaceUrl: string;
+  roomCode: string;
+  isOpen: boolean;
+  isCopied: boolean;
+  buttonLabel: 'QR Code';
+  dialogTitle: 'Mobile & Nearby Access QR Code';
+  dialogSubtitle: string;
+  ariaLabel: string;
+  title: string;
+  qrMatrix: WorkspaceHeaderQrMatrixSpec;
+}
+
+export function getWorkspaceHeaderQrCodeMeta(input?: {
+  currentHref?: string | null;
+  isOpen?: boolean;
+  isCopied?: boolean;
+  roomCode?: string | null;
+}): WorkspaceHeaderQrCodeMeta {
+  const qrMatrix = generateWorkspaceUrlQrMatrix(input?.currentHref);
+  const workspaceUrl = qrMatrix.url;
+  const isOpen = Boolean(input?.isOpen);
+  const isCopied = Boolean(input?.isCopied);
+  const roomCode = (input?.roomCode ?? '').trim() || 'STUDY-GLOBAL';
+
+  return {
+    shellSelector: '#workspace-shell',
+    headerElementId: 'workspace-top-header',
+    buttonElementId: 'workspace-header-qr-btn',
+    buttonTestId: 'workspace-header-qr-btn',
+    popoverElementId: 'workspace-header-qr-popover',
+    popoverTestId: 'workspace-header-qr-popover',
+    svgElementId: 'workspace-header-qr-svg',
+    svgTestId: 'workspace-header-qr-svg',
+    urlDisplayId: 'workspace-header-qr-url',
+    urlDisplayTestId: 'workspace-header-qr-url',
+    copyButtonId: 'workspace-header-qr-copy-btn',
+    copyButtonTestId: 'workspace-header-qr-copy-btn',
+    closeButtonId: 'workspace-header-qr-close-btn',
+    closeButtonTestId: 'workspace-header-qr-close-btn',
+    workspaceUrl,
+    roomCode,
+    isOpen,
+    isCopied,
+    buttonLabel: 'QR Code',
+    dialogTitle: 'Mobile & Nearby Access QR Code',
+    dialogSubtitle:
+      'Scan with your phone camera to open this workspace URL on mobile or share with people nearby.',
+    ariaLabel: isOpen
+      ? 'Hide workspace URL QR code'
+      : 'Show QR code for current workspace URL',
+    title: isOpen
+      ? `Close QR code for ${workspaceUrl}`
+      : `Generate and display QR code for ${workspaceUrl}`,
+    qrMatrix,
   };
 }

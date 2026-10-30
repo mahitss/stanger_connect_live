@@ -59,6 +59,7 @@ import {
   Bookmark,
   History,
   Trash2,
+  QrCode,
 } from 'lucide-react';
 import {
   auth,
@@ -210,6 +211,7 @@ import {
   WORKSPACE_HEADER_SHARE_FEEDBACK_DURATION_MS,
   resolveWorkspaceHeaderShareUrl,
   getWorkspaceHeaderShareButtonMeta,
+  getWorkspaceHeaderQrCodeMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -772,6 +774,10 @@ export default function App() {
   const [lastCopiedWorkspaceHeaderUrl, setLastCopiedWorkspaceHeaderUrl] =
     useState<string>('');
   const workspaceHeaderShareTimerRef = useRef<number | null>(null);
+  const [isWorkspaceHeaderQrOpen, setIsWorkspaceHeaderQrOpen] =
+    useState<boolean>(false);
+  const [workspaceHeaderQrHref, setWorkspaceHeaderQrHref] = useState<string>('');
+  const workspaceHeaderQrContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     return () => {
       if (workspaceHeaderShareTimerRef.current !== null) {
@@ -779,6 +785,29 @@ export default function App() {
       }
     };
   }, []);
+  useEffect(() => {
+    if (!isWorkspaceHeaderQrOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setIsWorkspaceHeaderQrOpen(false);
+      }
+    };
+    const onMouseDown = (e: MouseEvent) => {
+      if (
+        workspaceHeaderQrContainerRef.current &&
+        !workspaceHeaderQrContainerRef.current.contains(e.target as Node)
+      ) {
+        setIsWorkspaceHeaderQrOpen(false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('mousedown', onMouseDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [isWorkspaceHeaderQrOpen]);
   const [isSidebarHovered, setIsSidebarHovered] = useState<boolean>(false);
   const [isSidebarFocused, setIsSidebarFocused] = useState<boolean>(false);
   const [isSidebarProgrammaticScroll, setIsSidebarProgrammaticScroll] =
@@ -3675,6 +3704,32 @@ export default function App() {
       }
     }
   };
+
+  const workspaceHeaderQrMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref:
+      workspaceHeaderQrHref ||
+      lastCopiedWorkspaceHeaderUrl ||
+      currentWorkspacePageHref,
+    isOpen: isWorkspaceHeaderQrOpen,
+    isCopied: isWorkspaceHeaderUrlCopied,
+    roomCode: activeStudyRoomCode,
+  });
+
+  const handleToggleWorkspaceHeaderQrCode = () => {
+    const resolvedHref = resolveWorkspaceHeaderShareUrl(
+      typeof window !== 'undefined' && window.location?.href
+        ? window.location.href
+        : 'https://mrstranger.app/'
+    );
+    setWorkspaceHeaderQrHref(resolvedHref);
+    setIsWorkspaceHeaderQrOpen((prev) => {
+      const next = !prev;
+      if (next && uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+      return next;
+    });
+  };
   const myFocusStatus =
     directoryFocusSummary.byUid[currentIdentity.uid] ||
     getOnlinePeerFocusStatus(
@@ -4629,6 +4684,154 @@ export default function App() {
                   </motion.span>
                 )}
               </AnimatePresence>
+
+              {/* Workspace URL QR Code Generator Button & Popover */}
+              <div
+                ref={workspaceHeaderQrContainerRef}
+                className="relative inline-flex items-center"
+              >
+                <button
+                  type="button"
+                  id={workspaceHeaderQrMeta.buttonElementId}
+                  data-testid={workspaceHeaderQrMeta.buttonTestId}
+                  data-open={workspaceHeaderQrMeta.isOpen ? 'true' : 'false'}
+                  data-qr-url={workspaceHeaderQrMeta.workspaceUrl}
+                  aria-expanded={workspaceHeaderQrMeta.isOpen}
+                  aria-haspopup="dialog"
+                  aria-controls={workspaceHeaderQrMeta.popoverElementId}
+                  aria-label={workspaceHeaderQrMeta.ariaLabel}
+                  title={workspaceHeaderQrMeta.title}
+                  onClick={handleToggleWorkspaceHeaderQrCode}
+                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                    workspaceHeaderQrMeta.isOpen
+                      ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
+                      : 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500'
+                  }`}
+                >
+                  <QrCode
+                    className={`w-3.5 h-3.5 shrink-0 ${
+                      workspaceHeaderQrMeta.isOpen
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : 'text-slate-600 dark:text-zinc-300'
+                    }`}
+                    data-testid="workspace-header-qr-icon"
+                  />
+                  <span>{workspaceHeaderQrMeta.buttonLabel}</span>
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {workspaceHeaderQrMeta.isOpen && (
+                    <motion.div
+                      key="workspace-header-qr-popover"
+                      id={workspaceHeaderQrMeta.popoverElementId}
+                      data-testid={workspaceHeaderQrMeta.popoverTestId}
+                      data-qr-url={workspaceHeaderQrMeta.workspaceUrl}
+                      data-qr-module-size={String(
+                        workspaceHeaderQrMeta.qrMatrix.moduleSize
+                      )}
+                      role="dialog"
+                      aria-modal="false"
+                      aria-label={workspaceHeaderQrMeta.dialogTitle}
+                      initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                      transition={{ duration: 0.18, ease: 'easeOut' }}
+                      className="absolute left-0 top-full mt-2 z-50 w-72 sm:w-80 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
+                            <QrCode className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                            <span>{workspaceHeaderQrMeta.dialogTitle}</span>
+                          </div>
+                          <p className="text-[11px] leading-snug text-slate-500 dark:text-zinc-400">
+                            {workspaceHeaderQrMeta.dialogSubtitle}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          id={workspaceHeaderQrMeta.closeButtonId}
+                          data-testid={workspaceHeaderQrMeta.closeButtonTestId}
+                          onClick={() => setIsWorkspaceHeaderQrOpen(false)}
+                          aria-label="Close QR code dialog"
+                          className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/80 transition-colors shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col items-center justify-center rounded-lg border border-slate-200 dark:border-zinc-800 bg-white p-3">
+                        <svg
+                          id={workspaceHeaderQrMeta.svgElementId}
+                          data-testid={workspaceHeaderQrMeta.svgTestId}
+                          data-qr-url={workspaceHeaderQrMeta.workspaceUrl}
+                          data-qr-modules={String(
+                            workspaceHeaderQrMeta.qrMatrix.moduleSize
+                          )}
+                          data-qr-dark-modules={String(
+                            workspaceHeaderQrMeta.qrMatrix.darkModulesCount
+                          )}
+                          viewBox={workspaceHeaderQrMeta.qrMatrix.viewBox}
+                          shapeRendering="crispEdges"
+                          role="img"
+                          aria-label={`QR code for workspace URL ${workspaceHeaderQrMeta.workspaceUrl}`}
+                          className="w-44 h-44"
+                        >
+                          <rect
+                            width={workspaceHeaderQrMeta.qrMatrix.viewBoxSize}
+                            height={workspaceHeaderQrMeta.qrMatrix.viewBoxSize}
+                            fill="#FFFFFF"
+                          />
+                          <path
+                            d={workspaceHeaderQrMeta.qrMatrix.svgPathData}
+                            fill="#09090B"
+                          />
+                        </svg>
+                        <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-mono text-slate-600 whitespace-nowrap">
+                          <span className="font-semibold text-emerald-700">
+                            Room: {workspaceHeaderQrMeta.roomCode}
+                          </span>
+                          <span>·</span>
+                          <span>Scan with phone camera</span>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <div
+                          id={workspaceHeaderQrMeta.urlDisplayId}
+                          data-testid={workspaceHeaderQrMeta.urlDisplayTestId}
+                          title={workspaceHeaderQrMeta.workspaceUrl}
+                          className="px-2.5 py-1.5 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-[#050505] text-[11px] font-mono text-slate-700 dark:text-zinc-300 truncate"
+                        >
+                          {workspaceHeaderQrMeta.workspaceUrl}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+                          <button
+                            type="button"
+                            id={workspaceHeaderQrMeta.copyButtonId}
+                            data-testid={workspaceHeaderQrMeta.copyButtonTestId}
+                            onClick={handleCopyWorkspaceHeaderShareLink}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-xs font-semibold text-slate-800 dark:text-zinc-100 transition-colors"
+                          >
+                            {workspaceHeaderQrMeta.isCopied ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                                <span>Copied URL!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Link2 className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-300 shrink-0" />
+                                <span>Copy Workspace URL</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             </div>
 
             <button
