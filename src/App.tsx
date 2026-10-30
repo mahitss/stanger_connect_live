@@ -225,6 +225,7 @@ import {
   WorkspaceQrRecentScanEntry,
   normalizeStoredWorkspaceQrRecentScans,
   recordWorkspaceQrRecentScan,
+  resolveWorkspaceQrScanConfirmationChime,
   WorkspaceHeaderQrCameraScanStatus,
   ParsedWorkspaceQrScanResult,
 } from './utils/rules';
@@ -826,6 +827,8 @@ export default function App() {
   });
   const [isWorkspaceHeaderQrScanToastVisible, setIsWorkspaceHeaderQrScanToastVisible] =
     useState<boolean>(false);
+  const [workspaceHeaderQrScanChimeCount, setWorkspaceHeaderQrScanChimeCount] =
+    useState<number>(0);
   const workspaceHeaderQrScanToastTimerRef = useRef<number | null>(null);
   const [workspaceHeaderQrCameraError, setWorkspaceHeaderQrCameraError] =
     useState<string>('');
@@ -3813,6 +3816,8 @@ export default function App() {
     lastScannedResult: lastScannedWorkspaceQrResult,
     isScanToastVisible: isWorkspaceHeaderQrScanToastVisible,
     recentScans: recentWorkspaceQrScans,
+    uiSoundPreferences: uiSoundPrefs,
+    scanChimePlayedCount: workspaceHeaderQrScanChimeCount,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
@@ -3933,6 +3938,17 @@ export default function App() {
       return false;
     }
 
+    // Play high-frequency confirmation chime immediately upon successful QR scan detection
+    const scanChimeSpec = resolveWorkspaceQrScanConfirmationChime({
+      preferences: uiSoundPrefs,
+      roomCode: parsed.roomCode,
+    });
+    if (scanChimeSpec.shouldPlay) {
+      playSubtleUiChime(scanChimeSpec.chime, scanChimeSpec.volumePercent);
+      setWorkspaceHeaderQrScanChimeCount((c) => c + 1);
+    }
+    setLastSoundFeedback(scanChimeSpec.feedbackMessage);
+
     stopWorkspaceHeaderQrCameraStream();
     setIsWorkspaceHeaderQrCameraScanning(false);
     setWorkspaceHeaderQrCameraStatus('detected');
@@ -4011,10 +4027,6 @@ export default function App() {
       );
     }
 
-    if (uiSoundPrefs.enabled) {
-      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
-    }
-
     return true;
   };
 
@@ -4072,11 +4084,9 @@ export default function App() {
         const videoEl = workspaceHeaderQrVideoRef.current;
         if (videoEl) {
           videoEl.srcObject = stream;
-          try {
-            await videoEl.play();
-          } catch {
+          void videoEl.play().catch(() => {
             // ignore play interruption
-          }
+          });
         }
 
         type NativeBarcodeDetectorInstance = {
@@ -4118,14 +4128,12 @@ export default function App() {
             activeVideo.srcObject !== workspaceHeaderQrCameraStreamRef.current
           ) {
             activeVideo.srcObject = workspaceHeaderQrCameraStreamRef.current;
-            try {
-              await activeVideo.play();
-            } catch {
+            void activeVideo.play().catch(() => {
               // ignore play interruption
-            }
+            });
           }
 
-          if (nativeDetector && activeVideo.readyState >= 2) {
+          if (nativeDetector) {
             try {
               const barcodes = await nativeDetector.detect(activeVideo);
               const firstRaw = barcodes?.[0]?.rawValue?.trim();
@@ -5340,6 +5348,15 @@ export default function App() {
                       data-qr-module-size={String(
                         workspaceHeaderQrMeta.qrMatrix.moduleSize
                       )}
+                      data-scan-chime-event={
+                        workspaceHeaderQrMeta.scanConfirmationChime.chimeType
+                      }
+                      data-scan-chime-freqs={workspaceHeaderQrMeta.scanConfirmationChime.frequenciesHz.join(
+                        ','
+                      )}
+                      data-scan-chime-count={String(
+                        workspaceHeaderQrMeta.scanChimePlayedCount
+                      )}
                       role="dialog"
                       aria-modal="false"
                       aria-label={workspaceHeaderQrMeta.dialogTitle}
@@ -5627,6 +5644,15 @@ export default function App() {
                             data-testid={workspaceHeaderQrMeta.scanResultBannerTestId}
                             data-joined-room={lastScannedWorkspaceQrResult.roomCode}
                             data-scanned-url={lastScannedWorkspaceQrResult.workspaceUrl}
+                            data-scan-chime-event={
+                              workspaceHeaderQrMeta.scanConfirmationChime.chimeType
+                            }
+                            data-scan-chime-freqs={workspaceHeaderQrMeta.scanConfirmationChime.frequenciesHz.join(
+                              ','
+                            )}
+                            data-scan-chime-count={String(
+                              workspaceHeaderQrMeta.scanChimePlayedCount
+                            )}
                             role="status"
                             aria-live="polite"
                             className="flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-md border border-emerald-500/40 bg-emerald-500/10 text-[11px] font-medium text-emerald-700 dark:text-emerald-300"
@@ -11829,6 +11855,15 @@ export default function App() {
             data-room-code={workspaceHeaderQrMeta.scanToast.roomCode}
             data-workspace-url={workspaceHeaderQrMeta.scanToast.workspaceUrl}
             data-duration-ms={String(workspaceHeaderQrMeta.scanToast.durationMs)}
+            data-scan-chime-event={
+              workspaceHeaderQrMeta.scanConfirmationChime.chimeType
+            }
+            data-scan-chime-freqs={workspaceHeaderQrMeta.scanConfirmationChime.frequenciesHz.join(
+              ','
+            )}
+            data-scan-chime-count={String(
+              workspaceHeaderQrMeta.scanChimePlayedCount
+            )}
             role={workspaceHeaderQrMeta.scanToast.statusRole}
             aria-live={workspaceHeaderQrMeta.scanToast.ariaLive}
             initial={{ opacity: 0, y: -12, scale: 0.96 }}

@@ -48,10 +48,11 @@ export function playSubtleUiChime(
     const totalSec = Math.max(0.18, chime.durationMs / 1000);
     const secondNoteOffset = totalSec * 0.36;
 
-    // Master low-pass filter so the chime sounds warm and tactile rather than piercing
+    // Master low-pass filter so the chime sounds warm and tactile while preserving high-frequency confirmation chimes
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.setValueAtTime(1850, now);
+    const maxFreq = Math.max(freq1, freq2);
+    filter.frequency.setValueAtTime(maxFreq > 900 ? 3200 : 1850, now);
     filter.connect(ctx.destination);
 
     // Note 1 (Soft fundamental sine + subtle triangle overtone)

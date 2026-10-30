@@ -255,6 +255,8 @@ import {
   normalizeStoredWorkspaceQrRecentScans,
   recordWorkspaceQrRecentScan,
   buildWorkspaceQrRecentScansSpec,
+  WORKSPACE_QR_SCAN_HIGH_FREQ_HZ,
+  resolveWorkspaceQrScanConfirmationChime,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -6424,4 +6426,50 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     populatedRecentSpec.sectionElementId,
     'workspace-header-qr-recent-scans'
   );
+
+  // 8. High-frequency confirmation chime ('qr_scan_confirm') immediately upon successful QR scan detection
+  const qrChimeSpec = getUiSoundChimeSpec('qr_scan_confirm');
+  assert.deepEqual(qrChimeSpec.frequenciesHz, [1046.5, 1318.51]);
+  assert.deepEqual(qrChimeSpec.frequenciesHz, [...WORKSPACE_QR_SCAN_HIGH_FREQ_HZ]);
+  assert.equal(qrChimeSpec.durationMs, 190);
+  assert.equal(
+    qrChimeSpec.noteNames,
+    'C6 → E6 High-Freq QR Scan Confirm'
+  );
+
+  const resolvedEnabledChime = resolveWorkspaceQrScanConfirmationChime({
+    preferences: { ...DEFAULT_UI_SOUND_PREFERENCES, enabled: true, volumePercent: 80 },
+    roomCode: 'STUDY-ALGO',
+  });
+  assert.equal(resolvedEnabledChime.shouldPlay, true);
+  assert.equal(resolvedEnabledChime.chimeType, 'qr_scan_confirm');
+  assert.equal(resolvedEnabledChime.chime.eventType, 'qr_scan_confirm');
+  assert.equal(resolvedEnabledChime.isHighFrequency, true);
+  assert.deepEqual(resolvedEnabledChime.frequenciesHz, [1046.5, 1318.51]);
+  assert.equal(resolvedEnabledChime.volumePercent, 80);
+  assert.ok(resolvedEnabledChime.feedbackMessage.includes('STUDY-ALGO'));
+
+  const resolvedMutedChime = resolveWorkspaceQrScanConfirmationChime({
+    preferences: { ...DEFAULT_UI_SOUND_PREFERENCES, enabled: false, volumePercent: 80 },
+    roomCode: 'STUDY-ALGO',
+  });
+  assert.equal(resolvedMutedChime.shouldPlay, false);
+  assert.equal(resolvedMutedChime.chimeType, 'qr_scan_confirm');
+
+  const metaWithChimeCount = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ALGO',
+    isOpen: true,
+    scanChimePlayedCount: 2,
+    roomCode: 'STUDY-ALGO',
+  });
+  assert.equal(
+    metaWithChimeCount.scanConfirmationChime.chimeType,
+    'qr_scan_confirm'
+  );
+  assert.deepEqual(
+    metaWithChimeCount.scanConfirmationChime.frequenciesHz,
+    [1046.5, 1318.51]
+  );
+  assert.equal(metaWithChimeCount.scanChimePlayedCount, 2);
 });
+

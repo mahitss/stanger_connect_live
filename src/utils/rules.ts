@@ -253,7 +253,8 @@ export type UiSoundAlertEvent =
   | 'connection_request'
   | 'start'
   | 'end'
-  | 'ui_chime';
+  | 'ui_chime'
+  | 'qr_scan_confirm';
 
 export interface UiSoundEffectPreferences {
   enabled: boolean;
@@ -412,6 +413,17 @@ export function getUiSoundChimeSpec(
       frequenciesHz: [587.33, 440],
       noteNames: 'D5 → A4 Subtle UI Chime',
       durationMs: isAppInBackground ? 260 : 200,
+      gainScalar,
+    };
+  }
+
+  if (eventType === 'qr_scan_confirm') {
+    return {
+      eventType: 'qr_scan_confirm',
+      label: 'QR Scan High-Frequency Confirmation Chime',
+      frequenciesHz: [1046.5, 1318.51],
+      noteNames: 'C6 → E6 High-Freq QR Scan Confirm',
+      durationMs: isAppInBackground ? 240 : 190,
       gainScalar,
     };
   }
@@ -14360,6 +14372,52 @@ export function buildWorkspaceQrRecentScansSpec(
   };
 }
 
+export const WORKSPACE_QR_SCAN_HIGH_FREQ_HZ: readonly [number, number] = [
+  1046.5, 1318.51,
+] as const;
+
+export interface WorkspaceQrScanConfirmationChimeSpec {
+  shouldPlay: boolean;
+  chimeType: 'qr_scan_confirm';
+  chime: UiSoundChimeSpec;
+  isHighFrequency: true;
+  frequenciesHz: [number, number];
+  noteNames: string;
+  volumePercent: number;
+  roomCode: string;
+  feedbackMessage: string;
+}
+
+export function resolveWorkspaceQrScanConfirmationChime(input?: {
+  preferences?: UiSoundEffectPreferences | null;
+  roomCode?: string | null;
+  isAppInBackground?: boolean;
+}): WorkspaceQrScanConfirmationChimeSpec {
+  const prefs = input?.preferences ?? DEFAULT_UI_SOUND_PREFERENCES;
+  const volumePercent = clampSoundVolumePercent(prefs.volumePercent);
+  const shouldPlay = Boolean(prefs.enabled);
+  const roomCode = normalizeStudyRoomCode(input?.roomCode || 'STUDY-GLOBAL');
+  const chime = getUiSoundChimeSpec(
+    'qr_scan_confirm',
+    Boolean(input?.isAppInBackground),
+    volumePercent
+  );
+
+  return {
+    shouldPlay,
+    chimeType: 'qr_scan_confirm',
+    chime,
+    isHighFrequency: true,
+    frequenciesHz: chime.frequenciesHz,
+    noteNames: chime.noteNames,
+    volumePercent,
+    roomCode,
+    feedbackMessage: shouldPlay
+      ? `High-frequency QR scan confirmation chime played for ${roomCode} (${chime.noteNames})`
+      : `QR scan detected for ${roomCode} (Sound alerts muted)`,
+  };
+}
+
 export interface WorkspaceHeaderQrCodeMeta {
   shellSelector: '#workspace-shell';
   headerElementId: 'workspace-top-header';
@@ -14372,6 +14430,8 @@ export interface WorkspaceHeaderQrCodeMeta {
   headerCameraStatusDot: WorkspaceHeaderCameraStatusDotSpec;
   scanToast: WorkspaceQrScanToastSpec;
   recentScans: WorkspaceQrRecentScansSpec;
+  scanConfirmationChime: WorkspaceQrScanConfirmationChimeSpec;
+  scanChimePlayedCount: number;
   popoverElementId: 'workspace-header-qr-popover';
   popoverTestId: 'workspace-header-qr-popover';
   generationCountHiddenInputId: 'workspace-header-qr-generation-count-state';
@@ -14452,6 +14512,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   lastScannedResult?: ParsedWorkspaceQrScanResult | null;
   isScanToastVisible?: boolean;
   recentScans?: WorkspaceQrRecentScanEntry[] | null;
+  uiSoundPreferences?: UiSoundEffectPreferences | null;
+  scanChimePlayedCount?: number;
   generationCount?: number;
   downloadCount?: number;
   roomCode?: string | null;
@@ -14475,6 +14537,10 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     Math.floor(input?.generationCount ?? (isOpen ? 1 : 0))
   );
   const downloadCount = Math.max(0, Math.floor(input?.downloadCount ?? 0));
+  const scanChimePlayedCount = Math.max(
+    0,
+    Math.floor(input?.scanChimePlayedCount ?? 0)
+  );
   const roomCode = (input?.roomCode ?? '').trim() || 'STUDY-GLOBAL';
   const downloadFilename = buildWorkspaceHeaderQrPngFilename(roomCode);
   const scanToast = buildWorkspaceQrScanToastSpec({
@@ -14484,6 +14550,10 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     workspaceUrl: lastScannedWorkspaceUrl || workspaceUrl,
   });
   const recentScans = buildWorkspaceQrRecentScansSpec(input?.recentScans ?? []);
+  const scanConfirmationChime = resolveWorkspaceQrScanConfirmationChime({
+    preferences: input?.uiSoundPreferences,
+    roomCode: lastJoinedWorkspaceRoomCode || roomCode,
+  });
 
   const cameraScanStatusLabel =
     cameraScanStatus === 'requesting_camera'
@@ -14517,6 +14587,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     headerCameraStatusDot,
     scanToast,
     recentScans,
+    scanConfirmationChime,
+    scanChimePlayedCount,
     popoverElementId: 'workspace-header-qr-popover',
     popoverTestId: 'workspace-header-qr-popover',
     generationCountHiddenInputId: 'workspace-header-qr-generation-count-state',
