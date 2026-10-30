@@ -4792,8 +4792,15 @@ export default function App() {
                             Room: {workspaceHeaderQrMeta.roomCode}
                           </span>
                           <span>·</span>
-                          <span>Scan with phone camera</span>
+                          <span>Mobile Instant Access</span>
                         </div>
+                        <p
+                          id={workspaceHeaderQrMeta.instructionElementId}
+                          data-testid={workspaceHeaderQrMeta.instructionTestId}
+                          className="mt-1.5 text-center text-[11px] leading-snug text-slate-700 font-medium"
+                        >
+                          {workspaceHeaderQrMeta.instructionText}
+                        </p>
                       </div>
 
                       <div className="space-y-2">

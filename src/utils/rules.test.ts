@@ -6016,4 +6016,10 @@ test('Workspace shell (#workspace-shell) header QR Code button generates ISO/IEC
   assert.equal(openMeta.isCopied, true);
   assert.equal(openMeta.ariaLabel, 'Hide workspace URL QR code');
   assert.equal(openMeta.qrMatrix.moduleSize, closedMeta.qrMatrix.moduleSize);
+  assert.equal(openMeta.instructionElementId, 'workspace-header-qr-instruction');
+  assert.equal(openMeta.instructionTestId, 'workspace-header-qr-instruction');
+  assert.equal(
+    openMeta.instructionText,
+    'Scan this QR code with your phone camera to instantly open the workspace on your mobile device.'
+  );
 });

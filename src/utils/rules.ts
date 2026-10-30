@@ -13797,6 +13797,8 @@ export interface WorkspaceHeaderQrCodeMeta {
   popoverTestId: 'workspace-header-qr-popover';
   svgElementId: 'workspace-header-qr-svg';
   svgTestId: 'workspace-header-qr-svg';
+  instructionElementId: 'workspace-header-qr-instruction';
+  instructionTestId: 'workspace-header-qr-instruction';
   urlDisplayId: 'workspace-header-qr-url';
   urlDisplayTestId: 'workspace-header-qr-url';
   copyButtonId: 'workspace-header-qr-copy-btn';
@@ -13810,6 +13812,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   buttonLabel: 'QR Code';
   dialogTitle: 'Mobile & Nearby Access QR Code';
   dialogSubtitle: string;
+  instructionText: string;
   ariaLabel: string;
   title: string;
   qrMatrix: WorkspaceHeaderQrMatrixSpec;
@@ -13836,6 +13839,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     popoverTestId: 'workspace-header-qr-popover',
     svgElementId: 'workspace-header-qr-svg',
     svgTestId: 'workspace-header-qr-svg',
+    instructionElementId: 'workspace-header-qr-instruction',
+    instructionTestId: 'workspace-header-qr-instruction',
     urlDisplayId: 'workspace-header-qr-url',
     urlDisplayTestId: 'workspace-header-qr-url',
     copyButtonId: 'workspace-header-qr-copy-btn',
@@ -13849,7 +13854,9 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     buttonLabel: 'QR Code',
     dialogTitle: 'Mobile & Nearby Access QR Code',
     dialogSubtitle:
-      'Scan with your phone camera to open this workspace URL on mobile or share with people nearby.',
+      'Share this workspace link with people nearby or access it on mobile.',
+    instructionText:
+      'Scan this QR code with your phone camera to instantly open the workspace on your mobile device.',
     ariaLabel: isOpen
       ? 'Hide workspace URL QR code'
       : 'Show QR code for current workspace URL',
