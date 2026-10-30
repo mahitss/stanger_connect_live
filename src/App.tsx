@@ -5146,6 +5146,10 @@ export default function App() {
                   data-camera-scanning={
                     workspaceHeaderQrMeta.isCameraScanning ? 'true' : 'false'
                   }
+                  data-camera-status={workspaceHeaderQrMeta.cameraScanStatus}
+                  data-status-dot-color={
+                    workspaceHeaderQrMeta.headerCameraStatusDot.color
+                  }
                   data-includes-qr-scanner="true"
                   aria-expanded={
                     workspaceHeaderQrMeta.isOpen &&
@@ -5155,7 +5159,7 @@ export default function App() {
                   aria-label={workspaceHeaderQrMeta.headerCameraScanAriaLabel}
                   title={workspaceHeaderQrMeta.headerCameraScanTitle}
                   onClick={handleOpenWorkspaceHeaderQrCameraScannerFromHeader}
-                  className={`inline-flex items-center justify-center p-1.5 rounded-md border text-xs font-sans font-semibold transition-colors shrink-0 ${
+                  className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors shrink-0 ${
                     workspaceHeaderQrMeta.isOpen &&
                     workspaceHeaderQrMeta.isCameraScanning
                       ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
@@ -5171,6 +5175,27 @@ export default function App() {
                         ? 'text-emerald-600 dark:text-emerald-300'
                         : 'text-emerald-600 dark:text-emerald-400'
                     }`}
+                  />
+                  <span
+                    id={workspaceHeaderQrMeta.headerCameraStatusDot.elementId}
+                    data-testid={workspaceHeaderQrMeta.headerCameraStatusDot.testId}
+                    data-camera-status={
+                      workspaceHeaderQrMeta.headerCameraStatusDot.status
+                    }
+                    data-dot-color={
+                      workspaceHeaderQrMeta.headerCameraStatusDot.color
+                    }
+                    data-state-category={
+                      workspaceHeaderQrMeta.headerCameraStatusDot.stateCategory
+                    }
+                    role="status"
+                    aria-label={
+                      workspaceHeaderQrMeta.headerCameraStatusDot.ariaLabel
+                    }
+                    title={workspaceHeaderQrMeta.headerCameraStatusDot.label}
+                    className={
+                      workspaceHeaderQrMeta.headerCameraStatusDot.dotClassName
+                    }
                   />
                 </button>
 

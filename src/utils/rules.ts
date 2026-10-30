@@ -14013,6 +14013,77 @@ export function decodeWorkspaceQrFromRgbaFrame(
   return null;
 }
 
+export type WorkspaceHeaderCameraStatusDotColor = 'red' | 'yellow' | 'green';
+
+export interface WorkspaceHeaderCameraStatusDotSpec {
+  elementId: 'workspace-header-qr-camera-status-dot';
+  testId: 'workspace-header-qr-camera-status-dot';
+  status: WorkspaceHeaderQrCameraScanStatus;
+  color: WorkspaceHeaderCameraStatusDotColor;
+  stateCategory:
+    | 'idle_or_error'
+    | 'requesting_permission'
+    | 'scanning_or_detected';
+  dotClassName: string;
+  glowShadowCss: string;
+  label: string;
+  ariaLabel: string;
+}
+
+export function resolveWorkspaceHeaderCameraStatusDotSpec(
+  status: WorkspaceHeaderQrCameraScanStatus = 'idle'
+): WorkspaceHeaderCameraStatusDotSpec {
+  if (status === 'requesting_camera') {
+    return {
+      elementId: 'workspace-header-qr-camera-status-dot',
+      testId: 'workspace-header-qr-camera-status-dot',
+      status,
+      color: 'yellow',
+      stateCategory: 'requesting_permission',
+      dotClassName:
+        'w-2 h-2 rounded-full shrink-0 transition-all duration-300 bg-amber-400 shadow-[0_0_8px_rgba(251,191,36,0.9)] ring-2 ring-amber-400/30 animate-pulse',
+      glowShadowCss: '0 0 8px rgba(251, 191, 36, 0.9)',
+      label: 'Requesting Permission',
+      ariaLabel: 'Camera scanner status: yellow (requesting permission)',
+    };
+  }
+
+  if (status === 'scanning' || status === 'detected') {
+    return {
+      elementId: 'workspace-header-qr-camera-status-dot',
+      testId: 'workspace-header-qr-camera-status-dot',
+      status,
+      color: 'green',
+      stateCategory: 'scanning_or_detected',
+      dotClassName:
+        'w-2 h-2 rounded-full shrink-0 transition-all duration-300 bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.95)] ring-2 ring-emerald-400/30',
+      glowShadowCss: '0 0 8px rgba(52, 211, 153, 0.95)',
+      label: status === 'detected' ? 'QR Code Detected' : 'Actively Scanning',
+      ariaLabel:
+        status === 'detected'
+          ? 'Camera scanner status: green (QR code detected)'
+          : 'Camera scanner status: green (actively scanning)',
+    };
+  }
+
+  const isError =
+    status === 'permission_denied' || status === 'camera_unavailable';
+  return {
+    elementId: 'workspace-header-qr-camera-status-dot',
+    testId: 'workspace-header-qr-camera-status-dot',
+    status,
+    color: 'red',
+    stateCategory: 'idle_or_error',
+    dotClassName:
+      'w-2 h-2 rounded-full shrink-0 transition-all duration-300 bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.85)] ring-2 ring-rose-500/25',
+    glowShadowCss: '0 0 8px rgba(244, 63, 94, 0.85)',
+    label: isError ? 'Camera Error' : 'Idle',
+    ariaLabel: isError
+      ? 'Camera scanner status: red (camera error or unavailable)'
+      : 'Camera scanner status: red (idle)',
+  };
+}
+
 export interface WorkspaceHeaderQrCodeMeta {
   shellSelector: '#workspace-shell';
   headerElementId: 'workspace-top-header';
@@ -14022,6 +14093,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   headerCameraScanButtonTestId: 'workspace-header-qr-camera-scan-btn';
   headerCameraScanIconId: 'workspace-header-qr-camera-scan-icon';
   headerCameraScanIconTestId: 'workspace-header-qr-camera-scan-icon';
+  headerCameraStatusDot: WorkspaceHeaderCameraStatusDotSpec;
   popoverElementId: 'workspace-header-qr-popover';
   popoverTestId: 'workspace-header-qr-popover';
   generationCountHiddenInputId: 'workspace-header-qr-generation-count-state';
@@ -14111,6 +14183,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   const isCameraScanning = Boolean(input?.isCameraScanning);
   const cameraScanStatus: WorkspaceHeaderQrCameraScanStatus =
     input?.cameraScanStatus ?? (isCameraScanning ? 'scanning' : 'idle');
+  const headerCameraStatusDot =
+    resolveWorkspaceHeaderCameraStatusDotSpec(cameraScanStatus);
   const lastScannedWorkspaceUrl =
     (input?.lastScannedWorkspaceUrl ?? '').trim() || null;
   const lastJoinedWorkspaceRoomCode =
@@ -14152,6 +14226,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     headerCameraScanButtonTestId: 'workspace-header-qr-camera-scan-btn',
     headerCameraScanIconId: 'workspace-header-qr-camera-scan-icon',
     headerCameraScanIconTestId: 'workspace-header-qr-camera-scan-icon',
+    headerCameraStatusDot,
     popoverElementId: 'workspace-header-qr-popover',
     popoverTestId: 'workspace-header-qr-popover',
     generationCountHiddenInputId: 'workspace-header-qr-generation-count-state',

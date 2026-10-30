@@ -246,6 +246,7 @@ import {
   parseScannedWorkspaceQrPayload,
   renderWorkspaceQrMatrixToRgba,
   decodeWorkspaceQrFromRgbaFrame,
+  resolveWorkspaceHeaderCameraStatusDotSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -6280,4 +6281,41 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     activeScanMeta.headerCameraScanAriaLabel,
     'Stop camera QR scanner in popover'
   );
+
+  // 5. Glowing status dot transitions between red (idle/error), yellow (requesting permission), and green (scanning/detected)
+  assert.equal(idleScanMeta.headerCameraStatusDot.color, 'red');
+  assert.equal(
+    idleScanMeta.headerCameraStatusDot.stateCategory,
+    'idle_or_error'
+  );
+  assert.equal(
+    idleScanMeta.headerCameraStatusDot.elementId,
+    'workspace-header-qr-camera-status-dot'
+  );
+
+  const errorDot = resolveWorkspaceHeaderCameraStatusDotSpec('permission_denied');
+  assert.equal(errorDot.color, 'red');
+  assert.equal(errorDot.stateCategory, 'idle_or_error');
+  assert.equal(errorDot.label, 'Camera Error');
+
+  const requestingDot =
+    resolveWorkspaceHeaderCameraStatusDotSpec('requesting_camera');
+  assert.equal(requestingDot.color, 'yellow');
+  assert.equal(requestingDot.stateCategory, 'requesting_permission');
+  assert.equal(requestingDot.label, 'Requesting Permission');
+
+  assert.equal(activeScanMeta.headerCameraStatusDot.color, 'green');
+  assert.equal(
+    activeScanMeta.headerCameraStatusDot.stateCategory,
+    'scanning_or_detected'
+  );
+  assert.equal(
+    activeScanMeta.headerCameraStatusDot.label,
+    'Actively Scanning'
+  );
+
+  const detectedDot = resolveWorkspaceHeaderCameraStatusDotSpec('detected');
+  assert.equal(detectedDot.color, 'green');
+  assert.equal(detectedDot.stateCategory, 'scanning_or_detected');
+  assert.equal(detectedDot.label, 'QR Code Detected');
 });
