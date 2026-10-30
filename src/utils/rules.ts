@@ -14242,10 +14242,13 @@ export function normalizeStoredWorkspaceQrRecentScans(
   const cap = Math.max(1, Math.min(20, Math.floor(maxItems || 5)));
   if (!Array.isArray(rawList)) return [];
 
-  const deduped: WorkspaceQrRecentScanEntry[] = [];
-  const seenKeys = new Set<string>();
+  const parsedWithOrder: Array<{
+    entry: WorkspaceQrRecentScanEntry;
+    originalIndex: number;
+  }> = [];
 
-  for (const item of rawList) {
+  for (let idx = 0; idx < rawList.length; idx += 1) {
+    const item = rawList[idx];
     if (!item || typeof item !== 'object') continue;
     const rec = item as Partial<WorkspaceQrRecentScanEntry>;
     const rawUrl = typeof rec.workspaceUrl === 'string' ? rec.workspaceUrl.trim() : '';
@@ -14255,39 +14258,61 @@ export function normalizeStoredWorkspaceQrRecentScans(
     const roomCode = normalizeStudyRoomCode(rawRoom || 'STUDY-GLOBAL');
     const workspaceUrl =
       rawUrl || `https://mrstranger.app/?room=${encodeURIComponent(roomCode)}`;
-    const dedupeKey = `${roomCode}::${workspaceUrl}`;
-    if (seenKeys.has(dedupeKey)) continue;
-    seenKeys.add(dedupeKey);
 
-    deduped.push({
-      id:
-        typeof rec.id === 'string' && rec.id.trim()
-          ? rec.id.trim()
-          : `qrscan_${roomCode.toLowerCase()}_${deduped.length + 1}`,
-      roomCode,
-      workspaceUrl,
-      rawValue:
-        typeof rec.rawValue === 'string' && rec.rawValue.trim()
-          ? rec.rawValue.trim()
-          : workspaceUrl,
-      scannedAtMs:
-        typeof rec.scannedAtMs === 'number' && Number.isFinite(rec.scannedAtMs)
-          ? Math.max(0, Math.floor(rec.scannedAtMs))
-          : 0,
-      hasFilterParams: Boolean(rec.hasFilterParams),
-      audienceFilter:
-        rec.audienceFilter === 'my_connections' ? 'my_connections' : 'everyone',
-      moodFilter:
-        typeof rec.moodFilter === 'string' && rec.moodFilter.trim()
-          ? rec.moodFilter.trim()
-          : 'all',
-      onlyInFocus: Boolean(rec.onlyInFocus),
+    parsedWithOrder.push({
+      originalIndex: idx,
+      entry: {
+        id:
+          typeof rec.id === 'string' && rec.id.trim()
+            ? rec.id.trim()
+            : `qrscan_${roomCode.toLowerCase()}_${idx + 1}`,
+        roomCode,
+        workspaceUrl,
+        rawValue:
+          typeof rec.rawValue === 'string' && rec.rawValue.trim()
+            ? rec.rawValue.trim()
+            : workspaceUrl,
+        scannedAtMs:
+          typeof rec.scannedAtMs === 'number' && Number.isFinite(rec.scannedAtMs)
+            ? Math.max(0, Math.floor(rec.scannedAtMs))
+            : 0,
+        hasFilterParams: Boolean(rec.hasFilterParams),
+        audienceFilter:
+          rec.audienceFilter === 'my_connections' ? 'my_connections' : 'everyone',
+        moodFilter:
+          typeof rec.moodFilter === 'string' && rec.moodFilter.trim()
+            ? rec.moodFilter.trim()
+            : 'all',
+        onlyInFocus: Boolean(rec.onlyInFocus),
+      },
     });
+  }
 
+  parsedWithOrder.sort((a, b) => {
+    if (b.entry.scannedAtMs !== a.entry.scannedAtMs) {
+      return b.entry.scannedAtMs - a.entry.scannedAtMs;
+    }
+    return a.originalIndex - b.originalIndex;
+  });
+
+  const deduped: WorkspaceQrRecentScanEntry[] = [];
+  const seenRooms = new Set<string>();
+
+  for (const { entry } of parsedWithOrder) {
+    if (seenRooms.has(entry.roomCode)) continue;
+    seenRooms.add(entry.roomCode);
+    deduped.push(entry);
     if (deduped.length >= cap) break;
   }
 
   return deduped;
+}
+
+export function sortWorkspaceQrScansByMostRecent(
+  entries: WorkspaceQrRecentScanEntry[] | unknown,
+  maxItems = MAX_WORKSPACE_QR_RECENT_SCANS
+): WorkspaceQrRecentScanEntry[] {
+  return normalizeStoredWorkspaceQrRecentScans(entries, maxItems);
 }
 
 export function recordWorkspaceQrRecentScan(
@@ -14336,7 +14361,10 @@ export function recordWorkspaceQrRecentScan(
       !(entry.roomCode === roomCode && entry.workspaceUrl === workspaceUrl) &&
       entry.roomCode !== roomCode
   );
-  const updatedScans = [addedEntry, ...filtered].slice(0, cap);
+  const updatedScans = normalizeStoredWorkspaceQrRecentScans(
+    [addedEntry, ...filtered],
+    cap
+  );
 
   return {
     updatedScans,
@@ -14367,6 +14395,108 @@ export function buildWorkspaceQrRecentScansSpec(
     countBadgeLabel: `${items.length}/${cap}`,
     emptyMessage:
       'No recent QR scans yet. Scan a workspace QR code to save up to 5 rooms for quick access.',
+    items,
+    hasItems: items.length > 0,
+  };
+}
+
+export interface WorkspaceQrHistorySectionItemSpec
+  extends WorkspaceQrRecentScanEntry {
+  itemElementId: string;
+  itemTestId: string;
+  joinLinkElementId: string;
+  joinLinkTestId: string;
+  joinLinkLabel: 'Join';
+  joinLinkHref: string;
+  joinLinkAriaLabel: string;
+  rankOrder: number;
+}
+
+export interface WorkspaceQrHistorySectionSpec {
+  sectionElementId: 'workspace-header-qr-history-section';
+  sectionTestId: 'workspace-header-qr-history-section';
+  toggleButtonElementId: 'workspace-header-qr-history-toggle-btn';
+  toggleButtonTestId: 'workspace-header-qr-history-toggle-btn';
+  panelElementId: 'workspace-header-qr-history-panel';
+  panelTestId: 'workspace-header-qr-history-panel';
+  listElementId: 'workspace-header-qr-history-list';
+  listTestId: 'workspace-header-qr-history-list';
+  emptyStateElementId: 'workspace-header-qr-history-empty';
+  emptyStateTestId: 'workspace-header-qr-history-empty';
+  clearButtonElementId: 'workspace-header-qr-history-clear-btn';
+  clearButtonTestId: 'workspace-header-qr-history-clear-btn';
+  heading: 'History';
+  subtitle: 'Recent Scans';
+  joinLinkLabel: 'Join';
+  isCollapsible: true;
+  isExpanded: boolean;
+  toggleAriaLabel: string;
+  sortedBy: 'most_recent_desc';
+  maxItems: number;
+  countBadgeLabel: string;
+  emptyMessage: string;
+  items: WorkspaceQrHistorySectionItemSpec[];
+  hasItems: boolean;
+}
+
+export function toggleWorkspaceQrHistorySectionExpanded(
+  currentExpanded: boolean
+): boolean {
+  return !currentExpanded;
+}
+
+export function buildWorkspaceQrHistorySectionSpec(input?: {
+  recentScans?: WorkspaceQrRecentScanEntry[] | unknown;
+  isExpanded?: boolean;
+  maxItems?: number;
+}): WorkspaceQrHistorySectionSpec {
+  const cap = Math.max(1, Math.min(20, Math.floor(input?.maxItems || MAX_WORKSPACE_QR_RECENT_SCANS)));
+  const sortedEntries = normalizeStoredWorkspaceQrRecentScans(
+    input?.recentScans,
+    cap
+  );
+  const isExpanded = input?.isExpanded ?? true;
+
+  const items: WorkspaceQrHistorySectionItemSpec[] = sortedEntries.map(
+    (entry, idx) => ({
+      ...entry,
+      itemElementId: `workspace-header-qr-history-item-${idx}`,
+      itemTestId: `workspace-header-qr-history-item-${idx}`,
+      joinLinkElementId: `workspace-header-qr-history-join-link-${idx}`,
+      joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
+      joinLinkLabel: 'Join',
+      joinLinkHref: entry.workspaceUrl,
+      joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
+      rankOrder: idx + 1,
+    })
+  );
+
+  return {
+    sectionElementId: 'workspace-header-qr-history-section',
+    sectionTestId: 'workspace-header-qr-history-section',
+    toggleButtonElementId: 'workspace-header-qr-history-toggle-btn',
+    toggleButtonTestId: 'workspace-header-qr-history-toggle-btn',
+    panelElementId: 'workspace-header-qr-history-panel',
+    panelTestId: 'workspace-header-qr-history-panel',
+    listElementId: 'workspace-header-qr-history-list',
+    listTestId: 'workspace-header-qr-history-list',
+    emptyStateElementId: 'workspace-header-qr-history-empty',
+    emptyStateTestId: 'workspace-header-qr-history-empty',
+    clearButtonElementId: 'workspace-header-qr-history-clear-btn',
+    clearButtonTestId: 'workspace-header-qr-history-clear-btn',
+    heading: 'History',
+    subtitle: 'Recent Scans',
+    joinLinkLabel: 'Join',
+    isCollapsible: true,
+    isExpanded,
+    toggleAriaLabel: isExpanded
+      ? 'Collapse QR scanner History section'
+      : 'Expand QR scanner History section',
+    sortedBy: 'most_recent_desc',
+    maxItems: cap,
+    countBadgeLabel: `${items.length}/${cap}`,
+    emptyMessage:
+      'No scanned room codes in history yet. Scan up to 5 QR codes to quickly join them here.',
     items,
     hasItems: items.length > 0,
   };
@@ -14430,6 +14560,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   headerCameraStatusDot: WorkspaceHeaderCameraStatusDotSpec;
   scanToast: WorkspaceQrScanToastSpec;
   recentScans: WorkspaceQrRecentScansSpec;
+  historySection: WorkspaceQrHistorySectionSpec;
   scanConfirmationChime: WorkspaceQrScanConfirmationChimeSpec;
   scanChimePlayedCount: number;
   popoverElementId: 'workspace-header-qr-popover';
@@ -14512,6 +14643,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   lastScannedResult?: ParsedWorkspaceQrScanResult | null;
   isScanToastVisible?: boolean;
   recentScans?: WorkspaceQrRecentScanEntry[] | null;
+  isHistoryExpanded?: boolean;
   uiSoundPreferences?: UiSoundEffectPreferences | null;
   scanChimePlayedCount?: number;
   generationCount?: number;
@@ -14550,6 +14682,10 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     workspaceUrl: lastScannedWorkspaceUrl || workspaceUrl,
   });
   const recentScans = buildWorkspaceQrRecentScansSpec(input?.recentScans ?? []);
+  const historySection = buildWorkspaceQrHistorySectionSpec({
+    recentScans: input?.recentScans ?? [],
+    isExpanded: input?.isHistoryExpanded ?? true,
+  });
   const scanConfirmationChime = resolveWorkspaceQrScanConfirmationChime({
     preferences: input?.uiSoundPreferences,
     roomCode: lastJoinedWorkspaceRoomCode || roomCode,
@@ -14587,6 +14723,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     headerCameraStatusDot,
     scanToast,
     recentScans,
+    historySection,
     scanConfirmationChime,
     scanChimePlayedCount,
     popoverElementId: 'workspace-header-qr-popover',

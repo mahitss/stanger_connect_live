@@ -253,8 +253,11 @@ import {
   WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
   MAX_WORKSPACE_QR_RECENT_SCANS,
   normalizeStoredWorkspaceQrRecentScans,
+  sortWorkspaceQrScansByMostRecent,
   recordWorkspaceQrRecentScan,
   buildWorkspaceQrRecentScansSpec,
+  toggleWorkspaceQrHistorySectionExpanded,
+  buildWorkspaceQrHistorySectionSpec,
   WORKSPACE_QR_SCAN_HIGH_FREQ_HZ,
   resolveWorkspaceQrScanConfirmationChime,
 } from './rules.ts';
@@ -6471,5 +6474,92 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     [1046.5, 1318.51]
   );
   assert.equal(metaWithChimeCount.scanChimePlayedCount, 2);
+
+  // 9. Collapsible 'History' section inside QR scanner popover displaying last 5 scanned room codes with 'Join' link sorted by most recently scanned
+  const unsortedScans = [
+    {
+      id: 'scan_old',
+      roomCode: 'STUDY-OLD',
+      workspaceUrl: 'http://localhost:3000/?room=STUDY-OLD',
+      rawValue: 'http://localhost:3000/?room=STUDY-OLD',
+      scannedAtMs: 1_760_000_001_000,
+      hasFilterParams: false,
+      audienceFilter: 'everyone' as const,
+      moodFilter: 'all',
+      onlyInFocus: false,
+    },
+    {
+      id: 'scan_newest',
+      roomCode: 'STUDY-NEWEST',
+      workspaceUrl: 'http://localhost:3000/?room=STUDY-NEWEST',
+      rawValue: 'http://localhost:3000/?room=STUDY-NEWEST',
+      scannedAtMs: 1_760_000_009_000,
+      hasFilterParams: false,
+      audienceFilter: 'everyone' as const,
+      moodFilter: 'all',
+      onlyInFocus: false,
+    },
+    {
+      id: 'scan_mid',
+      roomCode: 'STUDY-MID',
+      workspaceUrl: 'http://localhost:3000/?room=STUDY-MID',
+      rawValue: 'http://localhost:3000/?room=STUDY-MID',
+      scannedAtMs: 1_760_000_005_000,
+      hasFilterParams: false,
+      audienceFilter: 'everyone' as const,
+      moodFilter: 'all',
+      onlyInFocus: false,
+    },
+  ];
+  const sortedByMostRecent = sortWorkspaceQrScansByMostRecent(unsortedScans, 5);
+  assert.deepEqual(
+    sortedByMostRecent.map((s) => s.roomCode),
+    ['STUDY-NEWEST', 'STUDY-MID', 'STUDY-OLD']
+  );
+
+  const expandedHistorySpec = buildWorkspaceQrHistorySectionSpec({
+    recentScans: rescanned.updatedScans,
+    isExpanded: true,
+  });
+  assert.equal(
+    expandedHistorySpec.sectionElementId,
+    'workspace-header-qr-history-section'
+  );
+  assert.equal(expandedHistorySpec.heading, 'History');
+  assert.equal(expandedHistorySpec.joinLinkLabel, 'Join');
+  assert.equal(expandedHistorySpec.isCollapsible, true);
+  assert.equal(expandedHistorySpec.isExpanded, true);
+  assert.equal(expandedHistorySpec.sortedBy, 'most_recent_desc');
+  assert.equal(expandedHistorySpec.items.length, 5);
+  assert.deepEqual(
+    expandedHistorySpec.items.map((item) => item.roomCode),
+    ['STUDY-ROOM3', 'STUDY-ROOM6', 'STUDY-ROOM5', 'STUDY-ROOM4', 'STUDY-ROOM2']
+  );
+  assert.equal(expandedHistorySpec.items[0].joinLinkLabel, 'Join');
+  assert.equal(
+    expandedHistorySpec.items[0].joinLinkElementId,
+    'workspace-header-qr-history-join-link-0'
+  );
+  assert.equal(
+    expandedHistorySpec.items[0].joinLinkHref,
+    'http://localhost:3000/?room=STUDY-ROOM3'
+  );
+
+  const toggledCollapsed = toggleWorkspaceQrHistorySectionExpanded(
+    expandedHistorySpec.isExpanded
+  );
+  assert.equal(toggledCollapsed, false);
+  const collapsedMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    recentScans: rescanned.updatedScans,
+    isHistoryExpanded: toggledCollapsed,
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(collapsedMeta.historySection.isExpanded, false);
+  assert.equal(
+    collapsedMeta.historySection.toggleAriaLabel,
+    'Expand QR scanner History section'
+  );
 });
 
