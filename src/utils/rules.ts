@@ -13667,3 +13667,69 @@ export function getOnlineDirectoryPeerFilterLayoutAnimationSpec(params?: {
   };
 }
 
+export const WORKSPACE_HEADER_SHARE_FEEDBACK_DURATION_MS = 3000;
+
+export interface WorkspaceHeaderShareButtonMeta {
+  shellSelector: '#workspace-shell';
+  headerElementId: 'workspace-top-header';
+  buttonElementId: 'workspace-header-share-btn';
+  buttonTestId: 'workspace-header-share-btn';
+  feedbackElementId: 'workspace-header-share-feedback';
+  feedbackTestId: 'workspace-header-share-feedback';
+  shareUrl: string;
+  isCopied: boolean;
+  copyCount: number;
+  buttonLabel: 'Share';
+  copiedBadgeLabel: 'Copied!';
+  feedbackMessage: string;
+  feedbackDurationMs: number;
+  ariaLabel: string;
+  title: string;
+  statusRole: 'status';
+  ariaLive: 'polite';
+}
+
+export function resolveWorkspaceHeaderShareUrl(
+  currentHref?: string | null
+): string {
+  const trimmed = (currentHref ?? '').trim();
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return trimmed;
+  }
+  return 'https://mrstranger.app/';
+}
+
+export function getWorkspaceHeaderShareButtonMeta(input?: {
+  currentHref?: string | null;
+  isCopied?: boolean;
+  copyCount?: number;
+}): WorkspaceHeaderShareButtonMeta {
+  const shareUrl = resolveWorkspaceHeaderShareUrl(input?.currentHref);
+  const isCopied = Boolean(input?.isCopied);
+  const copyCount = Math.max(0, Math.floor(input?.copyCount ?? 0));
+  const feedbackMessage = isCopied ? 'Page link copied to clipboard!' : '';
+
+  return {
+    shellSelector: '#workspace-shell',
+    headerElementId: 'workspace-top-header',
+    buttonElementId: 'workspace-header-share-btn',
+    buttonTestId: 'workspace-header-share-btn',
+    feedbackElementId: 'workspace-header-share-feedback',
+    feedbackTestId: 'workspace-header-share-feedback',
+    shareUrl,
+    isCopied,
+    copyCount,
+    buttonLabel: 'Share',
+    copiedBadgeLabel: 'Copied!',
+    feedbackMessage,
+    feedbackDurationMs: WORKSPACE_HEADER_SHARE_FEEDBACK_DURATION_MS,
+    ariaLabel: isCopied
+      ? 'Current page URL copied to clipboard'
+      : 'Copy current page URL to clipboard',
+    title: isCopied
+      ? `Page link copied to clipboard (${shareUrl})`
+      : `Copy current page URL (${shareUrl}) to clipboard`,
+    statusRole: 'status',
+    ariaLive: 'polite',
+  };
+}

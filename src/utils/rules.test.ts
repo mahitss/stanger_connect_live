@@ -232,6 +232,9 @@ import {
   resolveStudyTogetherQuickJoinAction,
   filterMoodCategoryGroupsBySearchQuery,
   getOnlineDirectoryPeerFilterLayoutAnimationSpec,
+  WORKSPACE_HEADER_SHARE_FEEDBACK_DURATION_MS,
+  resolveWorkspaceHeaderShareUrl,
+  getWorkspaceHeaderShareButtonMeta,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -5895,8 +5898,54 @@ test('Framer Motion layout animation spec for #online-directory-mood-filter and 
   );
 });
 
+test('Workspace shell (#workspace-shell) top header Share link button resolves current page URL and provides temporary UI feedback metadata', () => {
+  assert.equal(WORKSPACE_HEADER_SHARE_FEEDBACK_DURATION_MS, 3000);
 
+  // 1. URL resolution with valid http/https URLs and safe fallback
+  assert.equal(
+    resolveWorkspaceHeaderShareUrl('http://localhost:3000/?mood=Deep+Work'),
+    'http://localhost:3000/?mood=Deep+Work'
+  );
+  assert.equal(
+    resolveWorkspaceHeaderShareUrl('  https://mrstranger.app/workspace?room=FOCUS-101  '),
+    'https://mrstranger.app/workspace?room=FOCUS-101'
+  );
+  assert.equal(resolveWorkspaceHeaderShareUrl(''), 'https://mrstranger.app/');
+  assert.equal(resolveWorkspaceHeaderShareUrl(null), 'https://mrstranger.app/');
 
+  // 2. Idle state (before clicking Share)
+  const idleMeta = getWorkspaceHeaderShareButtonMeta({
+    currentHref: 'http://localhost:3000/?filter=connections',
+    isCopied: false,
+    copyCount: 0,
+  });
+  assert.equal(idleMeta.shellSelector, '#workspace-shell');
+  assert.equal(idleMeta.headerElementId, 'workspace-top-header');
+  assert.equal(idleMeta.buttonElementId, 'workspace-header-share-btn');
+  assert.equal(idleMeta.buttonTestId, 'workspace-header-share-btn');
+  assert.equal(idleMeta.feedbackElementId, 'workspace-header-share-feedback');
+  assert.equal(idleMeta.feedbackTestId, 'workspace-header-share-feedback');
+  assert.equal(idleMeta.shareUrl, 'http://localhost:3000/?filter=connections');
+  assert.equal(idleMeta.isCopied, false);
+  assert.equal(idleMeta.copyCount, 0);
+  assert.equal(idleMeta.buttonLabel, 'Share');
+  assert.equal(idleMeta.feedbackMessage, '');
+  assert.equal(idleMeta.feedbackDurationMs, 3000);
+  assert.equal(idleMeta.ariaLabel, 'Copy current page URL to clipboard');
+  assert.equal(idleMeta.statusRole, 'status');
+  assert.equal(idleMeta.ariaLive, 'polite');
 
-
-
+  // 3. Copied state (after clicking Share, showing temporary UI feedback message)
+  const copiedMeta = getWorkspaceHeaderShareButtonMeta({
+    currentHref: 'http://localhost:3000/?filter=connections',
+    isCopied: true,
+    copyCount: 1,
+  });
+  assert.equal(copiedMeta.isCopied, true);
+  assert.equal(copiedMeta.copyCount, 1);
+  assert.equal(copiedMeta.buttonLabel, 'Share');
+  assert.equal(copiedMeta.copiedBadgeLabel, 'Copied!');
+  assert.equal(copiedMeta.feedbackMessage, 'Page link copied to clipboard!');
+  assert.equal(copiedMeta.ariaLabel, 'Current page URL copied to clipboard');
+  assert.match(copiedMeta.title, /Page link copied to clipboard/);
+});

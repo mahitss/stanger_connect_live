@@ -207,6 +207,9 @@ import {
   FIRST_MATCHING_PEER_AUTO_SCROLL_HIGHLIGHT_MS,
   shouldTriggerFirstMatchingPeerAutoScroll,
   RESET_ONLY_BUTTON_POP_DURATION_MS,
+  WORKSPACE_HEADER_SHARE_FEEDBACK_DURATION_MS,
+  resolveWorkspaceHeaderShareUrl,
+  getWorkspaceHeaderShareButtonMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -762,6 +765,20 @@ export default function App() {
     initialFilterShareParams.audienceFilter
   );
   const filterLinkCopyTimerRef = useRef<number | null>(null);
+  const [isWorkspaceHeaderUrlCopied, setIsWorkspaceHeaderUrlCopied] =
+    useState<boolean>(false);
+  const [workspaceHeaderShareCopyCount, setWorkspaceHeaderShareCopyCount] =
+    useState<number>(0);
+  const [lastCopiedWorkspaceHeaderUrl, setLastCopiedWorkspaceHeaderUrl] =
+    useState<string>('');
+  const workspaceHeaderShareTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    return () => {
+      if (workspaceHeaderShareTimerRef.current !== null) {
+        window.clearTimeout(workspaceHeaderShareTimerRef.current);
+      }
+    };
+  }, []);
   const [isSidebarHovered, setIsSidebarHovered] = useState<boolean>(false);
   const [isSidebarFocused, setIsSidebarFocused] = useState<boolean>(false);
   const [isSidebarProgrammaticScroll, setIsSidebarProgrammaticScroll] =
@@ -3617,6 +3634,47 @@ export default function App() {
       }
     }
   };
+
+  const currentWorkspacePageHref =
+    typeof window !== 'undefined' && window.location?.href
+      ? window.location.href
+      : 'https://mrstranger.app/';
+  const workspaceHeaderShareMeta = getWorkspaceHeaderShareButtonMeta({
+    currentHref: lastCopiedWorkspaceHeaderUrl || currentWorkspacePageHref,
+    isCopied: isWorkspaceHeaderUrlCopied,
+    copyCount: workspaceHeaderShareCopyCount,
+  });
+
+  const handleCopyWorkspaceHeaderShareLink = async () => {
+    const urlToCopy = resolveWorkspaceHeaderShareUrl(
+      typeof window !== 'undefined' && window.location?.href
+        ? window.location.href
+        : 'https://mrstranger.app/'
+    );
+    setLastCopiedWorkspaceHeaderUrl(urlToCopy);
+    setIsWorkspaceHeaderUrlCopied(true);
+    setWorkspaceHeaderShareCopyCount((prev) => prev + 1);
+
+    if (workspaceHeaderShareTimerRef.current !== null) {
+      window.clearTimeout(workspaceHeaderShareTimerRef.current);
+    }
+    workspaceHeaderShareTimerRef.current = window.setTimeout(() => {
+      setIsWorkspaceHeaderUrlCopied(false);
+      workspaceHeaderShareTimerRef.current = null;
+    }, WORKSPACE_HEADER_SHARE_FEEDBACK_DURATION_MS);
+
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      try {
+        await navigator.clipboard.writeText(urlToCopy);
+      } catch {
+        // ignore clipboard permissions error in headless context
+      }
+    }
+  };
   const myFocusStatus =
     directoryFocusSummary.byUid[currentIdentity.uid] ||
     getOnlinePeerFocusStatus(
@@ -4496,8 +4554,12 @@ export default function App() {
         data-independent-scroll="true"
         className={sidebarScrollSpec.mainViewportClass}
       >
-        {/* Top Workspace Header (Follows SaaS Top Bar Contract: Breadcrumb left, Theme Switcher, Streak & Primary Action right) */}
-        <header className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-[#050505]">
+        {/* Top Workspace Header (Follows SaaS Top Bar Contract: Breadcrumb left, Theme Switcher, Share, Streak & Primary Action right) */}
+        <header
+          id={workspaceHeaderShareMeta.headerElementId}
+          data-testid={workspaceHeaderShareMeta.headerElementId}
+          className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-[#050505]"
+        >
           <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400 truncate">
             <img
               src={APP_LOGO_URL}
@@ -4517,6 +4579,58 @@ export default function App() {
           </div>
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-mono tabular-nums">
+            <div className="inline-flex items-center gap-2">
+              <button
+                type="button"
+                id={workspaceHeaderShareMeta.buttonElementId}
+                data-testid={workspaceHeaderShareMeta.buttonTestId}
+                data-copied={workspaceHeaderShareMeta.isCopied ? 'true' : 'false'}
+                data-copy-count={String(workspaceHeaderShareMeta.copyCount)}
+                data-share-url={workspaceHeaderShareMeta.shareUrl}
+                onClick={handleCopyWorkspaceHeaderShareLink}
+                aria-label={workspaceHeaderShareMeta.ariaLabel}
+                title={workspaceHeaderShareMeta.title}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  workspaceHeaderShareMeta.isCopied
+                    ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
+                    : 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500'
+                }`}
+              >
+                {workspaceHeaderShareMeta.isCopied ? (
+                  <Check
+                    className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0"
+                    data-testid="workspace-header-share-check-icon"
+                  />
+                ) : (
+                  <Share2
+                    className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-300 shrink-0"
+                    data-testid="workspace-header-share-icon"
+                  />
+                )}
+                <span>{workspaceHeaderShareMeta.buttonLabel}</span>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {workspaceHeaderShareMeta.isCopied && (
+                  <motion.span
+                    key="workspace-header-share-feedback"
+                    id={workspaceHeaderShareMeta.feedbackElementId}
+                    data-testid={workspaceHeaderShareMeta.feedbackTestId}
+                    role={workspaceHeaderShareMeta.statusRole}
+                    aria-live={workspaceHeaderShareMeta.ariaLive}
+                    initial={{ opacity: 0, x: -6, scale: 0.96 }}
+                    animate={{ opacity: 1, x: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: -6, scale: 0.96 }}
+                    transition={{ duration: 0.18, ease: 'easeOut' }}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 text-[11px] font-sans font-medium whitespace-nowrap"
+                  >
+                    <Check className="w-3 h-3 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                    <span>{workspaceHeaderShareMeta.feedbackMessage}</span>
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </div>
+
             <button
               type="button"
               onClick={handleToggleTheme}
