@@ -60,6 +60,7 @@ import {
   History,
   Trash2,
   QrCode,
+  Download,
 } from 'lucide-react';
 import {
   auth,
@@ -211,6 +212,8 @@ import {
   WORKSPACE_HEADER_SHARE_FEEDBACK_DURATION_MS,
   resolveWorkspaceHeaderShareUrl,
   getWorkspaceHeaderShareButtonMeta,
+  WORKSPACE_HEADER_QR_PNG_FEEDBACK_DURATION_MS,
+  generateWorkspaceHeaderQrPngDataUrl,
   getWorkspaceHeaderQrCodeMeta,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
@@ -777,11 +780,21 @@ export default function App() {
   const [isWorkspaceHeaderQrOpen, setIsWorkspaceHeaderQrOpen] =
     useState<boolean>(false);
   const [workspaceHeaderQrHref, setWorkspaceHeaderQrHref] = useState<string>('');
+  const [isWorkspaceHeaderQrPngDownloaded, setIsWorkspaceHeaderQrPngDownloaded] =
+    useState<boolean>(false);
+  const [workspaceHeaderQrPngDownloadCount, setWorkspaceHeaderQrPngDownloadCount] =
+    useState<number>(0);
+  const [lastDownloadedWorkspaceQrPngDataUrl, setLastDownloadedWorkspaceQrPngDataUrl] =
+    useState<string>('');
+  const workspaceHeaderQrPngTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrContainerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     return () => {
       if (workspaceHeaderShareTimerRef.current !== null) {
         window.clearTimeout(workspaceHeaderShareTimerRef.current);
+      }
+      if (workspaceHeaderQrPngTimerRef.current !== null) {
+        window.clearTimeout(workspaceHeaderQrPngTimerRef.current);
       }
     };
   }, []);
@@ -3712,6 +3725,8 @@ export default function App() {
       currentWorkspacePageHref,
     isOpen: isWorkspaceHeaderQrOpen,
     isCopied: isWorkspaceHeaderUrlCopied,
+    isDownloaded: isWorkspaceHeaderQrPngDownloaded,
+    downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
   });
 
@@ -3729,6 +3744,42 @@ export default function App() {
       }
       return next;
     });
+  };
+
+  const handleDownloadWorkspaceHeaderQrPng = async () => {
+    try {
+      const pngDataUrl = await generateWorkspaceHeaderQrPngDataUrl(
+        workspaceHeaderQrMeta.workspaceUrl,
+        workspaceHeaderQrMeta.downloadPixelScale
+      );
+      setLastDownloadedWorkspaceQrPngDataUrl(pngDataUrl);
+      setIsWorkspaceHeaderQrPngDownloaded(true);
+      setWorkspaceHeaderQrPngDownloadCount((prev) => prev + 1);
+
+      if (workspaceHeaderQrPngTimerRef.current !== null) {
+        window.clearTimeout(workspaceHeaderQrPngTimerRef.current);
+      }
+      workspaceHeaderQrPngTimerRef.current = window.setTimeout(() => {
+        setIsWorkspaceHeaderQrPngDownloaded(false);
+        workspaceHeaderQrPngTimerRef.current = null;
+      }, WORKSPACE_HEADER_QR_PNG_FEEDBACK_DURATION_MS);
+
+      if (uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+
+      if (typeof document !== 'undefined') {
+        const anchor = document.createElement('a');
+        anchor.href = pngDataUrl;
+        anchor.download = workspaceHeaderQrMeta.downloadFilename;
+        anchor.rel = 'noopener';
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
+      }
+    } catch {
+      // ignore fallback errors in restricted environments
+    }
   };
   const myFocusStatus =
     directoryFocusSummary.byUid[currentIdentity.uid] ||
@@ -4813,13 +4864,13 @@ export default function App() {
                           {workspaceHeaderQrMeta.workspaceUrl}
                         </div>
 
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="grid grid-cols-2 gap-2">
                           <button
                             type="button"
                             id={workspaceHeaderQrMeta.copyButtonId}
                             data-testid={workspaceHeaderQrMeta.copyButtonTestId}
                             onClick={handleCopyWorkspaceHeaderShareLink}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-xs font-semibold text-slate-800 dark:text-zinc-100 transition-colors"
+                            className="inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-xs font-semibold text-slate-800 dark:text-zinc-100 transition-colors whitespace-nowrap"
                           >
                             {workspaceHeaderQrMeta.isCopied ? (
                               <>
@@ -4829,7 +4880,49 @@ export default function App() {
                             ) : (
                               <>
                                 <Link2 className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-300 shrink-0" />
-                                <span>Copy Workspace URL</span>
+                                <span>Copy URL</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            id={workspaceHeaderQrMeta.downloadButtonId}
+                            data-testid={workspaceHeaderQrMeta.downloadButtonTestId}
+                            data-downloaded={
+                              workspaceHeaderQrMeta.isDownloaded ? 'true' : 'false'
+                            }
+                            data-download-count={String(
+                              workspaceHeaderQrMeta.downloadCount
+                            )}
+                            data-download-filename={
+                              workspaceHeaderQrMeta.downloadFilename
+                            }
+                            data-has-png-data-url={
+                              lastDownloadedWorkspaceQrPngDataUrl.startsWith(
+                                'data:image/png;base64,'
+                              )
+                                ? 'true'
+                                : 'false'
+                            }
+                            aria-label={workspaceHeaderQrMeta.downloadAriaLabel}
+                            title={workspaceHeaderQrMeta.downloadTitle}
+                            onClick={handleDownloadWorkspaceHeaderQrPng}
+                            className={`inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
+                              workspaceHeaderQrMeta.isDownloaded
+                                ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
+                                : 'border-emerald-500/50 bg-emerald-600 hover:bg-emerald-500 text-white'
+                            }`}
+                          >
+                            {workspaceHeaderQrMeta.isDownloaded ? (
+                              <>
+                                <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                                <span>{workspaceHeaderQrMeta.downloadedButtonLabel}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Download className="w-3.5 h-3.5 shrink-0" />
+                                <span>{workspaceHeaderQrMeta.downloadButtonLabel}</span>
                               </>
                             )}
                           </button>

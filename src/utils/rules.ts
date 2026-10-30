@@ -13788,6 +13788,39 @@ export function generateWorkspaceUrlQrMatrix(
   };
 }
 
+export const WORKSPACE_HEADER_QR_PNG_FEEDBACK_DURATION_MS = 3000;
+export const WORKSPACE_HEADER_QR_PNG_PIXEL_SCALE = 12;
+
+export function buildWorkspaceHeaderQrPngFilename(
+  roomCode?: string | null
+): string {
+  const cleaned = (roomCode ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  const slug = cleaned || 'study-global';
+  return `mr-stranger-workspace-qr-${slug}.png`;
+}
+
+export async function generateWorkspaceHeaderQrPngDataUrl(
+  currentHref?: string | null,
+  scale: number = WORKSPACE_HEADER_QR_PNG_PIXEL_SCALE
+): Promise<string> {
+  const url = resolveWorkspaceHeaderShareUrl(currentHref);
+  const safeScale = Math.max(4, Math.min(24, Math.floor(scale || 12)));
+  return QRCode.toDataURL(url, {
+    type: 'image/png',
+    errorCorrectionLevel: 'M',
+    margin: WORKSPACE_HEADER_QR_QUIET_ZONE,
+    scale: safeScale,
+    color: {
+      dark: '#09090B',
+      light: '#FFFFFF',
+    },
+  });
+}
+
 export interface WorkspaceHeaderQrCodeMeta {
   shellSelector: '#workspace-shell';
   headerElementId: 'workspace-top-header';
@@ -13803,18 +13836,28 @@ export interface WorkspaceHeaderQrCodeMeta {
   urlDisplayTestId: 'workspace-header-qr-url';
   copyButtonId: 'workspace-header-qr-copy-btn';
   copyButtonTestId: 'workspace-header-qr-copy-btn';
+  downloadButtonId: 'workspace-header-qr-download-btn';
+  downloadButtonTestId: 'workspace-header-qr-download-btn';
   closeButtonId: 'workspace-header-qr-close-btn';
   closeButtonTestId: 'workspace-header-qr-close-btn';
   workspaceUrl: string;
   roomCode: string;
   isOpen: boolean;
   isCopied: boolean;
+  isDownloaded: boolean;
+  downloadCount: number;
+  downloadFilename: string;
+  downloadPixelScale: number;
   buttonLabel: 'QR Code';
+  downloadButtonLabel: 'Download PNG';
+  downloadedButtonLabel: 'Downloaded PNG!';
   dialogTitle: 'Mobile & Nearby Access QR Code';
   dialogSubtitle: string;
   instructionText: string;
   ariaLabel: string;
   title: string;
+  downloadAriaLabel: string;
+  downloadTitle: string;
   qrMatrix: WorkspaceHeaderQrMatrixSpec;
 }
 
@@ -13822,13 +13865,18 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   currentHref?: string | null;
   isOpen?: boolean;
   isCopied?: boolean;
+  isDownloaded?: boolean;
+  downloadCount?: number;
   roomCode?: string | null;
 }): WorkspaceHeaderQrCodeMeta {
   const qrMatrix = generateWorkspaceUrlQrMatrix(input?.currentHref);
   const workspaceUrl = qrMatrix.url;
   const isOpen = Boolean(input?.isOpen);
   const isCopied = Boolean(input?.isCopied);
+  const isDownloaded = Boolean(input?.isDownloaded);
+  const downloadCount = Math.max(0, Math.floor(input?.downloadCount ?? 0));
   const roomCode = (input?.roomCode ?? '').trim() || 'STUDY-GLOBAL';
+  const downloadFilename = buildWorkspaceHeaderQrPngFilename(roomCode);
 
   return {
     shellSelector: '#workspace-shell',
@@ -13845,13 +13893,21 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     urlDisplayTestId: 'workspace-header-qr-url',
     copyButtonId: 'workspace-header-qr-copy-btn',
     copyButtonTestId: 'workspace-header-qr-copy-btn',
+    downloadButtonId: 'workspace-header-qr-download-btn',
+    downloadButtonTestId: 'workspace-header-qr-download-btn',
     closeButtonId: 'workspace-header-qr-close-btn',
     closeButtonTestId: 'workspace-header-qr-close-btn',
     workspaceUrl,
     roomCode,
     isOpen,
     isCopied,
+    isDownloaded,
+    downloadCount,
+    downloadFilename,
+    downloadPixelScale: WORKSPACE_HEADER_QR_PNG_PIXEL_SCALE,
     buttonLabel: 'QR Code',
+    downloadButtonLabel: 'Download PNG',
+    downloadedButtonLabel: 'Downloaded PNG!',
     dialogTitle: 'Mobile & Nearby Access QR Code',
     dialogSubtitle:
       'Share this workspace link with people nearby or access it on mobile.',
@@ -13863,6 +13919,12 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     title: isOpen
       ? `Close QR code for ${workspaceUrl}`
       : `Generate and display QR code for ${workspaceUrl}`,
+    downloadAriaLabel: isDownloaded
+      ? `QR code PNG downloaded (${downloadFilename})`
+      : `Download QR code image as PNG (${downloadFilename})`,
+    downloadTitle: isDownloaded
+      ? `Saved ${downloadFilename}`
+      : `Download QR code image as ${downloadFilename}`,
     qrMatrix,
   };
 }

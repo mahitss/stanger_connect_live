@@ -236,6 +236,10 @@ import {
   resolveWorkspaceHeaderShareUrl,
   getWorkspaceHeaderShareButtonMeta,
   WORKSPACE_HEADER_QR_QUIET_ZONE,
+  WORKSPACE_HEADER_QR_PNG_FEEDBACK_DURATION_MS,
+  WORKSPACE_HEADER_QR_PNG_PIXEL_SCALE,
+  buildWorkspaceHeaderQrPngFilename,
+  generateWorkspaceHeaderQrPngDataUrl,
   generateWorkspaceUrlQrMatrix,
   getWorkspaceHeaderQrCodeMeta,
 } from './rules.ts';
@@ -6022,4 +6026,68 @@ test('Workspace shell (#workspace-shell) header QR Code button generates ISO/IEC
     openMeta.instructionText,
     'Scan this QR code with your phone camera to instantly open the workspace on your mobile device.'
   );
+});
+
+test('Workspace shell (#workspace-shell) header QR Code popover generates downloadable PNG data URL and download button metadata', async () => {
+  assert.equal(WORKSPACE_HEADER_QR_PNG_FEEDBACK_DURATION_MS, 3000);
+  assert.equal(WORKSPACE_HEADER_QR_PNG_PIXEL_SCALE, 12);
+
+  // 1. Filename sanitization for room codes
+  assert.equal(
+    buildWorkspaceHeaderQrPngFilename('STUDY-GLOBAL'),
+    'mr-stranger-workspace-qr-study-global.png'
+  );
+  assert.equal(
+    buildWorkspaceHeaderQrPngFilename('  Focus Room #42! '),
+    'mr-stranger-workspace-qr-focus-room-42.png'
+  );
+  assert.equal(
+    buildWorkspaceHeaderQrPngFilename(''),
+    'mr-stranger-workspace-qr-study-global.png'
+  );
+
+  // 2. Idle vs Downloaded button metadata in getWorkspaceHeaderQrCodeMeta
+  const idleQrMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-GLOBAL',
+    isOpen: true,
+    isDownloaded: false,
+    downloadCount: 0,
+    roomCode: 'STUDY-GLOBAL',
+  });
+  assert.equal(idleQrMeta.downloadButtonId, 'workspace-header-qr-download-btn');
+  assert.equal(idleQrMeta.downloadButtonTestId, 'workspace-header-qr-download-btn');
+  assert.equal(
+    idleQrMeta.downloadFilename,
+    'mr-stranger-workspace-qr-study-global.png'
+  );
+  assert.equal(idleQrMeta.downloadPixelScale, 12);
+  assert.equal(idleQrMeta.isDownloaded, false);
+  assert.equal(idleQrMeta.downloadCount, 0);
+  assert.equal(idleQrMeta.downloadButtonLabel, 'Download PNG');
+  assert.equal(idleQrMeta.downloadedButtonLabel, 'Downloaded PNG!');
+  assert.equal(
+    idleQrMeta.downloadAriaLabel,
+    'Download QR code image as PNG (mr-stranger-workspace-qr-study-global.png)'
+  );
+
+  const downloadedQrMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-GLOBAL',
+    isOpen: true,
+    isDownloaded: true,
+    downloadCount: 1,
+    roomCode: 'STUDY-GLOBAL',
+  });
+  assert.equal(downloadedQrMeta.isDownloaded, true);
+  assert.equal(downloadedQrMeta.downloadCount, 1);
+  assert.equal(
+    downloadedQrMeta.downloadAriaLabel,
+    'QR code PNG downloaded (mr-stranger-workspace-qr-study-global.png)'
+  );
+
+  // 3. Real PNG data URL generation
+  const pngDataUrl = await generateWorkspaceHeaderQrPngDataUrl(
+    'http://localhost:3000/?room=STUDY-GLOBAL'
+  );
+  assert.match(pngDataUrl, /^data:image\/png;base64,[A-Za-z0-9+/=]+$/);
+  assert.equal(pngDataUrl.length > 200, true);
 });
