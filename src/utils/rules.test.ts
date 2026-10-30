@@ -6091,3 +6091,60 @@ test('Workspace shell (#workspace-shell) header QR Code popover generates downlo
   assert.match(pngDataUrl, /^data:image\/png;base64,[A-Za-z0-9+/=]+$/);
   assert.equal(pngDataUrl.length > 200, true);
 });
+
+test('Workspace shell (#workspace-shell) header QR Code tracks hidden generation count state and popover header usage badge', () => {
+  const initialClosedMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-GLOBAL',
+    isOpen: false,
+    generationCount: 0,
+    roomCode: 'STUDY-GLOBAL',
+  });
+  assert.equal(
+    initialClosedMeta.generationCountHiddenInputId,
+    'workspace-header-qr-generation-count-state'
+  );
+  assert.equal(
+    initialClosedMeta.generationCountHiddenInputTestId,
+    'workspace-header-qr-generation-count-state'
+  );
+  assert.equal(
+    initialClosedMeta.generationBadgeId,
+    'workspace-header-qr-generation-badge'
+  );
+  assert.equal(
+    initialClosedMeta.generationBadgeTestId,
+    'workspace-header-qr-generation-badge'
+  );
+  assert.equal(initialClosedMeta.generationCount, 0);
+  assert.equal(initialClosedMeta.generationBadgeLabel, '0x generated');
+  assert.equal(
+    initialClosedMeta.generationBadgeTitle,
+    'QR code generated 0 times in this session'
+  );
+
+  const firstGenMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-GLOBAL',
+    isOpen: true,
+    generationCount: 1,
+    roomCode: 'STUDY-GLOBAL',
+  });
+  assert.equal(firstGenMeta.generationCount, 1);
+  assert.equal(firstGenMeta.generationBadgeLabel, '1x generated');
+  assert.equal(
+    firstGenMeta.generationBadgeTitle,
+    'QR code generated 1 time in this session'
+  );
+
+  const thirdGenMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-GLOBAL',
+    isOpen: true,
+    generationCount: 3,
+    roomCode: 'STUDY-GLOBAL',
+  });
+  assert.equal(thirdGenMeta.generationCount, 3);
+  assert.equal(thirdGenMeta.generationBadgeLabel, '3x generated');
+  assert.equal(
+    thirdGenMeta.generationBadgeTitle,
+    'QR code generated 3 times in this session'
+  );
+});

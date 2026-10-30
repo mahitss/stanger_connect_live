@@ -779,6 +779,8 @@ export default function App() {
   const workspaceHeaderShareTimerRef = useRef<number | null>(null);
   const [isWorkspaceHeaderQrOpen, setIsWorkspaceHeaderQrOpen] =
     useState<boolean>(false);
+  const [workspaceHeaderQrGenerationCount, setWorkspaceHeaderQrGenerationCount] =
+    useState<number>(0);
   const [workspaceHeaderQrHref, setWorkspaceHeaderQrHref] = useState<string>('');
   const [isWorkspaceHeaderQrPngDownloaded, setIsWorkspaceHeaderQrPngDownloaded] =
     useState<boolean>(false);
@@ -3726,6 +3728,7 @@ export default function App() {
     isOpen: isWorkspaceHeaderQrOpen,
     isCopied: isWorkspaceHeaderUrlCopied,
     isDownloaded: isWorkspaceHeaderQrPngDownloaded,
+    generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
   });
@@ -3737,6 +3740,9 @@ export default function App() {
         : 'https://mrstranger.app/'
     );
     setWorkspaceHeaderQrHref(resolvedHref);
+    if (!isWorkspaceHeaderQrOpen) {
+      setWorkspaceHeaderQrGenerationCount((c) => c + 1);
+    }
     setIsWorkspaceHeaderQrOpen((prev) => {
       const next = !prev;
       if (next && uiSoundPrefs.enabled) {
@@ -4741,12 +4747,25 @@ export default function App() {
                 ref={workspaceHeaderQrContainerRef}
                 className="relative inline-flex items-center"
               >
+                <input
+                  type="hidden"
+                  id={workspaceHeaderQrMeta.generationCountHiddenInputId}
+                  data-testid={workspaceHeaderQrMeta.generationCountHiddenInputTestId}
+                  data-generation-count={String(
+                    workspaceHeaderQrMeta.generationCount
+                  )}
+                  value={String(workspaceHeaderQrMeta.generationCount)}
+                  readOnly
+                />
                 <button
                   type="button"
                   id={workspaceHeaderQrMeta.buttonElementId}
                   data-testid={workspaceHeaderQrMeta.buttonTestId}
                   data-open={workspaceHeaderQrMeta.isOpen ? 'true' : 'false'}
                   data-qr-url={workspaceHeaderQrMeta.workspaceUrl}
+                  data-generation-count={String(
+                    workspaceHeaderQrMeta.generationCount
+                  )}
                   aria-expanded={workspaceHeaderQrMeta.isOpen}
                   aria-haspopup="dialog"
                   aria-controls={workspaceHeaderQrMeta.popoverElementId}
@@ -4777,6 +4796,9 @@ export default function App() {
                       id={workspaceHeaderQrMeta.popoverElementId}
                       data-testid={workspaceHeaderQrMeta.popoverTestId}
                       data-qr-url={workspaceHeaderQrMeta.workspaceUrl}
+                      data-generation-count={String(
+                        workspaceHeaderQrMeta.generationCount
+                      )}
                       data-qr-module-size={String(
                         workspaceHeaderQrMeta.qrMatrix.moduleSize
                       )}
@@ -4790,10 +4812,22 @@ export default function App() {
                       className="absolute left-0 top-full mt-2 z-50 w-72 sm:w-80 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
                     >
                       <div className="flex items-start justify-between gap-2">
-                        <div className="space-y-0.5">
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
+                        <div className="space-y-1">
+                          <div className="flex items-center flex-wrap gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
                             <QrCode className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
                             <span>{workspaceHeaderQrMeta.dialogTitle}</span>
+                            <span
+                              id={workspaceHeaderQrMeta.generationBadgeId}
+                              data-testid={workspaceHeaderQrMeta.generationBadgeTestId}
+                              data-generation-count={String(
+                                workspaceHeaderQrMeta.generationCount
+                              )}
+                              title={workspaceHeaderQrMeta.generationBadgeTitle}
+                              aria-label={workspaceHeaderQrMeta.generationBadgeTitle}
+                              className="inline-flex items-center px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300 whitespace-nowrap"
+                            >
+                              {workspaceHeaderQrMeta.generationBadgeLabel}
+                            </span>
                           </div>
                           <p className="text-[11px] leading-snug text-slate-500 dark:text-zinc-400">
                             {workspaceHeaderQrMeta.dialogSubtitle}

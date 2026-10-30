@@ -13828,6 +13828,10 @@ export interface WorkspaceHeaderQrCodeMeta {
   buttonTestId: 'workspace-header-qr-btn';
   popoverElementId: 'workspace-header-qr-popover';
   popoverTestId: 'workspace-header-qr-popover';
+  generationCountHiddenInputId: 'workspace-header-qr-generation-count-state';
+  generationCountHiddenInputTestId: 'workspace-header-qr-generation-count-state';
+  generationBadgeId: 'workspace-header-qr-generation-badge';
+  generationBadgeTestId: 'workspace-header-qr-generation-badge';
   svgElementId: 'workspace-header-qr-svg';
   svgTestId: 'workspace-header-qr-svg';
   instructionElementId: 'workspace-header-qr-instruction';
@@ -13845,6 +13849,9 @@ export interface WorkspaceHeaderQrCodeMeta {
   isOpen: boolean;
   isCopied: boolean;
   isDownloaded: boolean;
+  generationCount: number;
+  generationBadgeLabel: string;
+  generationBadgeTitle: string;
   downloadCount: number;
   downloadFilename: string;
   downloadPixelScale: number;
@@ -13866,6 +13873,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   isOpen?: boolean;
   isCopied?: boolean;
   isDownloaded?: boolean;
+  generationCount?: number;
   downloadCount?: number;
   roomCode?: string | null;
 }): WorkspaceHeaderQrCodeMeta {
@@ -13874,6 +13882,10 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   const isOpen = Boolean(input?.isOpen);
   const isCopied = Boolean(input?.isCopied);
   const isDownloaded = Boolean(input?.isDownloaded);
+  const generationCount = Math.max(
+    0,
+    Math.floor(input?.generationCount ?? (isOpen ? 1 : 0))
+  );
   const downloadCount = Math.max(0, Math.floor(input?.downloadCount ?? 0));
   const roomCode = (input?.roomCode ?? '').trim() || 'STUDY-GLOBAL';
   const downloadFilename = buildWorkspaceHeaderQrPngFilename(roomCode);
@@ -13885,6 +13897,10 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     buttonTestId: 'workspace-header-qr-btn',
     popoverElementId: 'workspace-header-qr-popover',
     popoverTestId: 'workspace-header-qr-popover',
+    generationCountHiddenInputId: 'workspace-header-qr-generation-count-state',
+    generationCountHiddenInputTestId: 'workspace-header-qr-generation-count-state',
+    generationBadgeId: 'workspace-header-qr-generation-badge',
+    generationBadgeTestId: 'workspace-header-qr-generation-badge',
     svgElementId: 'workspace-header-qr-svg',
     svgTestId: 'workspace-header-qr-svg',
     instructionElementId: 'workspace-header-qr-instruction',
@@ -13902,6 +13918,11 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     isOpen,
     isCopied,
     isDownloaded,
+    generationCount,
+    generationBadgeLabel: `${generationCount}x generated`,
+    generationBadgeTitle: `QR code generated ${generationCount} ${
+      generationCount === 1 ? 'time' : 'times'
+    } in this session`,
     downloadCount,
     downloadFilename,
     downloadPixelScale: WORKSPACE_HEADER_QR_PNG_PIXEL_SCALE,
