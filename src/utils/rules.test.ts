@@ -257,6 +257,12 @@ import {
   recordWorkspaceQrRecentScan,
   removeWorkspaceQrRecentScanEntry,
   togglePinWorkspaceQrRecentScanEntry,
+  WORKSPACE_QR_HISTORY_ROOM_CATEGORIES,
+  normalizeWorkspaceQrHistoryRoomCategory,
+  normalizeWorkspaceQrHistoryCategoryFilter,
+  getNextWorkspaceQrHistoryRoomCategory,
+  computeWorkspaceQrHistoryCountsByCategory,
+  setWorkspaceQrRecentScanCategory,
   buildWorkspaceQrRecentScansSpec,
   toggleWorkspaceQrHistorySectionExpanded,
   buildWorkspaceQrHistorySectionSpec,
@@ -7046,7 +7052,121 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     unpinnedRoom4.updatedScans.map((entry) => entry.roomCode),
     ['STUDY-ROOM2', 'STUDY-ROOM3', 'STUDY-ROOM5', 'STUDY-ROOM4']
   );
+
+  // 16. Category tags ('Study', 'Work', 'Casual') & Category filter chips for QR history room items
+  assert.deepEqual(WORKSPACE_QR_HISTORY_ROOM_CATEGORIES, [
+    'Study',
+    'Work',
+    'Casual',
+  ]);
+  assert.equal(normalizeWorkspaceQrHistoryRoomCategory('work'), 'Work');
+  assert.equal(normalizeWorkspaceQrHistoryRoomCategory('CASUAL'), 'Casual');
+  assert.equal(normalizeWorkspaceQrHistoryRoomCategory('Study'), 'Study');
+  assert.equal(normalizeWorkspaceQrHistoryRoomCategory('unknown'), 'Study');
+  assert.equal(normalizeWorkspaceQrHistoryCategoryFilter('all'), 'all');
+  assert.equal(normalizeWorkspaceQrHistoryCategoryFilter('work'), 'Work');
+  assert.equal(normalizeWorkspaceQrHistoryCategoryFilter('invalid'), 'all');
+  assert.equal(getNextWorkspaceQrHistoryRoomCategory('Study'), 'Work');
+  assert.equal(getNextWorkspaceQrHistoryRoomCategory('Work'), 'Casual');
+  assert.equal(getNextWorkspaceQrHistoryRoomCategory('Casual'), 'Study');
+
+  // Cycle STUDY-ROOM2 from default 'Study' -> 'Work'
+  const room2Work = setWorkspaceQrRecentScanCategory(
+    unpinnedRoom4.updatedScans,
+    'STUDY-ROOM2'
+  );
+  assert.equal(room2Work.category, 'Work');
+  assert.equal(room2Work.previousCategory, 'Study');
+  assert.equal(
+    room2Work.feedbackMessage,
+    'Classified STUDY-ROOM2 as Work in QR Scanner Search History'
+  );
+  assert.deepEqual(room2Work.countsByCategory, {
+    Study: 3,
+    Work: 1,
+    Casual: 0,
+  });
+
+  // Explicitly classify STUDY-ROOM5 as 'Casual'
+  const room5Casual = setWorkspaceQrRecentScanCategory(
+    room2Work.updatedScans,
+    'STUDY-ROOM5',
+    'Casual'
+  );
+  assert.equal(room5Casual.category, 'Casual');
+  assert.deepEqual(room5Casual.countsByCategory, {
+    Study: 2,
+    Work: 1,
+    Casual: 1,
+  });
+  assert.deepEqual(
+    computeWorkspaceQrHistoryCountsByCategory(room5Casual.updatedScans),
+    {
+      Study: 2,
+      Work: 1,
+      Casual: 1,
+    }
+  );
+
+  // Verify category tag metadata and category filter chips in getWorkspaceHeaderQrCodeMeta
+  const metaAllCategories = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    recentScans: room5Casual.updatedScans,
+    isHistoryExpanded: true,
+    historyCategoryFilter: 'all',
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(
+    metaAllCategories.searchHistory.categoryFilterBarElementId,
+    'workspace-header-qr-history-category-filter-bar'
+  );
+  assert.equal(metaAllCategories.searchHistory.activeCategoryFilter, 'all');
+  assert.equal(metaAllCategories.searchHistory.hasActiveCategoryFilter, false);
+  assert.equal(metaAllCategories.searchHistory.categoryFilterChips.length, 4);
+  assert.deepEqual(
+    metaAllCategories.searchHistory.categoryFilterChips.map((c) => ({
+      key: c.key,
+      count: c.count,
+      isActive: c.isActive,
+    })),
+    [
+      { key: 'all', count: 4, isActive: true },
+      { key: 'Study', count: 2, isActive: false },
+      { key: 'Work', count: 1, isActive: false },
+      { key: 'Casual', count: 1, isActive: false },
+    ]
+  );
+  assert.equal(metaAllCategories.searchHistory.items[0].roomCode, 'STUDY-ROOM2');
+  assert.equal(metaAllCategories.searchHistory.items[0].category, 'Work');
+  assert.equal(metaAllCategories.searchHistory.items[0].categoryLabel, 'Work');
+  assert.equal(metaAllCategories.searchHistory.items[0].nextCategory, 'Casual');
+  assert.equal(
+    metaAllCategories.searchHistory.items[0].categoryTagElementId,
+    'workspace-header-qr-history-category-tag-0'
+  );
+
+  // Filter by 'Work' category -> only STUDY-ROOM2 is returned
+  const metaWorkFilter = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    recentScans: room5Casual.updatedScans,
+    isHistoryExpanded: true,
+    historyCategoryFilter: 'Work',
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(metaWorkFilter.searchHistory.activeCategoryFilter, 'Work');
+  assert.equal(metaWorkFilter.searchHistory.hasActiveCategoryFilter, true);
+  assert.equal(metaWorkFilter.searchHistory.filteredCount, 1);
+  assert.equal(metaWorkFilter.searchHistory.totalSavedCount, 4);
+  assert.equal(
+    metaWorkFilter.searchHistory.filterStatusBadgeLabel,
+    '1/4 match'
+  );
+  assert.deepEqual(metaWorkFilter.searchHistory.matchedRoomCodes, [
+    'STUDY-ROOM2',
+  ]);
+  assert.deepEqual(metaWorkFilter.historySection.matchedRoomCodes, [
+    'STUDY-ROOM2',
+  ]);
 });
-
-
-

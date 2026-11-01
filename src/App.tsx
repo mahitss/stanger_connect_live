@@ -63,6 +63,7 @@ import {
   Download,
   Copy,
   Pin,
+  Tag,
 } from 'lucide-react';
 import {
   auth,
@@ -240,6 +241,9 @@ import {
   recordWorkspaceQrRecentScan,
   removeWorkspaceQrRecentScanEntry,
   togglePinWorkspaceQrRecentScanEntry,
+  setWorkspaceQrRecentScanCategory,
+  WorkspaceQrHistoryRoomCategory,
+  WorkspaceQrHistoryCategoryFilter,
   toggleWorkspaceQrHistorySectionExpanded,
   resolveWorkspaceQrScanConfirmationChime,
   WorkspaceHeaderQrCameraScanStatus,
@@ -858,6 +862,8 @@ export default function App() {
     useState<boolean>(true);
   const [workspaceHeaderQrHistorySearchQuery, setWorkspaceHeaderQrHistorySearchQuery] =
     useState<string>('');
+  const [workspaceHeaderQrHistoryCategoryFilter, setWorkspaceHeaderQrHistoryCategoryFilter] =
+    useState<WorkspaceQrHistoryCategoryFilter>('all');
   const [copiedQrHistoryRoomCode, setCopiedQrHistoryRoomCode] = useState<
     string | null
   >(null);
@@ -3878,6 +3884,7 @@ export default function App() {
     recentScans: recentWorkspaceQrScans,
     isHistoryExpanded: isWorkspaceHeaderQrHistoryExpanded,
     historySearchQuery: workspaceHeaderQrHistorySearchQuery,
+    historyCategoryFilter: workspaceHeaderQrHistoryCategoryFilter,
     copiedHistoryRoomCode: copiedQrHistoryRoomCode,
     qrScannerSoundPreferences,
     uiSoundPreferences: uiSoundPrefs,
@@ -3926,6 +3933,7 @@ export default function App() {
   const handleClearRecentWorkspaceQrScans = () => {
     setRecentWorkspaceQrScans([]);
     setWorkspaceHeaderQrHistorySearchQuery('');
+    setWorkspaceHeaderQrHistoryCategoryFilter('all');
     setCopiedQrHistoryRoomCode(null);
     if (qrHistoryCopyTimerRef.current !== null) {
       window.clearTimeout(qrHistoryCopyTimerRef.current);
@@ -4021,6 +4029,39 @@ export default function App() {
         prev,
         entryOrIdentifier,
         Date.now(),
+        MAX_WORKSPACE_QR_SEARCH_HISTORY
+      );
+      try {
+        localStorage.setItem(
+          WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+          result.serializedJson
+        );
+        localStorage.setItem(
+          WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
+          result.serializedJson
+        );
+      } catch {
+        // ignore localStorage write error
+      }
+      if (uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+      setLastSoundFeedback(result.feedbackMessage);
+      return result.updatedScans;
+    });
+  };
+
+  const handleSetWorkspaceQrHistoryCategory = (
+    entryOrIdentifier:
+      | Pick<WorkspaceQrRecentScanEntry, 'id' | 'roomCode' | 'category'>
+      | string,
+    explicitCategory?: WorkspaceQrHistoryRoomCategory | string | null
+  ) => {
+    setRecentWorkspaceQrScans((prev) => {
+      const result = setWorkspaceQrRecentScanCategory(
+        prev,
+        entryOrIdentifier,
+        explicitCategory,
         MAX_WORKSPACE_QR_SEARCH_HISTORY
       );
       try {
@@ -5683,7 +5724,7 @@ export default function App() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 6, scale: 0.96 }}
                       transition={{ duration: 0.18, ease: 'easeOut' }}
-                      className="absolute left-0 top-full mt-2 z-50 w-80 sm:w-[22.5rem] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
+                      className="absolute left-0 top-full mt-2 z-50 w-80 sm:w-[25.5rem] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-1">
@@ -6249,6 +6290,82 @@ export default function App() {
                                   </div>
                                 </div>
 
+                                <div
+                                  id={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .categoryFilterBarElementId
+                                  }
+                                  data-testid={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .categoryFilterBarTestId
+                                  }
+                                  data-search-history-category-filter-bar-id={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .searchHistoryCategoryFilterBarElementId
+                                  }
+                                  data-active-category-filter={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .activeCategoryFilter
+                                  }
+                                  data-study-count={String(
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .countsByCategory.Study
+                                  )}
+                                  data-work-count={String(
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .countsByCategory.Work
+                                  )}
+                                  data-casual-count={String(
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .countsByCategory.Casual
+                                  )}
+                                  role="group"
+                                  aria-label="Filter QR History rooms by category"
+                                  className="flex flex-wrap items-center gap-1"
+                                >
+                                  {workspaceHeaderQrMeta.searchHistory.categoryFilterChips.map(
+                                    (chip) => (
+                                      <button
+                                        key={chip.key}
+                                        type="button"
+                                        id={chip.elementId}
+                                        data-testid={chip.testId}
+                                        data-search-history-category-filter-id={
+                                          chip.searchHistoryElementId
+                                        }
+                                        data-category-filter={chip.key}
+                                        data-category-count={String(chip.count)}
+                                        data-active={
+                                          chip.isActive ? 'true' : 'false'
+                                        }
+                                        aria-pressed={chip.isActive}
+                                        aria-label={chip.ariaLabel}
+                                        onClick={() => {
+                                          setWorkspaceHeaderQrHistoryCategoryFilter(
+                                            chip.key
+                                          );
+                                          if (uiSoundPrefs.enabled) {
+                                            playSubtleUiChime(
+                                              'ui_chime',
+                                              uiSoundPrefs.volumePercent
+                                            );
+                                          }
+                                        }}
+                                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors ${
+                                          chip.isActive
+                                            ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 dark:bg-zinc-900/70 dark:hover:bg-zinc-800 dark:border-zinc-800 dark:text-zinc-400'
+                                        }`}
+                                      >
+                                        <span>{chip.label}</span>
+                                        <span className="opacity-75">
+                                          ({chip.count})
+                                        </span>
+                                      </button>
+                                    )
+                                  )}
+                                </div>
+
                                 {workspaceHeaderQrMeta.searchHistory
                                   .hasFilteredItems ? (
                                   <ul
@@ -6271,6 +6388,10 @@ export default function App() {
                                       workspaceHeaderQrMeta.searchHistory
                                         .searchQuery
                                     }
+                                    data-category-filter={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeCategoryFilter
+                                    }
                                     data-filtered-count={String(
                                       workspaceHeaderQrMeta.searchHistory
                                         .filteredCount
@@ -6282,7 +6403,7 @@ export default function App() {
                                     data-pinned-rooms={workspaceHeaderQrMeta.searchHistory.pinnedRoomCodes.join(
                                       ','
                                     )}
-                                    className="space-y-1 max-h-52 overflow-y-auto pr-0.5"
+                                    className="space-y-1 max-h-56 overflow-y-auto pr-0.5"
                                   >
                                     {workspaceHeaderQrMeta.searchHistory.items.map(
                                       (scanItem, idx) => (
@@ -6294,6 +6415,7 @@ export default function App() {
                                             scanItem.searchHistoryItemElementId
                                           }
                                           data-room-code={scanItem.roomCode}
+                                          data-category={scanItem.category}
                                           data-pinned={
                                             scanItem.isPinned ? 'true' : 'false'
                                           }
@@ -6309,44 +6431,82 @@ export default function App() {
                                           data-rank-order={String(
                                             scanItem.rankOrder
                                           )}
-                                          className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded border transition-colors ${
+                                          className={`flex flex-wrap items-center justify-between gap-1.5 px-2 py-1.5 rounded border transition-colors ${
                                             scanItem.isPinned
                                               ? 'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60 dark:border-amber-500/40 dark:bg-amber-950/20'
                                               : 'border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-emerald-50/70 hover:border-emerald-500/40 dark:bg-[#050505] dark:hover:bg-emerald-950/30 dark:hover:border-emerald-500/40'
                                           }`}
                                         >
-                                          <button
-                                            type="button"
-                                            id={`workspace-header-qr-recent-scan-item-${idx}`}
-                                            data-testid={`workspace-header-qr-recent-scan-item-${idx}`}
-                                            data-room-code={scanItem.roomCode}
-                                            data-pinned={
-                                              scanItem.isPinned ? 'true' : 'false'
-                                            }
-                                            data-workspace-url={
-                                              scanItem.workspaceUrl
-                                            }
-                                            onClick={() =>
-                                              handleSelectRecentWorkspaceQrScan(
-                                                scanItem
-                                              )
-                                            }
-                                            aria-label={`Quick access to scanned room ${scanItem.roomCode}`}
-                                            title={scanItem.workspaceUrl}
-                                            className="min-w-0 flex-1 flex items-center gap-1 text-left"
-                                          >
-                                            <span
-                                              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold shrink-0 ${
-                                                scanItem.isPinned
-                                                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300'
-                                                  : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                                          <div className="min-w-0 flex items-center gap-1 flex-wrap">
+                                            <button
+                                              type="button"
+                                              id={`workspace-header-qr-recent-scan-item-${idx}`}
+                                              data-testid={`workspace-header-qr-recent-scan-item-${idx}`}
+                                              data-room-code={scanItem.roomCode}
+                                              data-category={scanItem.category}
+                                              data-pinned={
+                                                scanItem.isPinned ? 'true' : 'false'
+                                              }
+                                              data-workspace-url={
+                                                scanItem.workspaceUrl
+                                              }
+                                              onClick={() =>
+                                                handleSelectRecentWorkspaceQrScan(
+                                                  scanItem
+                                                )
+                                              }
+                                              aria-label={`Quick access to scanned room ${scanItem.roomCode}`}
+                                              title={scanItem.workspaceUrl}
+                                              className="inline-flex items-center text-left"
+                                            >
+                                              <span
+                                                className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold shrink-0 ${
+                                                  scanItem.isPinned
+                                                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300'
+                                                    : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                                                }`}
+                                              >
+                                                {scanItem.roomCode}
+                                              </span>
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              id={scanItem.categoryTagElementId}
+                                              data-testid={scanItem.categoryTagTestId}
+                                              data-search-history-category-tag-id={
+                                                scanItem.searchHistoryCategoryTagElementId
+                                              }
+                                              data-room-code={scanItem.roomCode}
+                                              data-entry-id={scanItem.id}
+                                              data-category={scanItem.category}
+                                              data-next-category={
+                                                scanItem.nextCategory
+                                              }
+                                              aria-label={
+                                                scanItem.categoryTagAriaLabel
+                                              }
+                                              title={scanItem.categoryTagTitle}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleSetWorkspaceQrHistoryCategory(
+                                                  scanItem
+                                                );
+                                              }}
+                                              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors shrink-0 ${
+                                                scanItem.category === 'Work'
+                                                  ? 'bg-sky-500/15 border-sky-500/40 text-sky-700 hover:bg-sky-500/25 dark:text-sky-300'
+                                                  : scanItem.category === 'Casual'
+                                                    ? 'bg-teal-500/15 border-teal-500/40 text-teal-700 hover:bg-teal-500/25 dark:text-teal-300'
+                                                    : 'bg-violet-500/15 border-violet-500/40 text-violet-700 hover:bg-violet-500/25 dark:text-violet-300'
                                               }`}
                                             >
-                                              {scanItem.roomCode}
-                                            </span>
-                                          </button>
+                                              <Tag className="w-2.5 h-2.5 shrink-0" />
+                                              <span>{scanItem.categoryLabel}</span>
+                                            </button>
+                                          </div>
 
-                                          <div className="flex items-center gap-1 shrink-0">
+                                          <div className="flex items-center gap-1 shrink-0 ml-auto">
                                             <button
                                               type="button"
                                               id={scanItem.pinButtonElementId}
@@ -6491,7 +6651,9 @@ export default function App() {
                                     className="text-[10px] text-slate-500 dark:text-zinc-500 leading-snug"
                                   >
                                     {workspaceHeaderQrMeta.searchHistory
-                                      .hasActiveSearchQuery
+                                      .hasActiveSearchQuery ||
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .hasActiveCategoryFilter
                                       ? workspaceHeaderQrMeta.searchHistory
                                           .noMatchMessage
                                       : workspaceHeaderQrMeta.historySection
