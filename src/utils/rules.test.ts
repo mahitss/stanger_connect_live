@@ -286,8 +286,15 @@ import {
   filterWorkspaceQrSearchHistory,
   buildWorkspaceQrSearchHistorySpec,
   WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
+  WORKSPACE_QR_SOUND_VOLUME_STORAGE_KEY,
+  DEFAULT_WORKSPACE_QR_SCAN_SOUND_VOLUME_PERCENT,
   DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES,
+  DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES,
+  clampWorkspaceQrScannerSoundVolume,
   normalizeWorkspaceQrScannerSoundPreferences,
+  normalizeWorkspaceQrScannerSoundVolumePreferences,
+  resolveWorkspaceQrScannerEventVolumePercent,
+  setWorkspaceQrScannerSoundVolume,
   toggleWorkspaceQrScannerSoundPreference,
   buildWorkspaceQrSoundSettingsSectionSpec,
   resolveWorkspaceQrScannerEventSound,
@@ -7493,6 +7500,151 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   assert.equal(
     metaWithStatsTab.historySection.statistics.scansInLast7Days,
     4
+  );
+
+  // 20. Dedicated Scan Sound Volume Customization Section in QR scanner popover settings (slider component for master + successfulScans, scanErrors, cameraPermissionRequests)
+  assert.equal(
+    WORKSPACE_QR_SOUND_VOLUME_STORAGE_KEY,
+    'mr_stranger_qr_scanner_sound_volume_v1'
+  );
+  assert.equal(DEFAULT_WORKSPACE_QR_SCAN_SOUND_VOLUME_PERCENT, 65);
+  assert.deepEqual(DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES, {
+    masterVolumePercent: 65,
+    successfulScansVolumePercent: 65,
+    scanErrorsVolumePercent: 65,
+    cameraPermissionRequestsVolumePercent: 65,
+  });
+
+  // Clamping [0, 100]
+  assert.equal(clampWorkspaceQrScannerSoundVolume(-15), 0);
+  assert.equal(clampWorkspaceQrScannerSoundVolume(140), 100);
+  assert.equal(clampWorkspaceQrScannerSoundVolume('82.4'), 82);
+  assert.equal(clampWorkspaceQrScannerSoundVolume('invalid', 70), 70);
+
+  // Master volume slider updates all three scan sounds simultaneously
+  const masterVolUpdate = setWorkspaceQrScannerSoundVolume(
+    DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES,
+    85,
+    'master'
+  );
+  assert.equal(masterVolUpdate.volumePercent, 85);
+  assert.equal(masterVolUpdate.isMuted, false);
+  assert.deepEqual(masterVolUpdate.updatedVolumePreferences, {
+    masterVolumePercent: 85,
+    successfulScansVolumePercent: 85,
+    scanErrorsVolumePercent: 85,
+    cameraPermissionRequestsVolumePercent: 85,
+  });
+
+  // Per-sound volume sliders customize individual scan sounds (successfulScan, scanError, cameraPermissionRequest)
+  const successVolUpdate = setWorkspaceQrScannerSoundVolume(
+    masterVolUpdate.serializedJson,
+    90,
+    'successfulScans'
+  );
+  const errorVolUpdate = setWorkspaceQrScannerSoundVolume(
+    successVolUpdate.updatedVolumePreferences,
+    45,
+    'scanErrors'
+  );
+  const permVolUpdate = setWorkspaceQrScannerSoundVolume(
+    errorVolUpdate.updatedVolumePreferences,
+    30,
+    'cameraPermissionRequests'
+  );
+  assert.equal(
+    permVolUpdate.updatedVolumePreferences.successfulScansVolumePercent,
+    90
+  );
+  assert.equal(
+    permVolUpdate.updatedVolumePreferences.scanErrorsVolumePercent,
+    45
+  );
+  assert.equal(
+    permVolUpdate.updatedVolumePreferences.cameraPermissionRequestsVolumePercent,
+    30
+  );
+  assert.equal(permVolUpdate.updatedVolumePreferences.masterVolumePercent, 55);
+
+  const metaWithCustomVolumes = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=WORK-HUB1',
+    isOpen: true,
+    qrScannerSoundVolumePreferences: permVolUpdate.updatedVolumePreferences,
+    roomCode: 'WORK-HUB1',
+  });
+  assert.equal(
+    metaWithCustomVolumes.soundVolumeSection.sectionElementId,
+    'workspace-header-qr-sound-volume-section'
+  );
+  assert.equal(
+    metaWithCustomVolumes.soundVolumeSection.masterSliderElementId,
+    'workspace-header-qr-sound-volume-master-slider'
+  );
+  assert.equal(metaWithCustomVolumes.soundVolumeSection.minVolume, 0);
+  assert.equal(metaWithCustomVolumes.soundVolumeSection.maxVolume, 100);
+  assert.equal(metaWithCustomVolumes.soundVolumeSection.masterVolumePercent, 55);
+  assert.equal(
+    metaWithCustomVolumes.soundVolumeSection.masterVolumeBadgeText,
+    '55%'
+  );
+  assert.deepEqual(
+    metaWithCustomVolumes.soundVolumeSection.sliders.map((s) => ({
+      key: s.key,
+      sliderElementId: s.sliderElementId,
+      volumePercent: s.volumePercent,
+      volumeBadgeText: s.volumeBadgeText,
+    })),
+    [
+      {
+        key: 'successfulScans',
+        sliderElementId:
+          'workspace-header-qr-sound-volume-slider-successful-scans',
+        volumePercent: 90,
+        volumeBadgeText: '90%',
+      },
+      {
+        key: 'scanErrors',
+        sliderElementId: 'workspace-header-qr-sound-volume-slider-scan-errors',
+        volumePercent: 45,
+        volumeBadgeText: '45%',
+      },
+      {
+        key: 'cameraPermissionRequests',
+        sliderElementId:
+          'workspace-header-qr-sound-volume-slider-camera-permission',
+        volumePercent: 30,
+        volumeBadgeText: '30%',
+      },
+    ]
+  );
+
+  // Verify resolveWorkspaceQrScannerEventSound and scanConfirmationChime apply customized volume levels
+  assert.equal(metaWithCustomVolumes.scanConfirmationChime.volumePercent, 90);
+  const customErrorSound = resolveWorkspaceQrScannerEventSound({
+    eventCategory: 'scanErrors',
+    scannerSoundVolumePreferences: permVolUpdate.updatedVolumePreferences,
+  });
+  assert.equal(customErrorSound.volumePercent, 45);
+  assert.equal(customErrorSound.shouldPlay, true);
+
+  // Muting scanErrors via 0% volume slider suppresses playback
+  const mutedErrorVol = setWorkspaceQrScannerSoundVolume(
+    permVolUpdate.updatedVolumePreferences,
+    0,
+    'scanErrors'
+  );
+  const mutedErrorResolution = resolveWorkspaceQrScannerEventSound({
+    eventCategory: 'scanErrors',
+    scannerSoundVolumePreferences: mutedErrorVol.updatedVolumePreferences,
+  });
+  assert.equal(mutedErrorResolution.volumePercent, 0);
+  assert.equal(mutedErrorResolution.shouldPlay, false);
+  assert.equal(
+    resolveWorkspaceQrScannerEventVolumePercent(
+      mutedErrorVol.updatedVolumePreferences,
+      'scanErrors'
+    ),
+    0
   );
 });
 

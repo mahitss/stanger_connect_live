@@ -231,10 +231,16 @@ import {
   WORKSPACE_QR_HISTORY_COPY_FEEDBACK_DURATION_MS,
   resolveWorkspaceQrHistoryCopyRoomCodeAction,
   WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
+  WORKSPACE_QR_SOUND_VOLUME_STORAGE_KEY,
   WorkspaceQrSoundSettingKey,
+  WorkspaceQrSoundVolumeTargetKey,
   WorkspaceQrScannerSoundPreferences,
+  WorkspaceQrScannerSoundVolumePreferences,
   DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES,
+  DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES,
   normalizeWorkspaceQrScannerSoundPreferences,
+  normalizeWorkspaceQrScannerSoundVolumePreferences,
+  setWorkspaceQrScannerSoundVolume,
   toggleWorkspaceQrScannerSoundPreference,
   resolveWorkspaceQrScannerEventSound,
   WorkspaceQrRecentScanEntry,
@@ -909,6 +915,28 @@ export default function App() {
         // ignore localStorage error
       }
       return { ...DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES };
+    });
+  const [qrScannerSoundVolumePreferences, setQrScannerSoundVolumePreferences] =
+    useState<WorkspaceQrScannerSoundVolumePreferences>(() => {
+      try {
+        const raw = localStorage.getItem(WORKSPACE_QR_SOUND_VOLUME_STORAGE_KEY);
+        if (raw) {
+          const normalized =
+            normalizeWorkspaceQrScannerSoundVolumePreferences(raw);
+          localStorage.setItem(
+            WORKSPACE_QR_SOUND_VOLUME_STORAGE_KEY,
+            JSON.stringify(normalized)
+          );
+          return normalized;
+        }
+        localStorage.setItem(
+          WORKSPACE_QR_SOUND_VOLUME_STORAGE_KEY,
+          JSON.stringify(DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES)
+        );
+      } catch {
+        // ignore localStorage error
+      }
+      return { ...DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES };
     });
   const [workspaceHeaderQrScanChimeCount, setWorkspaceHeaderQrScanChimeCount] =
     useState<number>(0);
@@ -3912,6 +3940,7 @@ export default function App() {
     isHistoryCsvExported: isWorkspaceHeaderQrHistoryCsvExported,
     historyCsvExportCount: workspaceHeaderQrHistoryCsvExportCount,
     qrScannerSoundPreferences,
+    qrScannerSoundVolumePreferences,
     uiSoundPreferences: uiSoundPrefs,
     scanChimePlayedCount: workspaceHeaderQrScanChimeCount,
     generationCount: workspaceHeaderQrGenerationCount,
@@ -3935,6 +3964,7 @@ export default function App() {
       const soundRes = resolveWorkspaceQrScannerEventSound({
         eventCategory: key,
         scannerSoundPreferences: toggled.updatedPreferences,
+        scannerSoundVolumePreferences: qrScannerSoundVolumePreferences,
         uiSoundPreferences: uiSoundPrefs,
         roomCode: activeStudyRoomCode,
       });
@@ -3943,6 +3973,45 @@ export default function App() {
       }
       setLastSoundFeedback(soundRes.feedbackMessage);
       return toggled.updatedPreferences;
+    });
+  };
+
+  const handleChangeWorkspaceQrScannerSoundVolume = (
+    target: WorkspaceQrSoundVolumeTargetKey,
+    rawVolumePercent: number
+  ) => {
+    setQrScannerSoundVolumePreferences((prev) => {
+      const updated = setWorkspaceQrScannerSoundVolume(
+        prev,
+        rawVolumePercent,
+        target
+      );
+      try {
+        localStorage.setItem(
+          WORKSPACE_QR_SOUND_VOLUME_STORAGE_KEY,
+          updated.serializedJson
+        );
+      } catch {
+        // ignore localStorage error
+      }
+      const previewCategory: WorkspaceQrSoundSettingKey =
+        target === 'scanErrors'
+          ? 'scanErrors'
+          : target === 'cameraPermissionRequests'
+            ? 'cameraPermissionRequests'
+            : 'successfulScans';
+      const soundRes = resolveWorkspaceQrScannerEventSound({
+        eventCategory: previewCategory,
+        scannerSoundPreferences: qrScannerSoundPreferences,
+        scannerSoundVolumePreferences: updated.updatedVolumePreferences,
+        uiSoundPreferences: uiSoundPrefs,
+        roomCode: activeStudyRoomCode,
+      });
+      if (soundRes.shouldPlay && updated.volumePercent > 0) {
+        playSubtleUiChime(soundRes.chime, soundRes.volumePercent);
+      }
+      setLastSoundFeedback(updated.feedbackMessage);
+      return updated.updatedVolumePreferences;
     });
   };
 
@@ -4347,6 +4416,7 @@ export default function App() {
       const errorSoundSpec = resolveWorkspaceQrScannerEventSound({
         eventCategory: 'scanErrors',
         scannerSoundPreferences: qrScannerSoundPreferences,
+        scannerSoundVolumePreferences: qrScannerSoundVolumePreferences,
         uiSoundPreferences: uiSoundPrefs,
         roomCode: activeStudyRoomCode,
       });
@@ -4361,6 +4431,7 @@ export default function App() {
     const scanChimeSpec = resolveWorkspaceQrScanConfirmationChime({
       preferences: uiSoundPrefs,
       scannerSoundPreferences: qrScannerSoundPreferences,
+      scannerSoundVolumePreferences: qrScannerSoundVolumePreferences,
       roomCode: parsed.roomCode,
     });
     if (scanChimeSpec.shouldPlay) {
@@ -4472,6 +4543,7 @@ export default function App() {
     const permSoundSpec = resolveWorkspaceQrScannerEventSound({
       eventCategory: 'cameraPermissionRequests',
       scannerSoundPreferences: qrScannerSoundPreferences,
+      scannerSoundVolumePreferences: qrScannerSoundVolumePreferences,
       uiSoundPreferences: uiSoundPrefs,
       roomCode: activeStudyRoomCode,
     });
@@ -7608,6 +7680,228 @@ export default function App() {
                                 </button>
                               )
                             )}
+                          </div>
+
+                          {/* Dedicated Scan Sound Volume Customization Section (Slider Controls for Master + Successful Scan, Error, Permission Request) */}
+                          <div
+                            id={
+                              workspaceHeaderQrMeta.soundSettingsSection
+                                .volumeSection.sectionElementId
+                            }
+                            data-testid={
+                              workspaceHeaderQrMeta.soundSettingsSection
+                                .volumeSection.sectionTestId
+                            }
+                            data-storage-key={
+                              workspaceHeaderQrMeta.soundSettingsSection
+                                .volumeSection.storageKey
+                            }
+                            data-master-volume-percent={String(
+                              workspaceHeaderQrMeta.soundSettingsSection
+                                .volumeSection.masterVolumePercent
+                            )}
+                            data-volume-preferences-json={
+                              workspaceHeaderQrMeta.soundSettingsSection
+                                .volumeSection.serializedVolumePreferencesJson
+                            }
+                            className="mt-1.5 pt-2 border-t border-slate-200/80 dark:border-zinc-800/80 rounded-md bg-slate-50/90 dark:bg-[#050505] p-2 space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="inline-flex items-center gap-1.5 min-w-0">
+                                {workspaceHeaderQrMeta.soundSettingsSection
+                                  .volumeSection.isMasterMuted ? (
+                                  <VolumeX className="w-3 h-3 text-slate-400 dark:text-zinc-500 shrink-0" />
+                                ) : (
+                                  <Volume2 className="w-3 h-3 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                                )}
+                                <div className="min-w-0">
+                                  <span
+                                    id={
+                                      workspaceHeaderQrMeta.soundSettingsSection
+                                        .volumeSection.headingElementId
+                                    }
+                                    data-testid={
+                                      workspaceHeaderQrMeta.soundSettingsSection
+                                        .volumeSection.headingTestId
+                                    }
+                                    className="block text-[10px] font-bold text-slate-700 dark:text-zinc-200 truncate"
+                                  >
+                                    {
+                                      workspaceHeaderQrMeta.soundSettingsSection
+                                        .volumeSection.heading
+                                    }
+                                  </span>
+                                  <span className="block text-[9px] text-slate-500 dark:text-zinc-400 truncate">
+                                    {
+                                      workspaceHeaderQrMeta.soundSettingsSection
+                                        .volumeSection.subtitle
+                                    }
+                                  </span>
+                                </div>
+                              </div>
+                              <span
+                                id={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.badgeElementId
+                                }
+                                data-testid={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.badgeTestId
+                                }
+                                data-volume-percent={String(
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.masterVolumePercent
+                                )}
+                                className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-300 tabular-nums shrink-0"
+                              >
+                                {
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.masterVolumeBadgeText
+                                }
+                              </span>
+                            </div>
+
+                            {/* Master Volume Slider for All Scan Sounds */}
+                            <div className="space-y-1">
+                              <div className="flex items-center justify-between gap-2 text-[9px] font-medium text-slate-600 dark:text-zinc-300">
+                                <label
+                                  htmlFor={
+                                    workspaceHeaderQrMeta.soundSettingsSection
+                                      .volumeSection.masterSliderElementId
+                                  }
+                                  className="cursor-pointer truncate"
+                                >
+                                  {
+                                    workspaceHeaderQrMeta.soundSettingsSection
+                                      .volumeSection.masterSliderLabel
+                                  }
+                                </label>
+                                <span className="font-mono font-semibold text-slate-500 dark:text-zinc-400 tabular-nums">
+                                  {
+                                    workspaceHeaderQrMeta.soundSettingsSection
+                                      .volumeSection.masterVolumeBadgeText
+                                  }
+                                </span>
+                              </div>
+                              <input
+                                type="range"
+                                id={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.masterSliderElementId
+                                }
+                                data-testid={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.masterSliderTestId
+                                }
+                                data-sound-key="master"
+                                data-volume-percent={String(
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.masterVolumePercent
+                                )}
+                                min={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.minVolume
+                                }
+                                max={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.maxVolume
+                                }
+                                step={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.volumeStep
+                                }
+                                value={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.masterVolumePercent
+                                }
+                                aria-label={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.masterSliderAriaLabel
+                                }
+                                aria-valuemin={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.minVolume
+                                }
+                                aria-valuemax={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.maxVolume
+                                }
+                                aria-valuenow={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .volumeSection.masterVolumePercent
+                                }
+                                onChange={(e) =>
+                                  handleChangeWorkspaceQrScannerSoundVolume(
+                                    'master',
+                                    Number(e.target.value)
+                                  )
+                                }
+                                className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-slate-200 dark:bg-zinc-800 accent-emerald-500"
+                              />
+                            </div>
+
+                            {/* Individual Volume Sliders for Successful Scan, Error, and Permission Request */}
+                            <div className="space-y-1.5 pt-1 border-t border-slate-200/70 dark:border-zinc-800/70">
+                              {workspaceHeaderQrMeta.soundSettingsSection.volumeSection.sliders.map(
+                                (sliderItem) => (
+                                  <div
+                                    key={sliderItem.key}
+                                    data-testid={`workspace-header-qr-sound-volume-row-${sliderItem.key}`}
+                                    className="space-y-0.5"
+                                  >
+                                    <div className="flex items-center justify-between gap-2">
+                                      <label
+                                        htmlFor={sliderItem.sliderElementId}
+                                        className="text-[9px] font-semibold text-slate-700 dark:text-zinc-300 truncate cursor-pointer"
+                                      >
+                                        {sliderItem.label}
+                                      </label>
+                                      <span
+                                        id={sliderItem.badgeElementId}
+                                        data-testid={sliderItem.badgeTestId}
+                                        data-volume-percent={String(
+                                          sliderItem.volumePercent
+                                        )}
+                                        className={`px-1 py-0.2 rounded text-[9px] font-mono font-bold tabular-nums shrink-0 ${
+                                          sliderItem.isMuted
+                                            ? 'bg-slate-200/70 text-slate-500 dark:bg-zinc-900 dark:text-zinc-500'
+                                            : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                                        }`}
+                                      >
+                                        {sliderItem.volumeBadgeText}
+                                      </span>
+                                    </div>
+                                    <input
+                                      type="range"
+                                      id={sliderItem.sliderElementId}
+                                      data-testid={sliderItem.sliderTestId}
+                                      data-sound-key={sliderItem.key}
+                                      data-chime-event={
+                                        sliderItem.chimeEventType
+                                      }
+                                      data-volume-percent={String(
+                                        sliderItem.volumePercent
+                                      )}
+                                      min={sliderItem.min}
+                                      max={sliderItem.max}
+                                      step={sliderItem.step}
+                                      value={sliderItem.volumePercent}
+                                      aria-label={sliderItem.ariaLabel}
+                                      aria-valuemin={sliderItem.min}
+                                      aria-valuemax={sliderItem.max}
+                                      aria-valuenow={sliderItem.volumePercent}
+                                      onChange={(e) =>
+                                        handleChangeWorkspaceQrScannerSoundVolume(
+                                          sliderItem.key,
+                                          Number(e.target.value)
+                                        )
+                                      }
+                                      className="w-full h-1.5 rounded-lg appearance-none cursor-pointer bg-slate-200 dark:bg-zinc-800 accent-emerald-500"
+                                    />
+                                  </div>
+                                )
+                              )}
+                            </div>
                           </div>
                         </div>
                       </div>
