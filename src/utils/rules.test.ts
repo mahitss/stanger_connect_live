@@ -262,6 +262,9 @@ import {
   escapeWorkspaceQrHistoryCsvCell,
   buildWorkspaceQrHistoryCsvFilename,
   buildWorkspaceQrHistoryCsvExport,
+  WORKSPACE_QR_HISTORY_STATS_WINDOW_DAYS,
+  normalizeWorkspaceQrHistoryTab,
+  buildWorkspaceQrHistoryStatisticsSpec,
   recordWorkspaceQrRecentScan,
   removeWorkspaceQrRecentScanEntry,
   togglePinWorkspaceQrRecentScanEntry,
@@ -7410,6 +7413,88 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   assert.equal(metaAlphaSort.searchHistory.exportCsvButtonLabel, 'Export CSV');
   assert.equal(metaAlphaSort.searchHistory.csvExport.rowCount, 3);
   assert.equal(metaAlphaSort.historySection.csvExport.rowCount, 3);
+
+  // 19. QR History 'Statistics' tab: 7-day scan frequency chart & most frequently scanned category
+  assert.equal(WORKSPACE_QR_HISTORY_STATS_WINDOW_DAYS, 7);
+  assert.equal(normalizeWorkspaceQrHistoryTab('statistics'), 'statistics');
+  assert.equal(normalizeWorkspaceQrHistoryTab('stats'), 'statistics');
+  assert.equal(normalizeWorkspaceQrHistoryTab('history'), 'history');
+  assert.equal(normalizeWorkspaceQrHistoryTab(undefined), 'history');
+
+  const refDayMs = Date.UTC(2026, 10, 1, 12, 0, 0); // 2026-11-01 12:00 UTC
+  const dayMs = 86_400_000;
+  const statsScans = [
+    {
+      id: 'st-1',
+      roomCode: 'WORK-HUB1',
+      workspaceUrl: 'http://localhost:3000/?room=WORK-HUB1',
+      scannedAtMs: refDayMs - 1_000, // Today (dayIndex 6)
+      category: 'Work' as const,
+    },
+    {
+      id: 'st-2',
+      roomCode: 'WORK-HUB2',
+      workspaceUrl: 'http://localhost:3000/?room=WORK-HUB2',
+      scannedAtMs: refDayMs - 2_000, // Today (dayIndex 6)
+      category: 'Work' as const,
+    },
+    {
+      id: 'st-3',
+      roomCode: 'STUDY-LAB1',
+      workspaceUrl: 'http://localhost:3000/?room=STUDY-LAB1',
+      scannedAtMs: refDayMs - 2 * dayMs, // 2 days ago (dayIndex 4)
+      category: 'Study' as const,
+    },
+    {
+      id: 'st-4',
+      roomCode: 'CASUAL-LOUNGE',
+      workspaceUrl: 'http://localhost:3000/?room=CASUAL-LOUNGE',
+      scannedAtMs: refDayMs - 5 * dayMs, // 5 days ago (dayIndex 1)
+      category: 'Casual' as const,
+    },
+  ];
+
+  const statsSpec = buildWorkspaceQrHistoryStatisticsSpec(statsScans, {
+    activeTab: 'statistics',
+    referenceTimestampMs: refDayMs,
+  });
+  assert.equal(statsSpec.activeTab, 'statistics');
+  assert.equal(statsSpec.isStatisticsTabActive, true);
+  assert.equal(statsSpec.windowDays, 7);
+  assert.equal(statsSpec.dailyBuckets.length, 7);
+  assert.equal(statsSpec.totalStoredScans, 4);
+  assert.equal(statsSpec.scansInLast7Days, 4);
+  assert.equal(statsSpec.maxDailyScanCount, 2);
+  assert.equal(statsSpec.mostFrequentCategory, 'Work');
+  assert.equal(statsSpec.mostFrequentCategoryLabel, 'Work');
+  assert.equal(statsSpec.mostFrequentCategoryCount, 2);
+  assert.equal(statsSpec.mostFrequentCategoryPercent, 50);
+  assert.equal(statsSpec.dailyBuckets[6].count, 2);
+  assert.equal(statsSpec.dailyBuckets[6].heightPercent, 100);
+  assert.equal(statsSpec.dailyBuckets[4].count, 1);
+  assert.equal(statsSpec.dailyBuckets[4].heightPercent, 50);
+  assert.equal(statsSpec.dailyBuckets[1].count, 1);
+  assert.equal(statsSpec.dailyBuckets[0].count, 0);
+
+  const metaWithStatsTab = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=WORK-HUB1',
+    isOpen: true,
+    recentScans: statsScans,
+    isHistoryExpanded: true,
+    historyActiveTab: 'statistics',
+    historyStatsReferenceTimestampMs: refDayMs,
+    roomCode: 'WORK-HUB1',
+  });
+  assert.equal(metaWithStatsTab.searchHistory.activeTab, 'statistics');
+  assert.equal(
+    metaWithStatsTab.searchHistory.statistics.mostFrequentCategory,
+    'Work'
+  );
+  assert.equal(
+    metaWithStatsTab.historySection.statistics.scansInLast7Days,
+    4
+  );
 });
+
 
 

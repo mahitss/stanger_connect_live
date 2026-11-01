@@ -15271,6 +15271,273 @@ export function buildWorkspaceQrHistoryCsvExport(
   };
 }
 
+export type WorkspaceQrHistoryTab = 'history' | 'statistics';
+
+export const WORKSPACE_QR_HISTORY_STATS_WINDOW_DAYS = 7;
+
+export function normalizeWorkspaceQrHistoryTab(
+  raw?: unknown
+): WorkspaceQrHistoryTab {
+  if (typeof raw === 'string') {
+    const cleaned = raw.trim().toLowerCase();
+    if (cleaned === 'statistics' || cleaned === 'stats') {
+      return 'statistics';
+    }
+  }
+  return 'history';
+}
+
+export interface WorkspaceQrHistoryDailyFrequencyBucket {
+  dayIndex: number;
+  dateKey: string;
+  dayShortLabel: string;
+  dateShortLabel: string;
+  startOfDayMs: number;
+  endOfDayMs: number;
+  count: number;
+  heightPercent: number;
+  roomCodes: string[];
+  isToday: boolean;
+  barElementId: string;
+  barTestId: string;
+}
+
+export interface WorkspaceQrHistoryRoomFrequencyItem {
+  roomCode: string;
+  category: WorkspaceQrHistoryRoomCategory;
+  count: number;
+  sharePercent: number;
+}
+
+export interface WorkspaceQrHistoryStatisticsSpec {
+  tabsContainerElementId: 'workspace-header-qr-history-tabs';
+  tabsContainerTestId: 'workspace-header-qr-history-tabs';
+  historyTabButtonElementId: 'workspace-header-qr-history-tab-list';
+  historyTabButtonTestId: 'workspace-header-qr-history-tab-list';
+  statisticsTabButtonElementId: 'workspace-header-qr-history-tab-statistics';
+  statisticsTabButtonTestId: 'workspace-header-qr-history-tab-statistics';
+  searchHistoryStatisticsTabButtonElementId: 'workspace-header-qr-search-history-tab-statistics';
+  searchHistoryStatisticsTabButtonTestId: 'workspace-header-qr-search-history-tab-statistics';
+  panelElementId: 'workspace-header-qr-history-statistics-panel';
+  panelTestId: 'workspace-header-qr-history-statistics-panel';
+  chartElementId: 'workspace-header-qr-history-7day-chart';
+  chartTestId: 'workspace-header-qr-history-7day-chart';
+  topCategoryCardElementId: 'workspace-header-qr-history-top-category-card';
+  topCategoryCardTestId: 'workspace-header-qr-history-top-category-card';
+  topCategoryBadgeElementId: 'workspace-header-qr-history-top-category-badge';
+  topCategoryBadgeTestId: 'workspace-header-qr-history-top-category-badge';
+  activeTab: WorkspaceQrHistoryTab;
+  isStatisticsTabActive: boolean;
+  historyTabLabel: 'History';
+  statisticsTabLabel: 'Statistics';
+  windowDays: typeof WORKSPACE_QR_HISTORY_STATS_WINDOW_DAYS;
+  referenceTimestampMs: number;
+  totalStoredScans: number;
+  scansInLast7Days: number;
+  maxDailyScanCount: number;
+  mostFrequentCategory: WorkspaceQrHistoryRoomCategory | null;
+  mostFrequentCategoryLabel: WorkspaceQrHistoryRoomCategory | 'None';
+  mostFrequentCategoryCount: number;
+  mostFrequentCategoryPercent: number;
+  mostFrequentCategoryColorTag: WorkspaceQrHistoryCategoryColorTagSpec | null;
+  mostFrequentCategorySummary: string;
+  countsByCategory: Record<WorkspaceQrHistoryRoomCategory, number>;
+  dailyBuckets: WorkspaceQrHistoryDailyFrequencyBucket[];
+  roomFrequencies: WorkspaceQrHistoryRoomFrequencyItem[];
+}
+
+const SHORT_WEEKDAY_LABELS = [
+  'Sun',
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+] as const;
+
+export function buildWorkspaceQrHistoryStatisticsSpec(
+  entries: WorkspaceQrRecentScanEntry[] | unknown,
+  options?: {
+    activeTab?: WorkspaceQrHistoryTab | string | null;
+    referenceTimestampMs?: number;
+    maxItems?: number;
+  }
+): WorkspaceQrHistoryStatisticsSpec {
+  const cap = Math.max(
+    1,
+    Math.min(20, Math.floor(options?.maxItems || MAX_WORKSPACE_QR_SEARCH_HISTORY))
+  );
+  const savedEntries = normalizeStoredWorkspaceQrRecentScans(entries, cap);
+  const activeTab = normalizeWorkspaceQrHistoryTab(options?.activeTab);
+  const countsByCategory =
+    computeWorkspaceQrHistoryCountsByCategory(savedEntries);
+
+  let mostFrequentCategory: WorkspaceQrHistoryRoomCategory | null = null;
+  let mostFrequentCategoryCount = 0;
+
+  if (savedEntries.length > 0) {
+    let bestCount = -1;
+    let bestLatestMs = -1;
+    for (const cat of WORKSPACE_QR_HISTORY_ROOM_CATEGORIES) {
+      const catCount = countsByCategory[cat];
+      if (catCount <= 0) continue;
+      const latestForCat = savedEntries
+        .filter(
+          (e) => normalizeWorkspaceQrHistoryRoomCategory(e.category) === cat
+        )
+        .reduce((maxMs, e) => Math.max(maxMs, e.scannedAtMs || 0), 0);
+      if (
+        catCount > bestCount ||
+        (catCount === bestCount && latestForCat > bestLatestMs)
+      ) {
+        bestCount = catCount;
+        bestLatestMs = latestForCat;
+        mostFrequentCategory = cat;
+      }
+    }
+    mostFrequentCategoryCount = bestCount > 0 ? bestCount : 0;
+  }
+
+  const mostFrequentCategoryLabel: WorkspaceQrHistoryRoomCategory | 'None' =
+    mostFrequentCategory ?? 'None';
+  const mostFrequentCategoryPercent =
+    savedEntries.length > 0 && mostFrequentCategoryCount > 0
+      ? Math.round((mostFrequentCategoryCount / savedEntries.length) * 100)
+      : 0;
+  const mostFrequentCategoryColorTag = mostFrequentCategory
+    ? getWorkspaceQrHistoryCategoryColorTagSpec(mostFrequentCategory)
+    : null;
+  const mostFrequentCategorySummary = mostFrequentCategory
+    ? `${mostFrequentCategory} (${mostFrequentCategoryCount}/${savedEntries.length} · ${mostFrequentCategoryPercent}%)`
+    : 'No scans recorded yet';
+
+  const nowMs = Date.now();
+  const latestScanMs =
+    savedEntries.length > 0
+      ? Math.max(...savedEntries.map((e) => e.scannedAtMs || 0))
+      : nowMs;
+  const resolvedRefMs =
+    typeof options?.referenceTimestampMs === 'number' &&
+    Number.isFinite(options.referenceTimestampMs) &&
+    options.referenceTimestampMs > 0
+      ? Math.floor(options.referenceTimestampMs)
+      : savedEntries.length > 0 &&
+          Math.abs(nowMs - latestScanMs) >
+            WORKSPACE_QR_HISTORY_STATS_WINDOW_DAYS * 86_400_000
+        ? latestScanMs
+        : Math.max(nowMs, latestScanMs);
+
+  const refDate = new Date(resolvedRefMs);
+  const endDayUtcStartMs = Date.UTC(
+    refDate.getUTCFullYear(),
+    refDate.getUTCMonth(),
+    refDate.getUTCDate()
+  );
+
+  const rawBuckets: Omit<
+    WorkspaceQrHistoryDailyFrequencyBucket,
+    'heightPercent'
+  >[] = [];
+
+  for (let i = 0; i < WORKSPACE_QR_HISTORY_STATS_WINDOW_DAYS; i++) {
+    const daysAgo = WORKSPACE_QR_HISTORY_STATS_WINDOW_DAYS - 1 - i;
+    const startOfDayMs = endDayUtcStartMs - daysAgo * 86_400_000;
+    const endOfDayMs = startOfDayMs + 86_400_000 - 1;
+    const d = new Date(startOfDayMs);
+    const yyyy = d.getUTCFullYear();
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const dateKey = `${yyyy}-${mm}-${dd}`;
+    const dateShortLabel = `${mm}/${dd}`;
+    const dayShortLabel = SHORT_WEEKDAY_LABELS[d.getUTCDay()];
+
+    const matchingScans = savedEntries.filter(
+      (entry) =>
+        entry.scannedAtMs >= startOfDayMs && entry.scannedAtMs <= endOfDayMs
+    );
+    rawBuckets.push({
+      dayIndex: i,
+      dateKey,
+      dayShortLabel,
+      dateShortLabel,
+      startOfDayMs,
+      endOfDayMs,
+      count: matchingScans.length,
+      roomCodes: matchingScans.map((e) => e.roomCode),
+      isToday: daysAgo === 0,
+      barElementId: `workspace-header-qr-history-7day-bar-${i}`,
+      barTestId: `workspace-header-qr-history-7day-bar-${i}`,
+    });
+  }
+
+  const maxDailyScanCount = rawBuckets.reduce(
+    (max, b) => Math.max(max, b.count),
+    0
+  );
+  const scansInLast7Days = rawBuckets.reduce((sum, b) => sum + b.count, 0);
+
+  const dailyBuckets: WorkspaceQrHistoryDailyFrequencyBucket[] = rawBuckets.map(
+    (b) => ({
+      ...b,
+      heightPercent:
+        b.count <= 0 || maxDailyScanCount <= 0
+          ? 0
+          : Math.max(22, Math.round((b.count / maxDailyScanCount) * 100)),
+    })
+  );
+
+  const roomFrequencies: WorkspaceQrHistoryRoomFrequencyItem[] =
+    savedEntries.map((entry) => ({
+      roomCode: entry.roomCode,
+      category: normalizeWorkspaceQrHistoryRoomCategory(entry.category),
+      count: 1,
+      sharePercent:
+        savedEntries.length > 0
+          ? Math.round((1 / savedEntries.length) * 100)
+          : 0,
+    }));
+
+  return {
+    tabsContainerElementId: 'workspace-header-qr-history-tabs',
+    tabsContainerTestId: 'workspace-header-qr-history-tabs',
+    historyTabButtonElementId: 'workspace-header-qr-history-tab-list',
+    historyTabButtonTestId: 'workspace-header-qr-history-tab-list',
+    statisticsTabButtonElementId: 'workspace-header-qr-history-tab-statistics',
+    statisticsTabButtonTestId: 'workspace-header-qr-history-tab-statistics',
+    searchHistoryStatisticsTabButtonElementId:
+      'workspace-header-qr-search-history-tab-statistics',
+    searchHistoryStatisticsTabButtonTestId:
+      'workspace-header-qr-search-history-tab-statistics',
+    panelElementId: 'workspace-header-qr-history-statistics-panel',
+    panelTestId: 'workspace-header-qr-history-statistics-panel',
+    chartElementId: 'workspace-header-qr-history-7day-chart',
+    chartTestId: 'workspace-header-qr-history-7day-chart',
+    topCategoryCardElementId: 'workspace-header-qr-history-top-category-card',
+    topCategoryCardTestId: 'workspace-header-qr-history-top-category-card',
+    topCategoryBadgeElementId: 'workspace-header-qr-history-top-category-badge',
+    topCategoryBadgeTestId: 'workspace-header-qr-history-top-category-badge',
+    activeTab,
+    isStatisticsTabActive: activeTab === 'statistics',
+    historyTabLabel: 'History',
+    statisticsTabLabel: 'Statistics',
+    windowDays: WORKSPACE_QR_HISTORY_STATS_WINDOW_DAYS,
+    referenceTimestampMs: resolvedRefMs,
+    totalStoredScans: savedEntries.length,
+    scansInLast7Days,
+    maxDailyScanCount,
+    mostFrequentCategory,
+    mostFrequentCategoryLabel,
+    mostFrequentCategoryCount,
+    mostFrequentCategoryPercent,
+    mostFrequentCategoryColorTag,
+    mostFrequentCategorySummary,
+    countsByCategory,
+    dailyBuckets,
+    roomFrequencies,
+  };
+}
+
 export interface WorkspaceQrSearchHistorySpec {
   sectionElementId: 'workspace-header-qr-search-history-section';
   sectionTestId: 'workspace-header-qr-search-history-section';
@@ -15298,6 +15565,8 @@ export interface WorkspaceQrSearchHistorySpec {
   exportCsvButtonLabel: 'Export CSV';
   exportedCsvButtonLabel: 'Exported CSV!';
   csvExport: WorkspaceQrHistoryCsvExportSpec;
+  activeTab: WorkspaceQrHistoryTab;
+  statistics: WorkspaceQrHistoryStatisticsSpec;
   listElementId: 'workspace-header-qr-search-history-list';
   listTestId: 'workspace-header-qr-search-history-list';
   emptyStateElementId: 'workspace-header-qr-search-history-empty';
@@ -15440,6 +15709,8 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   searchQuery?: string | null;
   categoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
   sortOrder?: WorkspaceQrHistorySortOrder | string | null;
+  activeTab?: WorkspaceQrHistoryTab | string | null;
+  referenceTimestampMs?: number;
   copiedRoomCode?: string | null;
   roomCode?: string | null;
   isCsvExported?: boolean;
@@ -15462,6 +15733,12 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   const hasActiveCategoryFilter = activeCategoryFilter !== 'all';
   const sortOrder = normalizeWorkspaceQrHistorySortOrder(input?.sortOrder);
   const sortOrderLabel = getWorkspaceQrHistorySortLabel(sortOrder);
+  const activeTab = normalizeWorkspaceQrHistoryTab(input?.activeTab);
+  const statistics = buildWorkspaceQrHistoryStatisticsSpec(savedEntries, {
+    activeTab,
+    referenceTimestampMs: input?.referenceTimestampMs,
+    maxItems: cap,
+  });
   const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
     ? normalizeStudyRoomCode(input?.copiedRoomCode || '')
     : null;
@@ -15621,6 +15898,8 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     exportCsvButtonLabel: 'Export CSV',
     exportedCsvButtonLabel: 'Exported CSV!',
     csvExport,
+    activeTab,
+    statistics,
     listElementId: 'workspace-header-qr-search-history-list',
     listTestId: 'workspace-header-qr-search-history-list',
     emptyStateElementId: 'workspace-header-qr-search-history-empty',
@@ -15697,6 +15976,8 @@ export interface WorkspaceQrHistorySectionSpec {
   exportCsvButtonLabel: 'Export CSV';
   exportedCsvButtonLabel: 'Exported CSV!';
   csvExport: WorkspaceQrHistoryCsvExportSpec;
+  activeTab: WorkspaceQrHistoryTab;
+  statistics: WorkspaceQrHistoryStatisticsSpec;
   panelElementId: 'workspace-header-qr-history-panel';
   panelTestId: 'workspace-header-qr-history-panel';
   listElementId: 'workspace-header-qr-history-list';
@@ -15757,6 +16038,8 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   searchQuery?: string | null;
   categoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
   sortOrder?: WorkspaceQrHistorySortOrder | string | null;
+  activeTab?: WorkspaceQrHistoryTab | string | null;
+  referenceTimestampMs?: number;
   copiedRoomCode?: string | null;
   roomCode?: string | null;
   isCsvExported?: boolean;
@@ -15779,6 +16062,12 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   const hasActiveCategoryFilter = activeCategoryFilter !== 'all';
   const sortOrder = normalizeWorkspaceQrHistorySortOrder(input?.sortOrder);
   const sortOrderLabel = getWorkspaceQrHistorySortLabel(sortOrder);
+  const activeTab = normalizeWorkspaceQrHistoryTab(input?.activeTab);
+  const statistics = buildWorkspaceQrHistoryStatisticsSpec(allSortedEntries, {
+    activeTab,
+    referenceTimestampMs: input?.referenceTimestampMs,
+    maxItems: cap,
+  });
   const csvExport = buildWorkspaceQrHistoryCsvExport(allSortedEntries, {
     sortOrder,
     roomCode: input?.roomCode,
@@ -15925,6 +16214,8 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     exportCsvButtonLabel: 'Export CSV',
     exportedCsvButtonLabel: 'Exported CSV!',
     csvExport,
+    activeTab,
+    statistics,
     panelElementId: 'workspace-header-qr-history-panel',
     panelTestId: 'workspace-header-qr-history-panel',
     listElementId: 'workspace-header-qr-history-list',
@@ -16417,6 +16708,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   historySearchQuery?: string | null;
   historyCategoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
   historySortOrder?: WorkspaceQrHistorySortOrder | string | null;
+  historyActiveTab?: WorkspaceQrHistoryTab | string | null;
+  historyStatsReferenceTimestampMs?: number;
   copiedHistoryRoomCode?: string | null;
   isHistoryCsvExported?: boolean;
   historyCsvExportCount?: number;
@@ -16465,6 +16758,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     searchQuery: input?.historySearchQuery,
     categoryFilter: input?.historyCategoryFilter,
     sortOrder: input?.historySortOrder,
+    activeTab: input?.historyActiveTab,
+    referenceTimestampMs: input?.historyStatsReferenceTimestampMs,
     copiedRoomCode: input?.copiedHistoryRoomCode,
     roomCode,
     isCsvExported: input?.isHistoryCsvExported,
@@ -16475,6 +16770,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     searchQuery: input?.historySearchQuery,
     categoryFilter: input?.historyCategoryFilter,
     sortOrder: input?.historySortOrder,
+    activeTab: input?.historyActiveTab,
+    referenceTimestampMs: input?.historyStatsReferenceTimestampMs,
     copiedRoomCode: input?.copiedHistoryRoomCode,
     roomCode,
     isCsvExported: input?.isHistoryCsvExported,

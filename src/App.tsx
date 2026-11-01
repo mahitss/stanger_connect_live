@@ -64,6 +64,7 @@ import {
   Copy,
   Pin,
   Tag,
+  BarChart3,
 } from 'lucide-react';
 import {
   auth,
@@ -247,6 +248,8 @@ import {
   WorkspaceQrHistorySortOrder,
   normalizeWorkspaceQrHistorySortOrder,
   buildWorkspaceQrHistoryCsvExport,
+  WorkspaceQrHistoryTab,
+  normalizeWorkspaceQrHistoryTab,
   toggleWorkspaceQrHistorySectionExpanded,
   resolveWorkspaceQrScanConfirmationChime,
   WorkspaceHeaderQrCameraScanStatus,
@@ -869,6 +872,8 @@ export default function App() {
     useState<WorkspaceQrHistoryCategoryFilter>('all');
   const [workspaceHeaderQrHistorySortOrder, setWorkspaceHeaderQrHistorySortOrder] =
     useState<WorkspaceQrHistorySortOrder>('most_recent_desc');
+  const [workspaceHeaderQrHistoryActiveTab, setWorkspaceHeaderQrHistoryActiveTab] =
+    useState<WorkspaceQrHistoryTab>('history');
   const [openQrHistoryCategoryPickerRoomCode, setOpenQrHistoryCategoryPickerRoomCode] =
     useState<string | null>(null);
   const [copiedQrHistoryRoomCode, setCopiedQrHistoryRoomCode] = useState<
@@ -3902,6 +3907,7 @@ export default function App() {
     historySearchQuery: workspaceHeaderQrHistorySearchQuery,
     historyCategoryFilter: workspaceHeaderQrHistoryCategoryFilter,
     historySortOrder: workspaceHeaderQrHistorySortOrder,
+    historyActiveTab: workspaceHeaderQrHistoryActiveTab,
     copiedHistoryRoomCode: copiedQrHistoryRoomCode,
     isHistoryCsvExported: isWorkspaceHeaderQrHistoryCsvExported,
     historyCsvExportCount: workspaceHeaderQrHistoryCsvExportCount,
@@ -6310,6 +6316,9 @@ export default function App() {
                               data-sorted-by={
                                 workspaceHeaderQrMeta.historySection.sortedBy
                               }
+                              data-active-tab={
+                                workspaceHeaderQrMeta.searchHistory.activeTab
+                              }
                               className="space-y-1.5"
                             >
                               <div
@@ -6337,8 +6346,440 @@ export default function App() {
                                 data-max-items={String(
                                   workspaceHeaderQrMeta.searchHistory.maxItems
                                 )}
+                                data-active-tab={
+                                  workspaceHeaderQrMeta.searchHistory.activeTab
+                                }
+                                data-most-frequent-category={
+                                  workspaceHeaderQrMeta.searchHistory.statistics
+                                    .mostFrequentCategoryLabel
+                                }
                                 className="space-y-1.5"
                               >
+                                <div
+                                  id={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .statistics.tabsContainerElementId
+                                  }
+                                  data-testid={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .statistics.tabsContainerTestId
+                                  }
+                                  data-active-tab={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .activeTab
+                                  }
+                                  role="tablist"
+                                  aria-label="QR scanner history view tabs"
+                                  className="grid grid-cols-2 gap-1 p-0.5 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-100/80 dark:bg-zinc-900/90"
+                                >
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    id={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.historyTabButtonElementId
+                                    }
+                                    data-testid={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.historyTabButtonTestId
+                                    }
+                                    data-tab-key="history"
+                                    data-active={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeTab === 'history'
+                                        ? 'true'
+                                        : 'false'
+                                    }
+                                    aria-selected={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeTab === 'history'
+                                    }
+                                    aria-controls={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .listElementId
+                                    }
+                                    onClick={() => {
+                                      setWorkspaceHeaderQrHistoryActiveTab(
+                                        normalizeWorkspaceQrHistoryTab('history')
+                                      );
+                                      if (uiSoundPrefs.enabled) {
+                                        playSubtleUiChime(
+                                          'ui_chime',
+                                          uiSoundPrefs.volumePercent
+                                        );
+                                      }
+                                    }}
+                                    className={`inline-flex items-center justify-center gap-1 py-1 px-2 rounded text-[10px] font-mono font-semibold transition-colors ${
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeTab === 'history'
+                                        ? 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 shadow-xs border border-emerald-500/30'
+                                        : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-200'
+                                    }`}
+                                  >
+                                    <History className="w-3 h-3 shrink-0" />
+                                    <span>
+                                      {
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.historyTabLabel
+                                      }
+                                    </span>
+                                    <span className="opacity-75">
+                                      ({
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .totalSavedCount
+                                      })
+                                    </span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    role="tab"
+                                    id={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.statisticsTabButtonElementId
+                                    }
+                                    data-testid={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.statisticsTabButtonTestId
+                                    }
+                                    data-search-history-statistics-tab-id={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics
+                                        .searchHistoryStatisticsTabButtonElementId
+                                    }
+                                    data-tab-key="statistics"
+                                    data-active={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeTab === 'statistics'
+                                        ? 'true'
+                                        : 'false'
+                                    }
+                                    aria-selected={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeTab === 'statistics'
+                                    }
+                                    aria-controls={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.panelElementId
+                                    }
+                                    onClick={() => {
+                                      setWorkspaceHeaderQrHistoryActiveTab(
+                                        normalizeWorkspaceQrHistoryTab(
+                                          'statistics'
+                                        )
+                                      );
+                                      if (uiSoundPrefs.enabled) {
+                                        playSubtleUiChime(
+                                          'ui_chime',
+                                          uiSoundPrefs.volumePercent
+                                        );
+                                      }
+                                    }}
+                                    className={`inline-flex items-center justify-center gap-1 py-1 px-2 rounded text-[10px] font-mono font-semibold transition-colors ${
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeTab === 'statistics'
+                                        ? 'bg-white dark:bg-zinc-800 text-emerald-700 dark:text-emerald-300 shadow-xs border border-emerald-500/30'
+                                        : 'text-slate-600 hover:text-slate-900 dark:text-zinc-400 dark:hover:text-zinc-200'
+                                    }`}
+                                  >
+                                    <BarChart3 className="w-3 h-3 shrink-0" />
+                                    <span>
+                                      {
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.statisticsTabLabel
+                                      }
+                                    </span>
+                                  </button>
+                                </div>
+
+                                {workspaceHeaderQrMeta.searchHistory.statistics
+                                  .isStatisticsTabActive ? (
+                                  <div
+                                    id={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.panelElementId
+                                    }
+                                    data-testid={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.panelTestId
+                                    }
+                                    role="tabpanel"
+                                    aria-labelledby={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.statisticsTabButtonElementId
+                                    }
+                                    data-window-days={String(
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.windowDays
+                                    )}
+                                    data-total-scans={String(
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.totalStoredScans
+                                    )}
+                                    data-scans-last-7days={String(
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.scansInLast7Days
+                                    )}
+                                    data-most-frequent-category={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.mostFrequentCategoryLabel
+                                    }
+                                    data-most-frequent-category-count={String(
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .statistics.mostFrequentCategoryCount
+                                    )}
+                                    className="space-y-2 pt-0.5"
+                                  >
+                                    {/* Most Frequently Scanned Category Card */}
+                                    <div
+                                      id={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.topCategoryCardElementId
+                                      }
+                                      data-testid={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.topCategoryCardTestId
+                                      }
+                                      data-top-category={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.mostFrequentCategoryLabel
+                                      }
+                                      data-top-category-count={String(
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.mostFrequentCategoryCount
+                                      )}
+                                      data-top-category-percent={String(
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics
+                                          .mostFrequentCategoryPercent
+                                      )}
+                                      className="p-2 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50/90 dark:bg-zinc-900/70 space-y-1.5"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[10px] font-mono font-semibold text-slate-600 dark:text-zinc-300">
+                                          Most Frequently Scanned Category
+                                        </span>
+                                        {workspaceHeaderQrMeta.searchHistory
+                                          .statistics.mostFrequentCategory &&
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics
+                                          .mostFrequentCategoryColorTag ? (
+                                          <span
+                                            id={
+                                              workspaceHeaderQrMeta
+                                                .searchHistory.statistics
+                                                .topCategoryBadgeElementId
+                                            }
+                                            data-testid={
+                                              workspaceHeaderQrMeta
+                                                .searchHistory.statistics
+                                                .topCategoryBadgeTestId
+                                            }
+                                            data-category={
+                                              workspaceHeaderQrMeta
+                                                .searchHistory.statistics
+                                                .mostFrequentCategory
+                                            }
+                                            data-count={String(
+                                              workspaceHeaderQrMeta
+                                                .searchHistory.statistics
+                                                .mostFrequentCategoryCount
+                                            )}
+                                            data-percent={String(
+                                              workspaceHeaderQrMeta
+                                                .searchHistory.statistics
+                                                .mostFrequentCategoryPercent
+                                            )}
+                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold ${workspaceHeaderQrMeta.searchHistory.statistics.mostFrequentCategoryColorTag.tagClassName}`}
+                                          >
+                                            <span
+                                              className={`w-1.5 h-1.5 rounded-full ${workspaceHeaderQrMeta.searchHistory.statistics.mostFrequentCategoryColorTag.dotColorClassName}`}
+                                            />
+                                            <span>
+                                              {
+                                                workspaceHeaderQrMeta
+                                                  .searchHistory.statistics
+                                                  .mostFrequentCategory
+                                              }
+                                            </span>
+                                            <span className="opacity-80">
+                                              ·{' '}
+                                              {
+                                                workspaceHeaderQrMeta
+                                                  .searchHistory.statistics
+                                                  .mostFrequentCategoryCount
+                                              }{' '}
+                                              ({
+                                                workspaceHeaderQrMeta
+                                                  .searchHistory.statistics
+                                                  .mostFrequentCategoryPercent
+                                              }
+                                              %)
+                                            </span>
+                                          </span>
+                                        ) : (
+                                          <span
+                                            id={
+                                              workspaceHeaderQrMeta
+                                                .searchHistory.statistics
+                                                .topCategoryBadgeElementId
+                                            }
+                                            data-testid={
+                                              workspaceHeaderQrMeta
+                                                .searchHistory.statistics
+                                                .topCategoryBadgeTestId
+                                            }
+                                            data-category="None"
+                                            className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-800 text-[9px] font-mono text-slate-400 dark:text-zinc-500"
+                                          >
+                                            None
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="grid grid-cols-3 gap-1 pt-0.5">
+                                        {(
+                                          ['Study', 'Work', 'Casual'] as const
+                                        ).map((cat) => {
+                                          const count =
+                                            workspaceHeaderQrMeta.searchHistory
+                                              .statistics.countsByCategory[cat];
+                                          const isTop =
+                                            workspaceHeaderQrMeta.searchHistory
+                                              .statistics
+                                              .mostFrequentCategory === cat &&
+                                            count > 0;
+                                          return (
+                                            <div
+                                              key={cat}
+                                              data-testid={`workspace-header-qr-history-stat-category-${cat.toLowerCase()}`}
+                                              data-category={cat}
+                                              data-count={String(count)}
+                                              data-is-top={
+                                                isTop ? 'true' : 'false'
+                                              }
+                                              className={`flex items-center justify-between px-1.5 py-0.5 rounded border text-[9px] font-mono ${
+                                                isTop
+                                                  ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 font-semibold'
+                                                  : 'border-slate-200/70 dark:border-zinc-800 bg-white/70 dark:bg-zinc-950/60 text-slate-500 dark:text-zinc-400'
+                                              }`}
+                                            >
+                                              <span>{cat}</span>
+                                              <span>{count}</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+
+                                    {/* 7-Day Scanned Room Code Frequency Chart */}
+                                    <div
+                                      id={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.chartElementId
+                                      }
+                                      data-testid={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.chartTestId
+                                      }
+                                      data-window-days="7"
+                                      data-scans-last-7days={String(
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.scansInLast7Days
+                                      )}
+                                      data-max-daily-scans={String(
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .statistics.maxDailyScanCount
+                                      )}
+                                      role="img"
+                                      aria-label="Bar chart of scanned room codes frequency over the last 7 days"
+                                      className="p-2 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50/90 dark:bg-zinc-900/70 space-y-1.5"
+                                    >
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-[10px] font-mono font-semibold text-slate-600 dark:text-zinc-300">
+                                          Scanned Room Codes (Last 7 Days)
+                                        </span>
+                                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[9px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                                          {
+                                            workspaceHeaderQrMeta.searchHistory
+                                              .statistics.scansInLast7Days
+                                          }{' '}
+                                          {workspaceHeaderQrMeta.searchHistory
+                                            .statistics.scansInLast7Days === 1
+                                            ? 'scan'
+                                            : 'scans'}{' '}
+                                          · 7d
+                                        </span>
+                                      </div>
+
+                                      {/* SVG Bar Chart + 7 Daily Buckets */}
+                                      <div className="grid grid-cols-7 gap-1.5 items-end pt-1">
+                                        {workspaceHeaderQrMeta.searchHistory.statistics.dailyBuckets.map(
+                                          (bucket) => (
+                                            <div
+                                              key={bucket.dateKey}
+                                              id={bucket.barElementId}
+                                              data-testid={bucket.barTestId}
+                                              data-date={bucket.dateKey}
+                                              data-day-label={
+                                                bucket.dayShortLabel
+                                              }
+                                              data-scan-count={String(
+                                                bucket.count
+                                              )}
+                                              data-height-percent={String(
+                                                bucket.heightPercent
+                                              )}
+                                              data-room-codes={bucket.roomCodes.join(
+                                                ','
+                                              )}
+                                              title={
+                                                bucket.count > 0
+                                                  ? `${bucket.dayShortLabel} (${bucket.dateShortLabel}): ${bucket.count} scan(s) — ${bucket.roomCodes.join(', ')}`
+                                                  : `${bucket.dayShortLabel} (${bucket.dateShortLabel}): 0 scans`
+                                              }
+                                              className="flex flex-col items-center gap-1"
+                                            >
+                                              <span
+                                                className={`text-[9px] font-mono leading-none ${
+                                                  bucket.count > 0
+                                                    ? 'font-bold text-emerald-600 dark:text-emerald-400'
+                                                    : 'text-slate-400 dark:text-zinc-600'
+                                                }`}
+                                              >
+                                                {bucket.count}
+                                              </span>
+                                              <div className="w-full h-12 rounded-sm bg-slate-200/70 dark:bg-zinc-800/80 flex items-end p-0.5 overflow-hidden">
+                                                <div
+                                                  style={{
+                                                    height: `${Math.max(
+                                                      bucket.count > 0
+                                                        ? bucket.heightPercent
+                                                        : 6,
+                                                      6
+                                                    )}%`,
+                                                  }}
+                                                  className={`w-full rounded-xs transition-all ${
+                                                    bucket.count > 0
+                                                      ? 'bg-emerald-500 dark:bg-emerald-400'
+                                                      : 'bg-slate-300/60 dark:bg-zinc-700/50'
+                                                  }`}
+                                                />
+                                              </div>
+                                              <span className="text-[9px] font-mono font-semibold text-slate-600 dark:text-zinc-400 leading-none">
+                                                {bucket.dayShortLabel}
+                                              </span>
+                                              <span className="text-[8px] font-mono text-slate-400 dark:text-zinc-500 leading-none">
+                                                {bucket.dateShortLabel}
+                                              </span>
+                                            </div>
+                                          )
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : null}
+
                                 <div className="relative flex items-center">
                                   <Search className="w-3 h-3 text-slate-400 dark:text-zinc-500 absolute left-2 pointer-events-none" />
                                   <input
