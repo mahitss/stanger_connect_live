@@ -864,6 +864,8 @@ export default function App() {
     useState<string>('');
   const [workspaceHeaderQrHistoryCategoryFilter, setWorkspaceHeaderQrHistoryCategoryFilter] =
     useState<WorkspaceQrHistoryCategoryFilter>('all');
+  const [openQrHistoryCategoryPickerRoomCode, setOpenQrHistoryCategoryPickerRoomCode] =
+    useState<string | null>(null);
   const [copiedQrHistoryRoomCode, setCopiedQrHistoryRoomCode] = useState<
     string | null
   >(null);
@@ -3934,6 +3936,7 @@ export default function App() {
     setRecentWorkspaceQrScans([]);
     setWorkspaceHeaderQrHistorySearchQuery('');
     setWorkspaceHeaderQrHistoryCategoryFilter('all');
+    setOpenQrHistoryCategoryPickerRoomCode(null);
     setCopiedQrHistoryRoomCode(null);
     if (qrHistoryCopyTimerRef.current !== null) {
       window.clearTimeout(qrHistoryCopyTimerRef.current);
@@ -5724,7 +5727,7 @@ export default function App() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 6, scale: 0.96 }}
                       transition={{ duration: 0.18, ease: 'easeOut' }}
-                      className="absolute left-0 top-full mt-2 z-50 w-80 sm:w-[25.5rem] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
+                      className="absolute left-0 top-full mt-2 z-50 w-80 sm:w-[29.5rem] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-1">
@@ -6416,6 +6419,9 @@ export default function App() {
                                           }
                                           data-room-code={scanItem.roomCode}
                                           data-category={scanItem.category}
+                                          data-color-tone={
+                                            scanItem.categoryColorTone
+                                          }
                                           data-pinned={
                                             scanItem.isPinned ? 'true' : 'false'
                                           }
@@ -6444,6 +6450,9 @@ export default function App() {
                                               data-testid={`workspace-header-qr-recent-scan-item-${idx}`}
                                               data-room-code={scanItem.roomCode}
                                               data-category={scanItem.category}
+                                              data-color-tone={
+                                                scanItem.categoryColorTone
+                                              }
                                               data-pinned={
                                                 scanItem.isPinned ? 'true' : 'false'
                                               }
@@ -6480,8 +6489,15 @@ export default function App() {
                                               data-room-code={scanItem.roomCode}
                                               data-entry-id={scanItem.id}
                                               data-category={scanItem.category}
+                                              data-color-tone={
+                                                scanItem.categoryColorTone
+                                              }
                                               data-next-category={
                                                 scanItem.nextCategory
+                                              }
+                                              aria-expanded={
+                                                openQrHistoryCategoryPickerRoomCode ===
+                                                scanItem.roomCode
                                               }
                                               aria-label={
                                                 scanItem.categoryTagAriaLabel
@@ -6492,18 +6508,73 @@ export default function App() {
                                                 handleSetWorkspaceQrHistoryCategory(
                                                   scanItem
                                                 );
+                                                setOpenQrHistoryCategoryPickerRoomCode(
+                                                  (prev) =>
+                                                    prev === scanItem.roomCode
+                                                      ? null
+                                                      : scanItem.roomCode
+                                                );
                                               }}
-                                              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors shrink-0 ${
-                                                scanItem.category === 'Work'
-                                                  ? 'bg-sky-500/15 border-sky-500/40 text-sky-700 hover:bg-sky-500/25 dark:text-sky-300'
-                                                  : scanItem.category === 'Casual'
-                                                    ? 'bg-teal-500/15 border-teal-500/40 text-teal-700 hover:bg-teal-500/25 dark:text-teal-300'
-                                                    : 'bg-violet-500/15 border-violet-500/40 text-violet-700 hover:bg-violet-500/25 dark:text-violet-300'
-                                              }`}
+                                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors shrink-0 ${scanItem.categoryColorTagSpec.tagClassName}`}
                                             >
-                                              <Tag className="w-2.5 h-2.5 shrink-0" />
+                                              <span
+                                                id={scanItem.categoryDotElementId}
+                                                data-testid={
+                                                  scanItem.categoryDotTestId
+                                                }
+                                                data-color-tone={
+                                                  scanItem.categoryColorTone
+                                                }
+                                                className={`w-1.5 h-1.5 rounded-full shrink-0 ${scanItem.categoryColorTagSpec.dotColorClassName}`}
+                                              />
                                               <span>{scanItem.categoryLabel}</span>
                                             </button>
+
+                                            <select
+                                              id={scanItem.categorySelectElementId}
+                                              data-testid={
+                                                scanItem.categorySelectTestId
+                                              }
+                                              data-search-history-category-select-id={
+                                                scanItem.searchHistoryCategorySelectElementId
+                                              }
+                                              data-room-code={scanItem.roomCode}
+                                              data-entry-id={scanItem.id}
+                                              data-category={scanItem.category}
+                                              data-color-tone={
+                                                scanItem.categoryColorTone
+                                              }
+                                              value={scanItem.category}
+                                              aria-label={
+                                                scanItem.categorySelectAriaLabel
+                                              }
+                                              title={scanItem.categorySelectTitle}
+                                              onClick={(e) => e.stopPropagation()}
+                                              onChange={(e) => {
+                                                e.stopPropagation();
+                                                handleSetWorkspaceQrHistoryCategory(
+                                                  scanItem,
+                                                  e.target
+                                                    .value as WorkspaceQrHistoryRoomCategory
+                                                );
+                                                setOpenQrHistoryCategoryPickerRoomCode(
+                                                  null
+                                                );
+                                              }}
+                                              className={`px-1 py-0.5 rounded border text-[9px] font-mono font-semibold cursor-pointer focus:outline-none transition-colors shrink-0 ${scanItem.categoryColorTagSpec.selectClassName}`}
+                                            >
+                                              {scanItem.categoryPresetOptions.map(
+                                                (opt) => (
+                                                  <option
+                                                    key={opt.value}
+                                                    value={opt.value}
+                                                    className="bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-100"
+                                                  >
+                                                    {opt.label}
+                                                  </option>
+                                                )
+                                              )}
+                                            </select>
                                           </div>
 
                                           <div className="flex items-center gap-1 shrink-0 ml-auto">
@@ -6630,6 +6701,94 @@ export default function App() {
                                               {scanItem.joinLinkLabel}
                                             </a>
                                           </div>
+
+                                          {openQrHistoryCategoryPickerRoomCode ===
+                                            scanItem.roomCode && (
+                                            <div
+                                              id={
+                                                scanItem.categoryPickerPopoverElementId
+                                              }
+                                              data-testid={
+                                                scanItem.categoryPickerPopoverTestId
+                                              }
+                                              data-room-code={scanItem.roomCode}
+                                              data-current-category={
+                                                scanItem.category
+                                              }
+                                              role="dialog"
+                                              aria-label={`Assign preset category for ${scanItem.roomCode}`}
+                                              className="w-full mt-1 pt-1.5 border-t border-slate-200/80 dark:border-zinc-800/80 flex items-center justify-between gap-1.5"
+                                            >
+                                              <span className="text-[9px] font-mono text-slate-500 dark:text-zinc-400">
+                                                Assign Category:
+                                              </span>
+                                              <div className="flex items-center gap-1">
+                                                {scanItem.categoryPresetOptions.map(
+                                                  (opt) => (
+                                                    <button
+                                                      key={opt.value}
+                                                      type="button"
+                                                      id={opt.optionElementId}
+                                                      data-testid={
+                                                        opt.optionTestId
+                                                      }
+                                                      data-room-code={
+                                                        scanItem.roomCode
+                                                      }
+                                                      data-category-option={
+                                                        opt.value
+                                                      }
+                                                      data-color-tone={
+                                                        opt.colorTone
+                                                      }
+                                                      data-selected={
+                                                        opt.isSelected
+                                                          ? 'true'
+                                                          : 'false'
+                                                      }
+                                                      aria-pressed={
+                                                        opt.isSelected
+                                                      }
+                                                      aria-label={opt.ariaLabel}
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        handleSetWorkspaceQrHistoryCategory(
+                                                          scanItem,
+                                                          opt.value
+                                                        );
+                                                        setOpenQrHistoryCategoryPickerRoomCode(
+                                                          null
+                                                        );
+                                                      }}
+                                                      className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors ${
+                                                        opt.isSelected
+                                                          ? opt.activeOptionClassName
+                                                          : opt.tagClassName
+                                                      }`}
+                                                    >
+                                                      <span
+                                                        className={`w-1.5 h-1.5 rounded-full ${opt.dotColorClassName}`}
+                                                      />
+                                                      <span>{opt.label}</span>
+                                                    </button>
+                                                  )
+                                                )}
+                                                <button
+                                                  type="button"
+                                                  aria-label={`Close category picker for ${scanItem.roomCode}`}
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setOpenQrHistoryCategoryPickerRoomCode(
+                                                      null
+                                                    );
+                                                  }}
+                                                  className="p-0.5 rounded text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                                                >
+                                                  <X className="w-2.5 h-2.5" />
+                                                </button>
+                                              </div>
+                                            </div>
+                                          )}
                                         </li>
                                       )
                                     )}

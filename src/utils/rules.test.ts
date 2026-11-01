@@ -261,6 +261,8 @@ import {
   normalizeWorkspaceQrHistoryRoomCategory,
   normalizeWorkspaceQrHistoryCategoryFilter,
   getNextWorkspaceQrHistoryRoomCategory,
+  getWorkspaceQrHistoryCategoryColorTagSpec,
+  buildWorkspaceQrHistoryCategoryPresetOptions,
   computeWorkspaceQrHistoryCountsByCategory,
   setWorkspaceQrRecentScanCategory,
   buildWorkspaceQrRecentScansSpec,
@@ -7144,6 +7146,73 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   assert.equal(
     metaAllCategories.searchHistory.items[0].categoryTagElementId,
     'workspace-header-qr-history-category-tag-0'
+  );
+  assert.equal(
+    metaAllCategories.searchHistory.items[0].categorySelectElementId,
+    'workspace-header-qr-history-category-select-0'
+  );
+  assert.equal(
+    metaAllCategories.searchHistory.items[0].categoryPickerPopoverElementId,
+    'workspace-header-qr-history-category-picker-0'
+  );
+  assert.equal(
+    metaAllCategories.searchHistory.items[0].categoryColorTone,
+    'sky'
+  );
+  assert.deepEqual(
+    metaAllCategories.searchHistory.items[0].categoryPresetOptions.map(
+      (opt) => ({
+        value: opt.value,
+        colorTone: opt.colorTone,
+        isSelected: opt.isSelected,
+        optionElementId: opt.optionElementId,
+      })
+    ),
+    [
+      {
+        value: 'Study',
+        colorTone: 'violet',
+        isSelected: false,
+        optionElementId: 'workspace-header-qr-history-category-option-0-study',
+      },
+      {
+        value: 'Work',
+        colorTone: 'sky',
+        isSelected: true,
+        optionElementId: 'workspace-header-qr-history-category-option-0-work',
+      },
+      {
+        value: 'Casual',
+        colorTone: 'teal',
+        isSelected: false,
+        optionElementId: 'workspace-header-qr-history-category-option-0-casual',
+      },
+    ]
+  );
+
+  // Verify color-coded tag specs for Study (violet), Work (sky), and Casual (teal)
+  assert.equal(
+    getWorkspaceQrHistoryCategoryColorTagSpec('Study').colorTone,
+    'violet'
+  );
+  assert.equal(
+    getWorkspaceQrHistoryCategoryColorTagSpec('Work').colorTone,
+    'sky'
+  );
+  assert.equal(
+    getWorkspaceQrHistoryCategoryColorTagSpec('Casual').colorTone,
+    'teal'
+  );
+  const presetOptsRoom3 = buildWorkspaceQrHistoryCategoryPresetOptions(
+    'Casual',
+    2,
+    'STUDY-ROOM5'
+  );
+  assert.equal(presetOptsRoom3.length, 3);
+  assert.equal(presetOptsRoom3[2].isSelected, true);
+  assert.equal(
+    presetOptsRoom3[2].optionElementId,
+    'workspace-header-qr-history-category-option-2-casual'
   );
 
   // Filter by 'Work' category -> only STUDY-ROOM2 is returned

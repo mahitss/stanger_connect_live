@@ -14274,6 +14274,102 @@ export function getNextWorkspaceQrHistoryRoomCategory(
   ];
 }
 
+export type WorkspaceQrHistoryCategoryColorTone = 'violet' | 'sky' | 'teal';
+
+export interface WorkspaceQrHistoryCategoryColorTagSpec {
+  category: WorkspaceQrHistoryRoomCategory;
+  label: WorkspaceQrHistoryRoomCategory;
+  colorTone: WorkspaceQrHistoryCategoryColorTone;
+  dotColorClassName: string;
+  tagClassName: string;
+  selectClassName: string;
+  activeOptionClassName: string;
+}
+
+export function getWorkspaceQrHistoryCategoryColorTagSpec(
+  raw?: WorkspaceQrHistoryRoomCategory | string | null
+): WorkspaceQrHistoryCategoryColorTagSpec {
+  const category = normalizeWorkspaceQrHistoryRoomCategory(raw);
+  if (category === 'Work') {
+    return {
+      category: 'Work',
+      label: 'Work',
+      colorTone: 'sky',
+      dotColorClassName: 'bg-sky-500 dark:bg-sky-400',
+      tagClassName:
+        'bg-sky-500/15 border-sky-500/40 text-sky-700 hover:bg-sky-500/25 dark:text-sky-300',
+      selectClassName:
+        'bg-sky-500/10 border-sky-500/40 text-sky-700 hover:border-sky-500/60 dark:bg-sky-950/40 dark:border-sky-500/40 dark:text-sky-300',
+      activeOptionClassName:
+        'bg-sky-500/20 border-sky-500/50 text-sky-700 dark:text-sky-300',
+    };
+  }
+  if (category === 'Casual') {
+    return {
+      category: 'Casual',
+      label: 'Casual',
+      colorTone: 'teal',
+      dotColorClassName: 'bg-teal-500 dark:bg-teal-400',
+      tagClassName:
+        'bg-teal-500/15 border-teal-500/40 text-teal-700 hover:bg-teal-500/25 dark:text-teal-300',
+      selectClassName:
+        'bg-teal-500/10 border-teal-500/40 text-teal-700 hover:border-teal-500/60 dark:bg-teal-950/40 dark:border-teal-500/40 dark:text-teal-300',
+      activeOptionClassName:
+        'bg-teal-500/20 border-teal-500/50 text-teal-700 dark:text-teal-300',
+    };
+  }
+  return {
+    category: 'Study',
+    label: 'Study',
+    colorTone: 'violet',
+    dotColorClassName: 'bg-violet-500 dark:bg-violet-400',
+    tagClassName:
+      'bg-violet-500/15 border-violet-500/40 text-violet-700 hover:bg-violet-500/25 dark:text-violet-300',
+    selectClassName:
+      'bg-violet-500/10 border-violet-500/40 text-violet-700 hover:border-violet-500/60 dark:bg-violet-950/40 dark:border-violet-500/40 dark:text-violet-300',
+    activeOptionClassName:
+      'bg-violet-500/20 border-violet-500/50 text-violet-700 dark:text-violet-300',
+  };
+}
+
+export interface WorkspaceQrHistoryCategoryPresetOptionSpec {
+  value: WorkspaceQrHistoryRoomCategory;
+  label: WorkspaceQrHistoryRoomCategory;
+  colorTone: WorkspaceQrHistoryCategoryColorTone;
+  dotColorClassName: string;
+  tagClassName: string;
+  activeOptionClassName: string;
+  isSelected: boolean;
+  optionElementId: string;
+  optionTestId: string;
+  ariaLabel: string;
+}
+
+export function buildWorkspaceQrHistoryCategoryPresetOptions(
+  currentCategory: WorkspaceQrHistoryRoomCategory | string | null | undefined,
+  itemIndex: number,
+  roomCode: string
+): WorkspaceQrHistoryCategoryPresetOptionSpec[] {
+  const active = normalizeWorkspaceQrHistoryRoomCategory(currentCategory);
+  const safeIdx = Math.max(0, Math.floor(itemIndex || 0));
+  return WORKSPACE_QR_HISTORY_ROOM_CATEGORIES.map((preset) => {
+    const colorSpec = getWorkspaceQrHistoryCategoryColorTagSpec(preset);
+    const slug = preset.toLowerCase();
+    return {
+      value: preset,
+      label: preset,
+      colorTone: colorSpec.colorTone,
+      dotColorClassName: colorSpec.dotColorClassName,
+      tagClassName: colorSpec.tagClassName,
+      activeOptionClassName: colorSpec.activeOptionClassName,
+      isSelected: active === preset,
+      optionElementId: `workspace-header-qr-history-category-option-${safeIdx}-${slug}`,
+      optionTestId: `workspace-header-qr-history-category-option-${safeIdx}-${slug}`,
+      ariaLabel: `Assign ${preset} category to room ${roomCode}`,
+    };
+  });
+}
+
 export interface WorkspaceQrHistoryCategoryFilterChipSpec {
   key: WorkspaceQrHistoryCategoryFilter;
   value: WorkspaceQrHistoryCategoryFilter;
@@ -14855,8 +14951,12 @@ export interface WorkspaceQrHistorySectionItemSpec
   itemTestId: string;
   categoryTagElementId: string;
   categoryTagTestId: string;
+  categoryDotElementId: string;
+  categoryDotTestId: string;
   categorySelectElementId: string;
   categorySelectTestId: string;
+  categoryPickerPopoverElementId: string;
+  categoryPickerPopoverTestId: string;
   pinButtonElementId: string;
   pinButtonTestId: string;
   copyButtonElementId: string;
@@ -14869,6 +14969,8 @@ export interface WorkspaceQrHistorySectionItemSpec
   searchHistoryItemTestId: string;
   searchHistoryCategoryTagElementId: string;
   searchHistoryCategoryTagTestId: string;
+  searchHistoryCategorySelectElementId: string;
+  searchHistoryCategorySelectTestId: string;
   searchHistoryPinButtonElementId: string;
   searchHistoryPinButtonTestId: string;
   searchHistoryCopyButtonElementId: string;
@@ -14880,8 +14982,13 @@ export interface WorkspaceQrHistorySectionItemSpec
   category: WorkspaceQrHistoryRoomCategory;
   categoryLabel: WorkspaceQrHistoryRoomCategory;
   nextCategory: WorkspaceQrHistoryRoomCategory;
+  categoryColorTone: WorkspaceQrHistoryCategoryColorTone;
+  categoryColorTagSpec: WorkspaceQrHistoryCategoryColorTagSpec;
+  categoryPresetOptions: WorkspaceQrHistoryCategoryPresetOptionSpec[];
   categoryTagAriaLabel: string;
   categoryTagTitle: string;
+  categorySelectAriaLabel: string;
+  categorySelectTitle: string;
   isPinned: boolean;
   pinnedAtMs: number;
   pinButtonLabel: 'Pin' | 'Pinned';
@@ -15078,6 +15185,14 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
       const isPinned = Boolean(entry.isPinned);
       const category = normalizeWorkspaceQrHistoryRoomCategory(entry.category);
       const nextCategory = getNextWorkspaceQrHistoryRoomCategory(category);
+      const categoryColorTagSpec =
+        getWorkspaceQrHistoryCategoryColorTagSpec(category);
+      const categoryPresetOptions =
+        buildWorkspaceQrHistoryCategoryPresetOptions(
+          category,
+          idx,
+          entry.roomCode
+        );
       const isCopied =
         Boolean(normalizedCopiedRoomCode) &&
         normalizedCopiedRoomCode === entry.roomCode;
@@ -15086,14 +15201,21 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         category,
         categoryLabel: category,
         nextCategory,
+        categoryColorTone: categoryColorTagSpec.colorTone,
+        categoryColorTagSpec,
+        categoryPresetOptions,
         isPinned,
         pinnedAtMs: entry.pinnedAtMs || 0,
         itemElementId: `workspace-header-qr-history-item-${idx}`,
         itemTestId: `workspace-header-qr-history-item-${idx}`,
         categoryTagElementId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryTagTestId: `workspace-header-qr-history-category-tag-${idx}`,
+        categoryDotElementId: `workspace-header-qr-history-category-dot-${idx}`,
+        categoryDotTestId: `workspace-header-qr-history-category-dot-${idx}`,
         categorySelectElementId: `workspace-header-qr-history-category-select-${idx}`,
         categorySelectTestId: `workspace-header-qr-history-category-select-${idx}`,
+        categoryPickerPopoverElementId: `workspace-header-qr-history-category-picker-${idx}`,
+        categoryPickerPopoverTestId: `workspace-header-qr-history-category-picker-${idx}`,
         pinButtonElementId: `workspace-header-qr-history-pin-btn-${idx}`,
         pinButtonTestId: `workspace-header-qr-history-pin-btn-${idx}`,
         copyButtonElementId: `workspace-header-qr-history-copy-btn-${idx}`,
@@ -15106,6 +15228,8 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
         searchHistoryCategoryTagElementId: `workspace-header-qr-search-history-category-tag-${idx}`,
         searchHistoryCategoryTagTestId: `workspace-header-qr-search-history-category-tag-${idx}`,
+        searchHistoryCategorySelectElementId: `workspace-header-qr-search-history-category-select-${idx}`,
+        searchHistoryCategorySelectTestId: `workspace-header-qr-search-history-category-select-${idx}`,
         searchHistoryPinButtonElementId: `workspace-header-qr-search-history-pin-btn-${idx}`,
         searchHistoryPinButtonTestId: `workspace-header-qr-search-history-pin-btn-${idx}`,
         searchHistoryCopyButtonElementId: `workspace-header-qr-search-history-copy-btn-${idx}`,
@@ -15116,6 +15240,8 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
         categoryTagAriaLabel: `Category ${category} for room ${entry.roomCode} — click to switch to ${nextCategory}`,
         categoryTagTitle: `Category: ${category} (click to switch to ${nextCategory})`,
+        categorySelectAriaLabel: `Assign category for room ${entry.roomCode}`,
+        categorySelectTitle: `Assign preset category (Study, Work, Casual) for ${entry.roomCode}`,
         pinButtonLabel: isPinned ? 'Pinned' : 'Pin',
         pinActionLabel: 'Pin',
         pinnedBadgeLabel: 'Pinned',
@@ -15332,6 +15458,14 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
       const isPinned = Boolean(entry.isPinned);
       const category = normalizeWorkspaceQrHistoryRoomCategory(entry.category);
       const nextCategory = getNextWorkspaceQrHistoryRoomCategory(category);
+      const categoryColorTagSpec =
+        getWorkspaceQrHistoryCategoryColorTagSpec(category);
+      const categoryPresetOptions =
+        buildWorkspaceQrHistoryCategoryPresetOptions(
+          category,
+          idx,
+          entry.roomCode
+        );
       const isCopied =
         Boolean(normalizedCopiedRoomCode) &&
         normalizedCopiedRoomCode === entry.roomCode;
@@ -15340,14 +15474,21 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         category,
         categoryLabel: category,
         nextCategory,
+        categoryColorTone: categoryColorTagSpec.colorTone,
+        categoryColorTagSpec,
+        categoryPresetOptions,
         isPinned,
         pinnedAtMs: entry.pinnedAtMs || 0,
         itemElementId: `workspace-header-qr-history-item-${idx}`,
         itemTestId: `workspace-header-qr-history-item-${idx}`,
         categoryTagElementId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryTagTestId: `workspace-header-qr-history-category-tag-${idx}`,
+        categoryDotElementId: `workspace-header-qr-history-category-dot-${idx}`,
+        categoryDotTestId: `workspace-header-qr-history-category-dot-${idx}`,
         categorySelectElementId: `workspace-header-qr-history-category-select-${idx}`,
         categorySelectTestId: `workspace-header-qr-history-category-select-${idx}`,
+        categoryPickerPopoverElementId: `workspace-header-qr-history-category-picker-${idx}`,
+        categoryPickerPopoverTestId: `workspace-header-qr-history-category-picker-${idx}`,
         pinButtonElementId: `workspace-header-qr-history-pin-btn-${idx}`,
         pinButtonTestId: `workspace-header-qr-history-pin-btn-${idx}`,
         copyButtonElementId: `workspace-header-qr-history-copy-btn-${idx}`,
@@ -15360,6 +15501,8 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
         searchHistoryCategoryTagElementId: `workspace-header-qr-search-history-category-tag-${idx}`,
         searchHistoryCategoryTagTestId: `workspace-header-qr-search-history-category-tag-${idx}`,
+        searchHistoryCategorySelectElementId: `workspace-header-qr-search-history-category-select-${idx}`,
+        searchHistoryCategorySelectTestId: `workspace-header-qr-search-history-category-select-${idx}`,
         searchHistoryPinButtonElementId: `workspace-header-qr-search-history-pin-btn-${idx}`,
         searchHistoryPinButtonTestId: `workspace-header-qr-search-history-pin-btn-${idx}`,
         searchHistoryCopyButtonElementId: `workspace-header-qr-search-history-copy-btn-${idx}`,
@@ -15370,6 +15513,8 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
         categoryTagAriaLabel: `Category ${category} for room ${entry.roomCode} — click to switch to ${nextCategory}`,
         categoryTagTitle: `Category: ${category} (click to switch to ${nextCategory})`,
+        categorySelectAriaLabel: `Assign category for room ${entry.roomCode}`,
+        categorySelectTitle: `Assign preset category (Study, Work, Casual) for ${entry.roomCode}`,
         pinButtonLabel: isPinned ? 'Pinned' : 'Pin',
         pinActionLabel: 'Pin',
         pinnedBadgeLabel: 'Pinned',
