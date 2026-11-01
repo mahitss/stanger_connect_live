@@ -246,6 +246,7 @@ import {
   WorkspaceQrHistoryCategoryFilter,
   WorkspaceQrHistorySortOrder,
   normalizeWorkspaceQrHistorySortOrder,
+  buildWorkspaceQrHistoryCsvExport,
   toggleWorkspaceQrHistorySectionExpanded,
   resolveWorkspaceQrScanConfirmationChime,
   WorkspaceHeaderQrCameraScanStatus,
@@ -874,6 +875,15 @@ export default function App() {
     string | null
   >(null);
   const qrHistoryCopyTimerRef = useRef<number | null>(null);
+  const [
+    isWorkspaceHeaderQrHistoryCsvExported,
+    setIsWorkspaceHeaderQrHistoryCsvExported,
+  ] = useState<boolean>(false);
+  const [
+    workspaceHeaderQrHistoryCsvExportCount,
+    setWorkspaceHeaderQrHistoryCsvExportCount,
+  ] = useState<number>(0);
+  const qrHistoryCsvExportTimerRef = useRef<number | null>(null);
   const [qrScannerSoundPreferences, setQrScannerSoundPreferences] =
     useState<WorkspaceQrScannerSoundPreferences>(() => {
       try {
@@ -3893,6 +3903,8 @@ export default function App() {
     historyCategoryFilter: workspaceHeaderQrHistoryCategoryFilter,
     historySortOrder: workspaceHeaderQrHistorySortOrder,
     copiedHistoryRoomCode: copiedQrHistoryRoomCode,
+    isHistoryCsvExported: isWorkspaceHeaderQrHistoryCsvExported,
+    historyCsvExportCount: workspaceHeaderQrHistoryCsvExportCount,
     qrScannerSoundPreferences,
     uiSoundPreferences: uiSoundPrefs,
     scanChimePlayedCount: workspaceHeaderQrScanChimeCount,
@@ -3937,6 +3949,59 @@ export default function App() {
     }
   };
 
+  const handleExportWorkspaceQrHistoryCsv = () => {
+    const csvExport = buildWorkspaceQrHistoryCsvExport(recentWorkspaceQrScans, {
+      sortOrder: workspaceHeaderQrHistorySortOrder,
+      roomCode: activeStudyRoomCode,
+    });
+    if (!csvExport.hasRecords) return;
+
+    if (typeof document !== 'undefined') {
+      let objectUrl: string | null = null;
+      try {
+        if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && URL.createObjectURL) {
+          const blob = new Blob([csvExport.csvContent], {
+            type: csvExport.mimeType,
+          });
+          objectUrl = URL.createObjectURL(blob);
+        }
+      } catch {
+        objectUrl = null;
+      }
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl || csvExport.dataUrl;
+      anchor.download = csvExport.filename;
+      anchor.style.display = 'none';
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      if (objectUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+        window.setTimeout(() => {
+          URL.revokeObjectURL(objectUrl as string);
+        }, 250);
+      }
+    }
+
+    setIsWorkspaceHeaderQrHistoryCsvExported(true);
+    setWorkspaceHeaderQrHistoryCsvExportCount((prev) => prev + 1);
+    if (qrHistoryCsvExportTimerRef.current !== null) {
+      window.clearTimeout(qrHistoryCsvExportTimerRef.current);
+    }
+    qrHistoryCsvExportTimerRef.current = window.setTimeout(() => {
+      setIsWorkspaceHeaderQrHistoryCsvExported(false);
+      qrHistoryCsvExportTimerRef.current = null;
+    }, 1800);
+
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+    setLastSoundFeedback(
+      `Exported ${csvExport.rowCount} QR scan history ${
+        csvExport.rowCount === 1 ? 'record' : 'records'
+      } to ${csvExport.filename}`
+    );
+  };
+
   const handleClearRecentWorkspaceQrScans = () => {
     setRecentWorkspaceQrScans([]);
     setWorkspaceHeaderQrHistorySearchQuery('');
@@ -3944,9 +4009,14 @@ export default function App() {
     setWorkspaceHeaderQrHistorySortOrder('most_recent_desc');
     setOpenQrHistoryCategoryPickerRoomCode(null);
     setCopiedQrHistoryRoomCode(null);
+    setIsWorkspaceHeaderQrHistoryCsvExported(false);
     if (qrHistoryCopyTimerRef.current !== null) {
       window.clearTimeout(qrHistoryCopyTimerRef.current);
       qrHistoryCopyTimerRef.current = null;
+    }
+    if (qrHistoryCsvExportTimerRef.current !== null) {
+      window.clearTimeout(qrHistoryCsvExportTimerRef.current);
+      qrHistoryCsvExportTimerRef.current = null;
     }
     try {
       localStorage.setItem(WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY, '[]');
@@ -6142,23 +6212,90 @@ export default function App() {
                               )}
                             </button>
 
-                            {workspaceHeaderQrMeta.historySection.hasItems && (
+                            <div className="inline-flex items-center gap-1.5">
                               <button
                                 type="button"
                                 id={
-                                  workspaceHeaderQrMeta.recentScans
-                                    .clearButtonElementId
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .exportCsvButtonElementId
                                 }
                                 data-testid={
-                                  workspaceHeaderQrMeta.recentScans.clearButtonTestId
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .exportCsvButtonTestId
                                 }
-                                onClick={handleClearRecentWorkspaceQrScans}
-                                aria-label="Clear recent QR scans"
-                                className="text-[10px] font-mono font-medium text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 transition-colors"
+                                data-search-history-export-csv-id={
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .searchHistoryExportCsvButtonElementId
+                                }
+                                data-export-filename={
+                                  workspaceHeaderQrMeta.searchHistory.csvExport
+                                    .filename
+                                }
+                                data-csv-row-count={String(
+                                  workspaceHeaderQrMeta.searchHistory.csvExport
+                                    .rowCount
+                                )}
+                                data-csv-export-count={String(
+                                  workspaceHeaderQrMeta.searchHistory.csvExport
+                                    .exportCount
+                                )}
+                                data-exported={
+                                  workspaceHeaderQrMeta.searchHistory.csvExport
+                                    .isExported
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                disabled={
+                                  workspaceHeaderQrMeta.searchHistory.csvExport
+                                    .isDisabled
+                                }
+                                onClick={handleExportWorkspaceQrHistoryCsv}
+                                aria-label={
+                                  workspaceHeaderQrMeta.searchHistory.csvExport
+                                    .ariaLabel
+                                }
+                                title={
+                                  workspaceHeaderQrMeta.searchHistory.csvExport
+                                    .title
+                                }
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors ${
+                                  workspaceHeaderQrMeta.searchHistory.csvExport
+                                    .isDisabled
+                                    ? 'bg-slate-50 border-slate-200 text-slate-400 dark:bg-zinc-900/40 dark:border-zinc-800 dark:text-zinc-600 cursor-not-allowed'
+                                    : workspaceHeaderQrMeta.searchHistory
+                                          .csvExport.isExported
+                                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                                      : 'bg-slate-100 hover:bg-emerald-500/15 border-slate-200 hover:border-emerald-500/40 text-slate-700 hover:text-emerald-700 dark:bg-zinc-900 dark:hover:bg-emerald-500/15 dark:border-zinc-800 dark:hover:border-emerald-500/40 dark:text-zinc-300 dark:hover:text-emerald-300'
+                                }`}
                               >
-                                Clear
+                                <Download className="w-2.5 h-2.5 shrink-0" />
+                                <span>
+                                  {
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .exportCsvButtonLabel
+                                  }
+                                </span>
                               </button>
-                            )}
+
+                              {workspaceHeaderQrMeta.historySection.hasItems && (
+                                <button
+                                  type="button"
+                                  id={
+                                    workspaceHeaderQrMeta.recentScans
+                                      .clearButtonElementId
+                                  }
+                                  data-testid={
+                                    workspaceHeaderQrMeta.recentScans
+                                      .clearButtonTestId
+                                  }
+                                  onClick={handleClearRecentWorkspaceQrScans}
+                                  aria-label="Clear recent QR scans"
+                                  className="text-[10px] font-mono font-medium text-slate-500 hover:text-rose-600 dark:text-zinc-400 dark:hover:text-rose-400 transition-colors"
+                                >
+                                  Clear
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           {workspaceHeaderQrMeta.historySection.isExpanded && (

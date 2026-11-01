@@ -258,6 +258,10 @@ import {
   normalizeWorkspaceQrHistorySortOrder,
   getWorkspaceQrHistorySortLabel,
   sortWorkspaceQrHistoryItems,
+  WORKSPACE_QR_HISTORY_CSV_HEADERS,
+  escapeWorkspaceQrHistoryCsvCell,
+  buildWorkspaceQrHistoryCsvFilename,
+  buildWorkspaceQrHistoryCsvExport,
   recordWorkspaceQrRecentScan,
   removeWorkspaceQrRecentScanEntry,
   togglePinWorkspaceQrRecentScanEntry,
@@ -7343,5 +7347,69 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     'MANGO-ROOM',
     'ZETA-ROOM',
   ]);
+
+  // 18. QR History 'Export CSV' button & CSV payload generation for all stored scanned records
+  assert.equal(
+    escapeWorkspaceQrHistoryCsvCell('STUDY-ROOM, "A"'),
+    '"STUDY-ROOM, ""A"""'
+  );
+  assert.equal(
+    buildWorkspaceQrHistoryCsvFilename('STUDY-ROOM3'),
+    'mr-stranger-qr-history-study-room3.csv'
+  );
+  assert.equal(
+    buildWorkspaceQrHistoryCsvFilename(''),
+    'mr-stranger-qr-history.csv'
+  );
+
+  const csvSpec = buildWorkspaceQrHistoryCsvExport(alphaScans, {
+    sortOrder: 'alphabetical_asc',
+    roomCode: 'ALPHA-ROOM',
+    isExported: true,
+    exportCount: 1,
+  });
+  assert.equal(
+    csvSpec.buttonElementId,
+    'workspace-header-qr-history-export-csv-btn'
+  );
+  assert.equal(csvSpec.buttonLabel, 'Export CSV');
+  assert.equal(csvSpec.filename, 'mr-stranger-qr-history-alpha-room.csv');
+  assert.equal(csvSpec.rowCount, 3);
+  assert.equal(csvSpec.hasRecords, true);
+  assert.equal(csvSpec.isDisabled, false);
+  assert.equal(csvSpec.isExported, true);
+  assert.equal(csvSpec.exportCount, 1);
+  assert.deepEqual(csvSpec.exportedRoomCodes, [
+    'ALPHA-ROOM',
+    'MANGO-ROOM',
+    'ZETA-ROOM',
+  ]);
+  const csvLines = csvSpec.csvContent.split('\n');
+  assert.equal(csvLines.length, 4);
+  assert.equal(csvLines[0], WORKSPACE_QR_HISTORY_CSV_HEADERS.join(','));
+  assert.ok(csvLines[1].includes(',ALPHA-ROOM,Study,false,'));
+  assert.ok(csvLines[2].includes(',MANGO-ROOM,Study,true,'));
+  assert.ok(csvLines[3].includes(',ZETA-ROOM,Study,false,'));
+  assert.ok(csvSpec.dataUrl.startsWith('data:text/csv;charset=utf-8,'));
+
+  // Empty scans disables Export CSV button
+  const emptyCsvSpec = buildWorkspaceQrHistoryCsvExport([]);
+  assert.equal(emptyCsvSpec.rowCount, 0);
+  assert.equal(emptyCsvSpec.hasRecords, false);
+  assert.equal(emptyCsvSpec.isDisabled, true);
+  assert.equal(
+    emptyCsvSpec.csvContent,
+    WORKSPACE_QR_HISTORY_CSV_HEADERS.join(',')
+  );
+
+  // Verify meta exposes exportCsvButtonElementId and csvExport
+  assert.equal(
+    metaAlphaSort.searchHistory.exportCsvButtonElementId,
+    'workspace-header-qr-history-export-csv-btn'
+  );
+  assert.equal(metaAlphaSort.searchHistory.exportCsvButtonLabel, 'Export CSV');
+  assert.equal(metaAlphaSort.searchHistory.csvExport.rowCount, 3);
+  assert.equal(metaAlphaSort.historySection.csvExport.rowCount, 3);
 });
+
 

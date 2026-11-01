@@ -15121,6 +15121,156 @@ export interface WorkspaceQrHistorySectionItemSpec
 export interface WorkspaceQrSearchHistoryItemSpec
   extends WorkspaceQrHistorySectionItemSpec {}
 
+export const WORKSPACE_QR_HISTORY_CSV_HEADERS = [
+  'id',
+  'roomCode',
+  'category',
+  'isPinned',
+  'pinnedAtIso',
+  'scannedAtIso',
+  'scannedAtMs',
+  'workspaceUrl',
+  'audienceFilter',
+  'moodFilter',
+  'onlyInFocus',
+] as const;
+
+export const WORKSPACE_QR_HISTORY_CSV_MIME_TYPE = 'text/csv;charset=utf-8;';
+
+export const DEFAULT_WORKSPACE_QR_HISTORY_CSV_FILENAME =
+  'mr-stranger-qr-history.csv';
+
+export function escapeWorkspaceQrHistoryCsvCell(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const str = String(value);
+  if (/[",\r\n]/.test(str)) {
+    return `"${str.replace(/"/g, '""')}"`;
+  }
+  return str;
+}
+
+export function buildWorkspaceQrHistoryCsvFilename(
+  roomCode?: string | null
+): string {
+  const cleaned = (roomCode ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!cleaned) {
+    return DEFAULT_WORKSPACE_QR_HISTORY_CSV_FILENAME;
+  }
+  return `mr-stranger-qr-history-${cleaned}.csv`;
+}
+
+export interface WorkspaceQrHistoryCsvExportSpec {
+  buttonElementId: 'workspace-header-qr-history-export-csv-btn';
+  buttonTestId: 'workspace-header-qr-history-export-csv-btn';
+  searchHistoryButtonElementId: 'workspace-header-qr-search-history-export-csv-btn';
+  searchHistoryButtonTestId: 'workspace-header-qr-search-history-export-csv-btn';
+  buttonLabel: 'Export CSV';
+  exportedButtonLabel: 'Exported CSV!';
+  mimeType: typeof WORKSPACE_QR_HISTORY_CSV_MIME_TYPE;
+  filename: string;
+  headers: readonly string[];
+  rowCount: number;
+  hasRecords: boolean;
+  isDisabled: boolean;
+  isExported: boolean;
+  exportCount: number;
+  csvContent: string;
+  dataUrl: string;
+  exportedRoomCodes: string[];
+  ariaLabel: string;
+  title: string;
+}
+
+export function buildWorkspaceQrHistoryCsvExport(
+  entries: WorkspaceQrRecentScanEntry[] | unknown,
+  options?: {
+    sortOrder?: WorkspaceQrHistorySortOrder | string | null;
+    roomCode?: string | null;
+    maxItems?: number;
+    isExported?: boolean;
+    exportCount?: number;
+  }
+): WorkspaceQrHistoryCsvExportSpec {
+  const cap = Math.max(
+    1,
+    Math.min(20, Math.floor(options?.maxItems || MAX_WORKSPACE_QR_SEARCH_HISTORY))
+  );
+  const savedEntries = normalizeStoredWorkspaceQrRecentScans(entries, cap);
+  const sortedEntries = sortWorkspaceQrHistoryItems(
+    savedEntries,
+    options?.sortOrder
+  );
+  const headerLine = WORKSPACE_QR_HISTORY_CSV_HEADERS.join(',');
+  const dataLines = sortedEntries.map((entry) => {
+    const category = normalizeWorkspaceQrHistoryRoomCategory(entry.category);
+    const isPinned = Boolean(entry.isPinned);
+    const pinnedAtIso =
+      isPinned && entry.pinnedAtMs
+        ? new Date(entry.pinnedAtMs).toISOString()
+        : '';
+    const scannedAtIso = entry.scannedAtMs
+      ? new Date(entry.scannedAtMs).toISOString()
+      : '';
+    const cells = [
+      entry.id,
+      entry.roomCode,
+      category,
+      isPinned ? 'true' : 'false',
+      pinnedAtIso,
+      scannedAtIso,
+      entry.scannedAtMs,
+      entry.workspaceUrl,
+      entry.audienceFilter,
+      entry.moodFilter,
+      entry.onlyInFocus ? 'true' : 'false',
+    ];
+    return cells.map(escapeWorkspaceQrHistoryCsvCell).join(',');
+  });
+  const csvContent = [headerLine, ...dataLines].join('\n');
+  const dataUrl = `data:text/csv;charset=utf-8,${encodeURIComponent(csvContent)}`;
+  const filename = buildWorkspaceQrHistoryCsvFilename(options?.roomCode);
+  const rowCount = sortedEntries.length;
+  const hasRecords = rowCount > 0;
+  const isExported = Boolean(options?.isExported);
+  const exportCount = Math.max(0, Math.floor(options?.exportCount ?? 0));
+
+  return {
+    buttonElementId: 'workspace-header-qr-history-export-csv-btn',
+    buttonTestId: 'workspace-header-qr-history-export-csv-btn',
+    searchHistoryButtonElementId:
+      'workspace-header-qr-search-history-export-csv-btn',
+    searchHistoryButtonTestId:
+      'workspace-header-qr-search-history-export-csv-btn',
+    buttonLabel: 'Export CSV',
+    exportedButtonLabel: 'Exported CSV!',
+    mimeType: WORKSPACE_QR_HISTORY_CSV_MIME_TYPE,
+    filename,
+    headers: WORKSPACE_QR_HISTORY_CSV_HEADERS,
+    rowCount,
+    hasRecords,
+    isDisabled: !hasRecords,
+    isExported,
+    exportCount,
+    csvContent,
+    dataUrl,
+    exportedRoomCodes: sortedEntries.map((e) => e.roomCode),
+    ariaLabel: hasRecords
+      ? `Export ${rowCount} stored QR scan history ${
+          rowCount === 1 ? 'record' : 'records'
+        } as CSV (${filename})`
+      : 'Export QR scan history as CSV (no stored records)',
+    title: hasRecords
+      ? `Download all ${rowCount} stored scanned ${
+          rowCount === 1 ? 'record' : 'records'
+        } as ${filename}`
+      : 'No stored QR scan records to export',
+  };
+}
+
 export interface WorkspaceQrSearchHistorySpec {
   sectionElementId: 'workspace-header-qr-search-history-section';
   sectionTestId: 'workspace-header-qr-search-history-section';
@@ -15141,6 +15291,13 @@ export interface WorkspaceQrSearchHistorySpec {
   sortSelectTestId: 'workspace-header-qr-history-sort-select';
   searchHistorySortSelectElementId: 'workspace-header-qr-search-history-sort-select';
   searchHistorySortSelectTestId: 'workspace-header-qr-search-history-sort-select';
+  exportCsvButtonElementId: 'workspace-header-qr-history-export-csv-btn';
+  exportCsvButtonTestId: 'workspace-header-qr-history-export-csv-btn';
+  searchHistoryExportCsvButtonElementId: 'workspace-header-qr-search-history-export-csv-btn';
+  searchHistoryExportCsvButtonTestId: 'workspace-header-qr-search-history-export-csv-btn';
+  exportCsvButtonLabel: 'Export CSV';
+  exportedCsvButtonLabel: 'Exported CSV!';
+  csvExport: WorkspaceQrHistoryCsvExportSpec;
   listElementId: 'workspace-header-qr-search-history-list';
   listTestId: 'workspace-header-qr-search-history-list';
   emptyStateElementId: 'workspace-header-qr-search-history-empty';
@@ -15284,6 +15441,9 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   categoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
   sortOrder?: WorkspaceQrHistorySortOrder | string | null;
   copiedRoomCode?: string | null;
+  roomCode?: string | null;
+  isCsvExported?: boolean;
+  csvExportCount?: number;
   maxItems?: number;
 }): WorkspaceQrSearchHistorySpec {
   const cap = Math.max(
@@ -15305,6 +15465,13 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
     ? normalizeStudyRoomCode(input?.copiedRoomCode || '')
     : null;
+  const csvExport = buildWorkspaceQrHistoryCsvExport(savedEntries, {
+    sortOrder,
+    roomCode: input?.roomCode,
+    maxItems: cap,
+    isExported: input?.isCsvExported,
+    exportCount: input?.csvExportCount,
+  });
   const filteredEntries = filterWorkspaceQrSearchHistory(
     savedEntries,
     rawQuery,
@@ -15445,6 +15612,15 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
       'workspace-header-qr-search-history-sort-select',
     searchHistorySortSelectTestId:
       'workspace-header-qr-search-history-sort-select',
+    exportCsvButtonElementId: 'workspace-header-qr-history-export-csv-btn',
+    exportCsvButtonTestId: 'workspace-header-qr-history-export-csv-btn',
+    searchHistoryExportCsvButtonElementId:
+      'workspace-header-qr-search-history-export-csv-btn',
+    searchHistoryExportCsvButtonTestId:
+      'workspace-header-qr-search-history-export-csv-btn',
+    exportCsvButtonLabel: 'Export CSV',
+    exportedCsvButtonLabel: 'Exported CSV!',
+    csvExport,
     listElementId: 'workspace-header-qr-search-history-list',
     listTestId: 'workspace-header-qr-search-history-list',
     emptyStateElementId: 'workspace-header-qr-search-history-empty',
@@ -15516,6 +15692,11 @@ export interface WorkspaceQrHistorySectionSpec {
   categoryFilterBarTestId: 'workspace-header-qr-history-category-filter-bar';
   sortSelectElementId: 'workspace-header-qr-history-sort-select';
   sortSelectTestId: 'workspace-header-qr-history-sort-select';
+  exportCsvButtonElementId: 'workspace-header-qr-history-export-csv-btn';
+  exportCsvButtonTestId: 'workspace-header-qr-history-export-csv-btn';
+  exportCsvButtonLabel: 'Export CSV';
+  exportedCsvButtonLabel: 'Exported CSV!';
+  csvExport: WorkspaceQrHistoryCsvExportSpec;
   panelElementId: 'workspace-header-qr-history-panel';
   panelTestId: 'workspace-header-qr-history-panel';
   listElementId: 'workspace-header-qr-history-list';
@@ -15577,6 +15758,9 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   categoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
   sortOrder?: WorkspaceQrHistorySortOrder | string | null;
   copiedRoomCode?: string | null;
+  roomCode?: string | null;
+  isCsvExported?: boolean;
+  csvExportCount?: number;
   maxItems?: number;
 }): WorkspaceQrHistorySectionSpec {
   const cap = Math.max(
@@ -15595,6 +15779,13 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   const hasActiveCategoryFilter = activeCategoryFilter !== 'all';
   const sortOrder = normalizeWorkspaceQrHistorySortOrder(input?.sortOrder);
   const sortOrderLabel = getWorkspaceQrHistorySortLabel(sortOrder);
+  const csvExport = buildWorkspaceQrHistoryCsvExport(allSortedEntries, {
+    sortOrder,
+    roomCode: input?.roomCode,
+    maxItems: cap,
+    isExported: input?.isCsvExported,
+    exportCount: input?.csvExportCount,
+  });
   const sortedEntries = filterWorkspaceQrSearchHistory(
     allSortedEntries,
     rawQuery,
@@ -15729,6 +15920,11 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
       'workspace-header-qr-history-category-filter-bar',
     sortSelectElementId: 'workspace-header-qr-history-sort-select',
     sortSelectTestId: 'workspace-header-qr-history-sort-select',
+    exportCsvButtonElementId: 'workspace-header-qr-history-export-csv-btn',
+    exportCsvButtonTestId: 'workspace-header-qr-history-export-csv-btn',
+    exportCsvButtonLabel: 'Export CSV',
+    exportedCsvButtonLabel: 'Exported CSV!',
+    csvExport,
     panelElementId: 'workspace-header-qr-history-panel',
     panelTestId: 'workspace-header-qr-history-panel',
     listElementId: 'workspace-header-qr-history-list',
@@ -16222,6 +16418,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   historyCategoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
   historySortOrder?: WorkspaceQrHistorySortOrder | string | null;
   copiedHistoryRoomCode?: string | null;
+  isHistoryCsvExported?: boolean;
+  historyCsvExportCount?: number;
   qrScannerSoundPreferences?: WorkspaceQrScannerSoundPreferences | unknown;
   uiSoundPreferences?: UiSoundEffectPreferences | null;
   scanChimePlayedCount?: number;
@@ -16268,6 +16466,9 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     categoryFilter: input?.historyCategoryFilter,
     sortOrder: input?.historySortOrder,
     copiedRoomCode: input?.copiedHistoryRoomCode,
+    roomCode,
+    isCsvExported: input?.isHistoryCsvExported,
+    csvExportCount: input?.historyCsvExportCount,
   });
   const searchHistory = buildWorkspaceQrSearchHistorySpec({
     recentScans: input?.recentScans ?? [],
@@ -16275,6 +16476,9 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     categoryFilter: input?.historyCategoryFilter,
     sortOrder: input?.historySortOrder,
     copiedRoomCode: input?.copiedHistoryRoomCode,
+    roomCode,
+    isCsvExported: input?.isHistoryCsvExported,
+    csvExportCount: input?.historyCsvExportCount,
   });
   const soundSettingsSection = buildWorkspaceQrSoundSettingsSectionSpec({
     preferences: input?.qrScannerSoundPreferences,
