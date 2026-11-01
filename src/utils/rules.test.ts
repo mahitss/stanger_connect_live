@@ -6863,5 +6863,81 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     'STUDY-ROOM4',
     'STUDY-ROOM2',
   ]);
+
+  // 14. Real-time search input field at the top of the QR history list to filter scanned room codes as the user types
+  assert.equal(
+    fullSearchHistorySpec.historySearchInputAliasId,
+    'workspace-header-qr-history-search-input'
+  );
+  assert.equal(
+    fullSearchHistorySpec.filterCountBadgeElementId,
+    'workspace-header-qr-history-filter-count-badge'
+  );
+  assert.equal(
+    fullSearchHistorySpec.filterCountBadgeTestId,
+    'workspace-header-qr-history-filter-count-badge'
+  );
+  assert.equal(
+    fullSearchHistorySpec.searchPlaceholder,
+    'Filter scanned room codes...'
+  );
+  assert.equal(
+    fullSearchHistorySpec.searchAriaLabel,
+    'Filter scanned room codes in real-time'
+  );
+  assert.equal(fullSearchHistorySpec.isRealTimeFiltering, true);
+  assert.equal(fullSearchHistorySpec.filterStatusBadgeLabel, '5/5');
+  assert.deepEqual(fullSearchHistorySpec.matchedRoomCodes, [
+    'STUDY-ROOM3',
+    'STUDY-ROOM6',
+    'STUDY-ROOM5',
+    'STUDY-ROOM4',
+    'STUDY-ROOM2',
+  ]);
+
+  // Compact query (ignoring hyphens/spaces) and case-insensitive real-time matching
+  const compactFiltered = filterWorkspaceQrSearchHistory(
+    deletedMiddle.updatedScans,
+    'studyroom4'
+  );
+  assert.equal(compactFiltered.length, 1);
+  assert.equal(compactFiltered[0].roomCode, 'STUDY-ROOM4');
+
+  const metaWithRealtimeFilter = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    recentScans: deletedMiddle.updatedScans,
+    isHistoryExpanded: true,
+    historySearchQuery: 'studyroom4',
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(
+    metaWithRealtimeFilter.historySection.searchInputElementId,
+    'workspace-header-qr-search-history-input'
+  );
+  assert.equal(
+    metaWithRealtimeFilter.historySection.historySearchInputAliasId,
+    'workspace-header-qr-history-search-input'
+  );
+  assert.equal(metaWithRealtimeFilter.historySection.isRealTimeFiltering, true);
+  assert.equal(
+    metaWithRealtimeFilter.historySection.filterStatusBadgeLabel,
+    '1/4 match'
+  );
+  assert.deepEqual(metaWithRealtimeFilter.historySection.matchedRoomCodes, [
+    'STUDY-ROOM4',
+  ]);
+  assert.equal(
+    metaWithRealtimeFilter.historySection.items[0].matchedQuery,
+    'studyroom4'
+  );
+  assert.equal(
+    metaWithRealtimeFilter.searchHistory.filterStatusBadgeLabel,
+    '1/4 match'
+  );
+  assert.deepEqual(metaWithRealtimeFilter.searchHistory.matchedRoomCodes, [
+    'STUDY-ROOM4',
+  ]);
 });
+
 

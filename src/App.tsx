@@ -6123,6 +6123,19 @@ export default function App() {
                                       workspaceHeaderQrMeta.searchHistory
                                         .searchInputTestId
                                     }
+                                    data-history-search-id={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .historySearchInputAliasId
+                                    }
+                                    data-real-time-filter="true"
+                                    data-matched-count={String(
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .filteredCount
+                                    )}
+                                    data-total-saved-count={String(
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .totalSavedCount
+                                    )}
                                     value={workspaceHeaderQrHistorySearchQuery}
                                     onChange={(e) =>
                                       setWorkspaceHeaderQrHistorySearchQuery(
@@ -6137,29 +6150,62 @@ export default function App() {
                                       workspaceHeaderQrMeta.searchHistory
                                         .searchAriaLabel
                                     }
-                                    className="w-full pl-6 pr-6 py-1 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-[#050505] text-[10px] font-mono text-slate-700 dark:text-zinc-200 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/60"
+                                    className="w-full pl-6 pr-20 py-1 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-[#050505] text-[10px] font-mono text-slate-700 dark:text-zinc-200 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/60 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
                                   />
-                                  {workspaceHeaderQrMeta.searchHistory
-                                    .hasActiveSearchQuery && (
-                                    <button
-                                      type="button"
+                                  <div className="absolute right-1.5 flex items-center gap-1">
+                                    <span
                                       id={
                                         workspaceHeaderQrMeta.searchHistory
-                                          .clearSearchButtonElementId
+                                          .filterCountBadgeElementId
                                       }
                                       data-testid={
                                         workspaceHeaderQrMeta.searchHistory
-                                          .clearSearchButtonTestId
+                                          .filterCountBadgeTestId
                                       }
-                                      onClick={() =>
-                                        setWorkspaceHeaderQrHistorySearchQuery('')
-                                      }
-                                      aria-label="Clear Search History query"
-                                      className="absolute right-1.5 p-0.5 text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                                      data-filtered-count={String(
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .filteredCount
+                                      )}
+                                      data-total-count={String(
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .totalSavedCount
+                                      )}
+                                      className={`px-1 py-0.5 rounded text-[9px] font-mono font-semibold leading-none ${
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .hasActiveSearchQuery
+                                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                                          : 'text-slate-400 dark:text-zinc-500'
+                                      }`}
                                     >
-                                      <X className="w-2.5 h-2.5" />
-                                    </button>
-                                  )}
+                                      {
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .filterStatusBadgeLabel
+                                      }
+                                    </span>
+                                    {workspaceHeaderQrMeta.searchHistory
+                                      .hasActiveSearchQuery && (
+                                      <button
+                                        type="button"
+                                        id={
+                                          workspaceHeaderQrMeta.searchHistory
+                                            .clearSearchButtonElementId
+                                        }
+                                        data-testid={
+                                          workspaceHeaderQrMeta.searchHistory
+                                            .clearSearchButtonTestId
+                                        }
+                                        onClick={() =>
+                                          setWorkspaceHeaderQrHistorySearchQuery(
+                                            ''
+                                          )
+                                        }
+                                        aria-label="Clear Search History query"
+                                        className="p-0.5 text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
+                                      >
+                                        <X className="w-2.5 h-2.5" />
+                                      </button>
+                                    )}
+                                  </div>
                                 </div>
 
                                 {workspaceHeaderQrMeta.searchHistory
@@ -6180,6 +6226,14 @@ export default function App() {
                                     data-sorted-by={
                                       workspaceHeaderQrMeta.historySection.sortedBy
                                     }
+                                    data-filter-query={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .searchQuery
+                                    }
+                                    data-filtered-count={String(
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .filteredCount
+                                    )}
                                     className="space-y-1 max-h-52 overflow-y-auto pr-0.5"
                                   >
                                     {workspaceHeaderQrMeta.searchHistory.items.map(
@@ -6192,6 +6246,9 @@ export default function App() {
                                             scanItem.searchHistoryItemElementId
                                           }
                                           data-room-code={scanItem.roomCode}
+                                          data-matched-query={
+                                            scanItem.matchedQuery
+                                          }
                                           data-workspace-url={
                                             scanItem.workspaceUrl
                                           }

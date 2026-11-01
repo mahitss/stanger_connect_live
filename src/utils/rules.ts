@@ -14563,6 +14563,7 @@ export interface WorkspaceQrHistorySectionItemSpec
   joinLinkLabel: 'Join';
   joinLinkHref: string;
   joinLinkAriaLabel: string;
+  matchedQuery: string;
   rankOrder: number;
 }
 
@@ -14577,6 +14578,9 @@ export interface WorkspaceQrSearchHistorySpec {
   countBadgeTestId: 'workspace-header-qr-recent-scans-count-badge';
   searchInputElementId: 'workspace-header-qr-search-history-input';
   searchInputTestId: 'workspace-header-qr-search-history-input';
+  historySearchInputAliasId: 'workspace-header-qr-history-search-input';
+  filterCountBadgeElementId: 'workspace-header-qr-history-filter-count-badge';
+  filterCountBadgeTestId: 'workspace-header-qr-history-filter-count-badge';
   clearSearchButtonElementId: 'workspace-header-qr-search-history-clear-query-btn';
   clearSearchButtonTestId: 'workspace-header-qr-search-history-clear-query-btn';
   listElementId: 'workspace-header-qr-search-history-list';
@@ -14586,8 +14590,9 @@ export interface WorkspaceQrSearchHistorySpec {
   storageKey: typeof WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY;
   legacyStorageKey: typeof WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY;
   heading: 'Search History';
-  searchPlaceholder: 'Search History (last 5 room codes)...';
-  searchAriaLabel: 'Search History room codes';
+  searchPlaceholder: 'Filter scanned room codes...';
+  searchAriaLabel: 'Filter scanned room codes in real-time';
+  isRealTimeFiltering: true;
   copyButtonLabel: 'Copy';
   copiedButtonLabel: 'Copied';
   copiedRoomCode: string | null;
@@ -14599,9 +14604,11 @@ export interface WorkspaceQrSearchHistorySpec {
   totalSavedCount: number;
   filteredCount: number;
   countBadgeLabel: string;
+  filterStatusBadgeLabel: string;
   emptyMessage: string;
   noMatchMessage: string;
   savedRoomCodes: string[];
+  matchedRoomCodes: string[];
   items: WorkspaceQrSearchHistoryItemSpec[];
   hasSavedItems: boolean;
   hasFilteredItems: boolean;
@@ -14621,12 +14628,17 @@ export function filterWorkspaceQrSearchHistory(
   if (!normalizedQuery) {
     return savedEntries;
   }
-  return savedEntries.filter(
-    (entry) =>
-      entry.roomCode.toLowerCase().includes(normalizedQuery) ||
+  const compactQuery = normalizedQuery.replace(/[\s_-]+/g, '');
+  return savedEntries.filter((entry) => {
+    const roomLower = entry.roomCode.toLowerCase();
+    const compactRoom = roomLower.replace(/[\s_-]+/g, '');
+    return (
+      roomLower.includes(normalizedQuery) ||
+      (compactQuery.length > 0 && compactRoom.includes(compactQuery)) ||
       entry.workspaceUrl.toLowerCase().includes(normalizedQuery) ||
       entry.moodFilter.toLowerCase().includes(normalizedQuery)
-  );
+    );
+  });
 }
 
 export function buildWorkspaceQrSearchHistorySpec(input?: {
@@ -14644,6 +14656,7 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     cap
   );
   const rawQuery = (input?.searchQuery ?? '').trim();
+  const hasActiveSearchQuery = rawQuery.length > 0;
   const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
     ? normalizeStudyRoomCode(input?.copiedRoomCode || '')
     : null;
@@ -14692,6 +14705,7 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         joinLinkLabel: 'Join',
         joinLinkHref: entry.workspaceUrl,
         joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
+        matchedQuery: rawQuery,
         rankOrder: idx + 1,
       };
     }
@@ -14705,6 +14719,10 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     countBadgeTestId: 'workspace-header-qr-recent-scans-count-badge',
     searchInputElementId: 'workspace-header-qr-search-history-input',
     searchInputTestId: 'workspace-header-qr-search-history-input',
+    historySearchInputAliasId: 'workspace-header-qr-history-search-input',
+    filterCountBadgeElementId:
+      'workspace-header-qr-history-filter-count-badge',
+    filterCountBadgeTestId: 'workspace-header-qr-history-filter-count-badge',
     clearSearchButtonElementId:
       'workspace-header-qr-search-history-clear-query-btn',
     clearSearchButtonTestId:
@@ -14716,8 +14734,9 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     storageKey: WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
     legacyStorageKey: WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
     heading: 'Search History',
-    searchPlaceholder: 'Search History (last 5 room codes)...',
-    searchAriaLabel: 'Search History room codes',
+    searchPlaceholder: 'Filter scanned room codes...',
+    searchAriaLabel: 'Filter scanned room codes in real-time',
+    isRealTimeFiltering: true,
     copyButtonLabel: 'Copy',
     copiedButtonLabel: 'Copied',
     copiedRoomCode: normalizedCopiedRoomCode,
@@ -14725,16 +14744,20 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     joinLinkLabel: 'Join',
     maxItems: cap,
     searchQuery: rawQuery,
-    hasActiveSearchQuery: rawQuery.length > 0,
+    hasActiveSearchQuery,
     totalSavedCount: savedEntries.length,
     filteredCount: items.length,
     countBadgeLabel: `${savedEntries.length}/${cap}`,
+    filterStatusBadgeLabel: hasActiveSearchQuery
+      ? `${items.length}/${savedEntries.length} match`
+      : `${savedEntries.length}/${cap}`,
     emptyMessage:
       'No scanned room codes in Search History yet. Scan up to 5 QR codes to revisit and join them here.',
     noMatchMessage: rawQuery
       ? `No saved room codes matching "${rawQuery}".`
       : 'No matching room codes in Search History.',
     savedRoomCodes: savedEntries.map((entry) => entry.roomCode),
+    matchedRoomCodes: items.map((entry) => entry.roomCode),
     items,
     hasSavedItems: savedEntries.length > 0,
     hasFilteredItems: items.length > 0,
@@ -14747,6 +14770,11 @@ export interface WorkspaceQrHistorySectionSpec {
   toggleButtonElementId: 'workspace-header-qr-history-toggle-btn';
   toggleButtonTestId: 'workspace-header-qr-history-toggle-btn';
   countBadgeTestId: 'workspace-header-qr-recent-scans-count-badge';
+  searchInputElementId: 'workspace-header-qr-search-history-input';
+  searchInputTestId: 'workspace-header-qr-search-history-input';
+  historySearchInputAliasId: 'workspace-header-qr-history-search-input';
+  filterCountBadgeElementId: 'workspace-header-qr-history-filter-count-badge';
+  filterCountBadgeTestId: 'workspace-header-qr-history-filter-count-badge';
   panelElementId: 'workspace-header-qr-history-panel';
   panelTestId: 'workspace-header-qr-history-panel';
   listElementId: 'workspace-header-qr-history-list';
@@ -14757,6 +14785,14 @@ export interface WorkspaceQrHistorySectionSpec {
   clearButtonTestId: 'workspace-header-qr-history-clear-btn';
   heading: 'History';
   subtitle: 'Search History';
+  searchPlaceholder: 'Filter scanned room codes...';
+  searchAriaLabel: 'Filter scanned room codes in real-time';
+  isRealTimeFiltering: true;
+  searchQuery: string;
+  hasActiveSearchQuery: boolean;
+  filteredCount: number;
+  totalSavedCount: number;
+  filterStatusBadgeLabel: string;
   copyButtonLabel: 'Copy';
   copiedButtonLabel: 'Copied';
   copiedRoomCode: string | null;
@@ -14769,6 +14805,7 @@ export interface WorkspaceQrHistorySectionSpec {
   maxItems: number;
   countBadgeLabel: string;
   emptyMessage: string;
+  matchedRoomCodes: string[];
   items: WorkspaceQrHistorySectionItemSpec[];
   hasItems: boolean;
 }
@@ -14794,9 +14831,11 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     input?.recentScans,
     cap
   );
+  const rawQuery = (input?.searchQuery ?? '').trim();
+  const hasActiveSearchQuery = rawQuery.length > 0;
   const sortedEntries = filterWorkspaceQrSearchHistory(
     allSortedEntries,
-    input?.searchQuery,
+    rawQuery,
     cap
   );
   const isExpanded = input?.isExpanded ?? true;
@@ -14843,6 +14882,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         joinLinkLabel: 'Join',
         joinLinkHref: entry.workspaceUrl,
         joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
+        matchedQuery: rawQuery,
         rankOrder: idx + 1,
       };
     }
@@ -14854,6 +14894,12 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     toggleButtonElementId: 'workspace-header-qr-history-toggle-btn',
     toggleButtonTestId: 'workspace-header-qr-history-toggle-btn',
     countBadgeTestId: 'workspace-header-qr-recent-scans-count-badge',
+    searchInputElementId: 'workspace-header-qr-search-history-input',
+    searchInputTestId: 'workspace-header-qr-search-history-input',
+    historySearchInputAliasId: 'workspace-header-qr-history-search-input',
+    filterCountBadgeElementId:
+      'workspace-header-qr-history-filter-count-badge',
+    filterCountBadgeTestId: 'workspace-header-qr-history-filter-count-badge',
     panelElementId: 'workspace-header-qr-history-panel',
     panelTestId: 'workspace-header-qr-history-panel',
     listElementId: 'workspace-header-qr-history-list',
@@ -14864,6 +14910,16 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     clearButtonTestId: 'workspace-header-qr-history-clear-btn',
     heading: 'History',
     subtitle: 'Search History',
+    searchPlaceholder: 'Filter scanned room codes...',
+    searchAriaLabel: 'Filter scanned room codes in real-time',
+    isRealTimeFiltering: true,
+    searchQuery: rawQuery,
+    hasActiveSearchQuery,
+    filteredCount: items.length,
+    totalSavedCount: allSortedEntries.length,
+    filterStatusBadgeLabel: hasActiveSearchQuery
+      ? `${items.length}/${allSortedEntries.length} match`
+      : `${allSortedEntries.length}/${cap}`,
     copyButtonLabel: 'Copy',
     copiedButtonLabel: 'Copied',
     copiedRoomCode: normalizedCopiedRoomCode,
@@ -14879,6 +14935,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     countBadgeLabel: `${allSortedEntries.length}/${cap}`,
     emptyMessage:
       'No scanned room codes in history yet. Scan up to 5 QR codes to quickly join them here.',
+    matchedRoomCodes: items.map((entry) => entry.roomCode),
     items,
     hasItems: allSortedEntries.length > 0,
   };
