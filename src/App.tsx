@@ -224,6 +224,13 @@ import {
   MAX_WORKSPACE_QR_RECENT_SCANS,
   WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
   MAX_WORKSPACE_QR_SEARCH_HISTORY,
+  WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
+  WorkspaceQrSoundSettingKey,
+  WorkspaceQrScannerSoundPreferences,
+  DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES,
+  normalizeWorkspaceQrScannerSoundPreferences,
+  toggleWorkspaceQrScannerSoundPreference,
+  resolveWorkspaceQrScannerEventSound,
   WorkspaceQrRecentScanEntry,
   normalizeStoredWorkspaceQrRecentScans,
   recordWorkspaceQrRecentScan,
@@ -845,6 +852,27 @@ export default function App() {
     useState<boolean>(true);
   const [workspaceHeaderQrHistorySearchQuery, setWorkspaceHeaderQrHistorySearchQuery] =
     useState<string>('');
+  const [qrScannerSoundPreferences, setQrScannerSoundPreferences] =
+    useState<WorkspaceQrScannerSoundPreferences>(() => {
+      try {
+        const raw = localStorage.getItem(WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY);
+        if (raw) {
+          const normalized = normalizeWorkspaceQrScannerSoundPreferences(raw);
+          localStorage.setItem(
+            WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
+            JSON.stringify(normalized)
+          );
+          return normalized;
+        }
+        localStorage.setItem(
+          WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
+          JSON.stringify(DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES)
+        );
+      } catch {
+        // ignore localStorage error
+      }
+      return { ...DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES };
+    });
   const [workspaceHeaderQrScanChimeCount, setWorkspaceHeaderQrScanChimeCount] =
     useState<number>(0);
   const workspaceHeaderQrScanToastTimerRef = useRef<number | null>(null);
@@ -3840,12 +3868,40 @@ export default function App() {
     recentScans: recentWorkspaceQrScans,
     isHistoryExpanded: isWorkspaceHeaderQrHistoryExpanded,
     historySearchQuery: workspaceHeaderQrHistorySearchQuery,
+    qrScannerSoundPreferences,
     uiSoundPreferences: uiSoundPrefs,
     scanChimePlayedCount: workspaceHeaderQrScanChimeCount,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
   });
+
+  const handleToggleWorkspaceQrScannerSoundPreference = (
+    key: WorkspaceQrSoundSettingKey
+  ) => {
+    setQrScannerSoundPreferences((prev) => {
+      const toggled = toggleWorkspaceQrScannerSoundPreference(prev, key);
+      try {
+        localStorage.setItem(
+          WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
+          toggled.serializedJson
+        );
+      } catch {
+        // ignore localStorage error
+      }
+      const soundRes = resolveWorkspaceQrScannerEventSound({
+        eventCategory: key,
+        scannerSoundPreferences: toggled.updatedPreferences,
+        uiSoundPreferences: uiSoundPrefs,
+        roomCode: activeStudyRoomCode,
+      });
+      if (toggled.nextValue && soundRes.shouldPlay) {
+        playSubtleUiChime(soundRes.chime, soundRes.volumePercent);
+      }
+      setLastSoundFeedback(soundRes.feedbackMessage);
+      return toggled.updatedPreferences;
+    });
+  };
 
   const handleToggleWorkspaceHeaderQrHistoryExpanded = () => {
     setIsWorkspaceHeaderQrHistoryExpanded((prev) =>
@@ -4042,12 +4098,23 @@ export default function App() {
     const parsed = parseScannedWorkspaceQrPayload(rawScannedValue, fallbackOrigin);
     if (!parsed.isValid) {
       setWorkspaceHeaderQrCameraError(parsed.errorMessage);
+      const errorSoundSpec = resolveWorkspaceQrScannerEventSound({
+        eventCategory: 'scanErrors',
+        scannerSoundPreferences: qrScannerSoundPreferences,
+        uiSoundPreferences: uiSoundPrefs,
+        roomCode: activeStudyRoomCode,
+      });
+      if (errorSoundSpec.shouldPlay) {
+        playSubtleUiChime(errorSoundSpec.chime, errorSoundSpec.volumePercent);
+      }
+      setLastSoundFeedback(errorSoundSpec.feedbackMessage);
       return false;
     }
 
     // Play high-frequency confirmation chime immediately upon successful QR scan detection
     const scanChimeSpec = resolveWorkspaceQrScanConfirmationChime({
       preferences: uiSoundPrefs,
+      scannerSoundPreferences: qrScannerSoundPreferences,
       roomCode: parsed.roomCode,
     });
     if (scanChimeSpec.shouldPlay) {
@@ -4155,6 +4222,17 @@ export default function App() {
     setWorkspaceHeaderQrCameraError('');
     setIsWorkspaceHeaderQrCameraScanning(true);
     setWorkspaceHeaderQrCameraStatus('requesting_camera');
+
+    const permSoundSpec = resolveWorkspaceQrScannerEventSound({
+      eventCategory: 'cameraPermissionRequests',
+      scannerSoundPreferences: qrScannerSoundPreferences,
+      uiSoundPreferences: uiSoundPrefs,
+      roomCode: activeStudyRoomCode,
+    });
+    if (permSoundSpec.shouldPlay) {
+      playSubtleUiChime(permSoundSpec.chime, permSoundSpec.volumePercent);
+    }
+    setLastSoundFeedback(permSoundSpec.feedbackMessage);
 
     if (
       typeof navigator === 'undefined' ||
@@ -4340,6 +4418,16 @@ export default function App() {
           setWorkspaceHeaderQrCameraError(
             'Could not detect a valid QR code in that image frame.'
           );
+          const errorSoundSpec = resolveWorkspaceQrScannerEventSound({
+            eventCategory: 'scanErrors',
+            scannerSoundPreferences: qrScannerSoundPreferences,
+            uiSoundPreferences: uiSoundPrefs,
+            roomCode: activeStudyRoomCode,
+          });
+          if (errorSoundSpec.shouldPlay) {
+            playSubtleUiChime(errorSoundSpec.chime, errorSoundSpec.volumePercent);
+          }
+          setLastSoundFeedback(errorSoundSpec.feedbackMessage);
         }
       };
       img.src = reader.result;
@@ -5475,7 +5563,7 @@ export default function App() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 6, scale: 0.96 }}
                       transition={{ duration: 0.18, ease: 'easeOut' }}
-                      className="absolute left-0 top-full mt-2 z-50 w-72 sm:w-80 rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
+                      className="absolute left-0 top-full mt-2 z-50 w-72 sm:w-80 max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-1">
@@ -6096,6 +6184,130 @@ export default function App() {
                               </div>
                             </div>
                           )}
+                        </div>
+
+                        {/* QR Scanner Popover Sound Settings Section (Successful Scans, Scan Errors, Camera Permission Requests) */}
+                        <div
+                          id={
+                            workspaceHeaderQrMeta.soundSettingsSection
+                              .sectionElementId
+                          }
+                          data-testid={
+                            workspaceHeaderQrMeta.soundSettingsSection
+                              .sectionTestId
+                          }
+                          data-storage-key={
+                            workspaceHeaderQrMeta.soundSettingsSection.storageKey
+                          }
+                          data-enabled-count={String(
+                            workspaceHeaderQrMeta.soundSettingsSection.enabledCount
+                          )}
+                          data-total-count={String(
+                            workspaceHeaderQrMeta.soundSettingsSection.totalCount
+                          )}
+                          data-preferences-json={
+                            workspaceHeaderQrMeta.soundSettingsSection
+                              .serializedPreferencesJson
+                          }
+                          className="pt-2 border-t border-slate-200 dark:border-zinc-800/80 space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="inline-flex items-center gap-1.5">
+                              {workspaceHeaderQrMeta.soundSettingsSection
+                                .enabledCount > 0 ? (
+                                <Volume2 className="w-3 h-3 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                              ) : (
+                                <VolumeX className="w-3 h-3 text-slate-400 dark:text-zinc-500 shrink-0" />
+                              )}
+                              <span
+                                id={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .headingElementId
+                                }
+                                data-testid={
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .headingTestId
+                                }
+                                className="text-[11px] font-bold text-slate-700 dark:text-zinc-200"
+                              >
+                                {
+                                  workspaceHeaderQrMeta.soundSettingsSection
+                                    .heading
+                                }
+                              </span>
+                            </div>
+                            <span
+                              id={
+                                workspaceHeaderQrMeta.soundSettingsSection
+                                  .badgeElementId
+                              }
+                              data-testid={
+                                workspaceHeaderQrMeta.soundSettingsSection
+                                  .badgeTestId
+                              }
+                              className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[10px] font-mono font-semibold text-slate-600 dark:text-zinc-400"
+                            >
+                              {
+                                workspaceHeaderQrMeta.soundSettingsSection
+                                  .statusBadgeLabel
+                              }
+                            </span>
+                          </div>
+
+                          <div
+                            id={
+                              workspaceHeaderQrMeta.soundSettingsSection
+                                .listElementId
+                            }
+                            data-testid={
+                              workspaceHeaderQrMeta.soundSettingsSection
+                                .listTestId
+                            }
+                            className="space-y-1"
+                          >
+                            {workspaceHeaderQrMeta.soundSettingsSection.items.map(
+                              (soundItem) => (
+                                <button
+                                  key={soundItem.key}
+                                  type="button"
+                                  role="switch"
+                                  id={soundItem.toggleElementId}
+                                  data-testid={soundItem.toggleTestId}
+                                  data-setting-key={soundItem.key}
+                                  data-enabled={
+                                    soundItem.enabled ? 'true' : 'false'
+                                  }
+                                  data-chime-event={soundItem.chimeEventType}
+                                  aria-checked={soundItem.enabled}
+                                  aria-label={soundItem.ariaLabel}
+                                  onClick={() =>
+                                    handleToggleWorkspaceQrScannerSoundPreference(
+                                      soundItem.key
+                                    )
+                                  }
+                                  className="w-full flex items-center justify-between gap-2 px-2 py-1 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-slate-100 dark:bg-[#050505] dark:hover:bg-zinc-900/80 text-left transition-colors"
+                                >
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[10px] font-semibold text-slate-700 dark:text-zinc-200 truncate">
+                                      {soundItem.label}
+                                    </div>
+                                    <div className="text-[9px] text-slate-500 dark:text-zinc-400 truncate">
+                                      {soundItem.description}
+                                    </div>
+                                  </div>
+                                  <span
+                                    className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shrink-0 transition-colors ${
+                                      soundItem.enabled
+                                        ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-700 dark:text-emerald-300'
+                                        : 'bg-slate-200/70 border border-slate-300 text-slate-500 dark:bg-zinc-900 dark:border-zinc-700 dark:text-zinc-500'
+                                    }`}
+                                  >
+                                    {soundItem.statusText}
+                                  </span>
+                                </button>
+                              )
+                            )}
+                          </div>
                         </div>
                       </div>
                     </motion.div>

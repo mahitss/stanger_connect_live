@@ -254,7 +254,9 @@ export type UiSoundAlertEvent =
   | 'start'
   | 'end'
   | 'ui_chime'
-  | 'qr_scan_confirm';
+  | 'qr_scan_confirm'
+  | 'qr_scan_error'
+  | 'qr_camera_permission';
 
 export interface UiSoundEffectPreferences {
   enabled: boolean;
@@ -424,6 +426,28 @@ export function getUiSoundChimeSpec(
       frequenciesHz: [1046.5, 1318.51],
       noteNames: 'C6 → E6 High-Freq QR Scan Confirm',
       durationMs: isAppInBackground ? 240 : 190,
+      gainScalar,
+    };
+  }
+
+  if (eventType === 'qr_scan_error') {
+    return {
+      eventType: 'qr_scan_error',
+      label: 'QR Scan Error Alert Chime',
+      frequenciesHz: [392, 311.13],
+      noteNames: 'G4 → D#4 Scan Error Tone',
+      durationMs: isAppInBackground ? 280 : 220,
+      gainScalar,
+    };
+  }
+
+  if (eventType === 'qr_camera_permission') {
+    return {
+      eventType: 'qr_camera_permission',
+      label: 'Camera Permission Request Chime',
+      frequenciesHz: [587.33, 783.99],
+      noteNames: 'D5 → G5 Camera Permission Prompt',
+      durationMs: isAppInBackground ? 250 : 200,
       gainScalar,
     };
   }
@@ -14662,6 +14686,293 @@ export const WORKSPACE_QR_SCAN_HIGH_FREQ_HZ: readonly [number, number] = [
   1046.5, 1318.51,
 ] as const;
 
+export const WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY =
+  'mr_stranger_qr_scanner_sound_settings_v1';
+
+export type WorkspaceQrSoundSettingKey =
+  | 'successfulScans'
+  | 'scanErrors'
+  | 'cameraPermissionRequests';
+
+export interface WorkspaceQrScannerSoundPreferences {
+  successfulScans: boolean;
+  scanErrors: boolean;
+  cameraPermissionRequests: boolean;
+}
+
+export const DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES: WorkspaceQrScannerSoundPreferences =
+  {
+    successfulScans: true,
+    scanErrors: true,
+    cameraPermissionRequests: true,
+  };
+
+export function normalizeWorkspaceQrScannerSoundPreferences(
+  raw?: unknown
+): WorkspaceQrScannerSoundPreferences {
+  let candidate: unknown = raw;
+  if (typeof candidate === 'string') {
+    const trimmed = candidate.trim();
+    if (trimmed) {
+      try {
+        candidate = JSON.parse(trimmed);
+      } catch {
+        candidate = null;
+      }
+    }
+  }
+  if (!candidate || typeof candidate !== 'object') {
+    return { ...DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES };
+  }
+  const obj = candidate as Partial<WorkspaceQrScannerSoundPreferences>;
+  return {
+    successfulScans:
+      typeof obj.successfulScans === 'boolean'
+        ? obj.successfulScans
+        : DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES.successfulScans,
+    scanErrors:
+      typeof obj.scanErrors === 'boolean'
+        ? obj.scanErrors
+        : DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES.scanErrors,
+    cameraPermissionRequests:
+      typeof obj.cameraPermissionRequests === 'boolean'
+        ? obj.cameraPermissionRequests
+        : DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES.cameraPermissionRequests,
+  };
+}
+
+export function toggleWorkspaceQrScannerSoundPreference(
+  current: WorkspaceQrScannerSoundPreferences | unknown,
+  key: WorkspaceQrSoundSettingKey,
+  explicitValue?: boolean
+): {
+  updatedPreferences: WorkspaceQrScannerSoundPreferences;
+  serializedJson: string;
+  toggledKey: WorkspaceQrSoundSettingKey;
+  nextValue: boolean;
+} {
+  const normalized = normalizeWorkspaceQrScannerSoundPreferences(current);
+  const nextValue =
+    typeof explicitValue === 'boolean' ? explicitValue : !normalized[key];
+  const updatedPreferences: WorkspaceQrScannerSoundPreferences = {
+    ...normalized,
+    [key]: nextValue,
+  };
+  return {
+    updatedPreferences,
+    serializedJson: JSON.stringify(updatedPreferences),
+    toggledKey: key,
+    nextValue,
+  };
+}
+
+export interface WorkspaceQrSoundSettingItemSpec {
+  key: WorkspaceQrSoundSettingKey;
+  label: string;
+  description: string;
+  toggleElementId: string;
+  toggleTestId: string;
+  chimeEventType: 'qr_scan_confirm' | 'qr_scan_error' | 'qr_camera_permission';
+  noteNames: string;
+  frequenciesHz: [number, number];
+  enabled: boolean;
+  statusText: 'On' | 'Off';
+  ariaLabel: string;
+}
+
+export interface WorkspaceQrSoundSettingsSectionSpec {
+  sectionElementId: 'workspace-header-qr-sound-settings-section';
+  sectionTestId: 'workspace-header-qr-sound-settings-section';
+  headingElementId: 'workspace-header-qr-sound-settings-heading';
+  headingTestId: 'workspace-header-qr-sound-settings-heading';
+  badgeElementId: 'workspace-header-qr-sound-settings-badge';
+  badgeTestId: 'workspace-header-qr-sound-settings-badge';
+  listElementId: 'workspace-header-qr-sound-settings-list';
+  listTestId: 'workspace-header-qr-sound-settings-list';
+  storageKey: typeof WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY;
+  heading: 'Scanner Sound Settings';
+  subtitle: 'Individual Audio Alerts';
+  enabledCount: number;
+  totalCount: 3;
+  statusBadgeLabel: string;
+  preferences: WorkspaceQrScannerSoundPreferences;
+  serializedPreferencesJson: string;
+  items: [
+    WorkspaceQrSoundSettingItemSpec,
+    WorkspaceQrSoundSettingItemSpec,
+    WorkspaceQrSoundSettingItemSpec,
+  ];
+}
+
+export function buildWorkspaceQrSoundSettingsSectionSpec(input?: {
+  preferences?: WorkspaceQrScannerSoundPreferences | unknown;
+  uiSoundPreferences?: UiSoundEffectPreferences | null;
+}): WorkspaceQrSoundSettingsSectionSpec {
+  const prefs = normalizeWorkspaceQrScannerSoundPreferences(input?.preferences);
+  const volumePercent = clampSoundVolumePercent(
+    input?.uiSoundPreferences?.volumePercent ??
+      DEFAULT_UI_SOUND_PREFERENCES.volumePercent
+  );
+  const confirmChime = getUiSoundChimeSpec(
+    'qr_scan_confirm',
+    false,
+    volumePercent
+  );
+  const errorChime = getUiSoundChimeSpec('qr_scan_error', false, volumePercent);
+  const permissionChime = getUiSoundChimeSpec(
+    'qr_camera_permission',
+    false,
+    volumePercent
+  );
+
+  const items: [
+    WorkspaceQrSoundSettingItemSpec,
+    WorkspaceQrSoundSettingItemSpec,
+    WorkspaceQrSoundSettingItemSpec,
+  ] = [
+    {
+      key: 'successfulScans',
+      label: 'Successful Scans',
+      description: 'High-frequency confirmation chime on QR match',
+      toggleElementId: 'workspace-header-qr-sound-toggle-successful-scans',
+      toggleTestId: 'workspace-header-qr-sound-toggle-successful-scans',
+      chimeEventType: 'qr_scan_confirm',
+      noteNames: confirmChime.noteNames,
+      frequenciesHz: confirmChime.frequenciesHz,
+      enabled: prefs.successfulScans,
+      statusText: prefs.successfulScans ? 'On' : 'Off',
+      ariaLabel: `Toggle sound for Successful Scans (${
+        prefs.successfulScans ? 'currently On' : 'currently Off'
+      })`,
+    },
+    {
+      key: 'scanErrors',
+      label: 'Scan Errors',
+      description: 'Alert tone when QR code is invalid or unreadable',
+      toggleElementId: 'workspace-header-qr-sound-toggle-scan-errors',
+      toggleTestId: 'workspace-header-qr-sound-toggle-scan-errors',
+      chimeEventType: 'qr_scan_error',
+      noteNames: errorChime.noteNames,
+      frequenciesHz: errorChime.frequenciesHz,
+      enabled: prefs.scanErrors,
+      statusText: prefs.scanErrors ? 'On' : 'Off',
+      ariaLabel: `Toggle sound for Scan Errors (${
+        prefs.scanErrors ? 'currently On' : 'currently Off'
+      })`,
+    },
+    {
+      key: 'cameraPermissionRequests',
+      label: 'Camera Permission Requests',
+      description: 'Prompt chime when requesting browser camera access',
+      toggleElementId: 'workspace-header-qr-sound-toggle-camera-permission',
+      toggleTestId: 'workspace-header-qr-sound-toggle-camera-permission',
+      chimeEventType: 'qr_camera_permission',
+      noteNames: permissionChime.noteNames,
+      frequenciesHz: permissionChime.frequenciesHz,
+      enabled: prefs.cameraPermissionRequests,
+      statusText: prefs.cameraPermissionRequests ? 'On' : 'Off',
+      ariaLabel: `Toggle sound for Camera Permission Requests (${
+        prefs.cameraPermissionRequests ? 'currently On' : 'currently Off'
+      })`,
+    },
+  ];
+
+  const enabledCount = items.filter((item) => item.enabled).length;
+
+  return {
+    sectionElementId: 'workspace-header-qr-sound-settings-section',
+    sectionTestId: 'workspace-header-qr-sound-settings-section',
+    headingElementId: 'workspace-header-qr-sound-settings-heading',
+    headingTestId: 'workspace-header-qr-sound-settings-heading',
+    badgeElementId: 'workspace-header-qr-sound-settings-badge',
+    badgeTestId: 'workspace-header-qr-sound-settings-badge',
+    listElementId: 'workspace-header-qr-sound-settings-list',
+    listTestId: 'workspace-header-qr-sound-settings-list',
+    storageKey: WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
+    heading: 'Scanner Sound Settings',
+    subtitle: 'Individual Audio Alerts',
+    enabledCount,
+    totalCount: 3,
+    statusBadgeLabel: `${enabledCount}/3 On`,
+    preferences: prefs,
+    serializedPreferencesJson: JSON.stringify(prefs),
+    items,
+  };
+}
+
+export interface WorkspaceQrScannerEventSoundResolution {
+  eventCategory: WorkspaceQrSoundSettingKey;
+  chimeType: 'qr_scan_confirm' | 'qr_scan_error' | 'qr_camera_permission';
+  shouldPlay: boolean;
+  isGlobalSoundEnabled: boolean;
+  isIndividualToggleEnabled: boolean;
+  chime: UiSoundChimeSpec;
+  frequenciesHz: [number, number];
+  noteNames: string;
+  volumePercent: number;
+  feedbackMessage: string;
+}
+
+export function resolveWorkspaceQrScannerEventSound(input: {
+  eventCategory: WorkspaceQrSoundSettingKey;
+  scannerSoundPreferences?: WorkspaceQrScannerSoundPreferences | unknown;
+  uiSoundPreferences?: UiSoundEffectPreferences | null;
+  roomCode?: string | null;
+  isAppInBackground?: boolean;
+}): WorkspaceQrScannerEventSoundResolution {
+  const uiPrefs = input.uiSoundPreferences ?? DEFAULT_UI_SOUND_PREFERENCES;
+  const scannerPrefs = normalizeWorkspaceQrScannerSoundPreferences(
+    input.scannerSoundPreferences
+  );
+  const volumePercent = clampSoundVolumePercent(uiPrefs.volumePercent);
+  const isGlobalSoundEnabled = Boolean(uiPrefs.enabled);
+  const isIndividualToggleEnabled = Boolean(scannerPrefs[input.eventCategory]);
+  const shouldPlay = isGlobalSoundEnabled && isIndividualToggleEnabled;
+  const roomCode = normalizeStudyRoomCode(input.roomCode || 'STUDY-GLOBAL');
+
+  const chimeType:
+    | 'qr_scan_confirm'
+    | 'qr_scan_error'
+    | 'qr_camera_permission' =
+    input.eventCategory === 'successfulScans'
+      ? 'qr_scan_confirm'
+      : input.eventCategory === 'scanErrors'
+        ? 'qr_scan_error'
+        : 'qr_camera_permission';
+
+  const chime = getUiSoundChimeSpec(
+    chimeType,
+    Boolean(input.isAppInBackground),
+    volumePercent
+  );
+
+  const feedbackMessage =
+    input.eventCategory === 'successfulScans'
+      ? shouldPlay
+        ? `High-frequency QR scan confirmation chime played for ${roomCode} (${chime.noteNames})`
+        : `QR scan detected for ${roomCode} (Successful Scans sound muted)`
+      : input.eventCategory === 'scanErrors'
+        ? shouldPlay
+          ? `QR scan error alert tone played (${chime.noteNames})`
+          : 'QR scan error detected (Scan Errors sound muted)'
+        : shouldPlay
+          ? `Camera permission request prompt chime played (${chime.noteNames})`
+          : 'Requesting camera access (Camera Permission Requests sound muted)';
+
+  return {
+    eventCategory: input.eventCategory,
+    chimeType,
+    shouldPlay,
+    isGlobalSoundEnabled,
+    isIndividualToggleEnabled,
+    chime,
+    frequenciesHz: chime.frequenciesHz,
+    noteNames: chime.noteNames,
+    volumePercent,
+    feedbackMessage,
+  };
+}
+
 export interface WorkspaceQrScanConfirmationChimeSpec {
   shouldPlay: boolean;
   chimeType: 'qr_scan_confirm';
@@ -14676,12 +14987,16 @@ export interface WorkspaceQrScanConfirmationChimeSpec {
 
 export function resolveWorkspaceQrScanConfirmationChime(input?: {
   preferences?: UiSoundEffectPreferences | null;
+  scannerSoundPreferences?: WorkspaceQrScannerSoundPreferences | unknown;
   roomCode?: string | null;
   isAppInBackground?: boolean;
 }): WorkspaceQrScanConfirmationChimeSpec {
   const prefs = input?.preferences ?? DEFAULT_UI_SOUND_PREFERENCES;
+  const scannerPrefs = normalizeWorkspaceQrScannerSoundPreferences(
+    input?.scannerSoundPreferences
+  );
   const volumePercent = clampSoundVolumePercent(prefs.volumePercent);
-  const shouldPlay = Boolean(prefs.enabled);
+  const shouldPlay = Boolean(prefs.enabled) && Boolean(scannerPrefs.successfulScans);
   const roomCode = normalizeStudyRoomCode(input?.roomCode || 'STUDY-GLOBAL');
   const chime = getUiSoundChimeSpec(
     'qr_scan_confirm',
@@ -14718,6 +15033,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   recentScans: WorkspaceQrRecentScansSpec;
   historySection: WorkspaceQrHistorySectionSpec;
   searchHistory: WorkspaceQrSearchHistorySpec;
+  soundSettingsSection: WorkspaceQrSoundSettingsSectionSpec;
   scanConfirmationChime: WorkspaceQrScanConfirmationChimeSpec;
   scanChimePlayedCount: number;
   popoverElementId: 'workspace-header-qr-popover';
@@ -14802,6 +15118,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   recentScans?: WorkspaceQrRecentScanEntry[] | null;
   isHistoryExpanded?: boolean;
   historySearchQuery?: string | null;
+  qrScannerSoundPreferences?: WorkspaceQrScannerSoundPreferences | unknown;
   uiSoundPreferences?: UiSoundEffectPreferences | null;
   scanChimePlayedCount?: number;
   generationCount?: number;
@@ -14849,8 +15166,13 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     recentScans: input?.recentScans ?? [],
     searchQuery: input?.historySearchQuery,
   });
+  const soundSettingsSection = buildWorkspaceQrSoundSettingsSectionSpec({
+    preferences: input?.qrScannerSoundPreferences,
+    uiSoundPreferences: input?.uiSoundPreferences,
+  });
   const scanConfirmationChime = resolveWorkspaceQrScanConfirmationChime({
     preferences: input?.uiSoundPreferences,
+    scannerSoundPreferences: input?.qrScannerSoundPreferences,
     roomCode: lastJoinedWorkspaceRoomCode || roomCode,
   });
 
@@ -14888,6 +15210,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     recentScans,
     historySection,
     searchHistory,
+    soundSettingsSection,
     scanConfirmationChime,
     scanChimePlayedCount,
     popoverElementId: 'workspace-header-qr-popover',

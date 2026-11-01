@@ -262,6 +262,12 @@ import {
   MAX_WORKSPACE_QR_SEARCH_HISTORY,
   filterWorkspaceQrSearchHistory,
   buildWorkspaceQrSearchHistorySpec,
+  WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
+  DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES,
+  normalizeWorkspaceQrScannerSoundPreferences,
+  toggleWorkspaceQrScannerSoundPreference,
+  buildWorkspaceQrSoundSettingsSectionSpec,
+  resolveWorkspaceQrScannerEventSound,
   WORKSPACE_QR_SCAN_HIGH_FREQ_HZ,
   resolveWorkspaceQrScanConfirmationChime,
 } from './rules.ts';
@@ -6643,5 +6649,88 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   assert.equal(metaWithSearchQuery.searchHistory.filteredCount, 1);
   assert.equal(metaWithSearchQuery.searchHistory.items[0].roomCode, 'STUDY-ROOM5');
   assert.equal(metaWithSearchQuery.searchHistory.items[0].joinLinkLabel, 'Join');
+
+  // 11. QR scanner popover sound settings section for toggling successfulScans, scanErrors, and cameraPermissionRequests persisted in localStorage
+  assert.equal(
+    WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
+    'mr_stranger_qr_scanner_sound_settings_v1'
+  );
+  assert.deepEqual(DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES, {
+    successfulScans: true,
+    scanErrors: true,
+    cameraPermissionRequests: true,
+  });
+
+  const defaultSoundSection = buildWorkspaceQrSoundSettingsSectionSpec();
+  assert.equal(
+    defaultSoundSection.sectionElementId,
+    'workspace-header-qr-sound-settings-section'
+  );
+  assert.equal(defaultSoundSection.heading, 'Scanner Sound Settings');
+  assert.equal(defaultSoundSection.enabledCount, 3);
+  assert.equal(defaultSoundSection.totalCount, 3);
+  assert.equal(defaultSoundSection.statusBadgeLabel, '3/3 On');
+  assert.deepEqual(
+    defaultSoundSection.items.map((item) => item.key),
+    ['successfulScans', 'scanErrors', 'cameraPermissionRequests']
+  );
+
+  // Toggle scanErrors off and cameraPermissionRequests off, persist and re-parse JSON
+  const toggledErrorOff = toggleWorkspaceQrScannerSoundPreference(
+    defaultSoundSection.preferences,
+    'scanErrors'
+  );
+  assert.equal(toggledErrorOff.nextValue, false);
+  assert.equal(toggledErrorOff.updatedPreferences.scanErrors, false);
+  assert.equal(toggledErrorOff.updatedPreferences.successfulScans, true);
+  assert.equal(toggledErrorOff.updatedPreferences.cameraPermissionRequests, true);
+
+  const toggledPermissionOff = toggleWorkspaceQrScannerSoundPreference(
+    toggledErrorOff.serializedJson,
+    'cameraPermissionRequests'
+  );
+  assert.equal(toggledPermissionOff.nextValue, false);
+  const reloadedPrefs = normalizeWorkspaceQrScannerSoundPreferences(
+    toggledPermissionOff.serializedJson
+  );
+  assert.deepEqual(reloadedPrefs, {
+    successfulScans: true,
+    scanErrors: false,
+    cameraPermissionRequests: false,
+  });
+
+  const customMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    qrScannerSoundPreferences: reloadedPrefs,
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(customMeta.soundSettingsSection.enabledCount, 1);
+  assert.equal(customMeta.soundSettingsSection.statusBadgeLabel, '1/3 On');
+  assert.equal(customMeta.soundSettingsSection.items[0].enabled, true);
+  assert.equal(customMeta.soundSettingsSection.items[1].enabled, false);
+  assert.equal(customMeta.soundSettingsSection.items[2].enabled, false);
+
+  // Verify resolveWorkspaceQrScannerEventSound respects each individual toggle
+  const successSound = resolveWorkspaceQrScannerEventSound({
+    eventCategory: 'successfulScans',
+    scannerSoundPreferences: reloadedPrefs,
+  });
+  assert.equal(successSound.shouldPlay, true);
+  assert.equal(successSound.chimeType, 'qr_scan_confirm');
+
+  const errorSoundMuted = resolveWorkspaceQrScannerEventSound({
+    eventCategory: 'scanErrors',
+    scannerSoundPreferences: reloadedPrefs,
+  });
+  assert.equal(errorSoundMuted.shouldPlay, false);
+  assert.equal(errorSoundMuted.chimeType, 'qr_scan_error');
+
+  const permissionSoundMuted = resolveWorkspaceQrScannerEventSound({
+    eventCategory: 'cameraPermissionRequests',
+    scannerSoundPreferences: reloadedPrefs,
+  });
+  assert.equal(permissionSoundMuted.shouldPlay, false);
+  assert.equal(permissionSoundMuted.chimeType, 'qr_camera_permission');
 });
 
