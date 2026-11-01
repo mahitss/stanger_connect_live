@@ -14239,6 +14239,8 @@ export interface WorkspaceQrRecentScanEntry {
   audienceFilter: OnlineDirectoryAudienceFilter;
   moodFilter: string;
   onlyInFocus: boolean;
+  isPinned?: boolean;
+  pinnedAtMs?: number;
 }
 
 export interface WorkspaceQrRecentScansSpec {
@@ -14282,6 +14284,13 @@ export function normalizeStoredWorkspaceQrRecentScans(
     const roomCode = normalizeStudyRoomCode(rawRoom || 'STUDY-GLOBAL');
     const workspaceUrl =
       rawUrl || `https://mrstranger.app/?room=${encodeURIComponent(roomCode)}`;
+    const isPinned = Boolean(rec.isPinned);
+    const pinnedAtMs =
+      isPinned &&
+      typeof rec.pinnedAtMs === 'number' &&
+      Number.isFinite(rec.pinnedAtMs)
+        ? Math.max(0, Math.floor(rec.pinnedAtMs))
+        : 0;
 
     parsedWithOrder.push({
       originalIndex: idx,
@@ -14308,11 +14317,25 @@ export function normalizeStoredWorkspaceQrRecentScans(
             ? rec.moodFilter.trim()
             : 'all',
         onlyInFocus: Boolean(rec.onlyInFocus),
+        isPinned,
+        pinnedAtMs,
       },
     });
   }
 
   parsedWithOrder.sort((a, b) => {
+    const aPinned = Boolean(a.entry.isPinned);
+    const bPinned = Boolean(b.entry.isPinned);
+    if (aPinned !== bPinned) {
+      return aPinned ? -1 : 1;
+    }
+    if (aPinned && bPinned) {
+      const aPinMs = a.entry.pinnedAtMs || 0;
+      const bPinMs = b.entry.pinnedAtMs || 0;
+      if (bPinMs !== aPinMs) {
+        return bPinMs - aPinMs;
+      }
+    }
     if (b.entry.scannedAtMs !== a.entry.scannedAtMs) {
       return b.entry.scannedAtMs - a.entry.scannedAtMs;
     }
@@ -14367,6 +14390,10 @@ export function recordWorkspaceQrRecentScan(
   const workspaceUrl =
     (scanned.workspaceUrl || '').trim() ||
     `https://mrstranger.app/?room=${encodeURIComponent(roomCode)}`;
+  const existingMatch = normalizedExisting.find(
+    (entry) => entry.roomCode === roomCode
+  );
+  const preservePinned = Boolean(existingMatch?.isPinned);
 
   const addedEntry: WorkspaceQrRecentScanEntry = {
     id: `qrscan_${roomCode.toLowerCase()}_${safeNow}`,
@@ -14378,6 +14405,8 @@ export function recordWorkspaceQrRecentScan(
     audienceFilter: scanned.audienceFilter,
     moodFilter: scanned.moodFilter || 'all',
     onlyInFocus: Boolean(scanned.onlyInFocus),
+    isPinned: preservePinned,
+    pinnedAtMs: preservePinned ? existingMatch?.pinnedAtMs || safeNow : 0,
   };
 
   const filtered = normalizedExisting.filter(
@@ -14533,10 +14562,115 @@ export function removeWorkspaceQrRecentScanEntry(
   };
 }
 
+export interface WorkspaceQrHistoryTogglePinItemResult {
+  updatedScans: WorkspaceQrRecentScanEntry[];
+  toggledEntry: WorkspaceQrRecentScanEntry | null;
+  isPinned: boolean;
+  pinnedCount: number;
+  pinnedRoomCodes: string[];
+  serializedJson: string;
+  feedbackMessage: string;
+}
+
+export function togglePinWorkspaceQrRecentScanEntry(
+  existing: WorkspaceQrRecentScanEntry[] | unknown,
+  targetEntryOrIdentifier:
+    | Pick<WorkspaceQrRecentScanEntry, 'id' | 'roomCode'>
+    | string
+    | null
+    | undefined,
+  nowMs = Date.now(),
+  maxItems = MAX_WORKSPACE_QR_RECENT_SCANS
+): WorkspaceQrHistoryTogglePinItemResult {
+  const cap = Math.max(1, Math.min(20, Math.floor(maxItems || 5)));
+  const normalizedExisting = normalizeStoredWorkspaceQrRecentScans(existing, cap);
+  const safeNow =
+    typeof nowMs === 'number' && Number.isFinite(nowMs)
+      ? Math.max(0, Math.floor(nowMs))
+      : Date.now();
+
+  if (!targetEntryOrIdentifier) {
+    const pinnedRoomCodes = normalizedExisting
+      .filter((entry) => Boolean(entry.isPinned))
+      .map((entry) => entry.roomCode);
+    return {
+      updatedScans: normalizedExisting,
+      toggledEntry: null,
+      isPinned: false,
+      pinnedCount: pinnedRoomCodes.length,
+      pinnedRoomCodes,
+      serializedJson: JSON.stringify(normalizedExisting),
+      feedbackMessage: 'No QR scanner history item specified for pinning',
+    };
+  }
+
+  const targetId =
+    typeof targetEntryOrIdentifier === 'string'
+      ? targetEntryOrIdentifier.trim()
+      : (targetEntryOrIdentifier.id || '').trim();
+  const rawRoomCode =
+    typeof targetEntryOrIdentifier === 'string'
+      ? targetEntryOrIdentifier.trim()
+      : (targetEntryOrIdentifier.roomCode || '').trim();
+  const normalizedTargetRoomCode = rawRoomCode
+    ? normalizeStudyRoomCode(rawRoomCode)
+    : '';
+
+  let toggledEntry: WorkspaceQrRecentScanEntry | null = null;
+  const modifiedList = normalizedExisting.map((entry) => {
+    const matchesById = Boolean(targetId) && entry.id === targetId;
+    const matchesByRoomCode =
+      Boolean(normalizedTargetRoomCode) &&
+      entry.roomCode === normalizedTargetRoomCode;
+    if ((matchesById || matchesByRoomCode) && !toggledEntry) {
+      const nextPinned = !Boolean(entry.isPinned);
+      const updatedEntry: WorkspaceQrRecentScanEntry = {
+        ...entry,
+        isPinned: nextPinned,
+        pinnedAtMs: nextPinned ? safeNow : 0,
+      };
+      toggledEntry = updatedEntry;
+      return updatedEntry;
+    }
+    return entry;
+  });
+
+  const updatedScans = normalizeStoredWorkspaceQrRecentScans(modifiedList, cap);
+  const resolvedToggled = toggledEntry
+    ? updatedScans.find(
+        (entry) =>
+          entry.roomCode ===
+          (toggledEntry as WorkspaceQrRecentScanEntry).roomCode
+      ) || toggledEntry
+    : null;
+  const isPinned = Boolean(resolvedToggled?.isPinned);
+  const pinnedRoomCodes = updatedScans
+    .filter((entry) => Boolean(entry.isPinned))
+    .map((entry) => entry.roomCode);
+  const displayRoomCode =
+    resolvedToggled?.roomCode || normalizedTargetRoomCode || 'STUDY-GLOBAL';
+
+  return {
+    updatedScans,
+    toggledEntry: resolvedToggled,
+    isPinned,
+    pinnedCount: pinnedRoomCodes.length,
+    pinnedRoomCodes,
+    serializedJson: JSON.stringify(updatedScans),
+    feedbackMessage: resolvedToggled
+      ? isPinned
+        ? `Pinned ${displayRoomCode} to top of QR Scanner Search History`
+        : `Unpinned ${displayRoomCode} from top of QR Scanner Search History`
+      : `Room ${displayRoomCode} was not found in QR Scanner Search History`,
+  };
+}
+
 export interface WorkspaceQrHistorySectionItemSpec
   extends WorkspaceQrRecentScanEntry {
   itemElementId: string;
   itemTestId: string;
+  pinButtonElementId: string;
+  pinButtonTestId: string;
   copyButtonElementId: string;
   copyButtonTestId: string;
   deleteButtonElementId: string;
@@ -14545,12 +14679,21 @@ export interface WorkspaceQrHistorySectionItemSpec
   joinLinkTestId: string;
   searchHistoryItemElementId: string;
   searchHistoryItemTestId: string;
+  searchHistoryPinButtonElementId: string;
+  searchHistoryPinButtonTestId: string;
   searchHistoryCopyButtonElementId: string;
   searchHistoryCopyButtonTestId: string;
   searchHistoryDeleteButtonElementId: string;
   searchHistoryDeleteButtonTestId: string;
   searchHistoryJoinLinkElementId: string;
   searchHistoryJoinLinkTestId: string;
+  isPinned: boolean;
+  pinnedAtMs: number;
+  pinButtonLabel: 'Pin' | 'Pinned';
+  pinActionLabel: 'Pin';
+  pinnedBadgeLabel: 'Pinned';
+  pinButtonAriaLabel: string;
+  pinButtonTitle: string;
   copyButtonLabel: 'Copy';
   copiedButtonLabel: 'Copied';
   copyPayload: string;
@@ -14593,6 +14736,10 @@ export interface WorkspaceQrSearchHistorySpec {
   searchPlaceholder: 'Filter scanned room codes...';
   searchAriaLabel: 'Filter scanned room codes in real-time';
   isRealTimeFiltering: true;
+  pinButtonLabel: 'Pin';
+  pinnedButtonLabel: 'Pinned';
+  pinnedCount: number;
+  pinnedRoomCodes: string[];
   copyButtonLabel: 'Copy';
   copiedButtonLabel: 'Copied';
   copiedRoomCode: string | null;
@@ -14665,16 +14812,24 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     rawQuery,
     cap
   );
+  const pinnedRoomCodes = savedEntries
+    .filter((entry) => Boolean(entry.isPinned))
+    .map((entry) => entry.roomCode);
 
   const items: WorkspaceQrSearchHistoryItemSpec[] = filteredEntries.map(
     (entry, idx) => {
+      const isPinned = Boolean(entry.isPinned);
       const isCopied =
         Boolean(normalizedCopiedRoomCode) &&
         normalizedCopiedRoomCode === entry.roomCode;
       return {
         ...entry,
+        isPinned,
+        pinnedAtMs: entry.pinnedAtMs || 0,
         itemElementId: `workspace-header-qr-history-item-${idx}`,
         itemTestId: `workspace-header-qr-history-item-${idx}`,
+        pinButtonElementId: `workspace-header-qr-history-pin-btn-${idx}`,
+        pinButtonTestId: `workspace-header-qr-history-pin-btn-${idx}`,
         copyButtonElementId: `workspace-header-qr-history-copy-btn-${idx}`,
         copyButtonTestId: `workspace-header-qr-history-copy-btn-${idx}`,
         deleteButtonElementId: `workspace-header-qr-history-delete-btn-${idx}`,
@@ -14683,12 +14838,23 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
         searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
         searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
+        searchHistoryPinButtonElementId: `workspace-header-qr-search-history-pin-btn-${idx}`,
+        searchHistoryPinButtonTestId: `workspace-header-qr-search-history-pin-btn-${idx}`,
         searchHistoryCopyButtonElementId: `workspace-header-qr-search-history-copy-btn-${idx}`,
         searchHistoryCopyButtonTestId: `workspace-header-qr-search-history-copy-btn-${idx}`,
         searchHistoryDeleteButtonElementId: `workspace-header-qr-search-history-delete-btn-${idx}`,
         searchHistoryDeleteButtonTestId: `workspace-header-qr-search-history-delete-btn-${idx}`,
         searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
         searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
+        pinButtonLabel: isPinned ? 'Pinned' : 'Pin',
+        pinActionLabel: 'Pin',
+        pinnedBadgeLabel: 'Pinned',
+        pinButtonAriaLabel: isPinned
+          ? `Unpin room ${entry.roomCode} from top of search history`
+          : `Pin room ${entry.roomCode} to top of search history`,
+        pinButtonTitle: isPinned
+          ? `Pinned to top — click to unpin ${entry.roomCode}`
+          : `Pin ${entry.roomCode} to top of Search History`,
         copyButtonLabel: 'Copy',
         copiedButtonLabel: 'Copied',
         copyPayload: entry.roomCode,
@@ -14737,6 +14903,10 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     searchPlaceholder: 'Filter scanned room codes...',
     searchAriaLabel: 'Filter scanned room codes in real-time',
     isRealTimeFiltering: true,
+    pinButtonLabel: 'Pin',
+    pinnedButtonLabel: 'Pinned',
+    pinnedCount: pinnedRoomCodes.length,
+    pinnedRoomCodes,
     copyButtonLabel: 'Copy',
     copiedButtonLabel: 'Copied',
     copiedRoomCode: normalizedCopiedRoomCode,
@@ -14793,6 +14963,10 @@ export interface WorkspaceQrHistorySectionSpec {
   filteredCount: number;
   totalSavedCount: number;
   filterStatusBadgeLabel: string;
+  pinButtonLabel: 'Pin';
+  pinnedButtonLabel: 'Pinned';
+  pinnedCount: number;
+  pinnedRoomCodes: string[];
   copyButtonLabel: 'Copy';
   copiedButtonLabel: 'Copied';
   copiedRoomCode: string | null;
@@ -14842,16 +15016,24 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
     ? normalizeStudyRoomCode(input?.copiedRoomCode || '')
     : null;
+  const pinnedRoomCodes = allSortedEntries
+    .filter((entry) => Boolean(entry.isPinned))
+    .map((entry) => entry.roomCode);
 
   const items: WorkspaceQrHistorySectionItemSpec[] = sortedEntries.map(
     (entry, idx) => {
+      const isPinned = Boolean(entry.isPinned);
       const isCopied =
         Boolean(normalizedCopiedRoomCode) &&
         normalizedCopiedRoomCode === entry.roomCode;
       return {
         ...entry,
+        isPinned,
+        pinnedAtMs: entry.pinnedAtMs || 0,
         itemElementId: `workspace-header-qr-history-item-${idx}`,
         itemTestId: `workspace-header-qr-history-item-${idx}`,
+        pinButtonElementId: `workspace-header-qr-history-pin-btn-${idx}`,
+        pinButtonTestId: `workspace-header-qr-history-pin-btn-${idx}`,
         copyButtonElementId: `workspace-header-qr-history-copy-btn-${idx}`,
         copyButtonTestId: `workspace-header-qr-history-copy-btn-${idx}`,
         deleteButtonElementId: `workspace-header-qr-history-delete-btn-${idx}`,
@@ -14860,12 +15042,23 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
         searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
         searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
+        searchHistoryPinButtonElementId: `workspace-header-qr-search-history-pin-btn-${idx}`,
+        searchHistoryPinButtonTestId: `workspace-header-qr-search-history-pin-btn-${idx}`,
         searchHistoryCopyButtonElementId: `workspace-header-qr-search-history-copy-btn-${idx}`,
         searchHistoryCopyButtonTestId: `workspace-header-qr-search-history-copy-btn-${idx}`,
         searchHistoryDeleteButtonElementId: `workspace-header-qr-search-history-delete-btn-${idx}`,
         searchHistoryDeleteButtonTestId: `workspace-header-qr-search-history-delete-btn-${idx}`,
         searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
         searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
+        pinButtonLabel: isPinned ? 'Pinned' : 'Pin',
+        pinActionLabel: 'Pin',
+        pinnedBadgeLabel: 'Pinned',
+        pinButtonAriaLabel: isPinned
+          ? `Unpin room ${entry.roomCode} from top of search history`
+          : `Pin room ${entry.roomCode} to top of search history`,
+        pinButtonTitle: isPinned
+          ? `Pinned to top — click to unpin ${entry.roomCode}`
+          : `Pin ${entry.roomCode} to top of Search History`,
         copyButtonLabel: 'Copy',
         copiedButtonLabel: 'Copied',
         copyPayload: entry.roomCode,
@@ -14920,6 +15113,10 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     filterStatusBadgeLabel: hasActiveSearchQuery
       ? `${items.length}/${allSortedEntries.length} match`
       : `${allSortedEntries.length}/${cap}`,
+    pinButtonLabel: 'Pin',
+    pinnedButtonLabel: 'Pinned',
+    pinnedCount: pinnedRoomCodes.length,
+    pinnedRoomCodes,
     copyButtonLabel: 'Copy',
     copiedButtonLabel: 'Copied',
     copiedRoomCode: normalizedCopiedRoomCode,

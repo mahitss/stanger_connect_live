@@ -62,6 +62,7 @@ import {
   QrCode,
   Download,
   Copy,
+  Pin,
 } from 'lucide-react';
 import {
   auth,
@@ -238,6 +239,7 @@ import {
   normalizeStoredWorkspaceQrRecentScans,
   recordWorkspaceQrRecentScan,
   removeWorkspaceQrRecentScanEntry,
+  togglePinWorkspaceQrRecentScanEntry,
   toggleWorkspaceQrHistorySectionExpanded,
   resolveWorkspaceQrScanConfirmationChime,
   WorkspaceHeaderQrCameraScanStatus,
@@ -4009,6 +4011,38 @@ export default function App() {
     });
   };
 
+  const handleTogglePinWorkspaceQrHistoryItem = (
+    entryOrIdentifier:
+      | Pick<WorkspaceQrRecentScanEntry, 'id' | 'roomCode'>
+      | string
+  ) => {
+    setRecentWorkspaceQrScans((prev) => {
+      const result = togglePinWorkspaceQrRecentScanEntry(
+        prev,
+        entryOrIdentifier,
+        Date.now(),
+        MAX_WORKSPACE_QR_SEARCH_HISTORY
+      );
+      try {
+        localStorage.setItem(
+          WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+          result.serializedJson
+        );
+        localStorage.setItem(
+          WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
+          result.serializedJson
+        );
+      } catch {
+        // ignore localStorage write error
+      }
+      if (uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+      setLastSoundFeedback(result.feedbackMessage);
+      return result.updatedScans;
+    });
+  };
+
   const handleSelectRecentWorkspaceQrScan = (entry: WorkspaceQrRecentScanEntry) => {
     handleApplyScannedWorkspaceQrPayload(entry.workspaceUrl || entry.roomCode);
   };
@@ -5649,7 +5683,7 @@ export default function App() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 6, scale: 0.96 }}
                       transition={{ duration: 0.18, ease: 'easeOut' }}
-                      className="absolute left-0 top-full mt-2 z-50 w-72 sm:w-80 max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
+                      className="absolute left-0 top-full mt-2 z-50 w-80 sm:w-[22.5rem] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-1">
@@ -6040,6 +6074,13 @@ export default function App() {
                                   workspaceHeaderQrMeta.historySection
                                     .copiedRoomCode || ''
                                 }
+                                data-pinned-count={String(
+                                  workspaceHeaderQrMeta.historySection
+                                    .pinnedCount
+                                )}
+                                data-pinned-rooms={workspaceHeaderQrMeta.historySection.pinnedRoomCodes.join(
+                                  ','
+                                )}
                                 className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[10px] font-mono font-semibold text-slate-600 dark:text-zinc-400"
                               >
                                 {workspaceHeaderQrMeta.historySection.countBadgeLabel}
@@ -6234,6 +6275,13 @@ export default function App() {
                                       workspaceHeaderQrMeta.searchHistory
                                         .filteredCount
                                     )}
+                                    data-pinned-count={String(
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .pinnedCount
+                                    )}
+                                    data-pinned-rooms={workspaceHeaderQrMeta.searchHistory.pinnedRoomCodes.join(
+                                      ','
+                                    )}
                                     className="space-y-1 max-h-52 overflow-y-auto pr-0.5"
                                   >
                                     {workspaceHeaderQrMeta.searchHistory.items.map(
@@ -6246,6 +6294,9 @@ export default function App() {
                                             scanItem.searchHistoryItemElementId
                                           }
                                           data-room-code={scanItem.roomCode}
+                                          data-pinned={
+                                            scanItem.isPinned ? 'true' : 'false'
+                                          }
                                           data-matched-query={
                                             scanItem.matchedQuery
                                           }
@@ -6258,13 +6309,20 @@ export default function App() {
                                           data-rank-order={String(
                                             scanItem.rankOrder
                                           )}
-                                          className="flex items-center justify-between gap-1.5 px-2 py-1.5 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-emerald-50/70 hover:border-emerald-500/40 dark:bg-[#050505] dark:hover:bg-emerald-950/30 dark:hover:border-emerald-500/40 transition-colors"
+                                          className={`flex items-center justify-between gap-2 px-2 py-1.5 rounded border transition-colors ${
+                                            scanItem.isPinned
+                                              ? 'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60 dark:border-amber-500/40 dark:bg-amber-950/20'
+                                              : 'border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-emerald-50/70 hover:border-emerald-500/40 dark:bg-[#050505] dark:hover:bg-emerald-950/30 dark:hover:border-emerald-500/40'
+                                          }`}
                                         >
                                           <button
                                             type="button"
                                             id={`workspace-header-qr-recent-scan-item-${idx}`}
                                             data-testid={`workspace-header-qr-recent-scan-item-${idx}`}
                                             data-room-code={scanItem.roomCode}
+                                            data-pinned={
+                                              scanItem.isPinned ? 'true' : 'false'
+                                            }
                                             data-workspace-url={
                                               scanItem.workspaceUrl
                                             }
@@ -6274,17 +6332,54 @@ export default function App() {
                                               )
                                             }
                                             aria-label={`Quick access to scanned room ${scanItem.roomCode}`}
-                                            className="min-w-0 flex-1 flex items-center gap-1.5 text-left"
+                                            title={scanItem.workspaceUrl}
+                                            className="min-w-0 flex-1 flex items-center gap-1 text-left"
                                           >
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[10px] font-mono font-bold text-emerald-700 dark:text-emerald-300 shrink-0">
+                                            <span
+                                              className={`inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border text-[10px] font-mono font-bold shrink-0 ${
+                                                scanItem.isPinned
+                                                  ? 'bg-amber-500/15 border-amber-500/40 text-amber-700 dark:text-amber-300'
+                                                  : 'bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                                              }`}
+                                            >
                                               {scanItem.roomCode}
-                                            </span>
-                                            <span className="text-[10px] font-mono text-slate-500 dark:text-zinc-400 truncate">
-                                              {scanItem.workspaceUrl}
                                             </span>
                                           </button>
 
                                           <div className="flex items-center gap-1 shrink-0">
+                                            <button
+                                              type="button"
+                                              id={scanItem.pinButtonElementId}
+                                              data-testid={scanItem.pinButtonTestId}
+                                              data-search-history-pin-btn-id={
+                                                scanItem.searchHistoryPinButtonElementId
+                                              }
+                                              data-room-code={scanItem.roomCode}
+                                              data-entry-id={scanItem.id}
+                                              data-pinned={
+                                                scanItem.isPinned ? 'true' : 'false'
+                                              }
+                                              aria-pressed={scanItem.isPinned}
+                                              aria-label={scanItem.pinButtonAriaLabel}
+                                              title={scanItem.pinButtonTitle}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleTogglePinWorkspaceQrHistoryItem(
+                                                  scanItem
+                                                );
+                                              }}
+                                              className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors shrink-0 ${
+                                                scanItem.isPinned
+                                                  ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300'
+                                                  : 'bg-white hover:bg-amber-50 border-slate-200 hover:border-amber-500/40 text-slate-600 hover:text-amber-600 dark:bg-zinc-900 dark:hover:bg-amber-950/30 dark:border-zinc-700 dark:hover:border-amber-500/40 dark:text-zinc-300 dark:hover:text-amber-300'
+                                              }`}
+                                            >
+                                              <Pin className="w-2.5 h-2.5 shrink-0" />
+                                              <span>
+                                                {scanItem.pinButtonLabel}
+                                              </span>
+                                            </button>
+
                                             <button
                                               type="button"
                                               id={scanItem.copyButtonElementId}
@@ -6305,7 +6400,7 @@ export default function App() {
                                                   scanItem
                                                 );
                                               }}
-                                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono font-semibold transition-colors shrink-0 ${
+                                              className={`inline-flex items-center gap-0.5 px-1 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors shrink-0 ${
                                                 scanItem.isCopied
                                                   ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
                                                   : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-emerald-600 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-emerald-400'
@@ -6347,7 +6442,7 @@ export default function App() {
                                                   scanItem
                                                 );
                                               }}
-                                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-slate-200 hover:border-rose-500/40 bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 dark:bg-zinc-900 dark:hover:bg-rose-950/40 dark:border-zinc-700 dark:hover:border-rose-500/40 dark:text-zinc-400 dark:hover:text-rose-400 text-[10px] font-mono font-semibold transition-colors shrink-0"
+                                              className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded border border-slate-200 hover:border-rose-500/40 bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 dark:bg-zinc-900 dark:hover:bg-rose-950/40 dark:border-zinc-700 dark:hover:border-rose-500/40 dark:text-zinc-400 dark:hover:text-rose-400 text-[9px] font-mono font-semibold transition-colors shrink-0"
                                             >
                                               <Trash2 className="w-2.5 h-2.5 shrink-0" />
                                               <span>
@@ -6370,7 +6465,7 @@ export default function App() {
                                                   scanItem
                                                 );
                                               }}
-                                              className="inline-flex items-center px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold transition-colors shrink-0"
+                                              className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-semibold transition-colors shrink-0"
                                             >
                                               {scanItem.joinLinkLabel}
                                             </a>

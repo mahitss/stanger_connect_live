@@ -256,6 +256,7 @@ import {
   sortWorkspaceQrScansByMostRecent,
   recordWorkspaceQrRecentScan,
   removeWorkspaceQrRecentScanEntry,
+  togglePinWorkspaceQrRecentScanEntry,
   buildWorkspaceQrRecentScansSpec,
   toggleWorkspaceQrHistorySectionExpanded,
   buildWorkspaceQrHistorySectionSpec,
@@ -6938,6 +6939,114 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   assert.deepEqual(metaWithRealtimeFilter.searchHistory.matchedRoomCodes, [
     'STUDY-ROOM4',
   ]);
+
+  // 15. 'Pin' icon button next to each room code item in the QR scanner history list ([data-testid='workspace-header-qr-recent-scans-count-badge'])
+  assert.equal(fullSearchHistorySpec.pinButtonLabel, 'Pin');
+  assert.equal(fullSearchHistorySpec.pinnedButtonLabel, 'Pinned');
+  assert.equal(fullSearchHistorySpec.pinnedCount, 0);
+  assert.deepEqual(fullSearchHistorySpec.pinnedRoomCodes, []);
+  for (let i = 0; i < fullSearchHistorySpec.items.length; i += 1) {
+    const item = fullSearchHistorySpec.items[i];
+    assert.equal(
+      item.pinButtonElementId,
+      `workspace-header-qr-history-pin-btn-${i}`
+    );
+    assert.equal(
+      item.pinButtonTestId,
+      `workspace-header-qr-history-pin-btn-${i}`
+    );
+    assert.equal(
+      item.searchHistoryPinButtonElementId,
+      `workspace-header-qr-search-history-pin-btn-${i}`
+    );
+    assert.equal(item.isPinned, false);
+    assert.equal(item.pinButtonLabel, 'Pin');
+    assert.equal(item.pinActionLabel, 'Pin');
+    assert.equal(item.pinnedBadgeLabel, 'Pinned');
+    assert.equal(
+      item.pinButtonAriaLabel,
+      `Pin room ${item.roomCode} to top of search history`
+    );
+    assert.equal(
+      item.pinButtonTitle,
+      `Pin ${item.roomCode} to top of Search History`
+    );
+  }
+
+  // Pin STUDY-ROOM2 (currently last in deletedMiddle.updatedScans) to the top of the search history
+  const pinnedRoom2 = togglePinWorkspaceQrRecentScanEntry(
+    deletedMiddle.updatedScans,
+    'STUDY-ROOM2',
+    1_760_000_020_000
+  );
+  assert.equal(pinnedRoom2.isPinned, true);
+  assert.equal(pinnedRoom2.pinnedCount, 1);
+  assert.deepEqual(pinnedRoom2.pinnedRoomCodes, ['STUDY-ROOM2']);
+  assert.equal(
+    pinnedRoom2.feedbackMessage,
+    'Pinned STUDY-ROOM2 to top of QR Scanner Search History'
+  );
+  assert.deepEqual(
+    pinnedRoom2.updatedScans.map((entry) => entry.roomCode),
+    ['STUDY-ROOM2', 'STUDY-ROOM3', 'STUDY-ROOM5', 'STUDY-ROOM4']
+  );
+  assert.equal(pinnedRoom2.updatedScans[0].isPinned, true);
+
+  // Pin STUDY-ROOM4 as well at a newer timestamp -> STUDY-ROOM4 moves to index 0, STUDY-ROOM2 at index 1
+  const pinnedRoom4 = togglePinWorkspaceQrRecentScanEntry(
+    pinnedRoom2.updatedScans,
+    'STUDY-ROOM4',
+    1_760_000_030_000
+  );
+  assert.equal(pinnedRoom4.isPinned, true);
+  assert.equal(pinnedRoom4.pinnedCount, 2);
+  assert.deepEqual(pinnedRoom4.pinnedRoomCodes, ['STUDY-ROOM4', 'STUDY-ROOM2']);
+  assert.deepEqual(
+    pinnedRoom4.updatedScans.map((entry) => entry.roomCode),
+    ['STUDY-ROOM4', 'STUDY-ROOM2', 'STUDY-ROOM3', 'STUDY-ROOM5']
+  );
+
+  const metaWithPinned = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    recentScans: pinnedRoom4.updatedScans,
+    isHistoryExpanded: true,
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(metaWithPinned.historySection.pinnedCount, 2);
+  assert.deepEqual(metaWithPinned.historySection.pinnedRoomCodes, [
+    'STUDY-ROOM4',
+    'STUDY-ROOM2',
+  ]);
+  assert.equal(metaWithPinned.searchHistory.items[0].roomCode, 'STUDY-ROOM4');
+  assert.equal(metaWithPinned.searchHistory.items[0].isPinned, true);
+  assert.equal(metaWithPinned.searchHistory.items[0].pinButtonLabel, 'Pinned');
+  assert.equal(
+    metaWithPinned.searchHistory.items[0].pinButtonAriaLabel,
+    'Unpin room STUDY-ROOM4 from top of search history'
+  );
+  assert.equal(metaWithPinned.searchHistory.items[2].roomCode, 'STUDY-ROOM3');
+  assert.equal(metaWithPinned.searchHistory.items[2].isPinned, false);
+  assert.equal(metaWithPinned.searchHistory.items[2].pinButtonLabel, 'Pin');
+
+  // Unpin STUDY-ROOM4 -> returns to its chronological position by scannedAtMs, while STUDY-ROOM2 remains at index 0
+  const unpinnedRoom4 = togglePinWorkspaceQrRecentScanEntry(
+    pinnedRoom4.updatedScans,
+    'STUDY-ROOM4',
+    1_760_000_040_000
+  );
+  assert.equal(unpinnedRoom4.isPinned, false);
+  assert.equal(unpinnedRoom4.pinnedCount, 1);
+  assert.deepEqual(unpinnedRoom4.pinnedRoomCodes, ['STUDY-ROOM2']);
+  assert.equal(
+    unpinnedRoom4.feedbackMessage,
+    'Unpinned STUDY-ROOM4 from top of QR Scanner Search History'
+  );
+  assert.deepEqual(
+    unpinnedRoom4.updatedScans.map((entry) => entry.roomCode),
+    ['STUDY-ROOM2', 'STUDY-ROOM3', 'STUDY-ROOM5', 'STUDY-ROOM4']
+  );
 });
+
 
 
