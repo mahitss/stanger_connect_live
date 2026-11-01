@@ -244,6 +244,8 @@ import {
   setWorkspaceQrRecentScanCategory,
   WorkspaceQrHistoryRoomCategory,
   WorkspaceQrHistoryCategoryFilter,
+  WorkspaceQrHistorySortOrder,
+  normalizeWorkspaceQrHistorySortOrder,
   toggleWorkspaceQrHistorySectionExpanded,
   resolveWorkspaceQrScanConfirmationChime,
   WorkspaceHeaderQrCameraScanStatus,
@@ -864,6 +866,8 @@ export default function App() {
     useState<string>('');
   const [workspaceHeaderQrHistoryCategoryFilter, setWorkspaceHeaderQrHistoryCategoryFilter] =
     useState<WorkspaceQrHistoryCategoryFilter>('all');
+  const [workspaceHeaderQrHistorySortOrder, setWorkspaceHeaderQrHistorySortOrder] =
+    useState<WorkspaceQrHistorySortOrder>('most_recent_desc');
   const [openQrHistoryCategoryPickerRoomCode, setOpenQrHistoryCategoryPickerRoomCode] =
     useState<string | null>(null);
   const [copiedQrHistoryRoomCode, setCopiedQrHistoryRoomCode] = useState<
@@ -3887,6 +3891,7 @@ export default function App() {
     isHistoryExpanded: isWorkspaceHeaderQrHistoryExpanded,
     historySearchQuery: workspaceHeaderQrHistorySearchQuery,
     historyCategoryFilter: workspaceHeaderQrHistoryCategoryFilter,
+    historySortOrder: workspaceHeaderQrHistorySortOrder,
     copiedHistoryRoomCode: copiedQrHistoryRoomCode,
     qrScannerSoundPreferences,
     uiSoundPreferences: uiSoundPrefs,
@@ -3936,6 +3941,7 @@ export default function App() {
     setRecentWorkspaceQrScans([]);
     setWorkspaceHeaderQrHistorySearchQuery('');
     setWorkspaceHeaderQrHistoryCategoryFilter('all');
+    setWorkspaceHeaderQrHistorySortOrder('most_recent_desc');
     setOpenQrHistoryCategoryPickerRoomCode(null);
     setCopiedQrHistoryRoomCode(null);
     if (qrHistoryCopyTimerRef.current !== null) {
@@ -6324,49 +6330,124 @@ export default function App() {
                                   )}
                                   role="group"
                                   aria-label="Filter QR History rooms by category"
-                                  className="flex flex-wrap items-center gap-1"
+                                  className="flex flex-wrap items-center justify-between gap-1.5"
                                 >
-                                  {workspaceHeaderQrMeta.searchHistory.categoryFilterChips.map(
-                                    (chip) => (
-                                      <button
-                                        key={chip.key}
-                                        type="button"
-                                        id={chip.elementId}
-                                        data-testid={chip.testId}
-                                        data-search-history-category-filter-id={
-                                          chip.searchHistoryElementId
-                                        }
-                                        data-category-filter={chip.key}
-                                        data-category-count={String(chip.count)}
-                                        data-active={
-                                          chip.isActive ? 'true' : 'false'
-                                        }
-                                        aria-pressed={chip.isActive}
-                                        aria-label={chip.ariaLabel}
-                                        onClick={() => {
-                                          setWorkspaceHeaderQrHistoryCategoryFilter(
-                                            chip.key
-                                          );
-                                          if (uiSoundPrefs.enabled) {
-                                            playSubtleUiChime(
-                                              'ui_chime',
-                                              uiSoundPrefs.volumePercent
-                                            );
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    {workspaceHeaderQrMeta.searchHistory.categoryFilterChips.map(
+                                      (chip) => (
+                                        <button
+                                          key={chip.key}
+                                          type="button"
+                                          id={chip.elementId}
+                                          data-testid={chip.testId}
+                                          data-search-history-category-filter-id={
+                                            chip.searchHistoryElementId
                                           }
-                                        }}
-                                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors ${
-                                          chip.isActive
-                                            ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
-                                            : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 dark:bg-zinc-900/70 dark:hover:bg-zinc-800 dark:border-zinc-800 dark:text-zinc-400'
-                                        }`}
-                                      >
-                                        <span>{chip.label}</span>
-                                        <span className="opacity-75">
-                                          ({chip.count})
-                                        </span>
-                                      </button>
-                                    )
-                                  )}
+                                          data-category-filter={chip.key}
+                                          data-category-count={String(chip.count)}
+                                          data-active={
+                                            chip.isActive ? 'true' : 'false'
+                                          }
+                                          aria-pressed={chip.isActive}
+                                          aria-label={chip.ariaLabel}
+                                          onClick={() => {
+                                            setWorkspaceHeaderQrHistoryCategoryFilter(
+                                              chip.key
+                                            );
+                                            if (uiSoundPrefs.enabled) {
+                                              playSubtleUiChime(
+                                                'ui_chime',
+                                                uiSoundPrefs.volumePercent
+                                              );
+                                            }
+                                          }}
+                                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors ${
+                                            chip.isActive
+                                              ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                                              : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 dark:bg-zinc-900/70 dark:hover:bg-zinc-800 dark:border-zinc-800 dark:text-zinc-400'
+                                          }`}
+                                        >
+                                          <span>{chip.label}</span>
+                                          <span className="opacity-75">
+                                            ({chip.count})
+                                          </span>
+                                        </button>
+                                      )
+                                    )}
+                                  </div>
+
+                                  <div className="inline-flex items-center gap-1 shrink-0">
+                                    <label
+                                      htmlFor={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .sortSelectElementId
+                                      }
+                                      className="text-[9px] font-mono font-semibold text-slate-500 dark:text-zinc-400"
+                                    >
+                                      Sort:
+                                    </label>
+                                    <select
+                                      id={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .sortSelectElementId
+                                      }
+                                      data-testid={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .sortSelectTestId
+                                      }
+                                      data-search-history-sort-select-id={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .searchHistorySortSelectElementId
+                                      }
+                                      data-sorted-by={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .sortOrder
+                                      }
+                                      data-sort-label={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .sortOrderLabel
+                                      }
+                                      aria-label={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .sortSelectAriaLabel
+                                      }
+                                      title={`Sort QR history: ${workspaceHeaderQrMeta.searchHistory.sortOrderLabel}`}
+                                      value={
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .sortOrder
+                                      }
+                                      onChange={(e) => {
+                                        const nextSortOrder =
+                                          normalizeWorkspaceQrHistorySortOrder(
+                                            e.target.value
+                                          );
+                                        setWorkspaceHeaderQrHistorySortOrder(
+                                          nextSortOrder
+                                        );
+                                        if (uiSoundPrefs.enabled) {
+                                          playSubtleUiChime(
+                                            'ui_chime',
+                                            uiSoundPrefs.volumePercent
+                                          );
+                                        }
+                                      }}
+                                      className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/80 text-[9px] font-mono font-semibold text-slate-700 dark:text-zinc-300 focus:outline-none focus:ring-1 focus:ring-emerald-500/50 cursor-pointer"
+                                    >
+                                      {workspaceHeaderQrMeta.searchHistory.sortOptions.map(
+                                        (sortOpt) => (
+                                          <option
+                                            key={sortOpt.value}
+                                            id={sortOpt.optionElementId}
+                                            data-testid={sortOpt.optionTestId}
+                                            value={sortOpt.value}
+                                            className="bg-white dark:bg-zinc-900 text-slate-800 dark:text-zinc-200"
+                                          >
+                                            {sortOpt.label}
+                                          </option>
+                                        )
+                                      )}
+                                    </select>
+                                  </div>
                                 </div>
 
                                 {workspaceHeaderQrMeta.searchHistory
@@ -6386,6 +6467,10 @@ export default function App() {
                                     }
                                     data-sorted-by={
                                       workspaceHeaderQrMeta.historySection.sortedBy
+                                    }
+                                    data-sort-label={
+                                      workspaceHeaderQrMeta.historySection
+                                        .sortOrderLabel
                                     }
                                     data-filter-query={
                                       workspaceHeaderQrMeta.searchHistory

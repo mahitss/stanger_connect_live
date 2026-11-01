@@ -254,6 +254,10 @@ import {
   MAX_WORKSPACE_QR_RECENT_SCANS,
   normalizeStoredWorkspaceQrRecentScans,
   sortWorkspaceQrScansByMostRecent,
+  WORKSPACE_QR_HISTORY_SORT_OPTIONS,
+  normalizeWorkspaceQrHistorySortOrder,
+  getWorkspaceQrHistorySortLabel,
+  sortWorkspaceQrHistoryItems,
   recordWorkspaceQrRecentScan,
   removeWorkspaceQrRecentScanEntry,
   togglePinWorkspaceQrRecentScanEntry,
@@ -7238,4 +7242,106 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   assert.deepEqual(metaWorkFilter.historySection.matchedRoomCodes, [
     'STUDY-ROOM2',
   ]);
+
+  // 17. QR History sorting dropdown ('Most Recent', 'Oldest', 'Alphabetical')
+  assert.equal(WORKSPACE_QR_HISTORY_SORT_OPTIONS.length, 3);
+  assert.equal(
+    normalizeWorkspaceQrHistorySortOrder('Most Recent'),
+    'most_recent_desc'
+  );
+  assert.equal(normalizeWorkspaceQrHistorySortOrder('Oldest'), 'oldest_asc');
+  assert.equal(
+    normalizeWorkspaceQrHistorySortOrder('Alphabetical'),
+    'alphabetical_asc'
+  );
+  assert.equal(
+    getWorkspaceQrHistorySortLabel('most_recent_desc'),
+    'Most Recent'
+  );
+  assert.equal(getWorkspaceQrHistorySortLabel('oldest_asc'), 'Oldest');
+  assert.equal(
+    getWorkspaceQrHistorySortLabel('alphabetical_asc'),
+    'Alphabetical'
+  );
+
+  // Default ('most_recent_desc') keeps pinned first (STUDY-ROOM2), then most recent unpinned (STUDY-ROOM5, STUDY-ROOM4, STUDY-ROOM3)
+  assert.equal(metaWorkFilter.searchHistory.sortOrder, 'most_recent_desc');
+  assert.equal(metaWorkFilter.searchHistory.sortOrderLabel, 'Most Recent');
+  assert.equal(
+    metaWorkFilter.searchHistory.sortSelectElementId,
+    'workspace-header-qr-history-sort-select'
+  );
+
+  // Sort by 'Oldest' ('oldest_asc') across all rooms
+  const metaOldestSort = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    recentScans: room5Casual.updatedScans,
+    isHistoryExpanded: true,
+    historySortOrder: 'oldest_asc',
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(metaOldestSort.searchHistory.sortOrder, 'oldest_asc');
+  assert.equal(metaOldestSort.searchHistory.sortOrderLabel, 'Oldest');
+  assert.equal(metaOldestSort.historySection.sortedBy, 'oldest_asc');
+  assert.equal(metaOldestSort.historySection.sortOrderLabel, 'Oldest');
+  assert.deepEqual(metaOldestSort.searchHistory.matchedRoomCodes, [
+    'STUDY-ROOM2',
+    'STUDY-ROOM4',
+    'STUDY-ROOM5',
+    'STUDY-ROOM3',
+  ]);
+
+  // Sort by 'Alphabetical' ('alphabetical_asc') with custom unsorted room codes
+  const alphaScans = [
+    {
+      roomCode: 'ZETA-ROOM',
+      workspaceUrl: 'http://localhost:3000/?room=ZETA-ROOM',
+      scannedAtMs: 500,
+    },
+    {
+      roomCode: 'ALPHA-ROOM',
+      workspaceUrl: 'http://localhost:3000/?room=ALPHA-ROOM',
+      scannedAtMs: 700,
+    },
+    {
+      roomCode: 'MANGO-ROOM',
+      workspaceUrl: 'http://localhost:3000/?room=MANGO-ROOM',
+      scannedAtMs: 600,
+      isPinned: true,
+      pinnedAtMs: 900,
+    },
+  ];
+  const sortedMostRecent = sortWorkspaceQrHistoryItems(
+    alphaScans,
+    'most_recent_desc'
+  );
+  assert.deepEqual(
+    sortedMostRecent.map((e) => e.roomCode),
+    ['MANGO-ROOM', 'ALPHA-ROOM', 'ZETA-ROOM']
+  );
+
+  const sortedOldest = sortWorkspaceQrHistoryItems(alphaScans, 'oldest_asc');
+  assert.deepEqual(
+    sortedOldest.map((e) => e.roomCode),
+    ['ZETA-ROOM', 'MANGO-ROOM', 'ALPHA-ROOM']
+  );
+
+  const metaAlphaSort = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=ALPHA-ROOM',
+    isOpen: true,
+    recentScans: alphaScans,
+    isHistoryExpanded: true,
+    historySortOrder: 'alphabetical_asc',
+    roomCode: 'ALPHA-ROOM',
+  });
+  assert.equal(metaAlphaSort.searchHistory.sortOrder, 'alphabetical_asc');
+  assert.equal(metaAlphaSort.searchHistory.sortOrderLabel, 'Alphabetical');
+  assert.equal(metaAlphaSort.historySection.sortedBy, 'alphabetical_asc');
+  assert.deepEqual(metaAlphaSort.searchHistory.matchedRoomCodes, [
+    'ALPHA-ROOM',
+    'MANGO-ROOM',
+    'ZETA-ROOM',
+  ]);
 });
+

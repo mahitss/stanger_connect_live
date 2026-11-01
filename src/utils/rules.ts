@@ -14382,6 +14382,112 @@ export interface WorkspaceQrHistoryCategoryFilterChipSpec {
   ariaLabel: string;
 }
 
+export type WorkspaceQrHistorySortOrder =
+  | 'most_recent_desc'
+  | 'oldest_asc'
+  | 'alphabetical_asc';
+
+export type WorkspaceQrHistorySortLabel =
+  | 'Most Recent'
+  | 'Oldest'
+  | 'Alphabetical';
+
+export interface WorkspaceQrHistorySortOptionSpec {
+  value: WorkspaceQrHistorySortOrder;
+  label: WorkspaceQrHistorySortLabel;
+  optionElementId: string;
+  optionTestId: string;
+  description: string;
+}
+
+export const WORKSPACE_QR_HISTORY_SORT_OPTIONS: readonly WorkspaceQrHistorySortOptionSpec[] =
+  [
+    {
+      value: 'most_recent_desc',
+      label: 'Most Recent',
+      optionElementId: 'workspace-header-qr-history-sort-option-most-recent',
+      optionTestId: 'workspace-header-qr-history-sort-option-most-recent',
+      description: 'Most recently scanned first',
+    },
+    {
+      value: 'oldest_asc',
+      label: 'Oldest',
+      optionElementId: 'workspace-header-qr-history-sort-option-oldest',
+      optionTestId: 'workspace-header-qr-history-sort-option-oldest',
+      description: 'Oldest scanned first',
+    },
+    {
+      value: 'alphabetical_asc',
+      label: 'Alphabetical',
+      optionElementId: 'workspace-header-qr-history-sort-option-alphabetical',
+      optionTestId: 'workspace-header-qr-history-sort-option-alphabetical',
+      description: 'Room code A to Z',
+    },
+  ] as const;
+
+export function normalizeWorkspaceQrHistorySortOrder(
+  raw?: unknown
+): WorkspaceQrHistorySortOrder {
+  const cleaned = typeof raw === 'string' ? raw.trim().toLowerCase() : '';
+  if (
+    cleaned === 'oldest_asc' ||
+    cleaned === 'oldest' ||
+    cleaned === 'oldest first'
+  ) {
+    return 'oldest_asc';
+  }
+  if (
+    cleaned === 'alphabetical_asc' ||
+    cleaned === 'alphabetical' ||
+    cleaned === 'alpha' ||
+    cleaned === 'a-z'
+  ) {
+    return 'alphabetical_asc';
+  }
+  return 'most_recent_desc';
+}
+
+export function getWorkspaceQrHistorySortLabel(
+  raw?: WorkspaceQrHistorySortOrder | string | null
+): WorkspaceQrHistorySortLabel {
+  const normalized = normalizeWorkspaceQrHistorySortOrder(raw);
+  if (normalized === 'oldest_asc') return 'Oldest';
+  if (normalized === 'alphabetical_asc') return 'Alphabetical';
+  return 'Most Recent';
+}
+
+export function sortWorkspaceQrHistoryItems(
+  entries: WorkspaceQrRecentScanEntry[] | unknown,
+  sortOrder?: WorkspaceQrHistorySortOrder | string | null,
+  maxItems = MAX_WORKSPACE_QR_SEARCH_HISTORY
+): WorkspaceQrRecentScanEntry[] {
+  const cap = Math.max(
+    1,
+    Math.min(20, Math.floor(maxItems || MAX_WORKSPACE_QR_SEARCH_HISTORY))
+  );
+  const normalizedEntries = normalizeStoredWorkspaceQrRecentScans(entries, cap);
+  const resolvedSort = normalizeWorkspaceQrHistorySortOrder(sortOrder);
+  if (resolvedSort === 'most_recent_desc') {
+    return normalizedEntries;
+  }
+  const cloned = [...normalizedEntries];
+  if (resolvedSort === 'oldest_asc') {
+    cloned.sort((a, b) => {
+      if (a.scannedAtMs !== b.scannedAtMs) {
+        return a.scannedAtMs - b.scannedAtMs;
+      }
+      return a.roomCode.localeCompare(b.roomCode);
+    });
+    return cloned;
+  }
+  cloned.sort((a, b) => {
+    const cmp = a.roomCode.localeCompare(b.roomCode);
+    if (cmp !== 0) return cmp;
+    return b.scannedAtMs - a.scannedAtMs;
+  });
+  return cloned;
+}
+
 export interface WorkspaceQrRecentScanEntry {
   id: string;
   roomCode: string;
@@ -15031,6 +15137,10 @@ export interface WorkspaceQrSearchHistorySpec {
   categoryFilterBarElementId: 'workspace-header-qr-history-category-filter-bar';
   categoryFilterBarTestId: 'workspace-header-qr-history-category-filter-bar';
   searchHistoryCategoryFilterBarElementId: 'workspace-header-qr-search-history-category-filter-bar';
+  sortSelectElementId: 'workspace-header-qr-history-sort-select';
+  sortSelectTestId: 'workspace-header-qr-history-sort-select';
+  searchHistorySortSelectElementId: 'workspace-header-qr-search-history-sort-select';
+  searchHistorySortSelectTestId: 'workspace-header-qr-search-history-sort-select';
   listElementId: 'workspace-header-qr-search-history-list';
   listTestId: 'workspace-header-qr-search-history-list';
   emptyStateElementId: 'workspace-header-qr-search-history-empty';
@@ -15040,6 +15150,11 @@ export interface WorkspaceQrSearchHistorySpec {
   heading: 'Search History';
   searchPlaceholder: 'Filter scanned room codes...';
   searchAriaLabel: 'Filter scanned room codes in real-time';
+  sortSelectAriaLabel: 'Sort QR scanner history list';
+  sortedBy: WorkspaceQrHistorySortOrder;
+  sortOrder: WorkspaceQrHistorySortOrder;
+  sortOrderLabel: WorkspaceQrHistorySortLabel;
+  sortOptions: readonly WorkspaceQrHistorySortOptionSpec[];
   isRealTimeFiltering: true;
   activeCategoryFilter: WorkspaceQrHistoryCategoryFilter;
   hasActiveCategoryFilter: boolean;
@@ -15075,7 +15190,8 @@ export function filterWorkspaceQrSearchHistory(
   entries: WorkspaceQrRecentScanEntry[] | unknown,
   searchQuery?: string | null,
   maxItems = MAX_WORKSPACE_QR_SEARCH_HISTORY,
-  categoryFilter: WorkspaceQrHistoryCategoryFilter | string | null = 'all'
+  categoryFilter: WorkspaceQrHistoryCategoryFilter | string | null = 'all',
+  sortOrder: WorkspaceQrHistorySortOrder | string | null = 'most_recent_desc'
 ): WorkspaceQrRecentScanEntry[] {
   const cap = Math.max(
     1,
@@ -15094,24 +15210,46 @@ export function filterWorkspaceQrSearchHistory(
         );
 
   const normalizedQuery = (searchQuery ?? '').trim().toLowerCase();
-  if (!normalizedQuery) {
-    return categoryFiltered;
+  const queryFiltered = !normalizedQuery
+    ? categoryFiltered
+    : (() => {
+        const compactQuery = normalizedQuery.replace(/[\s_-]+/g, '');
+        return categoryFiltered.filter((entry) => {
+          const roomLower = entry.roomCode.toLowerCase();
+          const compactRoom = roomLower.replace(/[\s_-]+/g, '');
+          const catLower = normalizeWorkspaceQrHistoryRoomCategory(
+            entry.category
+          ).toLowerCase();
+          return (
+            roomLower.includes(normalizedQuery) ||
+            (compactQuery.length > 0 && compactRoom.includes(compactQuery)) ||
+            entry.workspaceUrl.toLowerCase().includes(normalizedQuery) ||
+            entry.moodFilter.toLowerCase().includes(normalizedQuery) ||
+            catLower.includes(normalizedQuery)
+          );
+        });
+      })();
+
+  const resolvedSort = normalizeWorkspaceQrHistorySortOrder(sortOrder);
+  if (resolvedSort === 'most_recent_desc') {
+    return queryFiltered;
   }
-  const compactQuery = normalizedQuery.replace(/[\s_-]+/g, '');
-  return categoryFiltered.filter((entry) => {
-    const roomLower = entry.roomCode.toLowerCase();
-    const compactRoom = roomLower.replace(/[\s_-]+/g, '');
-    const catLower = normalizeWorkspaceQrHistoryRoomCategory(
-      entry.category
-    ).toLowerCase();
-    return (
-      roomLower.includes(normalizedQuery) ||
-      (compactQuery.length > 0 && compactRoom.includes(compactQuery)) ||
-      entry.workspaceUrl.toLowerCase().includes(normalizedQuery) ||
-      entry.moodFilter.toLowerCase().includes(normalizedQuery) ||
-      catLower.includes(normalizedQuery)
-    );
+  const sorted = [...queryFiltered];
+  if (resolvedSort === 'oldest_asc') {
+    sorted.sort((a, b) => {
+      if (a.scannedAtMs !== b.scannedAtMs) {
+        return a.scannedAtMs - b.scannedAtMs;
+      }
+      return a.roomCode.localeCompare(b.roomCode);
+    });
+    return sorted;
+  }
+  sorted.sort((a, b) => {
+    const cmp = a.roomCode.localeCompare(b.roomCode);
+    if (cmp !== 0) return cmp;
+    return b.scannedAtMs - a.scannedAtMs;
   });
+  return sorted;
 }
 
 function buildWorkspaceQrHistoryCategoryFilterChips(
@@ -15144,6 +15282,7 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   recentScans?: WorkspaceQrRecentScanEntry[] | unknown;
   searchQuery?: string | null;
   categoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
+  sortOrder?: WorkspaceQrHistorySortOrder | string | null;
   copiedRoomCode?: string | null;
   maxItems?: number;
 }): WorkspaceQrSearchHistorySpec {
@@ -15161,6 +15300,8 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     input?.categoryFilter
   );
   const hasActiveCategoryFilter = activeCategoryFilter !== 'all';
+  const sortOrder = normalizeWorkspaceQrHistorySortOrder(input?.sortOrder);
+  const sortOrderLabel = getWorkspaceQrHistorySortLabel(sortOrder);
   const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
     ? normalizeStudyRoomCode(input?.copiedRoomCode || '')
     : null;
@@ -15168,7 +15309,8 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     savedEntries,
     rawQuery,
     cap,
-    activeCategoryFilter
+    activeCategoryFilter,
+    sortOrder
   );
   const pinnedRoomCodes = savedEntries
     .filter((entry) => Boolean(entry.isPinned))
@@ -15297,6 +15439,12 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
       'workspace-header-qr-history-category-filter-bar',
     searchHistoryCategoryFilterBarElementId:
       'workspace-header-qr-search-history-category-filter-bar',
+    sortSelectElementId: 'workspace-header-qr-history-sort-select',
+    sortSelectTestId: 'workspace-header-qr-history-sort-select',
+    searchHistorySortSelectElementId:
+      'workspace-header-qr-search-history-sort-select',
+    searchHistorySortSelectTestId:
+      'workspace-header-qr-search-history-sort-select',
     listElementId: 'workspace-header-qr-search-history-list',
     listTestId: 'workspace-header-qr-search-history-list',
     emptyStateElementId: 'workspace-header-qr-search-history-empty',
@@ -15306,6 +15454,11 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     heading: 'Search History',
     searchPlaceholder: 'Filter scanned room codes...',
     searchAriaLabel: 'Filter scanned room codes in real-time',
+    sortSelectAriaLabel: 'Sort QR scanner history list',
+    sortedBy: sortOrder,
+    sortOrder,
+    sortOrderLabel,
+    sortOptions: WORKSPACE_QR_HISTORY_SORT_OPTIONS,
     isRealTimeFiltering: true,
     activeCategoryFilter,
     hasActiveCategoryFilter,
@@ -15361,6 +15514,8 @@ export interface WorkspaceQrHistorySectionSpec {
   filterCountBadgeTestId: 'workspace-header-qr-history-filter-count-badge';
   categoryFilterBarElementId: 'workspace-header-qr-history-category-filter-bar';
   categoryFilterBarTestId: 'workspace-header-qr-history-category-filter-bar';
+  sortSelectElementId: 'workspace-header-qr-history-sort-select';
+  sortSelectTestId: 'workspace-header-qr-history-sort-select';
   panelElementId: 'workspace-header-qr-history-panel';
   panelTestId: 'workspace-header-qr-history-panel';
   listElementId: 'workspace-header-qr-history-list';
@@ -15373,6 +15528,7 @@ export interface WorkspaceQrHistorySectionSpec {
   subtitle: 'Search History';
   searchPlaceholder: 'Filter scanned room codes...';
   searchAriaLabel: 'Filter scanned room codes in real-time';
+  sortSelectAriaLabel: 'Sort QR scanner history list';
   isRealTimeFiltering: true;
   searchQuery: string;
   hasActiveSearchQuery: boolean;
@@ -15396,7 +15552,10 @@ export interface WorkspaceQrHistorySectionSpec {
   isCollapsible: true;
   isExpanded: boolean;
   toggleAriaLabel: string;
-  sortedBy: 'most_recent_desc';
+  sortedBy: WorkspaceQrHistorySortOrder;
+  sortOrder: WorkspaceQrHistorySortOrder;
+  sortOrderLabel: WorkspaceQrHistorySortLabel;
+  sortOptions: readonly WorkspaceQrHistorySortOptionSpec[];
   maxItems: number;
   countBadgeLabel: string;
   emptyMessage: string;
@@ -15416,6 +15575,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   isExpanded?: boolean;
   searchQuery?: string | null;
   categoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
+  sortOrder?: WorkspaceQrHistorySortOrder | string | null;
   copiedRoomCode?: string | null;
   maxItems?: number;
 }): WorkspaceQrHistorySectionSpec {
@@ -15433,11 +15593,14 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     input?.categoryFilter
   );
   const hasActiveCategoryFilter = activeCategoryFilter !== 'all';
+  const sortOrder = normalizeWorkspaceQrHistorySortOrder(input?.sortOrder);
+  const sortOrderLabel = getWorkspaceQrHistorySortLabel(sortOrder);
   const sortedEntries = filterWorkspaceQrSearchHistory(
     allSortedEntries,
     rawQuery,
     cap,
-    activeCategoryFilter
+    activeCategoryFilter,
+    sortOrder
   );
   const isExpanded = input?.isExpanded ?? true;
   const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
@@ -15564,6 +15727,8 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
       'workspace-header-qr-history-category-filter-bar',
     categoryFilterBarTestId:
       'workspace-header-qr-history-category-filter-bar',
+    sortSelectElementId: 'workspace-header-qr-history-sort-select',
+    sortSelectTestId: 'workspace-header-qr-history-sort-select',
     panelElementId: 'workspace-header-qr-history-panel',
     panelTestId: 'workspace-header-qr-history-panel',
     listElementId: 'workspace-header-qr-history-list',
@@ -15576,6 +15741,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     subtitle: 'Search History',
     searchPlaceholder: 'Filter scanned room codes...',
     searchAriaLabel: 'Filter scanned room codes in real-time',
+    sortSelectAriaLabel: 'Sort QR scanner history list',
     isRealTimeFiltering: true,
     searchQuery: rawQuery,
     hasActiveSearchQuery,
@@ -15603,7 +15769,10 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     toggleAriaLabel: isExpanded
       ? 'Collapse QR scanner History section'
       : 'Expand QR scanner History section',
-    sortedBy: 'most_recent_desc',
+    sortedBy: sortOrder,
+    sortOrder,
+    sortOrderLabel,
+    sortOptions: WORKSPACE_QR_HISTORY_SORT_OPTIONS,
     maxItems: cap,
     countBadgeLabel: `${allSortedEntries.length}/${cap}`,
     emptyMessage:
@@ -16051,6 +16220,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   isHistoryExpanded?: boolean;
   historySearchQuery?: string | null;
   historyCategoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
+  historySortOrder?: WorkspaceQrHistorySortOrder | string | null;
   copiedHistoryRoomCode?: string | null;
   qrScannerSoundPreferences?: WorkspaceQrScannerSoundPreferences | unknown;
   uiSoundPreferences?: UiSoundEffectPreferences | null;
@@ -16096,12 +16266,14 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     isExpanded: input?.isHistoryExpanded ?? true,
     searchQuery: input?.historySearchQuery,
     categoryFilter: input?.historyCategoryFilter,
+    sortOrder: input?.historySortOrder,
     copiedRoomCode: input?.copiedHistoryRoomCode,
   });
   const searchHistory = buildWorkspaceQrSearchHistorySpec({
     recentScans: input?.recentScans ?? [],
     searchQuery: input?.historySearchQuery,
     categoryFilter: input?.historyCategoryFilter,
+    sortOrder: input?.historySortOrder,
     copiedRoomCode: input?.copiedHistoryRoomCode,
   });
   const soundSettingsSection = buildWorkspaceQrSoundSettingsSectionSpec({
