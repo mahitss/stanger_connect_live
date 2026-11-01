@@ -61,6 +61,7 @@ import {
   Trash2,
   QrCode,
   Download,
+  Copy,
 } from 'lucide-react';
 import {
   auth,
@@ -224,6 +225,8 @@ import {
   MAX_WORKSPACE_QR_RECENT_SCANS,
   WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
   MAX_WORKSPACE_QR_SEARCH_HISTORY,
+  WORKSPACE_QR_HISTORY_COPY_FEEDBACK_DURATION_MS,
+  resolveWorkspaceQrHistoryCopyRoomCodeAction,
   WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
   WorkspaceQrSoundSettingKey,
   WorkspaceQrScannerSoundPreferences,
@@ -852,6 +855,10 @@ export default function App() {
     useState<boolean>(true);
   const [workspaceHeaderQrHistorySearchQuery, setWorkspaceHeaderQrHistorySearchQuery] =
     useState<string>('');
+  const [copiedQrHistoryRoomCode, setCopiedQrHistoryRoomCode] = useState<
+    string | null
+  >(null);
+  const qrHistoryCopyTimerRef = useRef<number | null>(null);
   const [qrScannerSoundPreferences, setQrScannerSoundPreferences] =
     useState<WorkspaceQrScannerSoundPreferences>(() => {
       try {
@@ -3868,6 +3875,7 @@ export default function App() {
     recentScans: recentWorkspaceQrScans,
     isHistoryExpanded: isWorkspaceHeaderQrHistoryExpanded,
     historySearchQuery: workspaceHeaderQrHistorySearchQuery,
+    copiedHistoryRoomCode: copiedQrHistoryRoomCode,
     qrScannerSoundPreferences,
     uiSoundPreferences: uiSoundPrefs,
     scanChimePlayedCount: workspaceHeaderQrScanChimeCount,
@@ -3915,12 +3923,52 @@ export default function App() {
   const handleClearRecentWorkspaceQrScans = () => {
     setRecentWorkspaceQrScans([]);
     setWorkspaceHeaderQrHistorySearchQuery('');
+    setCopiedQrHistoryRoomCode(null);
+    if (qrHistoryCopyTimerRef.current !== null) {
+      window.clearTimeout(qrHistoryCopyTimerRef.current);
+      qrHistoryCopyTimerRef.current = null;
+    }
     try {
       localStorage.setItem(WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY, '[]');
       localStorage.setItem(WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY, '[]');
     } catch {
       // ignore localStorage error
     }
+  };
+
+  const handleCopyWorkspaceQrHistoryRoomCode = async (
+    entry: Pick<WorkspaceQrRecentScanEntry, 'roomCode'> | string
+  ) => {
+    const action = resolveWorkspaceQrHistoryCopyRoomCodeAction(entry);
+    try {
+      if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(action.clipboardText);
+      } else if (typeof document !== 'undefined') {
+        const tempInput = document.createElement('textarea');
+        tempInput.value = action.clipboardText;
+        tempInput.style.position = 'fixed';
+        tempInput.style.opacity = '0';
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+      }
+    } catch {
+      // ignore clipboard restrictions in headless frames
+    }
+    setCopiedQrHistoryRoomCode(action.roomCode);
+    if (qrHistoryCopyTimerRef.current !== null) {
+      window.clearTimeout(qrHistoryCopyTimerRef.current);
+    }
+    qrHistoryCopyTimerRef.current = window.setTimeout(() => {
+      setCopiedQrHistoryRoomCode(null);
+      qrHistoryCopyTimerRef.current = null;
+    }, WORKSPACE_QR_HISTORY_COPY_FEEDBACK_DURATION_MS);
+
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+    setLastSoundFeedback(action.feedbackMessage);
   };
 
   const handleSelectRecentWorkspaceQrScan = (entry: WorkspaceQrRecentScanEntry) => {
@@ -5946,7 +5994,14 @@ export default function App() {
                                 · {workspaceHeaderQrMeta.searchHistory.heading}
                               </span>
                               <span
-                                data-testid="workspace-header-qr-recent-scans-count-badge"
+                                data-testid={
+                                  workspaceHeaderQrMeta.historySection
+                                    .countBadgeTestId
+                                }
+                                data-copied-room-code={
+                                  workspaceHeaderQrMeta.historySection
+                                    .copiedRoomCode || ''
+                                }
                                 className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[10px] font-mono font-semibold text-slate-600 dark:text-zinc-400"
                               >
                                 {workspaceHeaderQrMeta.historySection.countBadgeLabel}
@@ -6108,7 +6163,7 @@ export default function App() {
                                           data-rank-order={String(
                                             scanItem.rankOrder
                                           )}
-                                          className="flex items-center justify-between gap-2 px-2 py-1.5 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-emerald-50/70 hover:border-emerald-500/40 dark:bg-[#050505] dark:hover:bg-emerald-950/30 dark:hover:border-emerald-500/40 transition-colors"
+                                          className="flex items-center justify-between gap-1.5 px-2 py-1.5 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-emerald-50/70 hover:border-emerald-500/40 dark:bg-[#050505] dark:hover:bg-emerald-950/30 dark:hover:border-emerald-500/40 transition-colors"
                                         >
                                           <button
                                             type="button"
@@ -6134,25 +6189,70 @@ export default function App() {
                                             </span>
                                           </button>
 
-                                          <a
-                                            href={scanItem.joinLinkHref}
-                                            id={scanItem.joinLinkElementId}
-                                            data-testid={scanItem.joinLinkTestId}
-                                            data-search-history-join-link-id={
-                                              scanItem.searchHistoryJoinLinkElementId
-                                            }
-                                            data-room-code={scanItem.roomCode}
-                                            aria-label={scanItem.joinLinkAriaLabel}
-                                            onClick={(e) => {
-                                              e.preventDefault();
-                                              handleJoinWorkspaceQrHistoryRoom(
-                                                scanItem
-                                              );
-                                            }}
-                                            className="inline-flex items-center px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold transition-colors shrink-0"
-                                          >
-                                            {scanItem.joinLinkLabel}
-                                          </a>
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            <button
+                                              type="button"
+                                              id={scanItem.copyButtonElementId}
+                                              data-testid={scanItem.copyButtonTestId}
+                                              data-search-history-copy-btn-id={
+                                                scanItem.searchHistoryCopyButtonElementId
+                                              }
+                                              data-room-code={scanItem.roomCode}
+                                              data-copy-payload={scanItem.copyPayload}
+                                              data-copied={
+                                                scanItem.isCopied ? 'true' : 'false'
+                                              }
+                                              aria-label={scanItem.copyButtonAriaLabel}
+                                              title={scanItem.copyButtonTitle}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleCopyWorkspaceQrHistoryRoomCode(
+                                                  scanItem
+                                                );
+                                              }}
+                                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-mono font-semibold transition-colors shrink-0 ${
+                                                scanItem.isCopied
+                                                  ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                                                  : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-600 hover:text-emerald-600 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:border-zinc-700 dark:text-zinc-300 dark:hover:text-emerald-400'
+                                              }`}
+                                            >
+                                              {scanItem.isCopied ? (
+                                                <>
+                                                  <Check className="w-2.5 h-2.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                                                  <span>
+                                                    {scanItem.copiedButtonLabel}
+                                                  </span>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <Copy className="w-2.5 h-2.5 shrink-0" />
+                                                  <span>
+                                                    {scanItem.copyButtonLabel}
+                                                  </span>
+                                                </>
+                                              )}
+                                            </button>
+
+                                            <a
+                                              href={scanItem.joinLinkHref}
+                                              id={scanItem.joinLinkElementId}
+                                              data-testid={scanItem.joinLinkTestId}
+                                              data-search-history-join-link-id={
+                                                scanItem.searchHistoryJoinLinkElementId
+                                              }
+                                              data-room-code={scanItem.roomCode}
+                                              aria-label={scanItem.joinLinkAriaLabel}
+                                              onClick={(e) => {
+                                                e.preventDefault();
+                                                handleJoinWorkspaceQrHistoryRoom(
+                                                  scanItem
+                                                );
+                                              }}
+                                              className="inline-flex items-center px-2 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-semibold transition-colors shrink-0"
+                                            >
+                                              {scanItem.joinLinkLabel}
+                                            </a>
+                                          </div>
                                         </li>
                                       )
                                     )}

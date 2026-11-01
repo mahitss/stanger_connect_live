@@ -14427,17 +14427,57 @@ export function buildWorkspaceQrRecentScansSpec(
 export const WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY =
   'mr_stranger_qr_search_history_v1';
 export const MAX_WORKSPACE_QR_SEARCH_HISTORY = 5;
+export const WORKSPACE_QR_HISTORY_COPY_FEEDBACK_DURATION_MS = 2000;
+
+export interface WorkspaceQrHistoryCopyRoomCodeAction {
+  roomCode: string;
+  clipboardText: string;
+  isCopied: true;
+  feedbackDurationMs: number;
+  feedbackMessage: string;
+}
+
+export function resolveWorkspaceQrHistoryCopyRoomCodeAction(
+  entryOrRoomCode:
+    | Pick<WorkspaceQrRecentScanEntry, 'roomCode'>
+    | string
+    | null
+    | undefined
+): WorkspaceQrHistoryCopyRoomCodeAction {
+  const rawRoomCode =
+    typeof entryOrRoomCode === 'string'
+      ? entryOrRoomCode
+      : entryOrRoomCode?.roomCode || 'STUDY-GLOBAL';
+  const roomCode = normalizeStudyRoomCode(rawRoomCode || 'STUDY-GLOBAL');
+  return {
+    roomCode,
+    clipboardText: roomCode,
+    isCopied: true,
+    feedbackDurationMs: WORKSPACE_QR_HISTORY_COPY_FEEDBACK_DURATION_MS,
+    feedbackMessage: `Copied room code ${roomCode} to clipboard`,
+  };
+}
 
 export interface WorkspaceQrHistorySectionItemSpec
   extends WorkspaceQrRecentScanEntry {
   itemElementId: string;
   itemTestId: string;
+  copyButtonElementId: string;
+  copyButtonTestId: string;
   joinLinkElementId: string;
   joinLinkTestId: string;
   searchHistoryItemElementId: string;
   searchHistoryItemTestId: string;
+  searchHistoryCopyButtonElementId: string;
+  searchHistoryCopyButtonTestId: string;
   searchHistoryJoinLinkElementId: string;
   searchHistoryJoinLinkTestId: string;
+  copyButtonLabel: 'Copy';
+  copiedButtonLabel: 'Copied';
+  copyPayload: string;
+  isCopied: boolean;
+  copyButtonAriaLabel: string;
+  copyButtonTitle: string;
   joinLinkLabel: 'Join';
   joinLinkHref: string;
   joinLinkAriaLabel: string;
@@ -14452,6 +14492,7 @@ export interface WorkspaceQrSearchHistorySpec {
   sectionTestId: 'workspace-header-qr-search-history-section';
   headingElementId: 'workspace-header-qr-search-history-heading';
   headingTestId: 'workspace-header-qr-search-history-heading';
+  countBadgeTestId: 'workspace-header-qr-recent-scans-count-badge';
   searchInputElementId: 'workspace-header-qr-search-history-input';
   searchInputTestId: 'workspace-header-qr-search-history-input';
   clearSearchButtonElementId: 'workspace-header-qr-search-history-clear-query-btn';
@@ -14465,6 +14506,9 @@ export interface WorkspaceQrSearchHistorySpec {
   heading: 'Search History';
   searchPlaceholder: 'Search History (last 5 room codes)...';
   searchAriaLabel: 'Search History room codes';
+  copyButtonLabel: 'Copy';
+  copiedButtonLabel: 'Copied';
+  copiedRoomCode: string | null;
   joinLinkLabel: 'Join';
   maxItems: number;
   searchQuery: string;
@@ -14505,6 +14549,7 @@ export function filterWorkspaceQrSearchHistory(
 export function buildWorkspaceQrSearchHistorySpec(input?: {
   recentScans?: WorkspaceQrRecentScanEntry[] | unknown;
   searchQuery?: string | null;
+  copiedRoomCode?: string | null;
   maxItems?: number;
 }): WorkspaceQrSearchHistorySpec {
   const cap = Math.max(
@@ -14516,6 +14561,9 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     cap
   );
   const rawQuery = (input?.searchQuery ?? '').trim();
+  const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
+    ? normalizeStudyRoomCode(input?.copiedRoomCode || '')
+    : null;
   const filteredEntries = filterWorkspaceQrSearchHistory(
     savedEntries,
     rawQuery,
@@ -14523,21 +14571,40 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   );
 
   const items: WorkspaceQrSearchHistoryItemSpec[] = filteredEntries.map(
-    (entry, idx) => ({
-      ...entry,
-      itemElementId: `workspace-header-qr-history-item-${idx}`,
-      itemTestId: `workspace-header-qr-history-item-${idx}`,
-      joinLinkElementId: `workspace-header-qr-history-join-link-${idx}`,
-      joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
-      searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
-      searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
-      searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
-      searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
-      joinLinkLabel: 'Join',
-      joinLinkHref: entry.workspaceUrl,
-      joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
-      rankOrder: idx + 1,
-    })
+    (entry, idx) => {
+      const isCopied =
+        Boolean(normalizedCopiedRoomCode) &&
+        normalizedCopiedRoomCode === entry.roomCode;
+      return {
+        ...entry,
+        itemElementId: `workspace-header-qr-history-item-${idx}`,
+        itemTestId: `workspace-header-qr-history-item-${idx}`,
+        copyButtonElementId: `workspace-header-qr-history-copy-btn-${idx}`,
+        copyButtonTestId: `workspace-header-qr-history-copy-btn-${idx}`,
+        joinLinkElementId: `workspace-header-qr-history-join-link-${idx}`,
+        joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
+        searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
+        searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
+        searchHistoryCopyButtonElementId: `workspace-header-qr-search-history-copy-btn-${idx}`,
+        searchHistoryCopyButtonTestId: `workspace-header-qr-search-history-copy-btn-${idx}`,
+        searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
+        searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
+        copyButtonLabel: 'Copy',
+        copiedButtonLabel: 'Copied',
+        copyPayload: entry.roomCode,
+        isCopied,
+        copyButtonAriaLabel: isCopied
+          ? `Copied room code ${entry.roomCode} to clipboard`
+          : `Copy room code ${entry.roomCode} to clipboard`,
+        copyButtonTitle: isCopied
+          ? `Copied ${entry.roomCode}!`
+          : `Copy room code ${entry.roomCode}`,
+        joinLinkLabel: 'Join',
+        joinLinkHref: entry.workspaceUrl,
+        joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
+        rankOrder: idx + 1,
+      };
+    }
   );
 
   return {
@@ -14545,6 +14612,7 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     sectionTestId: 'workspace-header-qr-search-history-section',
     headingElementId: 'workspace-header-qr-search-history-heading',
     headingTestId: 'workspace-header-qr-search-history-heading',
+    countBadgeTestId: 'workspace-header-qr-recent-scans-count-badge',
     searchInputElementId: 'workspace-header-qr-search-history-input',
     searchInputTestId: 'workspace-header-qr-search-history-input',
     clearSearchButtonElementId:
@@ -14560,6 +14628,9 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     heading: 'Search History',
     searchPlaceholder: 'Search History (last 5 room codes)...',
     searchAriaLabel: 'Search History room codes',
+    copyButtonLabel: 'Copy',
+    copiedButtonLabel: 'Copied',
+    copiedRoomCode: normalizedCopiedRoomCode,
     joinLinkLabel: 'Join',
     maxItems: cap,
     searchQuery: rawQuery,
@@ -14584,6 +14655,7 @@ export interface WorkspaceQrHistorySectionSpec {
   sectionTestId: 'workspace-header-qr-history-section';
   toggleButtonElementId: 'workspace-header-qr-history-toggle-btn';
   toggleButtonTestId: 'workspace-header-qr-history-toggle-btn';
+  countBadgeTestId: 'workspace-header-qr-recent-scans-count-badge';
   panelElementId: 'workspace-header-qr-history-panel';
   panelTestId: 'workspace-header-qr-history-panel';
   listElementId: 'workspace-header-qr-history-list';
@@ -14594,6 +14666,9 @@ export interface WorkspaceQrHistorySectionSpec {
   clearButtonTestId: 'workspace-header-qr-history-clear-btn';
   heading: 'History';
   subtitle: 'Search History';
+  copyButtonLabel: 'Copy';
+  copiedButtonLabel: 'Copied';
+  copiedRoomCode: string | null;
   joinLinkLabel: 'Join';
   isCollapsible: true;
   isExpanded: boolean;
@@ -14616,6 +14691,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   recentScans?: WorkspaceQrRecentScanEntry[] | unknown;
   isExpanded?: boolean;
   searchQuery?: string | null;
+  copiedRoomCode?: string | null;
   maxItems?: number;
 }): WorkspaceQrHistorySectionSpec {
   const cap = Math.max(
@@ -14632,23 +14708,45 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     cap
   );
   const isExpanded = input?.isExpanded ?? true;
+  const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
+    ? normalizeStudyRoomCode(input?.copiedRoomCode || '')
+    : null;
 
   const items: WorkspaceQrHistorySectionItemSpec[] = sortedEntries.map(
-    (entry, idx) => ({
-      ...entry,
-      itemElementId: `workspace-header-qr-history-item-${idx}`,
-      itemTestId: `workspace-header-qr-history-item-${idx}`,
-      joinLinkElementId: `workspace-header-qr-history-join-link-${idx}`,
-      joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
-      searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
-      searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
-      searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
-      searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
-      joinLinkLabel: 'Join',
-      joinLinkHref: entry.workspaceUrl,
-      joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
-      rankOrder: idx + 1,
-    })
+    (entry, idx) => {
+      const isCopied =
+        Boolean(normalizedCopiedRoomCode) &&
+        normalizedCopiedRoomCode === entry.roomCode;
+      return {
+        ...entry,
+        itemElementId: `workspace-header-qr-history-item-${idx}`,
+        itemTestId: `workspace-header-qr-history-item-${idx}`,
+        copyButtonElementId: `workspace-header-qr-history-copy-btn-${idx}`,
+        copyButtonTestId: `workspace-header-qr-history-copy-btn-${idx}`,
+        joinLinkElementId: `workspace-header-qr-history-join-link-${idx}`,
+        joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
+        searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
+        searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
+        searchHistoryCopyButtonElementId: `workspace-header-qr-search-history-copy-btn-${idx}`,
+        searchHistoryCopyButtonTestId: `workspace-header-qr-search-history-copy-btn-${idx}`,
+        searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
+        searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
+        copyButtonLabel: 'Copy',
+        copiedButtonLabel: 'Copied',
+        copyPayload: entry.roomCode,
+        isCopied,
+        copyButtonAriaLabel: isCopied
+          ? `Copied room code ${entry.roomCode} to clipboard`
+          : `Copy room code ${entry.roomCode} to clipboard`,
+        copyButtonTitle: isCopied
+          ? `Copied ${entry.roomCode}!`
+          : `Copy room code ${entry.roomCode}`,
+        joinLinkLabel: 'Join',
+        joinLinkHref: entry.workspaceUrl,
+        joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
+        rankOrder: idx + 1,
+      };
+    }
   );
 
   return {
@@ -14656,6 +14754,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     sectionTestId: 'workspace-header-qr-history-section',
     toggleButtonElementId: 'workspace-header-qr-history-toggle-btn',
     toggleButtonTestId: 'workspace-header-qr-history-toggle-btn',
+    countBadgeTestId: 'workspace-header-qr-recent-scans-count-badge',
     panelElementId: 'workspace-header-qr-history-panel',
     panelTestId: 'workspace-header-qr-history-panel',
     listElementId: 'workspace-header-qr-history-list',
@@ -14666,6 +14765,9 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     clearButtonTestId: 'workspace-header-qr-history-clear-btn',
     heading: 'History',
     subtitle: 'Search History',
+    copyButtonLabel: 'Copy',
+    copiedButtonLabel: 'Copied',
+    copiedRoomCode: normalizedCopiedRoomCode,
     joinLinkLabel: 'Join',
     isCollapsible: true,
     isExpanded,
@@ -15118,6 +15220,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   recentScans?: WorkspaceQrRecentScanEntry[] | null;
   isHistoryExpanded?: boolean;
   historySearchQuery?: string | null;
+  copiedHistoryRoomCode?: string | null;
   qrScannerSoundPreferences?: WorkspaceQrScannerSoundPreferences | unknown;
   uiSoundPreferences?: UiSoundEffectPreferences | null;
   scanChimePlayedCount?: number;
@@ -15161,10 +15264,12 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     recentScans: input?.recentScans ?? [],
     isExpanded: input?.isHistoryExpanded ?? true,
     searchQuery: input?.historySearchQuery,
+    copiedRoomCode: input?.copiedHistoryRoomCode,
   });
   const searchHistory = buildWorkspaceQrSearchHistorySpec({
     recentScans: input?.recentScans ?? [],
     searchQuery: input?.historySearchQuery,
+    copiedRoomCode: input?.copiedHistoryRoomCode,
   });
   const soundSettingsSection = buildWorkspaceQrSoundSettingsSectionSpec({
     preferences: input?.qrScannerSoundPreferences,

@@ -260,6 +260,8 @@ import {
   buildWorkspaceQrHistorySectionSpec,
   WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
   MAX_WORKSPACE_QR_SEARCH_HISTORY,
+  WORKSPACE_QR_HISTORY_COPY_FEEDBACK_DURATION_MS,
+  resolveWorkspaceQrHistoryCopyRoomCodeAction,
   filterWorkspaceQrSearchHistory,
   buildWorkspaceQrSearchHistorySpec,
   WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
@@ -6732,5 +6734,74 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   });
   assert.equal(permissionSoundMuted.shouldPlay, false);
   assert.equal(permissionSoundMuted.chimeType, 'qr_camera_permission');
+
+  // 12. Copy icon button next to each room code item in the QR scanner history list ([data-testid='workspace-header-qr-recent-scans-count-badge'])
+  assert.equal(WORKSPACE_QR_HISTORY_COPY_FEEDBACK_DURATION_MS, 2000);
+  assert.equal(
+    fullSearchHistorySpec.countBadgeTestId,
+    'workspace-header-qr-recent-scans-count-badge'
+  );
+  assert.equal(fullSearchHistorySpec.copyButtonLabel, 'Copy');
+  assert.equal(fullSearchHistorySpec.copiedButtonLabel, 'Copied');
+  for (let i = 0; i < fullSearchHistorySpec.items.length; i += 1) {
+    const item = fullSearchHistorySpec.items[i];
+    assert.equal(
+      item.copyButtonElementId,
+      `workspace-header-qr-history-copy-btn-${i}`
+    );
+    assert.equal(
+      item.copyButtonTestId,
+      `workspace-header-qr-history-copy-btn-${i}`
+    );
+    assert.equal(
+      item.searchHistoryCopyButtonElementId,
+      `workspace-header-qr-search-history-copy-btn-${i}`
+    );
+    assert.equal(item.copyButtonLabel, 'Copy');
+    assert.equal(item.copiedButtonLabel, 'Copied');
+    assert.equal(item.copyPayload, item.roomCode);
+    assert.equal(item.isCopied, false);
+    assert.equal(
+      item.copyButtonAriaLabel,
+      `Copy room code ${item.roomCode} to clipboard`
+    );
+  }
+
+  const copyAction = resolveWorkspaceQrHistoryCopyRoomCodeAction(
+    fullSearchHistorySpec.items[1]
+  );
+  assert.equal(copyAction.roomCode, 'STUDY-ROOM6');
+  assert.equal(copyAction.clipboardText, 'STUDY-ROOM6');
+  assert.equal(copyAction.isCopied, true);
+  assert.equal(copyAction.feedbackDurationMs, 2000);
+  assert.equal(
+    copyAction.feedbackMessage,
+    'Copied room code STUDY-ROOM6 to clipboard'
+  );
+
+  const metaWithCopiedHistoryItem = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    recentScans: rescanned.updatedScans,
+    isHistoryExpanded: true,
+    copiedHistoryRoomCode: copyAction.roomCode,
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(
+    metaWithCopiedHistoryItem.historySection.copiedRoomCode,
+    'STUDY-ROOM6'
+  );
+  assert.equal(
+    metaWithCopiedHistoryItem.searchHistory.items[0].isCopied,
+    false
+  );
+  assert.equal(
+    metaWithCopiedHistoryItem.searchHistory.items[1].isCopied,
+    true
+  );
+  assert.equal(
+    metaWithCopiedHistoryItem.searchHistory.items[1].copyButtonAriaLabel,
+    'Copied room code STUDY-ROOM6 to clipboard'
+  );
 });
 
