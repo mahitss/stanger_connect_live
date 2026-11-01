@@ -255,6 +255,7 @@ import {
   normalizeStoredWorkspaceQrRecentScans,
   sortWorkspaceQrScansByMostRecent,
   recordWorkspaceQrRecentScan,
+  removeWorkspaceQrRecentScanEntry,
   buildWorkspaceQrRecentScansSpec,
   toggleWorkspaceQrHistorySectionExpanded,
   buildWorkspaceQrHistorySectionSpec,
@@ -6803,5 +6804,64 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     metaWithCopiedHistoryItem.searchHistory.items[1].copyButtonAriaLabel,
     'Copied room code STUDY-ROOM6 to clipboard'
   );
+
+  // 13. Delete button icon next to each room code item in the QR scanner history list to remove individual scanned records
+  assert.equal(fullSearchHistorySpec.deleteButtonLabel, 'Delete');
+  for (let i = 0; i < fullSearchHistorySpec.items.length; i += 1) {
+    const item = fullSearchHistorySpec.items[i];
+    assert.equal(
+      item.deleteButtonElementId,
+      `workspace-header-qr-history-delete-btn-${i}`
+    );
+    assert.equal(
+      item.deleteButtonTestId,
+      `workspace-header-qr-history-delete-btn-${i}`
+    );
+    assert.equal(
+      item.searchHistoryDeleteButtonElementId,
+      `workspace-header-qr-search-history-delete-btn-${i}`
+    );
+    assert.equal(item.deleteButtonLabel, 'Delete');
+    assert.equal(
+      item.deleteButtonAriaLabel,
+      `Delete scanned room ${item.roomCode} from search history`
+    );
+    assert.equal(
+      item.deleteButtonTitle,
+      `Remove ${item.roomCode} from Search History`
+    );
+  }
+
+  const deletedMiddle = removeWorkspaceQrRecentScanEntry(
+    rescanned.updatedScans,
+    fullSearchHistorySpec.items[1]
+  );
+  assert.equal(deletedMiddle.removedCount, 1);
+  assert.equal(deletedMiddle.removedEntry?.roomCode, 'STUDY-ROOM6');
+  assert.equal(
+    deletedMiddle.feedbackMessage,
+    'Removed STUDY-ROOM6 from QR Scanner Search History'
+  );
+  assert.deepEqual(
+    deletedMiddle.updatedScans.map((entry) => entry.roomCode),
+    ['STUDY-ROOM3', 'STUDY-ROOM5', 'STUDY-ROOM4', 'STUDY-ROOM2']
+  );
+
+  const metaAfterDelete = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=STUDY-ROOM3',
+    isOpen: true,
+    recentScans: deletedMiddle.updatedScans,
+    isHistoryExpanded: true,
+    roomCode: 'STUDY-ROOM3',
+  });
+  assert.equal(metaAfterDelete.historySection.countBadgeLabel, '4/5');
+  assert.equal(metaAfterDelete.searchHistory.totalSavedCount, 4);
+  assert.equal(metaAfterDelete.searchHistory.items.length, 4);
+  assert.deepEqual(metaAfterDelete.searchHistory.savedRoomCodes, [
+    'STUDY-ROOM3',
+    'STUDY-ROOM5',
+    'STUDY-ROOM4',
+    'STUDY-ROOM2',
+  ]);
 });
 

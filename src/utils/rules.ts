@@ -14458,18 +14458,97 @@ export function resolveWorkspaceQrHistoryCopyRoomCodeAction(
   };
 }
 
+export interface WorkspaceQrHistoryDeleteItemResult {
+  updatedScans: WorkspaceQrRecentScanEntry[];
+  removedEntry: WorkspaceQrRecentScanEntry | null;
+  removedCount: number;
+  serializedJson: string;
+  feedbackMessage: string;
+}
+
+export function removeWorkspaceQrRecentScanEntry(
+  existing: WorkspaceQrRecentScanEntry[] | unknown,
+  targetEntryOrIdentifier:
+    | Pick<WorkspaceQrRecentScanEntry, 'id' | 'roomCode'>
+    | string
+    | null
+    | undefined,
+  maxItems = MAX_WORKSPACE_QR_RECENT_SCANS
+): WorkspaceQrHistoryDeleteItemResult {
+  const cap = Math.max(1, Math.min(20, Math.floor(maxItems || 5)));
+  const normalizedExisting = normalizeStoredWorkspaceQrRecentScans(existing, cap);
+  if (!targetEntryOrIdentifier) {
+    return {
+      updatedScans: normalizedExisting,
+      removedEntry: null,
+      removedCount: 0,
+      serializedJson: JSON.stringify(normalizedExisting),
+      feedbackMessage: 'No QR scanner history item specified for deletion',
+    };
+  }
+
+  const targetId =
+    typeof targetEntryOrIdentifier === 'string'
+      ? targetEntryOrIdentifier.trim()
+      : (targetEntryOrIdentifier.id || '').trim();
+  const rawRoomCode =
+    typeof targetEntryOrIdentifier === 'string'
+      ? targetEntryOrIdentifier.trim()
+      : (targetEntryOrIdentifier.roomCode || '').trim();
+  const normalizedTargetRoomCode = rawRoomCode
+    ? normalizeStudyRoomCode(rawRoomCode)
+    : '';
+
+  let removedEntry: WorkspaceQrRecentScanEntry | null = null;
+  const remaining = normalizedExisting.filter((entry) => {
+    const matchesById = Boolean(targetId) && entry.id === targetId;
+    const matchesByRoomCode =
+      Boolean(normalizedTargetRoomCode) &&
+      entry.roomCode === normalizedTargetRoomCode;
+    if (matchesById || matchesByRoomCode) {
+      if (!removedEntry) {
+        removedEntry = entry;
+      }
+      return false;
+    }
+    return true;
+  });
+
+  const updatedScans = normalizeStoredWorkspaceQrRecentScans(remaining, cap);
+  const removedCount = normalizedExisting.length - updatedScans.length;
+  const displayRoomCode =
+    (removedEntry as WorkspaceQrRecentScanEntry | null)?.roomCode ||
+    normalizedTargetRoomCode ||
+    'STUDY-GLOBAL';
+
+  return {
+    updatedScans,
+    removedEntry,
+    removedCount,
+    serializedJson: JSON.stringify(updatedScans),
+    feedbackMessage:
+      removedCount > 0
+        ? `Removed ${displayRoomCode} from QR Scanner Search History`
+        : `Room ${displayRoomCode} was not found in QR Scanner Search History`,
+  };
+}
+
 export interface WorkspaceQrHistorySectionItemSpec
   extends WorkspaceQrRecentScanEntry {
   itemElementId: string;
   itemTestId: string;
   copyButtonElementId: string;
   copyButtonTestId: string;
+  deleteButtonElementId: string;
+  deleteButtonTestId: string;
   joinLinkElementId: string;
   joinLinkTestId: string;
   searchHistoryItemElementId: string;
   searchHistoryItemTestId: string;
   searchHistoryCopyButtonElementId: string;
   searchHistoryCopyButtonTestId: string;
+  searchHistoryDeleteButtonElementId: string;
+  searchHistoryDeleteButtonTestId: string;
   searchHistoryJoinLinkElementId: string;
   searchHistoryJoinLinkTestId: string;
   copyButtonLabel: 'Copy';
@@ -14478,6 +14557,9 @@ export interface WorkspaceQrHistorySectionItemSpec
   isCopied: boolean;
   copyButtonAriaLabel: string;
   copyButtonTitle: string;
+  deleteButtonLabel: 'Delete';
+  deleteButtonAriaLabel: string;
+  deleteButtonTitle: string;
   joinLinkLabel: 'Join';
   joinLinkHref: string;
   joinLinkAriaLabel: string;
@@ -14509,6 +14591,7 @@ export interface WorkspaceQrSearchHistorySpec {
   copyButtonLabel: 'Copy';
   copiedButtonLabel: 'Copied';
   copiedRoomCode: string | null;
+  deleteButtonLabel: 'Delete';
   joinLinkLabel: 'Join';
   maxItems: number;
   searchQuery: string;
@@ -14581,12 +14664,16 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         itemTestId: `workspace-header-qr-history-item-${idx}`,
         copyButtonElementId: `workspace-header-qr-history-copy-btn-${idx}`,
         copyButtonTestId: `workspace-header-qr-history-copy-btn-${idx}`,
+        deleteButtonElementId: `workspace-header-qr-history-delete-btn-${idx}`,
+        deleteButtonTestId: `workspace-header-qr-history-delete-btn-${idx}`,
         joinLinkElementId: `workspace-header-qr-history-join-link-${idx}`,
         joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
         searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
         searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
         searchHistoryCopyButtonElementId: `workspace-header-qr-search-history-copy-btn-${idx}`,
         searchHistoryCopyButtonTestId: `workspace-header-qr-search-history-copy-btn-${idx}`,
+        searchHistoryDeleteButtonElementId: `workspace-header-qr-search-history-delete-btn-${idx}`,
+        searchHistoryDeleteButtonTestId: `workspace-header-qr-search-history-delete-btn-${idx}`,
         searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
         searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
         copyButtonLabel: 'Copy',
@@ -14599,6 +14686,9 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         copyButtonTitle: isCopied
           ? `Copied ${entry.roomCode}!`
           : `Copy room code ${entry.roomCode}`,
+        deleteButtonLabel: 'Delete',
+        deleteButtonAriaLabel: `Delete scanned room ${entry.roomCode} from search history`,
+        deleteButtonTitle: `Remove ${entry.roomCode} from Search History`,
         joinLinkLabel: 'Join',
         joinLinkHref: entry.workspaceUrl,
         joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
@@ -14631,6 +14721,7 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     copyButtonLabel: 'Copy',
     copiedButtonLabel: 'Copied',
     copiedRoomCode: normalizedCopiedRoomCode,
+    deleteButtonLabel: 'Delete',
     joinLinkLabel: 'Join',
     maxItems: cap,
     searchQuery: rawQuery,
@@ -14669,6 +14760,7 @@ export interface WorkspaceQrHistorySectionSpec {
   copyButtonLabel: 'Copy';
   copiedButtonLabel: 'Copied';
   copiedRoomCode: string | null;
+  deleteButtonLabel: 'Delete';
   joinLinkLabel: 'Join';
   isCollapsible: true;
   isExpanded: boolean;
@@ -14723,12 +14815,16 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         itemTestId: `workspace-header-qr-history-item-${idx}`,
         copyButtonElementId: `workspace-header-qr-history-copy-btn-${idx}`,
         copyButtonTestId: `workspace-header-qr-history-copy-btn-${idx}`,
+        deleteButtonElementId: `workspace-header-qr-history-delete-btn-${idx}`,
+        deleteButtonTestId: `workspace-header-qr-history-delete-btn-${idx}`,
         joinLinkElementId: `workspace-header-qr-history-join-link-${idx}`,
         joinLinkTestId: `workspace-header-qr-history-join-link-${idx}`,
         searchHistoryItemElementId: `workspace-header-qr-search-history-item-${idx}`,
         searchHistoryItemTestId: `workspace-header-qr-search-history-item-${idx}`,
         searchHistoryCopyButtonElementId: `workspace-header-qr-search-history-copy-btn-${idx}`,
         searchHistoryCopyButtonTestId: `workspace-header-qr-search-history-copy-btn-${idx}`,
+        searchHistoryDeleteButtonElementId: `workspace-header-qr-search-history-delete-btn-${idx}`,
+        searchHistoryDeleteButtonTestId: `workspace-header-qr-search-history-delete-btn-${idx}`,
         searchHistoryJoinLinkElementId: `workspace-header-qr-search-history-join-link-${idx}`,
         searchHistoryJoinLinkTestId: `workspace-header-qr-search-history-join-link-${idx}`,
         copyButtonLabel: 'Copy',
@@ -14741,6 +14837,9 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         copyButtonTitle: isCopied
           ? `Copied ${entry.roomCode}!`
           : `Copy room code ${entry.roomCode}`,
+        deleteButtonLabel: 'Delete',
+        deleteButtonAriaLabel: `Delete scanned room ${entry.roomCode} from search history`,
+        deleteButtonTitle: `Remove ${entry.roomCode} from Search History`,
         joinLinkLabel: 'Join',
         joinLinkHref: entry.workspaceUrl,
         joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
@@ -14768,6 +14867,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     copyButtonLabel: 'Copy',
     copiedButtonLabel: 'Copied',
     copiedRoomCode: normalizedCopiedRoomCode,
+    deleteButtonLabel: 'Delete',
     joinLinkLabel: 'Join',
     isCollapsible: true,
     isExpanded,

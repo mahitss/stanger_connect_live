@@ -237,6 +237,7 @@ import {
   WorkspaceQrRecentScanEntry,
   normalizeStoredWorkspaceQrRecentScans,
   recordWorkspaceQrRecentScan,
+  removeWorkspaceQrRecentScanEntry,
   toggleWorkspaceQrHistorySectionExpanded,
   resolveWorkspaceQrScanConfirmationChime,
   WorkspaceHeaderQrCameraScanStatus,
@@ -3971,6 +3972,43 @@ export default function App() {
     setLastSoundFeedback(action.feedbackMessage);
   };
 
+  const handleDeleteWorkspaceQrHistoryItem = (
+    entryOrIdentifier:
+      | Pick<WorkspaceQrRecentScanEntry, 'id' | 'roomCode'>
+      | string
+  ) => {
+    setRecentWorkspaceQrScans((prev) => {
+      const result = removeWorkspaceQrRecentScanEntry(
+        prev,
+        entryOrIdentifier,
+        MAX_WORKSPACE_QR_SEARCH_HISTORY
+      );
+      try {
+        localStorage.setItem(
+          WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+          result.serializedJson
+        );
+        localStorage.setItem(
+          WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
+          result.serializedJson
+        );
+      } catch {
+        // ignore localStorage write error
+      }
+      if (
+        result.removedEntry &&
+        copiedQrHistoryRoomCode === result.removedEntry.roomCode
+      ) {
+        setCopiedQrHistoryRoomCode(null);
+      }
+      if (uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+      setLastSoundFeedback(result.feedbackMessage);
+      return result.updatedScans;
+    });
+  };
+
   const handleSelectRecentWorkspaceQrScan = (entry: WorkspaceQrRecentScanEntry) => {
     handleApplyScannedWorkspaceQrPayload(entry.workspaceUrl || entry.roomCode);
   };
@@ -6231,6 +6269,33 @@ export default function App() {
                                                   </span>
                                                 </>
                                               )}
+                                            </button>
+
+                                            <button
+                                              type="button"
+                                              id={scanItem.deleteButtonElementId}
+                                              data-testid={scanItem.deleteButtonTestId}
+                                              data-search-history-delete-btn-id={
+                                                scanItem.searchHistoryDeleteButtonElementId
+                                              }
+                                              data-room-code={scanItem.roomCode}
+                                              data-entry-id={scanItem.id}
+                                              aria-label={
+                                                scanItem.deleteButtonAriaLabel
+                                              }
+                                              title={scanItem.deleteButtonTitle}
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleDeleteWorkspaceQrHistoryItem(
+                                                  scanItem
+                                                );
+                                              }}
+                                              className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded border border-slate-200 hover:border-rose-500/40 bg-white hover:bg-rose-50 text-slate-500 hover:text-rose-600 dark:bg-zinc-900 dark:hover:bg-rose-950/40 dark:border-zinc-700 dark:hover:border-rose-500/40 dark:text-zinc-400 dark:hover:text-rose-400 text-[10px] font-mono font-semibold transition-colors shrink-0"
+                                            >
+                                              <Trash2 className="w-2.5 h-2.5 shrink-0" />
+                                              <span>
+                                                {scanItem.deleteButtonLabel}
+                                              </span>
                                             </button>
 
                                             <a
