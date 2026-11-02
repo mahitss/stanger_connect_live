@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { GlassArchitectureShowcase } from './components/GlassArchitectureShowcase';
 import {
   onAuthStateChanged,
   signInWithPopup,
@@ -381,6 +382,19 @@ export default function App() {
     initialRoomParam ? 'study' : initialMomentParam ? 'moments' : 'hub'
   );
 
+  const [isGlass3dLandingMode, setIsGlass3dLandingMode] = useState<boolean>(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (
+      params.get('room') ||
+      params.get('moment') ||
+      params.get('autostart') === '1' ||
+      params.get('view') === 'workspace'
+    ) {
+      return false;
+    }
+    return true;
+  });
+
   // Persistent Authenticated Account State (Auto-Set by default unless explicitly signed out)
   const [accountSession, setAccountSession] = useState<AccountIdentity | null>(() => {
     try {
@@ -399,6 +413,42 @@ export default function App() {
     }
     return initialAutoPreset.identity;
   });
+
+  useEffect(() => {
+    if (
+      !accountSession ||
+      accountSession.sessionToken ||
+      accountSession.email.toLowerCase() !== BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase()
+    ) {
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/auth/auto-session')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (cancelled || !data?.sessionToken) return;
+        setAccountSession((prev) => {
+          if (!prev) return prev;
+          const hydrated: AccountIdentity = {
+            ...prev,
+            sessionToken: String(data.sessionToken),
+            isAdmin: true,
+          };
+          try {
+            localStorage.setItem('mr_stranger_account_v2', JSON.stringify(hydrated));
+          } catch {
+            // ignore
+          }
+          return hydrated;
+        });
+      })
+      .catch(() => {
+        // ignore offline fallback
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountSession?.email, accountSession?.sessionToken]);
 
   // Persistent Streak Freeze Inventory & Missed-Day Protection State
   const [streakFreezeState, setStreakFreezeState] = useState<StreakFreezeInventoryState>(() => {
@@ -5664,6 +5714,35 @@ export default function App() {
   };
 
   // ==========================================================================
+  // 3D GLASSY CODEX ARCHITECTURE LANDING VIEW (DEFAULT FRONT BASE)
+  // ==========================================================================
+  if (isGlass3dLandingMode) {
+    return (
+      <GlassArchitectureShowcase
+        currentDisplayName={currentIdentity.displayName}
+        currentEmail={currentIdentity.email}
+        activeStudyRoomCode={activeStudyRoomCode}
+        dailyCompletedMinutes={dailyCompletedMinutes}
+        dailyTargetMinutes={dailyTargetMinutes}
+        streakCount={currentIdentity.streakCount}
+        participationPoints={currentIdentity.participationPoints}
+        recentQrScansCount={recentWorkspaceQrScans.length}
+        onEnterWorkspacePage={(targetPage, openQrScanner) => {
+          setActivePage(targetPage);
+          setIsGlass3dLandingMode(false);
+          if (openQrScanner) {
+            setIsWorkspaceHeaderQrOpen(true);
+          }
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        onQuickLogFocusSprint={() => {
+          handleQuickStartPomodoro();
+        }}
+      />
+    );
+  }
+
+  // ==========================================================================
   // MNC-LEVEL WORKSPACE CANVAS: SIDEBAR + VIEWPORT (Supports Dark & Light)
   // ==========================================================================
   return (
@@ -6083,6 +6162,18 @@ export default function App() {
 
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-mono tabular-nums">
             <div className="inline-flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="switch-to-3d-glass-landing-btn"
+                onClick={() => {
+                  setIsGlass3dLandingMode(true);
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-sky-400/50 bg-sky-500/15 text-sky-700 dark:text-sky-200 hover:bg-sky-500/25 text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0"
+              >
+                <BookOpen className="w-3.5 h-3.5 text-sky-500 dark:text-sky-300 shrink-0" />
+                <span>3D Glass Codex</span>
+              </button>
               <button
                 type="button"
                 id={workspaceHeaderShareMeta.buttonElementId}

@@ -321,6 +321,11 @@ import {
   AUTO_CONFIGURED_WORKSPACE_STORAGE_KEY,
   EXPLICIT_SIGNOUT_STORAGE_KEY,
   buildAutoConfiguredWorkspacePreset,
+  GLASS_ARCHITECTURAL_FLOORS,
+  evaluateRollingBookKinematics,
+  evaluateVerticalArchitectureScrollState,
+  buildInitialCharacterMessengerBubbles,
+  appendCharacterMessengerPing,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -8090,6 +8095,63 @@ test('Auto-Configured Workspace Preset provisions verified admin identity, 120m 
   assert.equal(preset.seededQrScans[0].isPinned, true);
   assert.ok(preset.statusLabel.includes('Auto-Set Active'));
 });
+
+test('3D Glassy Architecture & Rolling Book kinematics evaluate book roll up/down, 5-floor vertical scroll elevation, and animated phone messenger characters', () => {
+  assert.equal(GLASS_ARCHITECTURAL_FLOORS.length, 5);
+  assert.equal(GLASS_ARCHITECTURAL_FLOORS[0].character.name, 'Aria Chen');
+  assert.equal(GLASS_ARCHITECTURAL_FLOORS[4].character.name, 'Mahit Saxena');
+
+  const closedBook = evaluateRollingBookKinematics(0, 'idle');
+  assert.equal(closedBook.rollProgressPercent, 0);
+  assert.equal(closedBook.activeFloorIndex, 1);
+  assert.equal(closedBook.unfurledScrollLengthMeters, 0.45);
+  assert.ok(closedBook.bookStateLabel.includes('Rolled Up'));
+
+  const rollingDown = evaluateRollingBookKinematics(55, 'rolling_down');
+  assert.equal(rollingDown.rollProgressPercent, 55);
+  assert.equal(rollingDown.activeFloorIndex, 3);
+  assert.ok(rollingDown.bookStateLabel.includes('Rolling Down'));
+  assert.ok(rollingDown.upperRollerAngleRad > 0);
+  assert.ok(rollingDown.lowerRollerAngleRad < 0);
+
+  const rollingUp = evaluateRollingBookKinematics(25, 'rolling_up');
+  assert.equal(rollingUp.activeFloorIndex, 2);
+  assert.ok(rollingUp.bookStateLabel.includes('Rolling Up'));
+
+  const fullyUnfurled = evaluateRollingBookKinematics(100, 'rolling_down');
+  assert.equal(fullyUnfurled.activeFloorIndex, 5);
+  assert.equal(fullyUnfurled.unfurledScrollLengthMeters, 3.65);
+  assert.ok(fullyUnfurled.bookStateLabel.includes('Fully Rolled Down'));
+
+  const scrollTop = evaluateVerticalArchitectureScrollState(0, 0, 1.5);
+  assert.equal(scrollTop.cameraElevationY, 6);
+  assert.equal(scrollTop.activeFloor.floorIndex, 1);
+  assert.equal(scrollTop.characterElevatorOffsets.length, 5);
+  assert.equal(scrollTop.characterElevatorOffsets[0].isHighlighted, true);
+
+  const scrollBottom = evaluateVerticalArchitectureScrollState(1, 0.4, 3.2);
+  assert.equal(scrollBottom.cameraElevationY, -6);
+  assert.equal(scrollBottom.activeFloor.floorIndex, 5);
+  assert.equal(scrollBottom.bookKinematics.rollDirection, 'rolling_down');
+  assert.equal(scrollBottom.characterElevatorOffsets[4].isHighlighted, true);
+
+  const initialBubbles = buildInitialCharacterMessengerBubbles(1_762_000_000_000);
+  assert.equal(initialBubbles.length, 10);
+
+  const updatedBubbles = appendCharacterMessengerPing(
+    initialBubbles,
+    2,
+    'Live 3D Messenger test from Liam!',
+    1_762_000_050_000
+  );
+  assert.equal(updatedBubbles.length, 11);
+  assert.equal(updatedBubbles[updatedBubbles.length - 1].characterName, 'Liam Vance');
+  assert.equal(
+    updatedBubbles[updatedBubbles.length - 1].text,
+    'Live 3D Messenger test from Liam!'
+  );
+});
+
 
 
 

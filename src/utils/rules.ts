@@ -18895,5 +18895,421 @@ export function buildAutoConfiguredWorkspacePreset(options?: {
   };
 }
 
+// ============================================================================
+// 3D Glassy Architecture, Rolling Book Kinematics & Phone Messenger Characters
+// ============================================================================
+
+export type RollingBookDirection = 'rolling_down' | 'rolling_up' | 'idle';
+
+export interface CharacterMessengerBubble {
+  id: string;
+  floorIndex: number;
+  characterName: string;
+  characterHandle: string;
+  messengerApp: string;
+  text: string;
+  timestampLabel: string;
+  createdAtMs: number;
+}
+
+export interface GlassArchitecturalFloorSpec {
+  floorIndex: number;
+  floorCode: string;
+  tierLabel: string;
+  elevationY: number;
+  title: string;
+  bookChapterTitle: string;
+  whatTheAppDoes: string;
+  featureHighlights: string[];
+  targetWorkspacePage: 'hub' | 'study' | 'chat' | 'moments' | 'privacy';
+  accentHex: string;
+  glassTintRgba: string;
+  character: {
+    id: string;
+    name: string;
+    handle: string;
+    role: string;
+    messengerApp: string;
+    phoneModelLabel: string;
+    statusBadge: string;
+    defaultMessages: string[];
+    avatarAccentHex: string;
+  };
+}
+
+export const GLASS_ARCHITECTURAL_FLOORS: readonly GlassArchitecturalFloorSpec[] = [
+  {
+    floorIndex: 1,
+    floorCode: 'LEVEL 05 · PENTHOUSE SPIRE',
+    tierLabel: 'Top Base · Rolling Codex & Study Sanctuary',
+    elevationY: 6.0,
+    title: 'Silent Study Sanctuary & Rolling Codex (STUDY-204)',
+    bookChapterTitle: 'Chapter I · The Rolling Codex of Unbroken Focus',
+    whatTheAppDoes:
+      'As the 3D glass book rolls open from the front base, it unfurls live study rooms (STUDY-204), 120-minute daily focus targets, shared desk notes, and synchronized 25-minute Pomodoro sprints.',
+    featureHighlights: [
+      'Live Study Desks & Shared Room Notes',
+      '120m Daily Goal Ring & +25m Pomodoro Sprints',
+      '7-Day Streak Freeze Protection & Participation Leaderboard',
+    ],
+    targetWorkspacePage: 'study',
+    accentHex: '#38bdf8',
+    glassTintRgba: 'rgba(56, 189, 248, 0.14)',
+    character: {
+      id: 'char_aria_study',
+      name: 'Aria Chen',
+      handle: '@aria_deepwork',
+      role: 'Deep Work Architect',
+      messengerApp: 'Study Sanctuary Messenger',
+      phoneModelLabel: 'PrismPhone Glass Pro · 5G',
+      statusBadge: 'Texting in #STUDY-204',
+      defaultMessages: [
+        'Just rolled open Chapter I in STUDY-204 — locking in for a 25m Pomodoro sprint!',
+        '60/120 focus minutes logged today. Join our silent study desk!',
+      ],
+      avatarAccentHex: '#38bdf8',
+    },
+  },
+  {
+    floorIndex: 2,
+    floorCode: 'LEVEL 04 · SKY ATRIUM',
+    tierLabel: 'Upper Atrium · Invite-First Social Messenger',
+    elevationY: 3.0,
+    title: 'Invite-First Direct Messenger & WebRTC Audio/Video',
+    bookChapterTitle: 'Chapter II · Zero-Cold-Call Invite-First Connections',
+    whatTheAppDoes:
+      'Protects your focus with an invite-first handshake protocol: peers send a contextual connection note on their phone first, and only accepted connections unlock real-time WebSocket chat and WebRTC voice/video calls.',
+    featureHighlights: [
+      'Invite-First Handshake Gate (Zero Unsolicited DMs)',
+      'Real-Time WebSocket Chat with Read Receipts',
+      'Peer-to-Peer WebRTC Audio & Video Sanctuary Calls',
+    ],
+    targetWorkspacePage: 'chat',
+    accentHex: '#818cf8',
+    glassTintRgba: 'rgba(129, 140, 248, 0.14)',
+    character: {
+      id: 'char_liam_chat',
+      name: 'Liam Vance',
+      handle: '@liam_architect',
+      role: 'Distributed Systems Lead',
+      messengerApp: 'Invite-First Direct Messenger',
+      phoneModelLabel: 'PrismPhone Fold 3D',
+      statusBadge: 'Online on Messenger · Typing...',
+      defaultMessages: [
+        'Connection invite accepted! Direct encrypted WebSocket channel is now live.',
+        'Hopping on a quick 10-minute architecture review call after this sprint.',
+      ],
+      avatarAccentHex: '#818cf8',
+    },
+  },
+  {
+    floorIndex: 3,
+    floorCode: 'LEVEL 03 · PRISM CONCOURSE',
+    tierLabel: 'Mid-Tower · Moments & Townsquare X Feed',
+    elevationY: 0.0,
+    title: 'Visual Moments Gallery & Live Townsquare Social Feed',
+    bookChapterTitle: 'Chapter III · Visual Moments & Real-Time Townsquare',
+    whatTheAppDoes:
+      'Connects creators and scholars across a glassmorphic social feed where members post study desk snapshots, thread replies, bookmark deep-work insights, and filter peers by live mood.',
+    featureHighlights: [
+      'Photo Moments with Lightbox Zoom & Threaded Replies',
+      'Twitter / X Townsquare Channels, Likes, Retweets & Bookmarks',
+      'Live Mood Directory Filtering with Pinned Filter Chips',
+    ],
+    targetWorkspacePage: 'moments',
+    accentHex: '#c084fc',
+    glassTintRgba: 'rgba(192, 132, 252, 0.14)',
+    character: {
+      id: 'char_elena_social',
+      name: 'Elena Rostova',
+      handle: '@elena_rostova',
+      role: 'Creative Technologist',
+      messengerApp: 'Townsquare X & Moments App',
+      phoneModelLabel: 'PrismPhone Ultra Glass',
+      statusBadge: 'Posting to #DeepWork Feed',
+      defaultMessages: [
+        'Shared my dual-monitor glass desk setup on Moments — 42 likes already!',
+        'Filtering the directory by "Deep Focus 🎯" to find late-night builders.',
+      ],
+      avatarAccentHex: '#c084fc',
+    },
+  },
+  {
+    floorIndex: 4,
+    floorCode: 'LEVEL 02 · OPTICAL DECK',
+    tierLabel: 'Lower Concourse · 3D QR Scanner & Audio Studio',
+    elevationY: -3.0,
+    title: 'Optical QR Room Scanner, 7-Day Analytics & Chime Studio',
+    bookChapterTitle: 'Chapter IV · Instant Optical Room Handoff & Chimes',
+    whatTheAppDoes:
+      'Lets any phone or webcam scan room QR codes (STUDY-204, ARCH-LAB, LOUNGE-01) for instant workspace handoff, sort & export CSV scan history, inspect 7-day category frequency charts, and customize Web Audio chime volumes.',
+    featureHighlights: [
+      'Live Camera & Manual ISO/IEC 18004 QR Code Decoder',
+      'Real-Time Sort (Most Recent / Oldest / Alphabetical) & CSV Export',
+      '7-Day Category Frequency Chart & Custom Scan Sound Volume Slider',
+    ],
+    targetWorkspacePage: 'hub',
+    accentHex: '#34d399',
+    glassTintRgba: 'rgba(52, 211, 153, 0.14)',
+    character: {
+      id: 'char_noah_qr',
+      name: 'Noah Patel',
+      handle: '@noah_qr',
+      role: 'Spatial UX Engineer',
+      messengerApp: 'Optical QR & Chime Messenger',
+      phoneModelLabel: 'PrismPhone LiDAR Pro',
+      statusBadge: 'Scanning QR Code STUDY-204',
+      defaultMessages: [
+        'Scanned STUDY-204 QR badge from my phone camera in 140ms!',
+        'Exported our 7-day QR scan history CSV — Study category leads at 64%.',
+      ],
+      avatarAccentHex: '#34d399',
+    },
+  },
+  {
+    floorIndex: 5,
+    floorCode: 'LEVEL 01 · FOUNDATION VAULT',
+    tierLabel: 'Base Foundation · 16-Control Zero-Trust Security',
+    elevationY: -6.0,
+    title: 'Enterprise Zero-Trust Security Vault & Admin RBAC',
+    bookChapterTitle: 'Chapter V · Cryptographic Citadel & RBAC Firewall',
+    whatTheAppDoes:
+      'Anchors the entire 3D glass architecture on a hardened security foundation: scrypt password hashing, HMAC-SHA256 bearer sessions, XSS/SQLi/NoSQLi form sanitization, 3-tier rate limiting, and live RBAC admin auditing.',
+    featureHighlights: [
+      'scrypt (N=16384) Password KDF & HMAC-SHA256 Signed Sessions',
+      'Deep XSS / SQLi / NoSQLi / Prototype-Pollution Form Firewall',
+      '3-Tier Sliding-Window Rate Limiter & 16-Control Live Audit Probe',
+    ],
+    targetWorkspacePage: 'privacy',
+    accentHex: '#fbbf24',
+    glassTintRgba: 'rgba(251, 191, 36, 0.14)',
+    character: {
+      id: 'char_mahit_security',
+      name: 'Mahit Saxena',
+      handle: '@mahit_admin',
+      role: 'Principal Systems Architect',
+      messengerApp: 'Zero-Trust Command Messenger',
+      phoneModelLabel: 'PrismPhone Titan Vault',
+      statusBadge: 'Admin RBAC Verified · 100/100',
+      defaultMessages: [
+        'All 16 security controls verified: 0 leaked client keys, CSP & HSTS active.',
+        'Auto-configured workspace preset is live — scroll or click to enter any floor!',
+      ],
+      avatarAccentHex: '#fbbf24',
+    },
+  },
+];
+
+export interface RollingBookKinematics {
+  rollProgressPercent: number;
+  normalizedRoll: number;
+  rollDirection: RollingBookDirection;
+  unfurledScrollLengthMeters: number;
+  upperRollerAngleRad: number;
+  lowerRollerAngleRad: number;
+  pageCurlRadiusMeters: number;
+  spineTiltDegrees: number;
+  activeFloorIndex: number;
+  activeChapterTitle: string;
+  bookStateLabel: string;
+  glassRefractionIntensity: number;
+}
+
+export function evaluateRollingBookKinematics(
+  rawRollPercent: number,
+  rollDirection: RollingBookDirection = 'idle'
+): RollingBookKinematics {
+  const safePercent = Number.isFinite(rawRollPercent)
+    ? Math.max(0, Math.min(100, Math.round(rawRollPercent)))
+    : 0;
+  const normalizedRoll = safePercent / 100;
+
+  // Book scroll unfurls from 0.45m (tightly rolled up at top base) to 3.65m (fully rolled down)
+  const unfurledScrollLengthMeters = Number(
+    (0.45 + normalizedRoll * 3.2).toFixed(3)
+  );
+  // Axial rollers rotate up to 4 full turns (8 * PI radians) as the book rolls up and down
+  const upperRollerAngleRad = Number((normalizedRoll * Math.PI * 8).toFixed(3));
+  const lowerRollerAngleRad = Number((-normalizedRoll * Math.PI * 8).toFixed(3));
+  const pageCurlRadiusMeters = Number(
+    (0.38 - normalizedRoll * 0.22).toFixed(3)
+  );
+  const spineTiltDegrees = Number(
+    (-14 + Math.sin(normalizedRoll * Math.PI) * 22).toFixed(2)
+  );
+
+  const floorIdx = Math.min(
+    GLASS_ARCHITECTURAL_FLOORS.length,
+    Math.max(
+      1,
+      Math.floor(normalizedRoll * GLASS_ARCHITECTURAL_FLOORS.length) + 1
+    )
+  );
+  const adjustedFloorIdx =
+    safePercent >= 95 ? GLASS_ARCHITECTURAL_FLOORS.length : floorIdx;
+  const floorSpec =
+    GLASS_ARCHITECTURAL_FLOORS.find((f) => f.floorIndex === adjustedFloorIdx) ||
+    GLASS_ARCHITECTURAL_FLOORS[0];
+
+  let bookStateLabel = 'Rolled Up · Front Base Codex Ready';
+  if (safePercent >= 96) {
+    bookStateLabel = 'Fully Rolled Down · Complete 5-Floor Codex Open';
+  } else if (safePercent <= 4) {
+    bookStateLabel = 'Rolled Up · Front Base Codex Ready';
+  } else if (rollDirection === 'rolling_down') {
+    bookStateLabel = `Rolling Down (${safePercent}%) · Unfurling ${floorSpec.bookChapterTitle}`;
+  } else if (rollDirection === 'rolling_up') {
+    bookStateLabel = `Rolling Up (${safePercent}%) · Rewinding to ${floorSpec.bookChapterTitle}`;
+  } else {
+    bookStateLabel = `Book Unfurled ${safePercent}% · ${floorSpec.bookChapterTitle}`;
+  }
+
+  const glassRefractionIntensity = Number(
+    (0.72 + normalizedRoll * 0.24).toFixed(2)
+  );
+
+  return {
+    rollProgressPercent: safePercent,
+    normalizedRoll,
+    rollDirection,
+    unfurledScrollLengthMeters,
+    upperRollerAngleRad,
+    lowerRollerAngleRad,
+    pageCurlRadiusMeters,
+    spineTiltDegrees,
+    activeFloorIndex: floorSpec.floorIndex,
+    activeChapterTitle: floorSpec.bookChapterTitle,
+    bookStateLabel,
+    glassRefractionIntensity,
+  };
+}
+
+export interface VerticalArchitectureScrollState {
+  scrollRatio: number;
+  bookKinematics: RollingBookKinematics;
+  cameraElevationY: number;
+  activeFloor: GlassArchitecturalFloorSpec;
+  characterElevatorOffsets: Array<{
+    floorIndex: number;
+    characterId: string;
+    verticalOffsetMeters: number;
+    phoneTiltDegrees: number;
+    isHighlighted: boolean;
+  }>;
+}
+
+export function evaluateVerticalArchitectureScrollState(
+  rawScrollRatio: number,
+  previousScrollRatio = 0,
+  elapsedTimeSec = 0
+): VerticalArchitectureScrollState {
+  const safeRatio = Number.isFinite(rawScrollRatio)
+    ? Math.max(0, Math.min(1, rawScrollRatio))
+    : 0;
+  const prevRatio = Number.isFinite(previousScrollRatio)
+    ? Math.max(0, Math.min(1, previousScrollRatio))
+    : 0;
+  const delta = safeRatio - prevRatio;
+  const direction: RollingBookDirection =
+    delta > 0.005 ? 'rolling_down' : delta < -0.005 ? 'rolling_up' : 'idle';
+
+  const bookKinematics = evaluateRollingBookKinematics(
+    Math.round(safeRatio * 100),
+    direction
+  );
+
+  // Camera glides vertically from +6.0m (Top Spire) down to -6.0m (Foundation Vault)
+  const cameraElevationY = Number((6.0 - safeRatio * 12.0).toFixed(3));
+  const activeFloor =
+    GLASS_ARCHITECTURAL_FLOORS.find(
+      (f) => f.floorIndex === bookKinematics.activeFloorIndex
+    ) || GLASS_ARCHITECTURAL_FLOORS[0];
+
+  const t = Number.isFinite(elapsedTimeSec) ? elapsedTimeSec : 0;
+  const characterElevatorOffsets = GLASS_ARCHITECTURAL_FLOORS.map((floor) => {
+    const phase = floor.floorIndex * 1.15;
+    // Characters move up and down in their 3D glass elevator pods as you scroll and over time
+    const waveOffset = Math.sin(t * 1.8 + phase + safeRatio * Math.PI * 2) * 0.55;
+    const phoneTilt =
+      18 + Math.cos(t * 2.4 + phase) * 8 + (floor.floorIndex === activeFloor.floorIndex ? 6 : 0);
+    return {
+      floorIndex: floor.floorIndex,
+      characterId: floor.character.id,
+      verticalOffsetMeters: Number(waveOffset.toFixed(3)),
+      phoneTiltDegrees: Number(phoneTilt.toFixed(2)),
+      isHighlighted: floor.floorIndex === activeFloor.floorIndex,
+    };
+  });
+
+  return {
+    scrollRatio: Number(safeRatio.toFixed(4)),
+    bookKinematics,
+    cameraElevationY,
+    activeFloor,
+    characterElevatorOffsets,
+  };
+}
+
+export function buildInitialCharacterMessengerBubbles(
+  nowMs = Date.now()
+): CharacterMessengerBubble[] {
+  const bubbles: CharacterMessengerBubble[] = [];
+  for (const floor of GLASS_ARCHITECTURAL_FLOORS) {
+    floor.character.defaultMessages.forEach((msgText, idx) => {
+      bubbles.push({
+        id: `msg_${floor.character.id}_seed_${idx}`,
+        floorIndex: floor.floorIndex,
+        characterName: floor.character.name,
+        characterHandle: floor.character.handle,
+        messengerApp: floor.character.messengerApp,
+        text: msgText,
+        timestampLabel: idx === 0 ? '2m ago' : 'Just now',
+        createdAtMs: nowMs - (2 - idx) * 60_000,
+      });
+    });
+  }
+  return bubbles;
+}
+
+export function appendCharacterMessengerPing(
+  existingBubbles: CharacterMessengerBubble[],
+  floorIndex: number,
+  customMessage?: string,
+  nowMs = Date.now()
+): CharacterMessengerBubble[] {
+  const safeList = Array.isArray(existingBubbles) ? existingBubbles : [];
+  const floor =
+    GLASS_ARCHITECTURAL_FLOORS.find((f) => f.floorIndex === floorIndex) ||
+    GLASS_ARCHITECTURAL_FLOORS[0];
+
+  const fallbackResponses: Record<number, string> = {
+    1: 'Unfurled the 3D Study Codex on my phone — +25m Deep Work sprint synced to STUDY-204!',
+    2: 'Invite-First Messenger ping received! Encrypted WebSocket + WebRTC voice channel ready.',
+    3: 'New #DeepWork desk snapshot posted from my phone to the glass Townsquare feed!',
+    4: 'Scanned QR Room STUDY-204 via phone camera — 7-day scan analytics updated live!',
+    5: 'Zero-Trust Vault verified on mobile: 16/16 controls active, scrypt + HMAC-SHA256 locked.',
+  };
+
+  const rawText =
+    typeof customMessage === 'string' && customMessage.trim().length > 0
+      ? customMessage.trim()
+      : fallbackResponses[floor.floorIndex] || fallbackResponses[1];
+  const cleanText = sanitizeSafeText(rawText, 180);
+
+  const newBubble: CharacterMessengerBubble = {
+    id: `msg_${floor.character.id}_${nowMs}`,
+    floorIndex: floor.floorIndex,
+    characterName: floor.character.name,
+    characterHandle: floor.character.handle,
+    messengerApp: floor.character.messengerApp,
+    text: cleanText,
+    timestampLabel: 'Live now',
+    createdAtMs: nowMs,
+  };
+
+  return [...safeList, newBubble].slice(-25);
+}
+
+
 
 

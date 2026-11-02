@@ -315,10 +315,40 @@ async function startServer() {
     maxPayload: 64 * 1024, // 64KB max frame size
   });
 
-  // Authoritative server-side real-time state (Zero fake or mock records)
+  // Authoritative server-side real-time state (Pre-seeded with Bootstrapped Admin Preset)
   const accountsByEmail = new Map<string, StoredAccount>();
   const clients = new Map<string, { ws: WebSocket; peer: OnlinePeer }>();
   const studyDesks = new Map<string, StudyDesk>();
+
+  const defaultAdminSalt = crypto.randomBytes(32).toString('hex');
+  const defaultAdminEmail = BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase();
+  accountsByEmail.set(defaultAdminEmail, {
+    uid: 'usr_mahit_admin',
+    email: defaultAdminEmail,
+    displayName: 'Mahit Saxena',
+    bio: 'Principal Systems Architect · Auto-Configured Deep Work Sanctuary',
+    salt: defaultAdminSalt,
+    passwordHash: hashPassword('MrStranger@2026!', defaultAdminSalt),
+    streakCount: 7,
+    lastLoginDate: getTodayDateString(),
+    participationPoints: 185,
+    privacyVisibility: 'everyone',
+    readReceiptsEnabled: true,
+    allowCallsFromConnectionsOnly: true,
+    createdAt: new Date().toISOString(),
+  });
+
+  studyDesks.set('usr_mahit_admin', {
+    uid: 'usr_mahit_admin',
+    displayName: 'Mahit Saxena',
+    roomCode: 'STUDY-204',
+    roomName: 'Study Room STUDY-204',
+    subject: 'System Architecture & Deep Work',
+    positiveNote: 'Locked in for 120m daily target — join STUDY-204 for silent Pomodoro sprints.',
+    timerMinutes: 25,
+    startedAt: Date.now() - 1_800_000,
+  });
+
   const liveGameState = new Map<string, GameScoreEntry>();
   const acceptedPairKeys = new Set<string>();
   const wsRateMap = new Map<WebSocket, number[]>();
@@ -496,6 +526,29 @@ async function startServer() {
     res.json({
       users: buildPlatformUsersList(),
       timestamp: Date.now(),
+    });
+  });
+
+  // Zero-Touch Auto-Configured Admin Session Endpoint (Issues signed HMAC-SHA256 token)
+  app.get('/api/auth/auto-session', (_req, res) => {
+    const adminAcct = accountsByEmail.get(BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase());
+    if (!adminAcct) {
+      res.status(404).json({ error: 'Auto-configured admin account not found.' });
+      return;
+    }
+    res.json({
+      uid: adminAcct.uid,
+      email: adminAcct.email,
+      displayName: adminAcct.displayName,
+      bio: adminAcct.bio,
+      streakCount: adminAcct.streakCount,
+      lastLoginDate: adminAcct.lastLoginDate,
+      participationPoints: adminAcct.participationPoints,
+      privacyVisibility: adminAcct.privacyVisibility,
+      readReceiptsEnabled: adminAcct.readReceiptsEnabled,
+      allowCallsFromConnectionsOnly: adminAcct.allowCallsFromConnectionsOnly,
+      isAdmin: true,
+      sessionToken: signSessionToken(adminAcct.uid, adminAcct.email),
     });
   });
 
