@@ -882,6 +882,8 @@ export default function App() {
     useState<WorkspaceQrHistoryTab>('history');
   const [openQrHistoryCategoryPickerRoomCode, setOpenQrHistoryCategoryPickerRoomCode] =
     useState<string | null>(null);
+  const [selectedQrHistoryDetailsRoomCode, setSelectedQrHistoryDetailsRoomCode] =
+    useState<string | null>(null);
   const [copiedQrHistoryRoomCode, setCopiedQrHistoryRoomCode] = useState<
     string | null
   >(null);
@@ -3937,6 +3939,7 @@ export default function App() {
     historySortOrder: workspaceHeaderQrHistorySortOrder,
     historyActiveTab: workspaceHeaderQrHistoryActiveTab,
     copiedHistoryRoomCode: copiedQrHistoryRoomCode,
+    selectedHistoryDetailsRoomCode: selectedQrHistoryDetailsRoomCode,
     isHistoryCsvExported: isWorkspaceHeaderQrHistoryCsvExported,
     historyCsvExportCount: workspaceHeaderQrHistoryCsvExportCount,
     qrScannerSoundPreferences,
@@ -4083,6 +4086,7 @@ export default function App() {
     setWorkspaceHeaderQrHistoryCategoryFilter('all');
     setWorkspaceHeaderQrHistorySortOrder('most_recent_desc');
     setOpenQrHistoryCategoryPickerRoomCode(null);
+    setSelectedQrHistoryDetailsRoomCode(null);
     setCopiedQrHistoryRoomCode(null);
     setIsWorkspaceHeaderQrHistoryCsvExported(false);
     if (qrHistoryCopyTimerRef.current !== null) {
@@ -4165,6 +4169,12 @@ export default function App() {
       ) {
         setCopiedQrHistoryRoomCode(null);
       }
+      if (
+        result.removedEntry &&
+        selectedQrHistoryDetailsRoomCode === result.removedEntry.roomCode
+      ) {
+        setSelectedQrHistoryDetailsRoomCode(null);
+      }
       if (uiSoundPrefs.enabled) {
         playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
       }
@@ -4239,7 +4249,15 @@ export default function App() {
   };
 
   const handleSelectRecentWorkspaceQrScan = (entry: WorkspaceQrRecentScanEntry) => {
-    handleApplyScannedWorkspaceQrPayload(entry.workspaceUrl || entry.roomCode);
+    const normalizedCode = normalizeStudyRoomCode(entry.roomCode || 'STUDY-GLOBAL');
+    setSelectedQrHistoryDetailsRoomCode(normalizedCode);
+    setOpenQrHistoryCategoryPickerRoomCode(null);
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+    setLastSoundFeedback(
+      `Opened scan metadata modal for ${normalizedCode}`
+    );
   };
 
   const handleJoinWorkspaceQrHistoryRoom = (entry: WorkspaceQrRecentScanEntry) => {
@@ -7169,20 +7187,43 @@ export default function App() {
                                           data-scanned-at={String(
                                             scanItem.scannedAtMs
                                           )}
+                                          data-scanned-at-iso={
+                                            scanItem.scannedAtIso
+                                          }
+                                          data-original-timestamp={
+                                            scanItem.originalTimestampLabel
+                                          }
+                                          data-scan-source-type={
+                                            scanItem.scanSource.sourceType
+                                          }
+                                          data-details-modal-open={
+                                            scanItem.isDetailsModalOpen
+                                              ? 'true'
+                                              : 'false'
+                                          }
                                           data-rank-order={String(
                                             scanItem.rankOrder
                                           )}
-                                          className={`flex flex-wrap items-center justify-between gap-1.5 px-2 py-1.5 rounded border transition-colors ${
-                                            scanItem.isPinned
-                                              ? 'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60 dark:border-amber-500/40 dark:bg-amber-950/20'
-                                              : 'border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-emerald-50/70 hover:border-emerald-500/40 dark:bg-[#050505] dark:hover:bg-emerald-950/30 dark:hover:border-emerald-500/40'
+                                          onClick={() =>
+                                            handleSelectRecentWorkspaceQrScan(
+                                              scanItem
+                                            )
+                                          }
+                                          className={`flex flex-wrap items-center justify-between gap-1.5 px-2 py-1.5 rounded border transition-colors cursor-pointer ${
+                                            scanItem.isDetailsModalOpen
+                                              ? 'border-emerald-500 bg-emerald-500/10 dark:border-emerald-400 dark:bg-emerald-950/35'
+                                              : scanItem.isPinned
+                                                ? 'border-amber-500/40 bg-amber-500/5 hover:border-amber-500/60 dark:border-amber-500/40 dark:bg-amber-950/20'
+                                                : 'border-slate-200 dark:border-zinc-800 bg-slate-50 hover:bg-emerald-50/70 hover:border-emerald-500/40 dark:bg-[#050505] dark:hover:bg-emerald-950/30 dark:hover:border-emerald-500/40'
                                           }`}
                                         >
                                           <div className="min-w-0 flex items-center gap-1 flex-wrap">
                                             <button
                                               type="button"
-                                              id={`workspace-header-qr-recent-scan-item-${idx}`}
-                                              data-testid={`workspace-header-qr-recent-scan-item-${idx}`}
+                                              id={scanItem.detailsTriggerElementId}
+                                              data-testid={
+                                                scanItem.detailsTriggerTestId
+                                              }
                                               data-room-code={scanItem.roomCode}
                                               data-category={scanItem.category}
                                               data-color-tone={
@@ -7194,13 +7235,24 @@ export default function App() {
                                               data-workspace-url={
                                                 scanItem.workspaceUrl
                                               }
-                                              onClick={() =>
+                                              data-original-timestamp={
+                                                scanItem.originalTimestampLabel
+                                              }
+                                              data-scan-source={
+                                                scanItem.scanSource.sourceLabel
+                                              }
+                                              aria-haspopup="dialog"
+                                              aria-expanded={
+                                                scanItem.isDetailsModalOpen
+                                              }
+                                              onClick={(e) => {
+                                                e.stopPropagation();
                                                 handleSelectRecentWorkspaceQrScan(
                                                   scanItem
-                                                )
-                                              }
-                                              aria-label={`Quick access to scanned room ${scanItem.roomCode}`}
-                                              title={scanItem.workspaceUrl}
+                                                );
+                                              }}
+                                              aria-label={`View expanded scan metadata for room ${scanItem.roomCode} (${scanItem.originalTimestampLabel})`}
+                                              title={`Click to view scan metadata for ${scanItem.roomCode} · ${scanItem.originalTimestampLabel}`}
                                               className="inline-flex items-center text-left"
                                             >
                                               <span
@@ -7427,6 +7479,7 @@ export default function App() {
                                               aria-label={scanItem.joinLinkAriaLabel}
                                               onClick={(e) => {
                                                 e.preventDefault();
+                                                e.stopPropagation();
                                                 handleJoinWorkspaceQrHistoryRoom(
                                                   scanItem
                                                 );
@@ -7554,6 +7607,518 @@ export default function App() {
                                           .emptyMessage}
                                   </p>
                                 )}
+
+                                {/* Interactive Room Code Scan Metadata Modal */}
+                                {workspaceHeaderQrMeta.historyDetailsModal
+                                  .isOpen &&
+                                  workspaceHeaderQrMeta.historyDetailsModal
+                                    .timestamp &&
+                                  workspaceHeaderQrMeta.historyDetailsModal
+                                    .scanSource &&
+                                  workspaceHeaderQrMeta.historyDetailsModal
+                                    .categoryColorTagSpec && (
+                                    <div
+                                      id={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal.modalElementId
+                                      }
+                                      data-testid={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal.modalTestId
+                                      }
+                                      data-room-code={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal.roomCode || ''
+                                      }
+                                      data-entry-id={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal.entryId || ''
+                                      }
+                                      data-category={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal.category || ''
+                                      }
+                                      data-original-timestamp={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal
+                                          .originalTimestampLabel
+                                      }
+                                      data-scanned-at-iso={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal.scannedAtIso
+                                      }
+                                      data-scan-source-type={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal.scanSource
+                                          .sourceType
+                                      }
+                                      role="dialog"
+                                      aria-modal="true"
+                                      aria-labelledby={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal.titleElementId
+                                      }
+                                      aria-label={
+                                        workspaceHeaderQrMeta
+                                          .historyDetailsModal.ariaLabel
+                                      }
+                                      className="mt-2 p-2.5 rounded-lg border border-emerald-500/40 bg-white dark:bg-zinc-900 shadow-lg space-y-2"
+                                    >
+                                      <div className="flex items-start justify-between gap-2 pb-1.5 border-b border-slate-200 dark:border-zinc-800">
+                                        <div className="min-w-0">
+                                          <div className="flex items-center gap-1.5 flex-wrap">
+                                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-700 dark:text-emerald-300 text-[10px] font-mono font-bold">
+                                              <QrCode className="w-2.5 h-2.5 shrink-0" />
+                                              {
+                                                workspaceHeaderQrMeta
+                                                  .historyDetailsModal.roomCode
+                                              }
+                                            </span>
+                                            {workspaceHeaderQrMeta
+                                              .historyDetailsModal.isPinned && (
+                                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-700 dark:text-amber-300 text-[9px] font-mono font-semibold">
+                                                <Pin className="w-2.5 h-2.5 shrink-0" />
+                                                Pinned
+                                              </span>
+                                            )}
+                                          </div>
+                                          <h6
+                                            id={
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal
+                                                .titleElementId
+                                            }
+                                            data-testid={
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal.titleTestId
+                                            }
+                                            className="mt-1 text-[11px] font-bold text-slate-900 dark:text-zinc-100"
+                                          >
+                                            {
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal.dialogTitle
+                                            }
+                                          </h6>
+                                          <p className="text-[9px] text-slate-500 dark:text-zinc-400">
+                                            {
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal
+                                                .dialogSubtitle
+                                            }
+                                          </p>
+                                        </div>
+                                        <button
+                                          type="button"
+                                          id={
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal
+                                              .closeButtonElementId
+                                          }
+                                          data-testid={
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal
+                                              .closeButtonTestId
+                                          }
+                                          onClick={() =>
+                                            setSelectedQrHistoryDetailsRoomCode(
+                                              null
+                                            )
+                                          }
+                                          aria-label={`Close scan metadata modal for ${workspaceHeaderQrMeta.historyDetailsModal.roomCode}`}
+                                          className="p-1 rounded border border-slate-200 hover:border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-700 dark:border-zinc-700 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors shrink-0"
+                                        >
+                                          <X className="w-3 h-3" />
+                                        </button>
+                                      </div>
+
+                                      {/* 1. Original Timestamp Metadata */}
+                                      <div
+                                        id={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal
+                                            .timestampSectionElementId
+                                        }
+                                        data-testid={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal
+                                            .timestampSectionTestId
+                                        }
+                                        data-timestamp-ms={String(
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal.timestamp
+                                            .scannedAtMs
+                                        )}
+                                        data-timestamp-iso={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal.scannedAtIso
+                                        }
+                                        data-formatted-utc={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal
+                                            .originalTimestampLabel
+                                        }
+                                        className="p-2 rounded border border-slate-200/80 dark:border-zinc-800 bg-slate-50/80 dark:bg-[#050505] space-y-1"
+                                      >
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-wider font-semibold text-slate-500 dark:text-zinc-400">
+                                            <Clock className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                                            Original Timestamp
+                                          </span>
+                                          <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-mono font-semibold text-emerald-700 dark:text-emerald-300">
+                                            {
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal
+                                                .relativeTimestampLabel
+                                            }
+                                          </span>
+                                        </div>
+                                        <div className="text-[10px] font-mono font-semibold text-slate-800 dark:text-zinc-100">
+                                          {
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal
+                                              .originalTimestampLabel
+                                          }
+                                        </div>
+                                        <div className="text-[9px] font-mono text-slate-500 dark:text-zinc-400 truncate">
+                                          ISO:{' '}
+                                          {
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal.scannedAtIso
+                                          }
+                                        </div>
+                                      </div>
+
+                                      {/* 2. Category Classification Metadata & Quick Switcher */}
+                                      <div
+                                        id={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal
+                                            .categorySectionElementId
+                                        }
+                                        data-testid={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal
+                                            .categorySectionTestId
+                                        }
+                                        data-category={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal.category || ''
+                                        }
+                                        data-color-tone={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal
+                                            .categoryColorTone || ''
+                                        }
+                                        className="p-2 rounded border border-slate-200/80 dark:border-zinc-800 bg-slate-50/80 dark:bg-[#050505] space-y-1.5"
+                                      >
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-wider font-semibold text-slate-500 dark:text-zinc-400">
+                                            <Tag className="w-2.5 h-2.5 text-violet-500 shrink-0" />
+                                            Category Classification
+                                          </span>
+                                          <span
+                                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold ${workspaceHeaderQrMeta.historyDetailsModal.categoryColorTagSpec.tagClassName}`}
+                                          >
+                                            <span
+                                              className={`w-1.5 h-1.5 rounded-full ${workspaceHeaderQrMeta.historyDetailsModal.categoryColorTagSpec.dotColorClassName}`}
+                                            />
+                                            {
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal.category
+                                            }
+                                          </span>
+                                        </div>
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                          {workspaceHeaderQrMeta.historyDetailsModal.categoryPresetOptions.map(
+                                            (opt) => (
+                                              <button
+                                                key={opt.value}
+                                                type="button"
+                                                id={`workspace-header-qr-history-details-category-btn-${opt.value.toLowerCase()}`}
+                                                data-testid={`workspace-header-qr-history-details-category-btn-${opt.value.toLowerCase()}`}
+                                                data-category-option={opt.value}
+                                                data-selected={
+                                                  opt.isSelected
+                                                    ? 'true'
+                                                    : 'false'
+                                                }
+                                                aria-pressed={opt.isSelected}
+                                                onClick={() => {
+                                                  if (
+                                                    workspaceHeaderQrMeta
+                                                      .historyDetailsModal
+                                                      .roomCode
+                                                  ) {
+                                                    handleSetWorkspaceQrHistoryCategory(
+                                                      workspaceHeaderQrMeta
+                                                        .historyDetailsModal
+                                                        .roomCode,
+                                                      opt.value
+                                                    );
+                                                  }
+                                                }}
+                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors ${
+                                                  opt.isSelected
+                                                    ? opt.activeOptionClassName
+                                                    : opt.tagClassName
+                                                }`}
+                                              >
+                                                <span
+                                                  className={`w-1.5 h-1.5 rounded-full ${opt.dotColorClassName}`}
+                                                />
+                                                <span>{opt.label}</span>
+                                              </button>
+                                            )
+                                          )}
+                                        </div>
+                                      </div>
+
+                                      {/* 3. Scan Source Details Metadata */}
+                                      <div
+                                        id={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal
+                                            .scanSourceSectionElementId
+                                        }
+                                        data-testid={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal
+                                            .scanSourceSectionTestId
+                                        }
+                                        data-source-type={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal.scanSource
+                                            .sourceType
+                                        }
+                                        data-source-label={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal.scanSource
+                                            .sourceLabel
+                                        }
+                                        data-origin-host={
+                                          workspaceHeaderQrMeta
+                                            .historyDetailsModal.scanSource
+                                            .originHost
+                                        }
+                                        className="p-2 rounded border border-slate-200/80 dark:border-zinc-800 bg-slate-50/80 dark:bg-[#050505] space-y-1"
+                                      >
+                                        <div className="flex items-center justify-between gap-1.5">
+                                          <span className="inline-flex items-center gap-1 text-[9px] font-mono uppercase tracking-wider font-semibold text-slate-500 dark:text-zinc-400">
+                                            <Camera className="w-2.5 h-2.5 text-sky-500 shrink-0" />
+                                            Scan Source Details
+                                          </span>
+                                          <span className="px-1.5 py-0.5 rounded bg-sky-500/10 border border-sky-500/30 text-[9px] font-mono font-semibold text-sky-700 dark:text-sky-300">
+                                            {
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal.scanSource
+                                                .sourceLabel
+                                            }
+                                          </span>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-1 text-[9px] font-mono">
+                                          <div className="text-slate-500 dark:text-zinc-400">
+                                            Decoder:{' '}
+                                            <span className="text-slate-700 dark:text-zinc-200 font-semibold">
+                                              {
+                                                workspaceHeaderQrMeta
+                                                  .historyDetailsModal
+                                                  .scanSource.captureMethodLabel
+                                              }
+                                            </span>
+                                          </div>
+                                          <div className="text-slate-500 dark:text-zinc-400 truncate">
+                                            Origin:{' '}
+                                            <span className="text-slate-700 dark:text-zinc-200 font-semibold">
+                                              {
+                                                workspaceHeaderQrMeta
+                                                  .historyDetailsModal
+                                                  .scanSource.originHost
+                                              }
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="text-[9px] font-mono text-slate-500 dark:text-zinc-400">
+                                          Filters:{' '}
+                                          <span className="text-slate-700 dark:text-zinc-200">
+                                            {
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal.scanSource
+                                                .filterSummaryLabel
+                                            }
+                                          </span>
+                                        </div>
+                                        <div
+                                          id={
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal
+                                              .rawPayloadElementId
+                                          }
+                                          data-testid={
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal
+                                              .rawPayloadTestId
+                                          }
+                                          className="px-1.5 py-1 rounded bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[9px] font-mono text-slate-600 dark:text-zinc-300 break-all"
+                                        >
+                                          Raw Payload:{' '}
+                                          {
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal.scanSource
+                                              .rawPayload
+                                          }
+                                        </div>
+                                        <div
+                                          id={
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal
+                                              .workspaceUrlElementId
+                                          }
+                                          data-testid={
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal
+                                              .workspaceUrlTestId
+                                          }
+                                          className="px-1.5 py-1 rounded bg-white dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 text-[9px] font-mono text-emerald-700 dark:text-emerald-300 break-all"
+                                        >
+                                          Workspace URL:{' '}
+                                          {
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal.scanSource
+                                              .workspaceUrl
+                                          }
+                                        </div>
+                                      </div>
+
+                                      {/* Interactive Modal Footer Actions */}
+                                      <div className="flex items-center justify-between gap-1.5 pt-1">
+                                        <div className="flex items-center gap-1">
+                                          <button
+                                            type="button"
+                                            id={
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal
+                                                .copyButtonElementId
+                                            }
+                                            data-testid={
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal
+                                                .copyButtonTestId
+                                            }
+                                            onClick={() => {
+                                              if (
+                                                workspaceHeaderQrMeta
+                                                  .historyDetailsModal.roomCode
+                                              ) {
+                                                void handleCopyWorkspaceQrHistoryRoomCode(
+                                                  workspaceHeaderQrMeta
+                                                    .historyDetailsModal
+                                                    .roomCode
+                                                );
+                                              }
+                                            }}
+                                            className="inline-flex items-center gap-1 px-2 py-1 rounded border border-slate-200 dark:border-zinc-700 bg-slate-50 hover:bg-slate-100 dark:bg-zinc-800 dark:hover:bg-zinc-700 text-[9px] font-mono font-semibold text-slate-700 dark:text-zinc-200 transition-colors"
+                                          >
+                                            {workspaceHeaderQrMeta
+                                              .historyDetailsModal.isCopied ? (
+                                              <>
+                                                <Check className="w-2.5 h-2.5 text-emerald-500 shrink-0" />
+                                                <span>Copied</span>
+                                              </>
+                                            ) : (
+                                              <>
+                                                <Copy className="w-2.5 h-2.5 shrink-0" />
+                                                <span>Copy Code</span>
+                                              </>
+                                            )}
+                                          </button>
+                                          <button
+                                            type="button"
+                                            id={
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal
+                                                .pinButtonElementId
+                                            }
+                                            data-testid={
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal
+                                                .pinButtonTestId
+                                            }
+                                            aria-pressed={
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal.isPinned
+                                            }
+                                            onClick={() => {
+                                              if (
+                                                workspaceHeaderQrMeta
+                                                  .historyDetailsModal.roomCode
+                                              ) {
+                                                handleTogglePinWorkspaceQrHistoryItem(
+                                                  workspaceHeaderQrMeta
+                                                    .historyDetailsModal
+                                                    .roomCode
+                                                );
+                                              }
+                                            }}
+                                            className={`inline-flex items-center gap-1 px-2 py-1 rounded border text-[9px] font-mono font-semibold transition-colors ${
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal.isPinned
+                                                ? 'bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300'
+                                                : 'border-slate-200 dark:border-zinc-700 bg-slate-50 hover:bg-amber-50 dark:bg-zinc-800 text-slate-700 dark:text-zinc-200'
+                                            }`}
+                                          >
+                                            <Pin className="w-2.5 h-2.5 shrink-0" />
+                                            <span>
+                                              {workspaceHeaderQrMeta
+                                                .historyDetailsModal.isPinned
+                                                ? 'Pinned'
+                                                : 'Pin Room'}
+                                            </span>
+                                          </button>
+                                        </div>
+
+                                        <button
+                                          type="button"
+                                          id={
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal
+                                              .joinButtonElementId
+                                          }
+                                          data-testid={
+                                            workspaceHeaderQrMeta
+                                              .historyDetailsModal
+                                              .joinButtonTestId
+                                          }
+                                          onClick={() => {
+                                            const targetCode =
+                                              workspaceHeaderQrMeta
+                                                .historyDetailsModal.roomCode;
+                                            const matchedItem =
+                                              recentWorkspaceQrScans.find(
+                                                (e) => e.roomCode === targetCode
+                                              );
+                                            if (matchedItem) {
+                                              handleJoinWorkspaceQrHistoryRoom(
+                                                matchedItem
+                                              );
+                                            } else if (targetCode) {
+                                              handleApplyScannedWorkspaceQrPayload(
+                                                workspaceHeaderQrMeta
+                                                  .historyDetailsModal
+                                                  .scanSource?.workspaceUrl ||
+                                                  targetCode
+                                              );
+                                            }
+                                            setSelectedQrHistoryDetailsRoomCode(
+                                              null
+                                            );
+                                          }}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-mono font-semibold transition-colors"
+                                        >
+                                          <span>Join Room</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
                               </div>
                             </div>
                           )}

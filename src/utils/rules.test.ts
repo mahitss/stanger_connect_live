@@ -276,6 +276,9 @@ import {
   buildWorkspaceQrHistoryCategoryPresetOptions,
   computeWorkspaceQrHistoryCountsByCategory,
   setWorkspaceQrRecentScanCategory,
+  resolveWorkspaceQrHistoryScanSourceDetails,
+  formatWorkspaceQrHistoryOriginalTimestamp,
+  buildWorkspaceQrHistoryItemDetailsModalSpec,
   buildWorkspaceQrRecentScansSpec,
   toggleWorkspaceQrHistorySectionExpanded,
   buildWorkspaceQrHistorySectionSpec,
@@ -7646,7 +7649,145 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     ),
     0
   );
+
+  // 21. Interactive Room Code Scan Metadata Modal (Original Timestamp, Category, and Scan Source Details)
+  const testScanTsMs = Date.UTC(2026, 10, 1, 19, 30, 0); // 2026-11-01 19:30:00 UTC
+  const formattedTs = formatWorkspaceQrHistoryOriginalTimestamp(
+    testScanTsMs,
+    testScanTsMs + 300_000 // 5 minutes later
+  );
+  assert.equal(formattedTs.scannedAtMs, testScanTsMs);
+  assert.equal(formattedTs.scannedAtIso, '2026-11-01T19:30:00.000Z');
+  assert.equal(formattedTs.formattedDateLabel, '2026-11-01');
+  assert.equal(formattedTs.formattedTimeLabel, '19:30:00 UTC');
+  assert.equal(formattedTs.formattedUtcTimestamp, '2026-11-01 19:30:00 UTC');
+  assert.equal(formattedTs.relativeTimeLabel, '5m ago');
+
+  // Verify scan source details for URL QR payload vs Direct Room Code scan
+  const urlSourceDetails = resolveWorkspaceQrHistoryScanSourceDetails({
+    roomCode: 'WORK-HUB1',
+    workspaceUrl:
+      'http://localhost:3000/?room=WORK-HUB1&audience=my_connections&mood=Deep%20Work&focus=1',
+    rawValue:
+      'http://localhost:3000/?room=WORK-HUB1&audience=my_connections&mood=Deep%20Work&focus=1',
+    hasFilterParams: true,
+    audienceFilter: 'my_connections',
+    moodFilter: 'Deep Work',
+    onlyInFocus: true,
+  });
+  assert.equal(urlSourceDetails.sourceType, 'url_qr_payload');
+  assert.equal(urlSourceDetails.sourceLabel, 'Workspace URL QR Code');
+  assert.equal(
+    urlSourceDetails.captureMethodLabel,
+    'Camera / Image Frame QR Decoder'
+  );
+  assert.equal(urlSourceDetails.originHost, 'localhost:3000');
+  assert.equal(urlSourceDetails.hasFilterParams, true);
+  assert.equal(urlSourceDetails.audienceFilterLabel, 'My Connections');
+  assert.equal(
+    urlSourceDetails.filterSummaryLabel,
+    'Audience: My Connections · Mood: Deep Work · In Focus Only'
+  );
+
+  const directCodeSourceDetails = resolveWorkspaceQrHistoryScanSourceDetails({
+    roomCode: 'CASUAL-LOUNGE',
+    workspaceUrl: 'https://mrstranger.app/?room=CASUAL-LOUNGE',
+    rawValue: 'CASUAL-LOUNGE',
+    hasFilterParams: false,
+    audienceFilter: 'everyone',
+    moodFilter: 'all',
+    onlyInFocus: false,
+  });
+  assert.equal(directCodeSourceDetails.sourceType, 'direct_room_code');
+  assert.equal(
+    directCodeSourceDetails.sourceLabel,
+    'Direct Room Code QR Scan'
+  );
+  assert.equal(directCodeSourceDetails.originHost, 'mrstranger.app');
+  assert.equal(
+    directCodeSourceDetails.filterSummaryLabel,
+    'Default Directory Filters (Everyone · All Moods)'
+  );
+
+  // Verify closed vs open modal spec via buildWorkspaceQrHistoryItemDetailsModalSpec & getWorkspaceHeaderQrCodeMeta
+  const closedModalSpec = buildWorkspaceQrHistoryItemDetailsModalSpec(
+    statsScans,
+    null
+  );
+  assert.equal(closedModalSpec.isOpen, false);
+  assert.equal(closedModalSpec.selectedRoomCode, null);
+
+  const metaWithDetailsModal = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'http://localhost:3000/?room=WORK-HUB1',
+    isOpen: true,
+    recentScans: [
+      {
+        id: 'meta-scan-1',
+        roomCode: 'WORK-HUB1',
+        workspaceUrl:
+          'http://localhost:3000/?room=WORK-HUB1&audience=my_connections&mood=Deep%20Work&focus=1',
+        rawValue:
+          'http://localhost:3000/?room=WORK-HUB1&audience=my_connections&mood=Deep%20Work&focus=1',
+        scannedAtMs: testScanTsMs,
+        hasFilterParams: true,
+        audienceFilter: 'my_connections',
+        moodFilter: 'Deep Work',
+        onlyInFocus: true,
+        isPinned: true,
+        pinnedAtMs: testScanTsMs + 60_000,
+        category: 'Work',
+      },
+    ],
+    selectedHistoryDetailsRoomCode: 'WORK-HUB1',
+    historyStatsReferenceTimestampMs: testScanTsMs + 300_000,
+    copiedHistoryRoomCode: 'WORK-HUB1',
+    roomCode: 'WORK-HUB1',
+  });
+  assert.equal(metaWithDetailsModal.historyDetailsModal.isOpen, true);
+  assert.equal(
+    metaWithDetailsModal.historyDetailsModal.modalElementId,
+    'workspace-header-qr-history-item-details-modal'
+  );
+  assert.equal(
+    metaWithDetailsModal.historyDetailsModal.roomCode,
+    'WORK-HUB1'
+  );
+  assert.equal(metaWithDetailsModal.historyDetailsModal.category, 'Work');
+  assert.equal(
+    metaWithDetailsModal.historyDetailsModal.categoryColorTone,
+    'sky'
+  );
+  assert.equal(
+    metaWithDetailsModal.historyDetailsModal.originalTimestampLabel,
+    '2026-11-01 19:30:00 UTC'
+  );
+  assert.equal(
+    metaWithDetailsModal.historyDetailsModal.scannedAtIso,
+    '2026-11-01T19:30:00.000Z'
+  );
+  assert.equal(
+    metaWithDetailsModal.historyDetailsModal.relativeTimestampLabel,
+    '5m ago'
+  );
+  assert.equal(
+    metaWithDetailsModal.historyDetailsModal.scanSource?.sourceType,
+    'url_qr_payload'
+  );
+  assert.equal(
+    metaWithDetailsModal.historyDetailsModal.scanSource?.sourceLabel,
+    'Workspace URL QR Code'
+  );
+  assert.equal(metaWithDetailsModal.historyDetailsModal.isCopied, true);
+  assert.equal(
+    metaWithDetailsModal.searchHistory.items[0].isDetailsModalOpen,
+    true
+  );
+  assert.equal(
+    metaWithDetailsModal.searchHistory.items[0].detailsTriggerElementId,
+    'workspace-header-qr-recent-scan-item-0'
+  );
+  assert.equal(
+    metaWithDetailsModal.searchHistory.items[0].originalTimestampLabel,
+    '2026-11-01 19:30:00 UTC'
+  );
 });
-
-
-

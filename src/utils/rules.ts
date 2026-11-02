@@ -15051,10 +15051,379 @@ export function setWorkspaceQrRecentScanCategory(
   };
 }
 
+export type WorkspaceQrScanSourceType =
+  | 'url_qr_payload'
+  | 'direct_room_code';
+
+export interface WorkspaceQrHistoryScanSourceDetails {
+  sourceType: WorkspaceQrScanSourceType;
+  sourceLabel: 'Workspace URL QR Code' | 'Direct Room Code QR Scan';
+  captureMethodLabel: 'Camera / Image Frame QR Decoder';
+  originHost: string;
+  rawPayload: string;
+  workspaceUrl: string;
+  hasFilterParams: boolean;
+  audienceFilter: 'everyone' | 'my_connections';
+  audienceFilterLabel: 'Everyone' | 'My Connections';
+  moodFilter: string;
+  onlyInFocus: boolean;
+  filterSummaryLabel: string;
+}
+
+export function resolveWorkspaceQrHistoryScanSourceDetails(
+  entry?: Partial<WorkspaceQrRecentScanEntry> | null
+): WorkspaceQrHistoryScanSourceDetails {
+  const roomCode = normalizeStudyRoomCode(entry?.roomCode || 'STUDY-GLOBAL');
+  const workspaceUrl =
+    (entry?.workspaceUrl ?? '').trim() ||
+    `https://mrstranger.app/?room=${encodeURIComponent(roomCode)}`;
+  const rawPayload = (entry?.rawValue ?? '').trim() || workspaceUrl;
+  const lowerRaw = rawPayload.toLowerCase();
+  const isUrlPayload =
+    lowerRaw.startsWith('http://') ||
+    lowerRaw.startsWith('https://') ||
+    lowerRaw.includes('?room=') ||
+    lowerRaw.includes('&room=');
+  const sourceType: WorkspaceQrScanSourceType = isUrlPayload
+    ? 'url_qr_payload'
+    : 'direct_room_code';
+  const sourceLabel =
+    sourceType === 'url_qr_payload'
+      ? 'Workspace URL QR Code'
+      : 'Direct Room Code QR Scan';
+
+  let originHost = 'mrstranger.app';
+  try {
+    const parsed = new URL(workspaceUrl);
+    if (parsed.host) {
+      originHost = parsed.host;
+    }
+  } catch {
+    try {
+      if (
+        rawPayload.startsWith('http://') ||
+        rawPayload.startsWith('https://')
+      ) {
+        const parsedRaw = new URL(rawPayload);
+        if (parsedRaw.host) {
+          originHost = parsedRaw.host;
+        }
+      }
+    } catch {
+      // keep default originHost
+    }
+  }
+
+  const audienceFilter: 'everyone' | 'my_connections' =
+    entry?.audienceFilter === 'my_connections' ? 'my_connections' : 'everyone';
+  const audienceFilterLabel =
+    audienceFilter === 'my_connections' ? 'My Connections' : 'Everyone';
+  const moodFilter = (entry?.moodFilter ?? '').trim() || 'all';
+  const onlyInFocus = Boolean(entry?.onlyInFocus);
+  const hasFilterParams =
+    Boolean(entry?.hasFilterParams) ||
+    audienceFilter !== 'everyone' ||
+    moodFilter !== 'all' ||
+    onlyInFocus;
+
+  const filterParts: string[] = [];
+  if (audienceFilter === 'my_connections') {
+    filterParts.push('Audience: My Connections');
+  } else {
+    filterParts.push('Audience: Everyone');
+  }
+  if (moodFilter !== 'all') {
+    filterParts.push(`Mood: ${moodFilter}`);
+  }
+  if (onlyInFocus) {
+    filterParts.push('In Focus Only');
+  }
+  const filterSummaryLabel = hasFilterParams
+    ? filterParts.join(' · ')
+    : 'Default Directory Filters (Everyone · All Moods)';
+
+  return {
+    sourceType,
+    sourceLabel,
+    captureMethodLabel: 'Camera / Image Frame QR Decoder',
+    originHost,
+    rawPayload,
+    workspaceUrl,
+    hasFilterParams,
+    audienceFilter,
+    audienceFilterLabel,
+    moodFilter,
+    onlyInFocus,
+    filterSummaryLabel,
+  };
+}
+
+export interface WorkspaceQrHistoryFormattedTimestamp {
+  scannedAtMs: number;
+  scannedAtIso: string;
+  formattedUtcTimestamp: string;
+  formattedDateLabel: string;
+  formattedTimeLabel: string;
+  relativeTimeLabel: string;
+}
+
+export function formatWorkspaceQrHistoryOriginalTimestamp(
+  scannedAtMs: number | unknown,
+  referenceNowMs?: number
+): WorkspaceQrHistoryFormattedTimestamp {
+  const numericMs = Number(scannedAtMs);
+  const safeMs =
+    Number.isFinite(numericMs) && numericMs > 0
+      ? Math.floor(numericMs)
+      : 1_760_000_000_000;
+  const dateObj = new Date(safeMs);
+  const scannedAtIso = dateObj.toISOString();
+  const yyyy = dateObj.getUTCFullYear();
+  const mm = String(dateObj.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(dateObj.getUTCDate()).padStart(2, '0');
+  const hh = String(dateObj.getUTCHours()).padStart(2, '0');
+  const min = String(dateObj.getUTCMinutes()).padStart(2, '0');
+  const ss = String(dateObj.getUTCSeconds()).padStart(2, '0');
+  const formattedDateLabel = `${yyyy}-${mm}-${dd}`;
+  const formattedTimeLabel = `${hh}:${min}:${ss} UTC`;
+  const formattedUtcTimestamp = `${formattedDateLabel} ${formattedTimeLabel}`;
+  const resolvedNowMs =
+    typeof referenceNowMs === 'number' &&
+    Number.isFinite(referenceNowMs) &&
+    referenceNowMs > 0
+      ? Math.floor(referenceNowMs)
+      : Math.max(Date.now(), safeMs);
+  const relativeTimeLabel = formatRelativeCommentTimestamp(
+    safeMs,
+    resolvedNowMs
+  );
+
+  return {
+    scannedAtMs: safeMs,
+    scannedAtIso,
+    formattedUtcTimestamp,
+    formattedDateLabel,
+    formattedTimeLabel,
+    relativeTimeLabel,
+  };
+}
+
+export interface WorkspaceQrHistoryItemDetailsModalSpec {
+  modalElementId: 'workspace-header-qr-history-item-details-modal';
+  modalTestId: 'workspace-header-qr-history-item-details-modal';
+  backdropElementId: 'workspace-header-qr-history-item-details-backdrop';
+  backdropTestId: 'workspace-header-qr-history-item-details-backdrop';
+  titleElementId: 'workspace-header-qr-history-details-title';
+  titleTestId: 'workspace-header-qr-history-details-title';
+  closeButtonElementId: 'workspace-header-qr-history-details-close-btn';
+  closeButtonTestId: 'workspace-header-qr-history-details-close-btn';
+  timestampSectionElementId: 'workspace-header-qr-history-details-timestamp';
+  timestampSectionTestId: 'workspace-header-qr-history-details-timestamp';
+  categorySectionElementId: 'workspace-header-qr-history-details-category';
+  categorySectionTestId: 'workspace-header-qr-history-details-category';
+  scanSourceSectionElementId: 'workspace-header-qr-history-details-scan-source';
+  scanSourceSectionTestId: 'workspace-header-qr-history-details-scan-source';
+  rawPayloadElementId: 'workspace-header-qr-history-details-raw-payload';
+  rawPayloadTestId: 'workspace-header-qr-history-details-raw-payload';
+  workspaceUrlElementId: 'workspace-header-qr-history-details-workspace-url';
+  workspaceUrlTestId: 'workspace-header-qr-history-details-workspace-url';
+  copyButtonElementId: 'workspace-header-qr-history-details-copy-btn';
+  copyButtonTestId: 'workspace-header-qr-history-details-copy-btn';
+  pinButtonElementId: 'workspace-header-qr-history-details-pin-btn';
+  pinButtonTestId: 'workspace-header-qr-history-details-pin-btn';
+  joinButtonElementId: 'workspace-header-qr-history-details-join-btn';
+  joinButtonTestId: 'workspace-header-qr-history-details-join-btn';
+  isOpen: boolean;
+  selectedRoomCode: string | null;
+  entryId: string | null;
+  roomCode: string | null;
+  category: WorkspaceQrHistoryRoomCategory | null;
+  categoryColorTone: WorkspaceQrHistoryCategoryColorTone | null;
+  categoryColorTagSpec: WorkspaceQrHistoryCategoryColorTagSpec | null;
+  categoryPresetOptions: WorkspaceQrHistoryCategoryPresetOptionSpec[];
+  isPinned: boolean;
+  pinnedAtMs: number;
+  pinnedAtFormattedUtc: string | null;
+  timestamp: WorkspaceQrHistoryFormattedTimestamp | null;
+  originalTimestampLabel: string;
+  scannedAtIso: string;
+  relativeTimestampLabel: string;
+  scanSource: WorkspaceQrHistoryScanSourceDetails | null;
+  isCopied: boolean;
+  dialogTitle: string;
+  dialogSubtitle: string;
+  ariaLabel: string;
+}
+
+export function buildWorkspaceQrHistoryItemDetailsModalSpec(
+  entries: WorkspaceQrRecentScanEntry[] | unknown,
+  selectedRoomCodeOrId?: string | null,
+  options?: {
+    referenceTimestampMs?: number;
+    copiedRoomCode?: string | null;
+    maxItems?: number;
+  }
+): WorkspaceQrHistoryItemDetailsModalSpec {
+  const cap = Math.max(
+    1,
+    Math.min(20, Math.floor(options?.maxItems || MAX_WORKSPACE_QR_SEARCH_HISTORY))
+  );
+  const savedEntries = normalizeStoredWorkspaceQrRecentScans(entries, cap);
+  const rawTarget = (selectedRoomCodeOrId ?? '').trim();
+  const normalizedTargetRoom = rawTarget
+    ? normalizeStudyRoomCode(rawTarget)
+    : '';
+  const matchedIndex = rawTarget
+    ? savedEntries.findIndex(
+        (entry) =>
+          entry.id === rawTarget || entry.roomCode === normalizedTargetRoom
+      )
+    : -1;
+  const matchedEntry = matchedIndex >= 0 ? savedEntries[matchedIndex] : null;
+
+  if (!matchedEntry) {
+    return {
+      modalElementId: 'workspace-header-qr-history-item-details-modal',
+      modalTestId: 'workspace-header-qr-history-item-details-modal',
+      backdropElementId: 'workspace-header-qr-history-item-details-backdrop',
+      backdropTestId: 'workspace-header-qr-history-item-details-backdrop',
+      titleElementId: 'workspace-header-qr-history-details-title',
+      titleTestId: 'workspace-header-qr-history-details-title',
+      closeButtonElementId: 'workspace-header-qr-history-details-close-btn',
+      closeButtonTestId: 'workspace-header-qr-history-details-close-btn',
+      timestampSectionElementId: 'workspace-header-qr-history-details-timestamp',
+      timestampSectionTestId: 'workspace-header-qr-history-details-timestamp',
+      categorySectionElementId: 'workspace-header-qr-history-details-category',
+      categorySectionTestId: 'workspace-header-qr-history-details-category',
+      scanSourceSectionElementId:
+        'workspace-header-qr-history-details-scan-source',
+      scanSourceSectionTestId:
+        'workspace-header-qr-history-details-scan-source',
+      rawPayloadElementId: 'workspace-header-qr-history-details-raw-payload',
+      rawPayloadTestId: 'workspace-header-qr-history-details-raw-payload',
+      workspaceUrlElementId:
+        'workspace-header-qr-history-details-workspace-url',
+      workspaceUrlTestId: 'workspace-header-qr-history-details-workspace-url',
+      copyButtonElementId: 'workspace-header-qr-history-details-copy-btn',
+      copyButtonTestId: 'workspace-header-qr-history-details-copy-btn',
+      pinButtonElementId: 'workspace-header-qr-history-details-pin-btn',
+      pinButtonTestId: 'workspace-header-qr-history-details-pin-btn',
+      joinButtonElementId: 'workspace-header-qr-history-details-join-btn',
+      joinButtonTestId: 'workspace-header-qr-history-details-join-btn',
+      isOpen: false,
+      selectedRoomCode: null,
+      entryId: null,
+      roomCode: null,
+      category: null,
+      categoryColorTone: null,
+      categoryColorTagSpec: null,
+      categoryPresetOptions: [],
+      isPinned: false,
+      pinnedAtMs: 0,
+      pinnedAtFormattedUtc: null,
+      timestamp: null,
+      originalTimestampLabel: '',
+      scannedAtIso: '',
+      relativeTimestampLabel: '',
+      scanSource: null,
+      isCopied: false,
+      dialogTitle: 'Scanned Room Metadata',
+      dialogSubtitle: 'Original timestamp, category & scan source details',
+      ariaLabel: 'Scanned room metadata details modal',
+    };
+  }
+
+  const category = normalizeWorkspaceQrHistoryRoomCategory(
+    matchedEntry.category
+  );
+  const categoryColorTagSpec =
+    getWorkspaceQrHistoryCategoryColorTagSpec(category);
+  const categoryPresetOptions = buildWorkspaceQrHistoryCategoryPresetOptions(
+    category,
+    matchedIndex,
+    matchedEntry.roomCode
+  );
+  const isPinned = Boolean(matchedEntry.isPinned);
+  const pinnedAtMs = isPinned ? matchedEntry.pinnedAtMs || 0 : 0;
+  const pinnedAtFormattedUtc =
+    isPinned && pinnedAtMs > 0
+      ? formatWorkspaceQrHistoryOriginalTimestamp(
+          pinnedAtMs,
+          options?.referenceTimestampMs
+        ).formattedUtcTimestamp
+      : null;
+  const timestamp = formatWorkspaceQrHistoryOriginalTimestamp(
+    matchedEntry.scannedAtMs,
+    options?.referenceTimestampMs
+  );
+  const scanSource = resolveWorkspaceQrHistoryScanSourceDetails(matchedEntry);
+  const normalizedCopiedRoom = (options?.copiedRoomCode ?? '').trim()
+    ? normalizeStudyRoomCode(options?.copiedRoomCode || '')
+    : null;
+  const isCopied =
+    Boolean(normalizedCopiedRoom) &&
+    normalizedCopiedRoom === matchedEntry.roomCode;
+
+  return {
+    modalElementId: 'workspace-header-qr-history-item-details-modal',
+    modalTestId: 'workspace-header-qr-history-item-details-modal',
+    backdropElementId: 'workspace-header-qr-history-item-details-backdrop',
+    backdropTestId: 'workspace-header-qr-history-item-details-backdrop',
+    titleElementId: 'workspace-header-qr-history-details-title',
+    titleTestId: 'workspace-header-qr-history-details-title',
+    closeButtonElementId: 'workspace-header-qr-history-details-close-btn',
+    closeButtonTestId: 'workspace-header-qr-history-details-close-btn',
+    timestampSectionElementId: 'workspace-header-qr-history-details-timestamp',
+    timestampSectionTestId: 'workspace-header-qr-history-details-timestamp',
+    categorySectionElementId: 'workspace-header-qr-history-details-category',
+    categorySectionTestId: 'workspace-header-qr-history-details-category',
+    scanSourceSectionElementId:
+      'workspace-header-qr-history-details-scan-source',
+    scanSourceSectionTestId: 'workspace-header-qr-history-details-scan-source',
+    rawPayloadElementId: 'workspace-header-qr-history-details-raw-payload',
+    rawPayloadTestId: 'workspace-header-qr-history-details-raw-payload',
+    workspaceUrlElementId: 'workspace-header-qr-history-details-workspace-url',
+    workspaceUrlTestId: 'workspace-header-qr-history-details-workspace-url',
+    copyButtonElementId: 'workspace-header-qr-history-details-copy-btn',
+    copyButtonTestId: 'workspace-header-qr-history-details-copy-btn',
+    pinButtonElementId: 'workspace-header-qr-history-details-pin-btn',
+    pinButtonTestId: 'workspace-header-qr-history-details-pin-btn',
+    joinButtonElementId: 'workspace-header-qr-history-details-join-btn',
+    joinButtonTestId: 'workspace-header-qr-history-details-join-btn',
+    isOpen: true,
+    selectedRoomCode: matchedEntry.roomCode,
+    entryId: matchedEntry.id,
+    roomCode: matchedEntry.roomCode,
+    category,
+    categoryColorTone: categoryColorTagSpec.colorTone,
+    categoryColorTagSpec,
+    categoryPresetOptions,
+    isPinned,
+    pinnedAtMs,
+    pinnedAtFormattedUtc,
+    timestamp,
+    originalTimestampLabel: timestamp.formattedUtcTimestamp,
+    scannedAtIso: timestamp.scannedAtIso,
+    relativeTimestampLabel: timestamp.relativeTimeLabel,
+    scanSource,
+    isCopied,
+    dialogTitle: `Room ${matchedEntry.roomCode} Metadata`,
+    dialogSubtitle: 'Original timestamp, category & scan source details',
+    ariaLabel: `Expanded scan metadata for room ${matchedEntry.roomCode}`,
+  };
+}
+
 export interface WorkspaceQrHistorySectionItemSpec
   extends WorkspaceQrRecentScanEntry {
   itemElementId: string;
   itemTestId: string;
+  detailsTriggerElementId: string;
+  detailsTriggerTestId: string;
+  isDetailsModalOpen: boolean;
+  originalTimestampLabel: string;
+  scannedAtIso: string;
+  relativeTimestampLabel: string;
+  scanSource: WorkspaceQrHistoryScanSourceDetails;
   categoryTagElementId: string;
   categoryTagTestId: string;
   categoryDotElementId: string;
@@ -15607,6 +15976,8 @@ export interface WorkspaceQrSearchHistorySpec {
   noMatchMessage: string;
   savedRoomCodes: string[];
   matchedRoomCodes: string[];
+  selectedDetailsRoomCode: string | null;
+  detailsModal: WorkspaceQrHistoryItemDetailsModalSpec;
   items: WorkspaceQrSearchHistoryItemSpec[];
   hasSavedItems: boolean;
   hasFilteredItems: boolean;
@@ -15712,6 +16083,7 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   activeTab?: WorkspaceQrHistoryTab | string | null;
   referenceTimestampMs?: number;
   copiedRoomCode?: string | null;
+  selectedDetailsRoomCode?: string | null;
   roomCode?: string | null;
   isCsvExported?: boolean;
   csvExportCount?: number;
@@ -15742,6 +16114,15 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
     ? normalizeStudyRoomCode(input?.copiedRoomCode || '')
     : null;
+  const detailsModal = buildWorkspaceQrHistoryItemDetailsModalSpec(
+    savedEntries,
+    input?.selectedDetailsRoomCode,
+    {
+      referenceTimestampMs: input?.referenceTimestampMs,
+      copiedRoomCode: normalizedCopiedRoomCode,
+      maxItems: cap,
+    }
+  );
   const csvExport = buildWorkspaceQrHistoryCsvExport(savedEntries, {
     sortOrder,
     roomCode: input?.roomCode,
@@ -15782,6 +16163,14 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
       const isCopied =
         Boolean(normalizedCopiedRoomCode) &&
         normalizedCopiedRoomCode === entry.roomCode;
+      const formattedTs = formatWorkspaceQrHistoryOriginalTimestamp(
+        entry.scannedAtMs,
+        input?.referenceTimestampMs
+      );
+      const scanSource = resolveWorkspaceQrHistoryScanSourceDetails(entry);
+      const isDetailsModalOpen =
+        detailsModal.isOpen &&
+        detailsModal.selectedRoomCode === entry.roomCode;
       return {
         ...entry,
         category,
@@ -15794,6 +16183,13 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         pinnedAtMs: entry.pinnedAtMs || 0,
         itemElementId: `workspace-header-qr-history-item-${idx}`,
         itemTestId: `workspace-header-qr-history-item-${idx}`,
+        detailsTriggerElementId: `workspace-header-qr-recent-scan-item-${idx}`,
+        detailsTriggerTestId: `workspace-header-qr-recent-scan-item-${idx}`,
+        isDetailsModalOpen,
+        originalTimestampLabel: formattedTs.formattedUtcTimestamp,
+        scannedAtIso: formattedTs.scannedAtIso,
+        relativeTimestampLabel: formattedTs.relativeTimeLabel,
+        scanSource,
         categoryTagElementId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryTagTestId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryDotElementId: `workspace-header-qr-history-category-dot-${idx}`,
@@ -15950,6 +16346,8 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
             : 'No matching room codes in Search History.',
     savedRoomCodes: savedEntries.map((entry) => entry.roomCode),
     matchedRoomCodes: items.map((entry) => entry.roomCode),
+    selectedDetailsRoomCode: detailsModal.selectedRoomCode,
+    detailsModal,
     items,
     hasSavedItems: savedEntries.length > 0,
     hasFilteredItems: items.length > 0,
@@ -16022,6 +16420,8 @@ export interface WorkspaceQrHistorySectionSpec {
   countBadgeLabel: string;
   emptyMessage: string;
   matchedRoomCodes: string[];
+  selectedDetailsRoomCode: string | null;
+  detailsModal: WorkspaceQrHistoryItemDetailsModalSpec;
   items: WorkspaceQrHistorySectionItemSpec[];
   hasItems: boolean;
 }
@@ -16041,6 +16441,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   activeTab?: WorkspaceQrHistoryTab | string | null;
   referenceTimestampMs?: number;
   copiedRoomCode?: string | null;
+  selectedDetailsRoomCode?: string | null;
   roomCode?: string | null;
   isCsvExported?: boolean;
   csvExportCount?: number;
@@ -16086,6 +16487,15 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
     ? normalizeStudyRoomCode(input?.copiedRoomCode || '')
     : null;
+  const detailsModal = buildWorkspaceQrHistoryItemDetailsModalSpec(
+    allSortedEntries,
+    input?.selectedDetailsRoomCode,
+    {
+      referenceTimestampMs: input?.referenceTimestampMs,
+      copiedRoomCode: normalizedCopiedRoomCode,
+      maxItems: cap,
+    }
+  );
   const pinnedRoomCodes = allSortedEntries
     .filter((entry) => Boolean(entry.isPinned))
     .map((entry) => entry.roomCode);
@@ -16112,6 +16522,14 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
       const isCopied =
         Boolean(normalizedCopiedRoomCode) &&
         normalizedCopiedRoomCode === entry.roomCode;
+      const formattedTs = formatWorkspaceQrHistoryOriginalTimestamp(
+        entry.scannedAtMs,
+        input?.referenceTimestampMs
+      );
+      const scanSource = resolveWorkspaceQrHistoryScanSourceDetails(entry);
+      const isDetailsModalOpen =
+        detailsModal.isOpen &&
+        detailsModal.selectedRoomCode === entry.roomCode;
       return {
         ...entry,
         category,
@@ -16124,6 +16542,13 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         pinnedAtMs: entry.pinnedAtMs || 0,
         itemElementId: `workspace-header-qr-history-item-${idx}`,
         itemTestId: `workspace-header-qr-history-item-${idx}`,
+        detailsTriggerElementId: `workspace-header-qr-recent-scan-item-${idx}`,
+        detailsTriggerTestId: `workspace-header-qr-recent-scan-item-${idx}`,
+        isDetailsModalOpen,
+        originalTimestampLabel: formattedTs.formattedUtcTimestamp,
+        scannedAtIso: formattedTs.scannedAtIso,
+        relativeTimestampLabel: formattedTs.relativeTimeLabel,
+        scanSource,
         categoryTagElementId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryTagTestId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryDotElementId: `workspace-header-qr-history-category-dot-${idx}`,
@@ -16265,6 +16690,8 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     emptyMessage:
       'No scanned room codes in history yet. Scan up to 5 QR codes to quickly join them here.',
     matchedRoomCodes: items.map((entry) => entry.roomCode),
+    selectedDetailsRoomCode: detailsModal.selectedRoomCode,
+    detailsModal,
     items,
     hasItems: allSortedEntries.length > 0,
   };
@@ -17045,6 +17472,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   recentScans: WorkspaceQrRecentScansSpec;
   historySection: WorkspaceQrHistorySectionSpec;
   searchHistory: WorkspaceQrSearchHistorySpec;
+  historyDetailsModal: WorkspaceQrHistoryItemDetailsModalSpec;
   soundSettingsSection: WorkspaceQrSoundSettingsSectionSpec;
   soundVolumeSection: WorkspaceQrSoundVolumeSectionSpec;
   scanConfirmationChime: WorkspaceQrScanConfirmationChimeSpec;
@@ -17136,6 +17564,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   historyActiveTab?: WorkspaceQrHistoryTab | string | null;
   historyStatsReferenceTimestampMs?: number;
   copiedHistoryRoomCode?: string | null;
+  selectedHistoryDetailsRoomCode?: string | null;
   isHistoryCsvExported?: boolean;
   historyCsvExportCount?: number;
   qrScannerSoundPreferences?: WorkspaceQrScannerSoundPreferences | unknown;
@@ -17189,6 +17618,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     activeTab: input?.historyActiveTab,
     referenceTimestampMs: input?.historyStatsReferenceTimestampMs,
     copiedRoomCode: input?.copiedHistoryRoomCode,
+    selectedDetailsRoomCode: input?.selectedHistoryDetailsRoomCode,
     roomCode,
     isCsvExported: input?.isHistoryCsvExported,
     csvExportCount: input?.historyCsvExportCount,
@@ -17201,10 +17631,12 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     activeTab: input?.historyActiveTab,
     referenceTimestampMs: input?.historyStatsReferenceTimestampMs,
     copiedRoomCode: input?.copiedHistoryRoomCode,
+    selectedDetailsRoomCode: input?.selectedHistoryDetailsRoomCode,
     roomCode,
     isCsvExported: input?.isHistoryCsvExported,
     csvExportCount: input?.historyCsvExportCount,
   });
+  const historyDetailsModal = searchHistory.detailsModal;
   const soundSettingsSection = buildWorkspaceQrSoundSettingsSectionSpec({
     preferences: input?.qrScannerSoundPreferences,
     volumePreferences: input?.qrScannerSoundVolumePreferences,
@@ -17252,6 +17684,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     recentScans,
     historySection,
     searchHistory,
+    historyDetailsModal,
     soundSettingsSection,
     soundVolumeSection,
     scanConfirmationChime,
