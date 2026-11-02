@@ -6169,9 +6169,9 @@ export default function App() {
                   setIsGlass3dLandingMode(true);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-sky-400/50 bg-sky-500/15 text-sky-700 dark:text-sky-200 hover:bg-sky-500/25 text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-zinc-400/45 bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:border-zinc-500/50 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0"
               >
-                <BookOpen className="w-3.5 h-3.5 text-sky-500 dark:text-sky-300 shrink-0" />
+                <BookOpen className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
                 <span>3D Glass Codex</span>
               </button>
               <button
