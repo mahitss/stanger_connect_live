@@ -318,6 +318,9 @@ import {
   filterWorkspaceCommandPaletteItems,
   resolveCommandPaletteKeyboardNavigation,
   evaluateWorkspaceProductivitySummary,
+  AUTO_CONFIGURED_WORKSPACE_STORAGE_KEY,
+  EXPLICIT_SIGNOUT_STORAGE_KEY,
+  buildAutoConfiguredWorkspacePreset,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -7968,15 +7971,15 @@ test('Enterprise Zero-Trust Security Audit & Hardening Suite: exposed file block
 
 test('Universal Workspace Command Palette filters commands by multi-token query and category, resolves keyboard arrow wraparound, and evaluates productivity summary', () => {
   assert.equal(WORKSPACE_COMMAND_CATEGORIES.length, 5);
-  assert.equal(WORKSPACE_COMMAND_PALETTE_ITEMS.length, 12);
+  assert.equal(WORKSPACE_COMMAND_PALETTE_ITEMS.length, 13);
 
-  // 1. Default unfiltered returns all 12 items
+  // 1. Default unfiltered returns all 13 items
   const allItems = filterWorkspaceCommandPaletteItems('', 'All');
-  assert.equal(allItems.length, 12);
+  assert.equal(allItems.length, 13);
 
   // 2. Category filtering
   const studyItems = filterWorkspaceCommandPaletteItems('', 'Study & Focus');
-  assert.equal(studyItems.length, 3);
+  assert.equal(studyItems.length, 4);
   assert.ok(studyItems.every((item) => item.category === 'Study & Focus'));
 
   const securityItems = filterWorkspaceCommandPaletteItems('', 'Security & Audit');
@@ -7991,6 +7994,10 @@ test('Universal Workspace Command Palette filters commands by multi-token query 
   const pomodoroMatches = filterWorkspaceCommandPaletteItems('25m sprint');
   assert.equal(pomodoroMatches.length, 1);
   assert.equal(pomodoroMatches[0].id, 'act_quick_pomodoro_25m');
+
+  const autoSetMatches = filterWorkspaceCommandPaletteItems('auto preset');
+  assert.equal(autoSetMatches.length, 1);
+  assert.equal(autoSetMatches[0].id, 'act_auto_configure_workspace');
 
   // 4. Keyboard arrow wraparound navigation
   assert.equal(
@@ -8052,5 +8059,37 @@ test('Universal Workspace Command Palette filters commands by multi-token query 
   assert.equal(completedGoal.isDailyGoalReached, true);
   assert.equal(completedGoal.readinessScorePercent, 100);
 });
+
+test('Auto-Configured Workspace Preset provisions verified admin identity, 120m daily goal, STUDY-204 desk, Deep Focus mood, and categorized QR scan history', () => {
+  assert.equal(AUTO_CONFIGURED_WORKSPACE_STORAGE_KEY, 'mr_stranger_auto_configured_v1');
+  assert.equal(EXPLICIT_SIGNOUT_STORAGE_KEY, 'mr_stranger_explicit_signout_v1');
+
+  const preset = buildAutoConfiguredWorkspacePreset({
+    todayDateKey: '2026-11-02',
+    nowMs: 1_762_000_000_000,
+  });
+
+  assert.equal(preset.identity.uid, 'usr_mahit_admin');
+  assert.equal(preset.identity.email, BOOTSTRAPPED_ADMIN_EMAIL);
+  assert.equal(preset.identity.displayName, 'Mahit Saxena');
+  assert.equal(preset.identity.isAdmin, true);
+  assert.equal(preset.identity.streakCount, 7);
+  assert.equal(preset.identity.participationPoints, 185);
+  assert.equal(preset.identity.lastLoginDate, '2026-11-02');
+
+  assert.equal(preset.productivity.dailyTargetMinutes, 120);
+  assert.equal(preset.productivity.dailyCompletedMinutes, 60);
+  assert.equal(preset.productivity.studyRoomCode, 'STUDY-204');
+  assert.equal(preset.productivity.deskSubject, 'System Architecture & Deep Work');
+  assert.equal(preset.productivity.mood, 'Deep Focus 🎯');
+  assert.equal(preset.productivity.pomodoroTimerMinutes, 25);
+
+  assert.equal(preset.seededQrScans.length, 3);
+  assert.equal(preset.seededQrScans[0].roomCode, 'STUDY-204');
+  assert.equal(preset.seededQrScans[0].category, 'Study');
+  assert.equal(preset.seededQrScans[0].isPinned, true);
+  assert.ok(preset.statusLabel.includes('Auto-Set Active'));
+});
+
 
 

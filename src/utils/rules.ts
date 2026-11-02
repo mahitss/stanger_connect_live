@@ -18645,6 +18645,15 @@ export const WORKSPACE_COMMAND_PALETTE_ITEMS: readonly WorkspaceCommandItem[] = 
     keywords: ['theme', 'dark', 'light', 'mode', 'appearance', 'color'],
     actionType: 'quick_action',
   },
+  {
+    id: 'act_auto_configure_workspace',
+    title: 'Auto-Set Optimal Workspace Preset',
+    subtitle: 'Automatically configure 120m daily target, STUDY-204 desk, Deep Focus mood & QR room',
+    category: 'Study & Focus',
+    shortcut: '⇧ A',
+    keywords: ['auto', 'set', 'preset', 'configure', 'default', 'optimal', 'setup'],
+    actionType: 'quick_action',
+  },
 ] as const;
 
 export function filterWorkspaceCommandPaletteItems(
@@ -18765,5 +18774,126 @@ export function evaluateWorkspaceProductivitySummary(params: {
     summaryHeadline,
   };
 }
+
+export const AUTO_CONFIGURED_WORKSPACE_STORAGE_KEY = 'mr_stranger_auto_configured_v1';
+export const EXPLICIT_SIGNOUT_STORAGE_KEY = 'mr_stranger_explicit_signout_v1';
+
+export interface AutoConfiguredWorkspacePreset {
+  identity: {
+    uid: string;
+    email: string;
+    displayName: string;
+    bio: string;
+    avatarUrl: string;
+    streakCount: number;
+    lastLoginDate: string;
+    participationPoints: number;
+    privacyVisibility: 'everyone' | 'connections_only' | 'ghost';
+    readReceiptsEnabled: boolean;
+    allowCallsFromConnectionsOnly: boolean;
+    isAdmin: boolean;
+  };
+  productivity: {
+    dailyTargetMinutes: number;
+    dailyCompletedMinutes: number;
+    studyRoomCode: string;
+    studyRoomName: string;
+    deskSubject: string;
+    deskPositiveNote: string;
+    pomodoroTimerMinutes: number;
+    mood: string;
+  };
+  seededQrScans: WorkspaceQrRecentScanEntry[];
+  statusLabel: string;
+}
+
+export function buildAutoConfiguredWorkspacePreset(options?: {
+  todayDateKey?: string;
+  nowMs?: number;
+  preferredRoomCode?: string;
+  existingDisplayName?: string;
+  existingEmail?: string;
+  existingUid?: string;
+}): AutoConfiguredWorkspacePreset {
+  const nowMs =
+    typeof options?.nowMs === 'number' && Number.isFinite(options.nowMs)
+      ? Math.floor(options.nowMs)
+      : Date.now();
+  const todayDateKey =
+    typeof options?.todayDateKey === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(options.todayDateKey)
+      ? options.todayDateKey
+      : formatDateKey(new Date(nowMs));
+  const rawRoom = String(options?.preferredRoomCode || 'STUDY-204').trim();
+  const studyRoomCode = normalizeStudyRoomCode(rawRoom) || 'STUDY-204';
+  const displayName =
+    sanitizeSafeText(String(options?.existingDisplayName || 'Mahit Saxena').trim(), 48) ||
+    'Mahit Saxena';
+  const email =
+    String(options?.existingEmail || BOOTSTRAPPED_ADMIN_EMAIL)
+      .trim()
+      .toLowerCase() || BOOTSTRAPPED_ADMIN_EMAIL;
+  const uid =
+    String(options?.existingUid || 'usr_mahit_admin')
+      .trim()
+      .replace(/[^a-zA-Z0-9_-]/g, '') || 'usr_mahit_admin';
+
+  const seededQrScans: WorkspaceQrRecentScanEntry[] =
+    normalizeStoredWorkspaceQrRecentScans(
+      [
+        {
+          roomCode: studyRoomCode,
+          workspaceUrl: `https://mrstranger.app/?room=${encodeURIComponent(studyRoomCode)}`,
+          scannedAtMs: nowMs - 120_000,
+          isPinned: true,
+          category: 'Study',
+        },
+        {
+          roomCode: 'ARCH-LAB',
+          workspaceUrl: 'https://mrstranger.app/?room=ARCH-LAB',
+          scannedAtMs: nowMs - 3_600_000,
+          isPinned: false,
+          category: 'Work',
+        },
+        {
+          roomCode: 'LOUNGE-01',
+          workspaceUrl: 'https://mrstranger.app/?room=LOUNGE-01',
+          scannedAtMs: nowMs - 7_200_000,
+          isPinned: false,
+          category: 'Casual',
+        },
+      ],
+      3
+    );
+
+  return {
+    identity: {
+      uid,
+      email,
+      displayName,
+      bio: 'Principal Systems Architect · Auto-Configured Deep Work Sanctuary',
+      avatarUrl: '',
+      streakCount: 7,
+      lastLoginDate: todayDateKey,
+      participationPoints: 185,
+      privacyVisibility: 'everyone',
+      readReceiptsEnabled: true,
+      allowCallsFromConnectionsOnly: true,
+      isAdmin: email === BOOTSTRAPPED_ADMIN_EMAIL,
+    },
+    productivity: {
+      dailyTargetMinutes: 120,
+      dailyCompletedMinutes: 60,
+      studyRoomCode,
+      studyRoomName: `Study Room ${studyRoomCode}`,
+      deskSubject: 'System Architecture & Deep Work',
+      deskPositiveNote: `Auto-configured 120m Deep Work protocol active in ${studyRoomCode}`,
+      pomodoroTimerMinutes: 25,
+      mood: 'Deep Focus 🎯',
+    },
+    seededQrScans,
+    statusLabel: `Auto-Set Active · 120m Target (60m Logged) · ${studyRoomCode} · Deep Focus 🎯`,
+  };
+}
+
 
 

@@ -270,6 +270,9 @@ import {
   filterWorkspaceCommandPaletteItems,
   resolveCommandPaletteKeyboardNavigation,
   evaluateWorkspaceProductivitySummary,
+  AUTO_CONFIGURED_WORKSPACE_STORAGE_KEY,
+  EXPLICIT_SIGNOUT_STORAGE_KEY,
+  buildAutoConfiguredWorkspacePreset,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -365,23 +368,36 @@ export default function App() {
     return m ? sanitizeSafeText(m.trim(), 120) : '';
   })();
 
+  const initialAutoPreset = buildAutoConfiguredWorkspacePreset({
+    todayDateKey: formatDateKey(new Date()),
+    preferredRoomCode: initialRoomParam || 'STUDY-204',
+  });
+
   const [activeStudyRoomCode, setActiveStudyRoomCode] = useState<string>(
-    initialRoomParam || 'STUDY-GLOBAL'
+    initialRoomParam || initialAutoPreset.productivity.studyRoomCode
   );
 
   const [activePage, setActivePage] = useState<SidebarPage>(() =>
     initialRoomParam ? 'study' : initialMomentParam ? 'moments' : 'hub'
   );
 
-  // Persistent Authenticated Account State
+  // Persistent Authenticated Account State (Auto-Set by default unless explicitly signed out)
   const [accountSession, setAccountSession] = useState<AccountIdentity | null>(() => {
     try {
       const saved = localStorage.getItem('mr_stranger_account_v2');
       if (saved) return JSON.parse(saved);
+      if (localStorage.getItem(EXPLICIT_SIGNOUT_STORAGE_KEY) === 'true') {
+        return null;
+      }
+      localStorage.setItem(
+        'mr_stranger_account_v2',
+        JSON.stringify(initialAutoPreset.identity)
+      );
+      localStorage.setItem(AUTO_CONFIGURED_WORKSPACE_STORAGE_KEY, 'true');
     } catch {
       // ignore
     }
-    return null;
+    return initialAutoPreset.identity;
   });
 
   // Persistent Streak Freeze Inventory & Missed-Day Protection State
@@ -454,7 +470,18 @@ export default function App() {
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [onlinePeers, setOnlinePeers] = useState<OnlinePeer[]>([]);
-  const [studyDesks, setStudyDesks] = useState<StudyDeskItem[]>([]);
+  const [studyDesks, setStudyDesks] = useState<StudyDeskItem[]>(() => [
+    {
+      uid: initialAutoPreset.identity.uid,
+      displayName: initialAutoPreset.identity.displayName,
+      roomCode: initialAutoPreset.productivity.studyRoomCode,
+      roomName: initialAutoPreset.productivity.studyRoomName,
+      subject: initialAutoPreset.productivity.deskSubject,
+      positiveNote: initialAutoPreset.productivity.deskPositiveNote,
+      timerMinutes: initialAutoPreset.productivity.pomodoroTimerMinutes,
+      startedAt: Date.now() - 1_800_000,
+    },
+  ]);
   const [gameScores, setGameScores] = useState<MultiplayerScore[]>([]);
   const [studyChat, setStudyChat] = useState<StudyChatMessage[]>([]);
   const [incomingCallSignal, setIncomingCallSignal] = useState<{
@@ -671,11 +698,20 @@ export default function App() {
         if (parsed.dateKey === formatDateKey(new Date())) {
           return Math.max(0, Number(parsed.completedMinutes) || 0);
         }
+      } else {
+        localStorage.setItem(
+          'mr_stranger_daily_goal_v1',
+          JSON.stringify({
+            dateKey: formatDateKey(new Date()),
+            targetMinutes: initialAutoPreset.productivity.dailyTargetMinutes,
+            completedMinutes: initialAutoPreset.productivity.dailyCompletedMinutes,
+          })
+        );
       }
     } catch {
       // ignore
     }
-    return 30;
+    return initialAutoPreset.productivity.dailyCompletedMinutes;
   });
   const prevCompletedMinutesRef = useRef<number | null>(null);
   const [lastCompletedMinutesSnapshot, setLastCompletedMinutesSnapshot] = useState<
@@ -875,10 +911,18 @@ export default function App() {
         );
         return normalized;
       }
+      localStorage.setItem(
+        WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
+        JSON.stringify(initialAutoPreset.seededQrScans)
+      );
+      localStorage.setItem(
+        WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+        JSON.stringify(initialAutoPreset.seededQrScans)
+      );
     } catch {
       // ignore localStorage read error
     }
-    return [];
+    return initialAutoPreset.seededQrScans;
   });
   const [isWorkspaceHeaderQrScanToastVisible, setIsWorkspaceHeaderQrScanToastVisible] =
     useState<boolean>(false);
@@ -2513,6 +2557,7 @@ export default function App() {
       };
       setAccountSession(newSession);
       localStorage.setItem('mr_stranger_account_v2', JSON.stringify(newSession));
+      localStorage.removeItem(EXPLICIT_SIGNOUT_STORAGE_KEY);
       setPasswordInput('');
       setActivePage(initialRoomParam ? 'study' : initialMomentParam ? 'moments' : 'hub');
     } catch {
@@ -2683,6 +2728,7 @@ export default function App() {
       await signOut(auth);
     }
     localStorage.removeItem('mr_stranger_account_v2');
+    localStorage.setItem(EXPLICIT_SIGNOUT_STORAGE_KEY, 'true');
     setAccountSession(null);
     setSignOutEmailConfirm('');
     setSignOutPasswordConfirm('');
@@ -3429,6 +3475,102 @@ export default function App() {
     return () => window.removeEventListener('keydown', onGlobalKeyDown);
   }, [isCommandPaletteOpen, currentIdentity]);
 
+  const [autoConfigureStatusLabel, setAutoConfigureStatusLabel] = useState<string>(
+    initialAutoPreset.statusLabel
+  );
+  const [autoConfigureAppliedCount, setAutoConfigureAppliedCount] = useState<number>(1);
+
+  const handleApplyAutoConfiguredWorkspacePreset = () => {
+    const preset = buildAutoConfiguredWorkspacePreset({
+      todayDateKey: todayDateStr,
+      preferredRoomCode: initialRoomParam || 'STUDY-204',
+      existingUid: currentIdentity?.uid,
+      existingEmail: currentIdentity?.email,
+      existingDisplayName: currentIdentity?.displayName,
+    });
+
+    const nextIdentity: AccountIdentity = {
+      ...preset.identity,
+      streakCount: Math.max(currentIdentity?.streakCount ?? 0, preset.identity.streakCount),
+      participationPoints: Math.max(
+        currentIdentity?.participationPoints ?? 0,
+        preset.identity.participationPoints
+      ),
+      sessionToken: currentIdentity?.sessionToken,
+    };
+
+    setAccountSession(nextIdentity);
+    setDailyTargetMinutes(preset.productivity.dailyTargetMinutes);
+    setTargetInputMinutes(String(preset.productivity.dailyTargetMinutes));
+    const nextCompleted = Math.max(
+      dailyCompletedMinutes,
+      preset.productivity.dailyCompletedMinutes
+    );
+    setDailyCompletedMinutes(nextCompleted);
+    setActiveStudyRoomCode(preset.productivity.studyRoomCode);
+    setUserMood(preset.productivity.mood);
+    userMoodRef.current = preset.productivity.mood;
+
+    const nextDesk: StudyDeskItem = {
+      uid: nextIdentity.uid,
+      displayName: nextIdentity.displayName,
+      roomCode: preset.productivity.studyRoomCode,
+      roomName: preset.productivity.studyRoomName,
+      subject: preset.productivity.deskSubject,
+      positiveNote: preset.productivity.deskPositiveNote,
+      timerMinutes: preset.productivity.pomodoroTimerMinutes,
+      startedAt: Date.now(),
+    };
+    setStudyDesks((prev) => [
+      ...prev.filter((d) => d.uid !== nextIdentity.uid),
+      nextDesk,
+    ]);
+
+    setRecentWorkspaceQrScans((prev) => {
+      const merged = normalizeStoredWorkspaceQrRecentScans(
+        [...preset.seededQrScans, ...prev],
+        MAX_WORKSPACE_QR_SEARCH_HISTORY
+      );
+      try {
+        localStorage.setItem(
+          WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
+          JSON.stringify(merged)
+        );
+        localStorage.setItem(
+          WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+          JSON.stringify(merged)
+        );
+      } catch {
+        // ignore
+      }
+      return merged;
+    });
+
+    try {
+      localStorage.removeItem(EXPLICIT_SIGNOUT_STORAGE_KEY);
+      localStorage.setItem(AUTO_CONFIGURED_WORKSPACE_STORAGE_KEY, 'true');
+      localStorage.setItem('mr_stranger_account_v2', JSON.stringify(nextIdentity));
+      localStorage.setItem(
+        'mr_stranger_daily_goal_v1',
+        JSON.stringify({
+          dateKey: todayDateStr,
+          targetMinutes: preset.productivity.dailyTargetMinutes,
+          completedMinutes: nextCompleted,
+        })
+      );
+      localStorage.setItem('mr_stranger_user_mood_v1', preset.productivity.mood);
+    } catch {
+      // ignore storage errors
+    }
+
+    setAutoConfigureStatusLabel(preset.statusLabel);
+    setAutoConfigureAppliedCount((c) => c + 1);
+    setQuickStartFeedback(preset.statusLabel);
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+  };
+
   // ==========================================================================
   // DEDICATED MNC-GRADE SIGN-IN & CREATE ACCOUNT PAGE (Supports Dark & Light)
   // ==========================================================================
@@ -3560,6 +3702,25 @@ export default function App() {
                     Sign In
                   </button>
                 </div>
+              </div>
+
+              <div className="p-3.5 rounded-lg border border-emerald-500/35 bg-emerald-500/10 flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="text-xs font-bold text-emerald-300">
+                    Instant Zero-Friction Setup
+                  </div>
+                  <div className="text-[11px] text-zinc-300">
+                    Auto-configure profile, 120m daily goal, STUDY-204 desk & enter immediately.
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  data-testid="auth-auto-setup-btn"
+                  onClick={handleApplyAutoConfiguredWorkspacePreset}
+                  className="px-3 py-1.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-colors whitespace-nowrap shrink-0"
+                >
+                  Auto-Set & Enter Workspace
+                </button>
               </div>
 
               <form onSubmit={handleEmailPasswordSubmit} className="space-y-4">
@@ -5496,6 +5657,8 @@ export default function App() {
       handleCopyWorkspaceHeaderShareLink();
     } else if (item.id === 'act_toggle_theme') {
       handleToggleTheme();
+    } else if (item.id === 'act_auto_configure_workspace') {
+      handleApplyAutoConfiguredWorkspacePreset();
     }
     handleCloseCommandPalette();
   };
@@ -8704,6 +8867,26 @@ export default function App() {
               <kbd className="px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 text-[10px] font-mono text-slate-600 dark:text-zinc-300 tabular-nums">
                 ⌘K
               </kbd>
+            </button>
+
+            <button
+              type="button"
+              id="workspace-auto-configure-btn"
+              data-testid="workspace-auto-configure-btn"
+              data-applied-count={String(autoConfigureAppliedCount)}
+              data-status-label={autoConfigureStatusLabel}
+              onClick={handleApplyAutoConfiguredWorkspacePreset}
+              title={autoConfigureStatusLabel}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 bg-emerald-500/15 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/25 dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-300 dark:hover:bg-emerald-500/25"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>Auto-Set Workspace</span>
+              <span
+                data-testid="workspace-auto-configure-status"
+                className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-[10px] font-mono font-bold text-emerald-800 dark:text-emerald-200 tabular-nums"
+              >
+                120m · {activeStudyRoomCode}
+              </span>
             </button>
 
             <button
