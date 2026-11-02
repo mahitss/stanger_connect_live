@@ -66,11 +66,11 @@ function createProceduralCodexPageTexture(renderer: THREE.WebGLRenderer): THREE.
 
     const chapterColors = ['#ffffff', '#e4e4e7', '#f4f4f5', '#d4d4d8', '#ffffff'];
     const chapterLabels = [
-      'I · SILENT STUDY SANCTUARY',
-      'II · INVITE-FIRST MESSENGER',
-      'III · MOMENTS & TOWNSQUARE',
-      'IV · OPTICAL QR ROOM SCANNER',
-      'V · ZERO-TRUST SECURITY VAULT',
+      '01 · STUDY ROOM & POMODORO',
+      '02 · INVITE-FIRST CHAT & CALLS',
+      '03 · PHOTO MOMENTS & FEED',
+      '04 · QR SCANNER & ANALYTICS',
+      '05 · BREAK ARCADE & PRIVACY',
     ];
 
     for (let i = 0; i < 5; i++) {
@@ -805,7 +805,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-sm font-semibold tracking-tight text-white truncate">
-                <span>Mr. Stranger · 3D Glass Codex</span>
+                <span>Mr. Stranger · Live Presence &amp; Study Sanctuary</span>
                 <span aria-hidden="true" className="text-zinc-500">
                   ·
                 </span>
@@ -817,19 +817,30 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                 data-testid="rolling-book-state-badge"
                 className="text-[11px] text-zinc-400 truncate"
               >
-                {currentKinematics.bookStateLabel} · Elevation{' '}
-                {verticalState.cameraElevationY}m
+                {currentKinematics.bookStateLabel} · Room {activeStudyRoomCode} ·{' '}
+                {dailyCompletedMinutes}/{dailyTargetMinutes}m Focus
               </p>
             </div>
           </div>
 
-          {/* Floor Quick-Jump Nav Links (Brushed Silver Typography) */}
+          {/* Feature Quick-Jump Nav Links (Brushed Silver Typography) */}
           <nav
-            aria-label="3D Architectural Floors"
+            aria-label="Mr. Stranger Features"
             className="hidden xl:flex items-center gap-4 text-xs font-medium text-zinc-400 shrink-0"
           >
-            {GLASS_ARCHITECTURAL_FLOORS.map((floor) => {
-              const isActive = floor.floorIndex === currentKinematics.activeFloorIndex;
+            {[
+              { floorIndex: 1, shortLabel: '01. Study Room' },
+              { floorIndex: 2, shortLabel: '02. Chat & Calls' },
+              { floorIndex: 3, shortLabel: '03. Moments Feed' },
+              { floorIndex: 4, shortLabel: '04. QR Scanner' },
+              { floorIndex: 5, shortLabel: '05. Break Arcade' },
+            ].map((navItem) => {
+              const floor =
+                GLASS_ARCHITECTURAL_FLOORS.find(
+                  (f) => f.floorIndex === navItem.floorIndex
+                ) || GLASS_ARCHITECTURAL_FLOORS[0];
+              const isActive =
+                floor.floorIndex === currentKinematics.activeFloorIndex;
               return (
                 <button
                   key={floor.floorIndex}
@@ -841,7 +852,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                       : 'border-transparent text-zinc-400 hover:text-zinc-100'
                   }`}
                 >
-                  0{floor.floorIndex}. {floor.character.name.split(' ')[0]}
+                  {navItem.shortLabel}
                 </button>
               );
             })}
@@ -863,12 +874,12 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
               {bookRollPercent >= 75 ? (
                 <>
                   <ArrowUpCircle className="h-4 w-4 text-zinc-200" />
-                  <span>Roll Book Up</span>
+                  <span>Roll Guidebook Up</span>
                 </>
               ) : (
                 <>
                   <ArrowDownCircle className="h-4 w-4 text-zinc-200" />
-                  <span>Roll Book Down</span>
+                  <span>Roll Guidebook Down</span>
                 </>
               )}
             </button>
@@ -885,7 +896,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
               }}
             >
               <Layers className="h-4 w-4 text-zinc-950" />
-              <span>Open Full Workspace Studio</span>
+              <span>Enter Mr. Stranger Workspace</span>
             </button>
           </div>
         </div>
@@ -893,7 +904,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
 
       {/* Main Scrollable 3D Obsidian & Silver Glass Architectural Content */}
       <main className="relative z-10 mx-auto max-w-7xl px-4 sm:px-8 pt-6 pb-32">
-        {/* SECTION 1: UNOBSTRUCTED 3D SMOKED GLASS FRONT BASE STAGE */}
+        {/* SECTION 1: MR. STRANGER HERO LANDING STAGE */}
         <section
           data-testid="front-glass-base-hero"
           className="relative mb-16 flex flex-col justify-between min-h-[540px] rounded-3xl border border-zinc-300/25 p-6 sm:p-8"
@@ -904,30 +915,31 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
               'inset 0 1px 1px 0 rgba(255, 255, 255, 0.38), inset 0 -1px 1px 0 rgba(161, 161, 170, 0.22), 0 28px 64px -15px rgba(0, 0, 0, 0.92)',
           }}
         >
-          {/* Top Stage Header Overlay */}
+          {/* Top Stage Hero Copy */}
           <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-            <div className="max-w-xl space-y-2">
+            <div className="max-w-xl space-y-2.5">
               <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-300">
-                <span>3D Obsidian &amp; Silver Glass Base</span>
+                <span>Live Presence Directory</span>
                 <span aria-hidden="true">·</span>
-                <span>Kinetic Rolling Book</span>
+                <span>Invite-First Messenger &amp; Calls</span>
                 <span aria-hidden="true">·</span>
-                <span>5-Level Vertical Phone Architecture</span>
+                <span>Silent Study Room &amp; Break Arcade</span>
               </div>
               <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-white leading-tight">
-                Unfurl the 3D Glass Codex &amp; Scroll the Living Tower.
+                Meet Focused Minds. Co-Study in Silence. Connect Without Cold DMs.
               </h1>
               <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
-                Watch the <strong className="text-white">3D Codex Book roll up and down</strong> on
-                the left smoked-glass pedestal while{' '}
+                <strong className="text-white">Mr. Stranger</strong> combines a live mood
+                directory and invite-first direct messaging with{' '}
                 <strong className="text-white">
-                  animated 3D characters using phones and social media messengers
-                </strong>{' '}
-                move up and down the 5-story platinum glass tower on the right.
+                  WebRTC voice &amp; video calling, 25-minute Pomodoro study sanctuaries,
+                  photo Moments, QR room handoff, and multiplayer break games
+                </strong>
+                . Scroll down to explore how every feature works in real time.
               </p>
             </div>
 
-            {/* Compact Brushed Platinum Scroll Codex Readout */}
+            {/* Compact Brushed Platinum Product Guidebook Readout */}
             <div
               className="w-full lg:w-80 shrink-0 rounded-2xl border border-zinc-300/30 p-4"
               style={{
@@ -938,10 +950,10 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
             >
               <div className="flex items-center justify-between text-[11px] text-zinc-200 mb-2">
                 <span className="font-semibold uppercase tracking-wider">
-                  3D Rolling Book Status
+                  Mr. Stranger · Feature Guide
                 </span>
                 <span className="font-mono text-white">
-                  {currentKinematics.rollProgressPercent}% Unfurled
+                  {currentKinematics.rollProgressPercent}% Explored
                 </span>
               </div>
               {/* Top Brushed Platinum Roller Bar */}
@@ -974,30 +986,30 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
             </div>
           </div>
 
-          {/* Center 3D Stage Spatial Labels */}
+          {/* Center Stage Live App Activity Callouts */}
           <div className="my-auto py-12 grid grid-cols-1 sm:grid-cols-2 gap-6 pointer-events-none">
             <div className="flex flex-col items-start justify-end">
               <div
                 className="rounded-xl border border-zinc-300/30 px-3.5 py-2 text-xs text-zinc-200"
-                style={{ background: 'rgba(9, 9, 11, 0.76)' }}
+                style={{ background: 'rgba(9, 9, 11, 0.78)' }}
               >
                 <span className="font-semibold text-white">
-                  Left 3D Pedestal:
+                  Active Study Sanctuary ({activeStudyRoomCode}):
                 </span>{' '}
-                Rolling Codex Book ({currentKinematics.unfurledScrollLengthMeters}m
-                Scroll Unfurled)
+                {dailyCompletedMinutes}/{dailyTargetMinutes}m Focus Logged ·{' '}
+                {streakCount}-Day Streak ({participationPoints} pts)
               </div>
             </div>
             <div className="flex flex-col items-end justify-end">
               <div
                 className="rounded-xl border border-zinc-300/30 px-3.5 py-2 text-xs text-zinc-200"
-                style={{ background: 'rgba(9, 9, 11, 0.76)' }}
+                style={{ background: 'rgba(9, 9, 11, 0.78)' }}
               >
                 <span className="font-semibold text-white">
-                  Right 3D Glass Tower:
+                  Live Member Activity:
                 </span>{' '}
-                {verticalState.activeFloor.character.name} on{' '}
-                {verticalState.activeFloor.character.messengerApp}
+                {verticalState.activeFloor.character.name} ·{' '}
+                {verticalState.activeFloor.character.statusBadge}
               </div>
             </div>
           </div>
@@ -1014,12 +1026,12 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                 {isBottomDockCollapsed ? (
                   <>
                     <ChevronUp className="h-3.5 w-3.5 text-zinc-200" />
-                    <span>Show 3D Book &amp; Elevator Controls</span>
+                    <span>Show Feature Guide &amp; Quick Actions</span>
                   </>
                 ) : (
                   <>
                     <ChevronDown className="h-3.5 w-3.5 text-zinc-200" />
-                    <span>Hide Controls (Zen 3D View)</span>
+                    <span>Hide Dock (Full 3D View)</span>
                   </>
                 )}
               </button>
@@ -1037,7 +1049,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-3 flex-1 min-w-[240px]">
                     <span className="text-xs font-medium text-zinc-300 whitespace-nowrap">
-                      Rolled Up
+                      Chapter I
                     </span>
                     <input
                       type="range"
@@ -1045,12 +1057,12 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                       max={100}
                       value={bookRollPercent}
                       onChange={handleSliderRollChange}
-                      aria-label="Roll 3D Book Up and Down"
+                      aria-label="Roll Mr. Stranger Feature Guidebook Up and Down"
                       data-testid="book-roll-slider"
                       className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-zinc-200"
                     />
                     <span className="text-xs font-medium text-zinc-300 whitespace-nowrap">
-                      Rolled Down ({currentKinematics.rollProgressPercent}%)
+                      Chapter V ({currentKinematics.rollProgressPercent}%)
                     </span>
                   </div>
 
@@ -1061,7 +1073,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                       className="rounded-lg border border-zinc-400/30 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-zinc-200/70"
                       style={{ background: 'rgba(39, 39, 42, 0.78)' }}
                     >
-                      {isAutoRollingBook ? 'Pause Auto-Roll' : 'Resume Auto-Roll'}
+                      {isAutoRollingBook ? 'Pause Auto-Tour' : 'Resume Auto-Tour'}
                     </button>
                     <button
                       type="button"
@@ -1085,14 +1097,24 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                           'linear-gradient(135deg, rgba(161, 161, 170, 0.28), rgba(39, 39, 42, 0.68))',
                       }}
                     >
-                      QR Studio ({recentQrScansCount})
+                      Scan Room QR ({recentQrScansCount})
                     </button>
                   </div>
                 </div>
 
-                {/* 5 Animated Phone Character Elevator Selector Buttons */}
+                {/* 5 App Feature Quick-Jump Buttons */}
                 <div className="grid grid-cols-5 gap-2 pt-1 border-t border-zinc-300/15">
-                  {GLASS_ARCHITECTURAL_FLOORS.map((floor) => {
+                  {[
+                    { floorIndex: 1, label: '01. Study Room' },
+                    { floorIndex: 2, label: '02. Chat & Calls' },
+                    { floorIndex: 3, label: '03. Moments Feed' },
+                    { floorIndex: 4, label: '04. QR Scanner' },
+                    { floorIndex: 5, label: '05. Break Arcade' },
+                  ].map((item) => {
+                    const floor =
+                      GLASS_ARCHITECTURAL_FLOORS.find(
+                        (f) => f.floorIndex === item.floorIndex
+                      ) || GLASS_ARCHITECTURAL_FLOORS[0];
                     const isSelected =
                       floor.floorIndex === currentKinematics.activeFloorIndex;
                     return (
@@ -1112,9 +1134,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                         }}
                       >
                         <Smartphone className="h-3.5 w-3.5 shrink-0 text-zinc-200" />
-                        <span className="truncate">
-                          0{floor.floorIndex}. {floor.character.name.split(' ')[0]}
-                        </span>
+                        <span className="truncate">{item.label}</span>
                       </button>
                     );
                   })}
@@ -1124,7 +1144,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
           </div>
         </section>
 
-        {/* SECTION 2: TOP-TO-BOTTOM 3D OBSIDIAN & SILVER GLASS ARCHITECTURAL FLOORS */}
+        {/* SECTION 2: TOP-TO-BOTTOM MR. STRANGER FEATURE SHOWCASE */}
         <div className="relative space-y-14">
           {GLASS_ARCHITECTURAL_FLOORS.map((floor, idx) => {
             const floorBubbles = messengerBubbles
@@ -1135,6 +1155,13 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
               rotateY: 0,
             };
             const isEven = idx % 2 === 1;
+            const featureActionLabels: Record<number, string> = {
+              1: `Enter Study Room (${activeStudyRoomCode})`,
+              2: 'Open Invite-First Messenger & Calls',
+              3: 'Explore Moments & Townsquare Feed',
+              4: 'Launch QR Room Scanner & Analytics',
+              5: 'Open Privacy Vault & Break Arcade',
+            };
 
             return (
               <section
@@ -1154,7 +1181,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                 }}
               >
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                  {/* Architectural Floor Explanation & Live Feature Controls */}
+                  {/* Feature Explanation & Live Workspace Launch Controls */}
                   <div
                     className={`lg:col-span-7 space-y-4 ${
                       isEven ? 'lg:order-2' : 'lg:order-1'
@@ -1162,14 +1189,10 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                   >
                     <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-300">
                       <span className="font-semibold tracking-wider uppercase text-zinc-100">
-                        0{floor.floorIndex}. {floor.floorCode}
+                        {floor.floorCode}
                       </span>
                       <span aria-hidden="true">·</span>
                       <span>{floor.tierLabel}</span>
-                      <span aria-hidden="true">·</span>
-                      <span className="font-mono text-zinc-400">
-                        Elevation {floor.elevationY > 0 ? `+${floor.elevationY}` : floor.elevationY}m
-                      </span>
                     </div>
 
                     <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
@@ -1177,7 +1200,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                     </h2>
 
                     <p className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
-                      Unfurled Book Section: {floor.bookChapterTitle}
+                      Guidebook Section: {floor.bookChapterTitle}
                     </p>
 
                     <p className="text-sm sm:text-base text-zinc-200 leading-relaxed">
@@ -1215,9 +1238,8 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                       >
                         <ExternalLink className="h-4 w-4 text-zinc-950" />
                         <span>
-                          {floor.floorIndex === 4
-                            ? 'Launch QR Scanner & History Studio'
-                            : `Open ${floor.title.split(' ')[0]} in Workspace`}
+                          {featureActionLabels[floor.floorIndex] ||
+                            'Open in Mr. Stranger'}
                         </span>
                       </button>
 
@@ -1229,7 +1251,9 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                         style={{ background: 'rgba(18, 18, 22, 0.78)' }}
                       >
                         <MessageSquare className="h-4 w-4 text-zinc-300" />
-                        <span>Ping {floor.character.name.split(' ')[0]}’s Phone</span>
+                        <span>
+                          Send Quick Ping to {floor.character.name.split(' ')[0]}
+                        </span>
                       </button>
                     </div>
                   </div>

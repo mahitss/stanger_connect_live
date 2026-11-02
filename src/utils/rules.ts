@@ -18940,17 +18940,17 @@ export interface GlassArchitecturalFloorSpec {
 export const GLASS_ARCHITECTURAL_FLOORS: readonly GlassArchitecturalFloorSpec[] = [
   {
     floorIndex: 1,
-    floorCode: 'LEVEL 05 · PENTHOUSE SPIRE',
-    tierLabel: 'Top Base · Rolling Codex & Study Sanctuary',
+    floorCode: 'FEATURE 01 · SILENT STUDY ROOM',
+    tierLabel: 'Co-Working Desks · 25m Pomodoro · Ambient Soundscapes',
     elevationY: 6.0,
-    title: 'Silent Study Sanctuary & Rolling Codex (STUDY-204)',
-    bookChapterTitle: 'Chapter I · The Rolling Codex of Unbroken Focus',
+    title: 'Silent Study Room, Pomodoro Timer & Ambient Soundscapes',
+    bookChapterTitle: 'Chapter I · Silent Study Sanctuary & Focus Desks',
     whatTheAppDoes:
-      'As the 3D glass book rolls open from the front base, it unfurls live study rooms (STUDY-204), 120-minute daily focus targets, shared desk notes, and synchronized 25-minute Pomodoro sprints.',
+      'Enter shared study rooms like STUDY-204 to focus alongside peers in real time. Track your 120-minute daily focus goal, run synchronized 25-minute Pomodoro sprints, pin shared desk notes, and blend ambient rain, lo-fi, or cafe soundscapes.',
     featureHighlights: [
-      'Live Study Desks & Shared Room Notes',
-      '120m Daily Goal Ring & +25m Pomodoro Sprints',
-      '7-Day Streak Freeze Protection & Participation Leaderboard',
+      'Shared Study Desks (STUDY-204) with Real-Time Subject & Desk Notes',
+      '120m Daily Focus Progress Ring, +25m Pomodoro Sprints & 7-Day Streak Freeze',
+      'Ambient Soundscape Mixer & Daily Participation Leaderboard',
     ],
     targetWorkspacePage: 'study',
     accentHex: '#f4f4f5',
@@ -18960,29 +18960,29 @@ export const GLASS_ARCHITECTURAL_FLOORS: readonly GlassArchitecturalFloorSpec[] 
       name: 'Aria Chen',
       handle: '@aria_deepwork',
       role: 'Deep Work Architect',
-      messengerApp: 'Study Sanctuary Messenger',
+      messengerApp: 'Mr. Stranger · Study Room Chat',
       phoneModelLabel: 'PrismPhone Titanium Pro · 5G',
-      statusBadge: 'Texting in #STUDY-204',
+      statusBadge: 'Focusing in Room STUDY-204 🎯',
       defaultMessages: [
-        'Just rolled open Chapter I in STUDY-204 — locking in for a 25m Pomodoro sprint!',
-        '60/120 focus minutes logged today. Join our silent study desk!',
+        'Locked into Room STUDY-204 for a 25-minute Pomodoro sprint on System Architecture!',
+        '60/120 focus minutes completed today — ambient rain soundscape is on.',
       ],
       avatarAccentHex: '#f4f4f5',
     },
   },
   {
     floorIndex: 2,
-    floorCode: 'LEVEL 04 · SKY ATRIUM',
-    tierLabel: 'Upper Atrium · Invite-First Social Messenger',
+    floorCode: 'FEATURE 02 · INVITE-FIRST MESSENGER',
+    tierLabel: 'Live Presence Directory · Direct Chat · WebRTC Calling',
     elevationY: 3.0,
-    title: 'Invite-First Direct Messenger & WebRTC Audio/Video',
-    bookChapterTitle: 'Chapter II · Zero-Cold-Call Invite-First Connections',
+    title: 'Live Presence Directory, Invite-First Chat & Voice/Video Calls',
+    bookChapterTitle: 'Chapter II · Invite-First Connections & WebRTC Calling',
     whatTheAppDoes:
-      'Protects your focus with an invite-first handshake protocol: peers send a contextual connection note on their phone first, and only accepted connections unlock real-time WebSocket chat and WebRTC voice/video calls.',
+      'Discover who is online right now filtered by live mood ("Deep Work", "Pair Programming", "Brainstorming"), send a polite connection request first, and unlock real-time chat plus peer-to-peer WebRTC voice and video calls once accepted.',
     featureHighlights: [
-      'Invite-First Handshake Gate (Zero Unsolicited DMs)',
-      'Real-Time WebSocket Chat with Read Receipts',
-      'Peer-to-Peer WebRTC Audio & Video Sanctuary Calls',
+      'Invite-First Connection Requests — Zero Unsolicited Cold DMs',
+      'Real-Time Direct Messaging with Typing Indicators & Read Receipts',
+      'One-Click WebRTC Voice & HD Video Calling Between Connected Peers',
     ],
     targetWorkspacePage: 'chat',
     accentHex: '#d4d4d8',
@@ -18992,29 +18992,29 @@ export const GLASS_ARCHITECTURAL_FLOORS: readonly GlassArchitecturalFloorSpec[] 
       name: 'Liam Vance',
       handle: '@liam_architect',
       role: 'Distributed Systems Lead',
-      messengerApp: 'Invite-First Direct Messenger',
+      messengerApp: 'Mr. Stranger · Direct Messenger',
       phoneModelLabel: 'PrismPhone Fold Silver',
-      statusBadge: 'Online on Messenger · Typing...',
+      statusBadge: 'Online · Pair Programming 💻',
       defaultMessages: [
-        'Connection invite accepted! Direct encrypted WebSocket channel is now live.',
-        'Hopping on a quick 10-minute architecture review call after this sprint.',
+        'Accepted your connection request! Our direct chat and voice call channel is now open.',
+        'Hopping on a quick 10-minute WebRTC video call after this coding block.',
       ],
       avatarAccentHex: '#d4d4d8',
     },
   },
   {
     floorIndex: 3,
-    floorCode: 'LEVEL 03 · PRISM CONCOURSE',
-    tierLabel: 'Mid-Tower · Moments & Townsquare X Feed',
+    floorCode: 'FEATURE 03 · MOMENTS & TOWNSQUARE',
+    tierLabel: 'Photo Moments · Nested Threads · Townsquare Channels',
     elevationY: 0.0,
-    title: 'Visual Moments Gallery & Live Townsquare Social Feed',
-    bookChapterTitle: 'Chapter III · Visual Moments & Real-Time Townsquare',
+    title: 'Photo Moments Gallery & Real-Time Townsquare Feed',
+    bookChapterTitle: 'Chapter III · Visual Moments & Townsquare Channels',
     whatTheAppDoes:
-      'Connects creators and scholars across a glassmorphic social feed where members post study desk snapshots, thread replies, bookmark deep-work insights, and filter peers by live mood.',
+      'Share desk setups, study milestones, and daily snapshots on the Moments photo feed with public or connections-only privacy, discuss ideas in multi-level nested comment threads, and post to live Townsquare channels.',
     featureHighlights: [
-      'Photo Moments with Lightbox Zoom & Threaded Replies',
-      'Twitter / X Townsquare Channels, Likes, Retweets & Bookmarks',
-      'Live Mood Directory Filtering with Pinned Filter Chips',
+      'Photo Moments Feed with Lightbox Zoom & Connections-Only Privacy',
+      'Multi-Level Threaded Comments, Likes, Reposts & Saved Bookmarks',
+      'Live Mood Directory Filtering ("Productive", "Social", "Away")',
     ],
     targetWorkspacePage: 'moments',
     accentHex: '#e4e4e7',
@@ -19024,29 +19024,29 @@ export const GLASS_ARCHITECTURAL_FLOORS: readonly GlassArchitecturalFloorSpec[] 
       name: 'Elena Rostova',
       handle: '@elena_rostova',
       role: 'Creative Technologist',
-      messengerApp: 'Townsquare X & Moments App',
+      messengerApp: 'Mr. Stranger · Moments & Townsquare',
       phoneModelLabel: 'PrismPhone Obsidian Glass',
-      statusBadge: 'Posting to #DeepWork Feed',
+      statusBadge: 'Posting in #DeepWork Feed 📸',
       defaultMessages: [
-        'Shared my dual-monitor glass desk setup on Moments — 42 likes already!',
-        'Filtering the directory by "Deep Focus 🎯" to find late-night builders.',
+        'Just shared my late-night study desk snapshot on Moments — 42 likes and 8 replies!',
+        'Filtered the online directory by "My Connections" to see who is studying tonight.',
       ],
       avatarAccentHex: '#e4e4e7',
     },
   },
   {
     floorIndex: 4,
-    floorCode: 'LEVEL 02 · OPTICAL DECK',
-    tierLabel: 'Lower Concourse · 3D QR Scanner & Audio Studio',
+    floorCode: 'FEATURE 04 · QR SCANNER & ANALYTICS',
+    tierLabel: 'Camera QR Scanner · 7-Day Frequency Chart · Volume Studio',
     elevationY: -3.0,
-    title: 'Optical QR Room Scanner, 7-Day Analytics & Chime Studio',
-    bookChapterTitle: 'Chapter IV · Instant Optical Room Handoff & Chimes',
+    title: 'Instant QR Room Scanner, 7-Day Scan Statistics & Audio Studio',
+    bookChapterTitle: 'Chapter IV · Optical QR Room Handoff & Scan Analytics',
     whatTheAppDoes:
-      'Lets any phone or webcam scan room QR codes (STUDY-204, ARCH-LAB, LOUNGE-01) for instant workspace handoff, sort & export CSV scan history, inspect 7-day category frequency charts, and customize Web Audio chime volumes.',
+      'Point your phone or webcam at any room QR badge (STUDY-204, ARCH-LAB, LOUNGE-01) to join a room immediately, inspect 7-day room scan frequency charts and top categories, export CSV history, and customize scan chime volumes.',
     featureHighlights: [
-      'Live Camera & Manual ISO/IEC 18004 QR Code Decoder',
-      'Real-Time Sort (Most Recent / Oldest / Alphabetical) & CSV Export',
-      '7-Day Category Frequency Chart & Custom Scan Sound Volume Slider',
+      'Live Camera & Manual QR Code Scanner for Instant Study Room Handoff',
+      '7-Day Scan Frequency Bar Chart, Top Category Insights & CSV Export',
+      'Custom Scan Sound Volume Slider & Interactive Scan Metadata Modal',
     ],
     targetWorkspacePage: 'hub',
     accentHex: '#a1a1aa',
@@ -19056,29 +19056,29 @@ export const GLASS_ARCHITECTURAL_FLOORS: readonly GlassArchitecturalFloorSpec[] 
       name: 'Noah Patel',
       handle: '@noah_qr',
       role: 'Spatial UX Engineer',
-      messengerApp: 'Optical QR & Chime Messenger',
+      messengerApp: 'Mr. Stranger · QR Room Handoff',
       phoneModelLabel: 'PrismPhone LiDAR Chrome',
-      statusBadge: 'Scanning QR Code STUDY-204',
+      statusBadge: 'Joined STUDY-204 via QR Scan 📱',
       defaultMessages: [
-        'Scanned STUDY-204 QR badge from my phone camera in 140ms!',
-        'Exported our 7-day QR scan history CSV — Study category leads at 64%.',
+        'Scanned the STUDY-204 QR code from my phone and joined the room in under a second!',
+        'Checked the 7-day QR Statistics tab — Study rooms are our #1 scanned category at 64%.',
       ],
       avatarAccentHex: '#a1a1aa',
     },
   },
   {
     floorIndex: 5,
-    floorCode: 'LEVEL 01 · FOUNDATION VAULT',
-    tierLabel: 'Base Foundation · 16-Control Zero-Trust Security',
+    floorCode: 'FEATURE 05 · BREAK ARCADE & SECURITY',
+    tierLabel: 'Subway Runner · Angry Catapult · Block Arena · Zero-Trust',
     elevationY: -6.0,
-    title: 'Enterprise Zero-Trust Security Vault & Admin RBAC',
-    bookChapterTitle: 'Chapter V · Cryptographic Citadel & RBAC Firewall',
+    title: 'Multiplayer Break Arcade & Zero-Trust Privacy Controls',
+    bookChapterTitle: 'Chapter V · Multiplayer Break Arcade & Zero-Trust Vault',
     whatTheAppDoes:
-      'Anchors the entire 3D glass architecture on a hardened security foundation: scrypt password hashing, HMAC-SHA256 bearer sessions, XSS/SQLi/NoSQLi form sanitization, 3-tier rate limiting, and live RBAC admin auditing.',
+      'Take a 5-minute recharge break between Pomodoro sessions with built-in multiplayer games—Subway Runner, Angry Catapult, and Block Arena—protected by enterprise scrypt password hashing, signed HMAC sessions, and RBAC privacy controls.',
     featureHighlights: [
-      'scrypt (N=16384) Password KDF & HMAC-SHA256 Signed Sessions',
-      'Deep XSS / SQLi / NoSQLi / Prototype-Pollution Form Firewall',
-      '3-Tier Sliding-Window Rate Limiter & 16-Control Live Audit Probe',
+      'Built-In Multiplayer Break Games: Subway Runner, Angry Catapult & Block Arena',
+      'Granular Profile Privacy, Connection Visibility & Do-Not-Disturb Controls',
+      '16-Control Zero-Trust Security: scrypt KDF, HMAC-SHA256 & XSS/SQLi Firewall',
     ],
     targetWorkspacePage: 'privacy',
     accentHex: '#e2e8f0',
@@ -19088,12 +19088,12 @@ export const GLASS_ARCHITECTURAL_FLOORS: readonly GlassArchitecturalFloorSpec[] 
       name: 'Mahit Saxena',
       handle: '@mahit_admin',
       role: 'Principal Systems Architect',
-      messengerApp: 'Zero-Trust Command Messenger',
+      messengerApp: 'Mr. Stranger · Arcade & Security Hub',
       phoneModelLabel: 'PrismPhone Titan Vault',
-      statusBadge: 'Admin RBAC Verified · 100/100',
+      statusBadge: 'Playing Subway Runner · 100/100 Secure 🛡️',
       defaultMessages: [
-        'All 16 security controls verified: 0 leaked client keys, CSP & HSTS active.',
-        'Auto-configured workspace preset is live — scroll or click to enter any floor!',
+        'Just finished a 25m study sprint — challenging the room to a quick round of Subway Runner!',
+        'All 16 zero-trust security controls and privacy settings are active on your account.',
       ],
       avatarAccentHex: '#e2e8f0',
     },
@@ -19151,17 +19151,17 @@ export function evaluateRollingBookKinematics(
     GLASS_ARCHITECTURAL_FLOORS.find((f) => f.floorIndex === adjustedFloorIdx) ||
     GLASS_ARCHITECTURAL_FLOORS[0];
 
-  let bookStateLabel = 'Rolled Up · Front Base Codex Ready';
+  let bookStateLabel = 'Rolled Up · Mr. Stranger Guidebook Ready';
   if (safePercent >= 96) {
-    bookStateLabel = 'Fully Rolled Down · Complete 5-Floor Codex Open';
+    bookStateLabel = 'Fully Rolled Down · All 5 Mr. Stranger Features Open';
   } else if (safePercent <= 4) {
-    bookStateLabel = 'Rolled Up · Front Base Codex Ready';
+    bookStateLabel = 'Rolled Up · Mr. Stranger Guidebook Ready';
   } else if (rollDirection === 'rolling_down') {
-    bookStateLabel = `Rolling Down (${safePercent}%) · Unfurling ${floorSpec.bookChapterTitle}`;
+    bookStateLabel = `Rolling Down (${safePercent}%) · ${floorSpec.bookChapterTitle}`;
   } else if (rollDirection === 'rolling_up') {
-    bookStateLabel = `Rolling Up (${safePercent}%) · Rewinding to ${floorSpec.bookChapterTitle}`;
+    bookStateLabel = `Rolling Up (${safePercent}%) · ${floorSpec.bookChapterTitle}`;
   } else {
-    bookStateLabel = `Book Unfurled ${safePercent}% · ${floorSpec.bookChapterTitle}`;
+    bookStateLabel = `Guidebook ${safePercent}% · ${floorSpec.bookChapterTitle}`;
   }
 
   const glassRefractionIntensity = Number(
