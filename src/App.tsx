@@ -260,6 +260,16 @@ import {
   resolveWorkspaceQrScanConfirmationChime,
   WorkspaceHeaderQrCameraScanStatus,
   ParsedWorkspaceQrScanResult,
+  buildFullSecurityAuditReport,
+  FullSecurityAuditReport,
+  sanitizeFormPayload,
+  BOOTSTRAPPED_ADMIN_EMAIL,
+  WORKSPACE_COMMAND_CATEGORIES,
+  WorkspaceCommandCategoryFilter,
+  WorkspaceCommandItem,
+  filterWorkspaceCommandPaletteItems,
+  resolveCommandPaletteKeyboardNavigation,
+  evaluateWorkspaceProductivitySummary,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -334,6 +344,8 @@ interface AccountIdentity {
   privacyVisibility: 'everyone' | 'connections_only' | 'ghost';
   readReceiptsEnabled: boolean;
   allowCallsFromConnectionsOnly: boolean;
+  sessionToken?: string;
+  isAdmin?: boolean;
 }
 
 export default function App() {
@@ -2496,6 +2508,8 @@ export default function App() {
         privacyVisibility: data.privacyVisibility || 'everyone',
         readReceiptsEnabled: data.readReceiptsEnabled ?? true,
         allowCallsFromConnectionsOnly: data.allowCallsFromConnectionsOnly ?? true,
+        sessionToken: typeof data.sessionToken === 'string' ? data.sessionToken : undefined,
+        isAdmin: Boolean(data.isAdmin),
       };
       setAccountSession(newSession);
       localStorage.setItem('mr_stranger_account_v2', JSON.stringify(newSession));
@@ -2506,6 +2520,105 @@ export default function App() {
     } finally {
       setIsSubmittingAuth(false);
     }
+  };
+
+  // Full 16-Control Security Audit State & Handlers
+  const [securityAuditReport, setSecurityAuditReport] = useState<FullSecurityAuditReport>(() =>
+    buildFullSecurityAuditReport()
+  );
+  const [securityRuntimeMetrics, setSecurityRuntimeMetrics] = useState<{
+    passwordKdf: string;
+    sessionmac: string;
+    corsAllowlistCount: number;
+    blockedThreatsCount: number;
+    rateLimitedCount: number;
+  }>({
+    passwordKdf: 'scrypt (N=16384, r=8, p=1, salt=32B, keylen=64B)',
+    sessionmac: 'HMAC-SHA256 (TTL=12h, timingSafeEqual)',
+    corsAllowlistCount: 4,
+    blockedThreatsCount: 0,
+    rateLimitedCount: 0,
+  });
+  const [isRunningSecurityAudit, setIsRunningSecurityAudit] = useState(false);
+  const [adminRbacProbeStatus, setAdminRbacProbeStatus] = useState<{
+    tested: boolean;
+    httpStatus: number;
+    message: string;
+  } | null>(null);
+  const [securityFirewallTestInput, setSecurityFirewallTestInput] = useState('');
+  const [securityFirewallTestResult, setSecurityFirewallTestResult] = useState<{
+    safe: boolean;
+    reason?: string;
+    sanitizedPreview?: string;
+  } | null>(null);
+
+  const handleRunFullSecurityAudit = async () => {
+    setIsRunningSecurityAudit(true);
+    try {
+      const headers: Record<string, string> = {};
+      if (accountSession?.sessionToken) {
+        headers.Authorization = `Bearer ${accountSession.sessionToken}`;
+      }
+      const resp = await fetch('/api/security/audit-status', { headers });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data?.controls && Array.isArray(data.controls)) {
+          setSecurityAuditReport({
+            ...buildFullSecurityAuditReport(),
+            controls: data.controls,
+          });
+        }
+        if (data?.runtimeMetrics) {
+          setSecurityRuntimeMetrics({
+            passwordKdf:
+              data.runtimeMetrics.passwordKdf ||
+              'scrypt (N=16384, r=8, p=1, salt=32B, keylen=64B)',
+            sessionmac:
+              data.runtimeMetrics.sessionmac || 'HMAC-SHA256 (TTL=12h, timingSafeEqual)',
+            corsAllowlistCount: Number(data.runtimeMetrics.corsAllowlistCount) || 4,
+            blockedThreatsCount: Number(data.runtimeMetrics.blockedThreatsCount) || 0,
+            rateLimitedCount: Number(data.runtimeMetrics.rateLimitedCount) || 0,
+          });
+        }
+      }
+
+      // Also verify RBAC protection on /api/admin/audit
+      const adminResp = await fetch('/api/admin/audit', { headers });
+      const adminData = await adminResp.json().catch(() => ({}));
+      setAdminRbacProbeStatus({
+        tested: true,
+        httpStatus: adminResp.status,
+        message:
+          adminResp.status === 200
+            ? `Admin Access Verified (${adminData.adminEmail || BOOTSTRAPPED_ADMIN_EMAIL})`
+            : `Protected Admin Route Enforced (HTTP ${adminResp.status}: ${
+                adminData.error || 'Admin role required'
+              })`,
+      });
+    } catch {
+      setSecurityAuditReport(buildFullSecurityAuditReport());
+    } finally {
+      setIsRunningSecurityAudit(false);
+    }
+  };
+
+  const handleTestFormSanitizer = (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = sanitizeFormPayload(
+      { sampleField: securityFirewallTestInput },
+      { sampleField: 400 }
+    );
+    if (!res.safe) {
+      setSecurityFirewallTestResult({
+        safe: false,
+        reason: res.reason,
+      });
+      return;
+    }
+    setSecurityFirewallTestResult({
+      safe: true,
+      sanitizedPreview: String(res.sanitized.sampleField || ''),
+    });
   };
 
   const handleGoogleSignIn = async () => {
@@ -2542,12 +2655,17 @@ export default function App() {
         );
         return;
       }
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (accountSession?.sessionToken) {
+        headers.Authorization = `Bearer ${accountSession.sessionToken}`;
+      }
       const resp = await fetch('/api/auth/verify-password', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           email: currentIdentity.email,
           password: signOutPasswordConfirm,
+          sessionToken: accountSession?.sessionToken,
         }),
       });
       if (!resp.ok) {
@@ -3268,6 +3386,48 @@ export default function App() {
     }
     return { valid: true, error: '' };
   };
+
+  // ==========================================================================
+  // UNIVERSAL WORKSPACE COMMAND PALETTE HOOKS (TOP-LEVEL BEFORE EARLY RETURN)
+  // ==========================================================================
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState('');
+  const [commandPaletteCategory, setCommandPaletteCategory] =
+    useState<WorkspaceCommandCategoryFilter>('All');
+  const [commandPaletteSelectedIndex, setCommandPaletteSelectedIndex] = useState(0);
+  const [lastExecutedCommandLabel, setLastExecutedCommandLabel] = useState('');
+  const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleCloseCommandPalette = () => {
+    setIsCommandPaletteOpen(false);
+    setCommandPaletteQuery('');
+    setCommandPaletteCategory('All');
+    setCommandPaletteSelectedIndex(0);
+  };
+
+  useEffect(() => {
+    const onGlobalKeyDown = (e: KeyboardEvent) => {
+      if (!currentIdentity) return;
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => {
+          const next = !prev;
+          if (next) {
+            setCommandPaletteSelectedIndex(0);
+            window.requestAnimationFrame(() => {
+              commandPaletteInputRef.current?.focus();
+            });
+          }
+          return next;
+        });
+      } else if (e.key === 'Escape' && isCommandPaletteOpen) {
+        e.preventDefault();
+        handleCloseCommandPalette();
+      }
+    };
+    window.addEventListener('keydown', onGlobalKeyDown);
+    return () => window.removeEventListener('keydown', onGlobalKeyDown);
+  }, [isCommandPaletteOpen, currentIdentity]);
 
   // ==========================================================================
   // DEDICATED MNC-GRADE SIGN-IN & CREATE ACCOUNT PAGE (Supports Dark & Light)
@@ -5290,6 +5450,54 @@ export default function App() {
         targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     });
+  };
+
+  // ==========================================================================
+  // UNIVERSAL WORKSPACE COMMAND PALETTE (CMD/CTRL + K) & PRODUCTIVITY SUMMARY
+  // ==========================================================================
+  const filteredCommandItems = filterWorkspaceCommandPaletteItems(
+    commandPaletteQuery,
+    commandPaletteCategory
+  );
+
+  const workspaceProductivitySummary = evaluateWorkspaceProductivitySummary({
+    dailyCompletedMinutes,
+    dailyTargetMinutes,
+    streakCount: currentIdentity.streakCount,
+    recentQrScansCount: recentWorkspaceQrScans.length,
+    securityScorePercent: securityAuditReport.scorePercent,
+  });
+
+  const handleOpenCommandPalette = () => {
+    setIsCommandPaletteOpen(true);
+    setCommandPaletteSelectedIndex(0);
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+    window.requestAnimationFrame(() => {
+      commandPaletteInputRef.current?.focus();
+    });
+  };
+
+  const handleExecuteCommandPaletteItem = (item: WorkspaceCommandItem) => {
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+    setLastExecutedCommandLabel(item.title);
+    if (item.actionType === 'navigate' && item.targetPage) {
+      setActivePage(item.targetPage);
+    } else if (item.id === 'act_quick_pomodoro_25m') {
+      handleQuickStartPomodoro();
+    } else if (item.id === 'act_toggle_focus_desk') {
+      handleToggleQuickFocusDesk();
+    } else if (item.id === 'act_open_qr_scanner_hub') {
+      setIsWorkspaceHeaderQrOpen(true);
+    } else if (item.id === 'act_copy_workspace_link') {
+      handleCopyWorkspaceHeaderShareLink();
+    } else if (item.id === 'act_toggle_theme') {
+      handleToggleTheme();
+    }
+    handleCloseCommandPalette();
   };
 
   // ==========================================================================
@@ -8475,6 +8683,28 @@ export default function App() {
                 </AnimatePresence>
               </div>
             </div>
+
+            <button
+              type="button"
+              id="workspace-command-palette-trigger-btn"
+              data-testid="workspace-command-palette-trigger-btn"
+              data-open={isCommandPaletteOpen ? 'true' : 'false'}
+              data-focus-completion-percent={String(
+                workspaceProductivitySummary.focusCompletionPercent
+              )}
+              onClick={handleOpenCommandPalette}
+              aria-haspopup="dialog"
+              aria-expanded={isCommandPaletteOpen}
+              aria-controls="workspace-command-palette"
+              title="Open Universal Command Palette & Quick Action Launcher (Cmd/Ctrl + K)"
+              className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-emerald-500/60"
+            >
+              <Search className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+              <span>Quick Command</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 text-[10px] font-mono text-slate-600 dark:text-zinc-300 tabular-nums">
+                ⌘K
+              </kbd>
+            </button>
 
             <button
               type="button"
@@ -14270,18 +14500,129 @@ export default function App() {
                   </label>
                 </div>
 
-                <div className="pt-4 border-t border-zinc-800/80 space-y-2">
-                  <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
-                    <Lock className="w-4 h-4" />
-                    <span>Isolated PII Vault & Zero-Trust Defense Matrix</span>
+                <div className="pt-4 border-t border-zinc-800/80 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-emerald-400">
+                      <Lock className="w-4 h-4" />
+                      <span>
+                        16-Point Enterprise Security Audit & Hardening Matrix (
+                        {securityAuditReport.passedControlsCount}/{securityAuditReport.totalControlsCount} Controls Verified ·{' '}
+                        {securityAuditReport.scorePercent}%)
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      data-testid="run-full-security-audit-btn"
+                      onClick={handleRunFullSecurityAudit}
+                      disabled={isRunningSecurityAudit}
+                      className="px-3.5 py-1.5 rounded-md bg-emerald-500 text-black text-xs font-bold hover:bg-emerald-400 transition-colors disabled:opacity-60"
+                    >
+                      {isRunningSecurityAudit
+                        ? 'Running Live Audit...'
+                        : 'Run Full Security Audit'}
+                    </button>
                   </div>
+
                   <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs font-mono text-zinc-300 space-y-1.5">
                     <div>Account UID: {currentIdentity.uid}</div>
                     <div>Isolated Email Vault: {currentIdentity.email} (Owner-Only Read)</div>
+                    <div>
+                      Access Role:{' '}
+                      {currentIdentity.email.toLowerCase() ===
+                      BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase()
+                        ? 'Verified Administrator (RBAC Enabled)'
+                        : 'Verified Standard Member (Admin Routes Locked)'}
+                    </div>
                     <div>E2EE Verification Fingerprint: {e2eeFingerprint}</div>
-                    <div>Payload Firewall: SQLi / NoSQLi / XSS / Prototype-Pollution Blocked</div>
-                    <div>Rate Limiter: 25 Auth/min · 120 API/min · 45 WS Frames/10s</div>
-                    <div>Hardware Policy: Camera & Microphone Closed Until Explicit Permission + Join</div>
+                    <div>Password Hashing KDF: {securityRuntimeMetrics.passwordKdf}</div>
+                    <div>Session Authentication: {securityRuntimeMetrics.sessionmac}</div>
+                    <div>
+                      Rate Limiter: 10 Admin/min · 25 Auth/min · 120 API/min · 45 WS Frames/10s
+                    </div>
+                    <div>
+                      CORS Allowlist: {securityRuntimeMetrics.corsAllowlistCount} Trusted Origins · Debug Mode: OFF
+                    </div>
+                    {adminRbacProbeStatus && (
+                      <div
+                        data-testid="admin-rbac-probe-result"
+                        className="text-emerald-400 pt-1 border-t border-zinc-800/80"
+                      >
+                        Admin Route Probe (/api/admin/audit): {adminRbacProbeStatus.message}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Interactive Form Sanitizer & XSS/SQLi Firewall Tester */}
+                  <form
+                    onSubmit={handleTestFormSanitizer}
+                    className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2.5"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-white">
+                        Live Form Sanitizer & XSS / SQLi / NoSQLi Firewall Verification
+                      </span>
+                      <span className="text-[11px] font-mono text-emerald-400">
+                        Active on all Forms & /api/* Endpoints
+                      </span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <input
+                        type="text"
+                        data-testid="security-firewall-test-input"
+                        value={securityFirewallTestInput}
+                        onChange={(e) => setSecurityFirewallTestInput(e.target.value)}
+                        placeholder="Test input (e.g. <script>alert(1)</script> or UNION SELECT)"
+                        className="flex-1 px-3 py-1.5 rounded bg-[#0A0A0C] border border-zinc-800 text-xs text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
+                      />
+                      <button
+                        type="submit"
+                        data-testid="security-firewall-test-submit"
+                        className="px-3 py-1.5 rounded bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-white shrink-0"
+                      >
+                        Verify Input Shield
+                      </button>
+                    </div>
+                    {securityFirewallTestResult && (
+                      <div
+                        data-testid="security-firewall-test-result"
+                        className={`text-xs font-mono p-2 rounded border ${
+                          securityFirewallTestResult.safe
+                            ? 'bg-emerald-950/30 border-emerald-800/60 text-emerald-300'
+                            : 'bg-rose-950/40 border-rose-800/70 text-rose-300'
+                        }`}
+                      >
+                        {securityFirewallTestResult.safe
+                          ? `SAFE & SANITIZED: "${securityFirewallTestResult.sanitizedPreview}"`
+                          : `THREAT BLOCKED: ${securityFirewallTestResult.reason}`}
+                      </div>
+                    )}
+                  </form>
+
+                  {/* 16-Item Security Audit Checklist Grid */}
+                  <div
+                    data-testid="security-audit-controls-grid"
+                    className="grid grid-cols-1 md:grid-cols-2 gap-2.5"
+                  >
+                    {securityAuditReport.controls.map((ctrl) => (
+                      <div
+                        key={ctrl.id}
+                        data-testid={`security-control-${ctrl.id}`}
+                        className="p-3 rounded-md bg-[#050505] border border-zinc-800/80 flex items-start justify-between gap-2.5"
+                      >
+                        <div className="space-y-0.5 min-w-0">
+                          <div className="text-xs font-bold text-white flex items-center gap-1.5">
+                            <Check className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span className="truncate">{ctrl.title}</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400 leading-snug">
+                            {ctrl.detail}
+                          </p>
+                        </div>
+                        <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-[10px] font-mono font-bold text-emerald-300 shrink-0">
+                          {ctrl.status}
+                        </span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -14717,6 +15058,254 @@ export default function App() {
           </div>
         </aside>
       )}
+
+      {/* Universal Workspace Command Palette & Quick Action Launcher (Cmd/Ctrl + K) */}
+      <AnimatePresence initial={false}>
+        {isCommandPaletteOpen && (
+          <motion.div
+            key="workspace-command-palette-backdrop"
+            id="workspace-command-palette"
+            data-testid="workspace-command-palette"
+            data-active-category={commandPaletteCategory}
+            data-filtered-count={String(filteredCommandItems.length)}
+            data-last-executed={lastExecutedCommandLabel}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Universal Workspace Command Palette"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
+            onClick={(e) => {
+              if (e.target === e.currentTarget) {
+                handleCloseCommandPalette();
+              }
+            }}
+            className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-start justify-center pt-16 sm:pt-24 px-4"
+          >
+            <motion.div
+              initial={{ opacity: 0, y: -10, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -10, scale: 0.98 }}
+              transition={{ duration: 0.16, ease: 'easeOut' }}
+              className="w-full max-w-2xl rounded-xl border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] shadow-2xl overflow-hidden font-sans"
+            >
+              {/* Search Header */}
+              <div className="p-3.5 border-b border-slate-200 dark:border-zinc-800 flex items-center gap-3">
+                <Search className="w-4 h-4 text-emerald-500 shrink-0" />
+                <input
+                  ref={commandPaletteInputRef}
+                  type="text"
+                  id="workspace-command-palette-search-input"
+                  data-testid="workspace-command-palette-search-input"
+                  value={commandPaletteQuery}
+                  onChange={(e) => {
+                    setCommandPaletteQuery(e.target.value);
+                    setCommandPaletteSelectedIndex(0);
+                  }}
+                  onKeyDown={(e) => {
+                    if (
+                      e.key === 'ArrowDown' ||
+                      e.key === 'ArrowUp' ||
+                      e.key === 'Home' ||
+                      e.key === 'End'
+                    ) {
+                      e.preventDefault();
+                      setCommandPaletteSelectedIndex((curr) =>
+                        resolveCommandPaletteKeyboardNavigation({
+                          currentIndex: curr,
+                          itemCount: filteredCommandItems.length,
+                          key: e.key as 'ArrowDown' | 'ArrowUp' | 'Home' | 'End',
+                        })
+                      );
+                    } else if (e.key === 'Enter' && filteredCommandItems.length > 0) {
+                      e.preventDefault();
+                      const chosen =
+                        filteredCommandItems[
+                          Math.min(
+                            commandPaletteSelectedIndex,
+                            filteredCommandItems.length - 1
+                          )
+                        ] || filteredCommandItems[0];
+                      if (chosen) {
+                        handleExecuteCommandPaletteItem(chosen);
+                      }
+                    }
+                  }}
+                  placeholder="Type a command or search views (e.g., Pomodoro 25m, QR Scanner, Security Audit)..."
+                  aria-label="Search workspace commands"
+                  className="flex-1 bg-transparent text-sm text-slate-900 dark:text-zinc-100 placeholder-slate-400 dark:placeholder-zinc-500 focus:outline-none"
+                />
+                {commandPaletteQuery && (
+                  <button
+                    type="button"
+                    data-testid="workspace-command-palette-clear-query-btn"
+                    onClick={() => {
+                      setCommandPaletteQuery('');
+                      setCommandPaletteSelectedIndex(0);
+                      commandPaletteInputRef.current?.focus();
+                    }}
+                    className="px-2 py-0.5 rounded text-[11px] font-mono text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-white"
+                  >
+                    Clear
+                  </button>
+                )}
+                <button
+                  type="button"
+                  id="workspace-command-palette-close-btn"
+                  data-testid="workspace-command-palette-close-btn"
+                  onClick={handleCloseCommandPalette}
+                  aria-label="Close Command Palette"
+                  className="p-1.5 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Category Filter Tabs */}
+              <div
+                data-testid="workspace-command-palette-categories"
+                className="px-3.5 py-2 border-b border-slate-200 dark:border-zinc-800/80 bg-slate-50/70 dark:bg-[#050505] flex flex-wrap items-center justify-between gap-2"
+              >
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {WORKSPACE_COMMAND_CATEGORIES.map((cat) => {
+                    const isSelected = commandPaletteCategory === cat;
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        data-testid={`workspace-command-category-${cat
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, '-')}`}
+                        aria-pressed={isSelected}
+                        onClick={() => {
+                          setCommandPaletteCategory(cat);
+                          setCommandPaletteSelectedIndex(0);
+                        }}
+                        className={`px-2.5 py-1 rounded text-[11px] font-semibold transition-colors ${
+                          isSelected
+                            ? 'bg-emerald-600 text-white'
+                            : 'text-slate-600 hover:bg-slate-200/70 dark:text-zinc-400 dark:hover:bg-zinc-900 dark:hover:text-zinc-200'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    );
+                  })}
+                </div>
+                <span className="text-[11px] font-mono text-slate-500 dark:text-zinc-400 tabular-nums">
+                  {filteredCommandItems.length} commands
+                </span>
+              </div>
+
+              {/* Command Items List */}
+              <div
+                data-testid="workspace-command-palette-list"
+                className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-zinc-800/60"
+              >
+                {filteredCommandItems.length > 0 ? (
+                  filteredCommandItems.map((item, idx) => {
+                    const isHighlighted = idx === commandPaletteSelectedIndex;
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        id={`workspace-command-item-${item.id}`}
+                        data-testid={`workspace-command-item-${item.id}`}
+                        data-command-category={item.category}
+                        data-highlighted={isHighlighted ? 'true' : 'false'}
+                        onMouseEnter={() => setCommandPaletteSelectedIndex(idx)}
+                        onClick={() => handleExecuteCommandPaletteItem(item)}
+                        className={`w-full px-4 py-3 text-left flex items-center justify-between gap-3 transition-colors ${
+                          isHighlighted
+                            ? 'bg-emerald-50/90 dark:bg-zinc-900/95'
+                            : 'bg-white dark:bg-[#0A0A0C] hover:bg-slate-50 dark:hover:bg-zinc-900/60'
+                        }`}
+                      >
+                        <div className="min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                              {item.title}
+                            </span>
+                            <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 shrink-0">
+                              {item.category}
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-500 dark:text-zinc-400 truncate">
+                            {item.subtitle}
+                          </p>
+                        </div>
+                        <kbd className="px-2 py-1 rounded border border-slate-200 dark:border-zinc-700 bg-slate-100 dark:bg-zinc-950 text-[10px] font-mono text-slate-600 dark:text-zinc-300 shrink-0 tabular-nums">
+                          {item.shortcut}
+                        </kbd>
+                      </button>
+                    );
+                  })
+                ) : (
+                  <div
+                    data-testid="workspace-command-palette-empty"
+                    className="px-6 py-10 text-center space-y-2"
+                  >
+                    <p className="text-xs font-semibold text-slate-700 dark:text-zinc-300">
+                      No workspace commands match &ldquo;{commandPaletteQuery}&rdquo;
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCommandPaletteQuery('');
+                        setCommandPaletteCategory('All');
+                        setCommandPaletteSelectedIndex(0);
+                      }}
+                      className="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors"
+                    >
+                      Show All Commands
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Live Workspace Productivity & Readiness Summary Footer */}
+              <div
+                id="workspace-command-productivity-summary"
+                data-testid="workspace-command-productivity-summary"
+                data-readiness-score={String(
+                  workspaceProductivitySummary.readinessScorePercent
+                )}
+                data-focus-percent={String(
+                  workspaceProductivitySummary.focusCompletionPercent
+                )}
+                className="px-4 py-2.5 border-t border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-[#050505] flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono tabular-nums"
+              >
+                <div className="flex flex-wrap items-center gap-3 text-slate-600 dark:text-zinc-400">
+                  <span>
+                    Focus:{' '}
+                    <strong className="text-emerald-600 dark:text-emerald-400">
+                      {workspaceProductivitySummary.focusStatusLabel}
+                    </strong>
+                  </span>
+                  <span>·</span>
+                  <span>
+                    Readiness:{' '}
+                    <strong className="text-slate-900 dark:text-white">
+                      {workspaceProductivitySummary.readinessScorePercent}%
+                    </strong>
+                  </span>
+                  <span>·</span>
+                  <span>
+                    Security:{' '}
+                    <strong className="text-emerald-600 dark:text-emerald-400">
+                      {workspaceProductivitySummary.securityScorePercent}% Zero-Trust
+                    </strong>
+                  </span>
+                </div>
+                <span className="text-[10px] text-slate-400 dark:text-zinc-500">
+                  ↑↓ Navigate · Enter Execute · Esc Close
+                </span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

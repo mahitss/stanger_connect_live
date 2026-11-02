@@ -1,4 +1,5 @@
-import express from 'express';
+import 'dotenv/config';
+import express, { Request, Response, NextFunction } from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import crypto from 'crypto';
@@ -12,6 +13,15 @@ import {
   normalizeAndValidatePeerMood,
   MOOD_POPULARITY_WINDOW_MS,
   PeerMoodHistoryEvent,
+  BOOTSTRAPPED_ADMIN_EMAIL,
+  DEFAULT_ALLOWED_CORS_ORIGINS,
+  isBlockedSensitiveFilePath,
+  sanitizeFormPayload,
+  validateCorsOrigin,
+  buildEnterpriseSecurityHeadersSpec,
+  verifyUserAndAdminAccess,
+  auditEnvironmentSecurity,
+  buildFullSecurityAuditReport,
 } from './src/utils/rules.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -77,17 +87,33 @@ interface StoredAccount {
   createdAt: string;
 }
 
-const SERVER_HMAC_SECRET = crypto.randomBytes(32).toString('hex');
+const SERVER_HMAC_SECRET =
+  process.env.SESSION_HMAC_SECRET && process.env.SESSION_HMAC_SECRET.length >= 64
+    ? process.env.SESSION_HMAC_SECRET
+    : crypto.randomBytes(32).toString('hex');
+
+const SESSION_TTL_MS = Math.max(
+  300_000,
+  Math.min(86_400_000, Number(process.env.SESSION_TTL_MS) || 43_200_000)
+);
+
+const SCRYPT_PARAMS = {
+  N: 16384,
+  r: 8,
+  p: 1,
+  maxmem: 32 * 1024 * 1024,
+} as const;
 
 function hashPassword(password: string, salt: string): string {
-  return crypto.scryptSync(password, salt, 64).toString('hex');
+  return crypto.scryptSync(password, salt, 64, SCRYPT_PARAMS).toString('hex');
 }
 
 function timingSafeCompareHex(aHex: string, bHex: string): boolean {
   try {
+    if (!aHex || !bHex || aHex.length !== bHex.length || aHex.length % 2 !== 0) return false;
     const aBuf = Buffer.from(aHex, 'hex');
     const bBuf = Buffer.from(bHex, 'hex');
-    if (aBuf.length !== bBuf.length) return false;
+    if (aBuf.length === 0 || aBuf.length !== bBuf.length) return false;
     return crypto.timingSafeEqual(aBuf, bBuf);
   } catch {
     return false;
@@ -96,9 +122,60 @@ function timingSafeCompareHex(aHex: string, bHex: string): boolean {
 
 function signSessionToken(uid: string, email: string): string {
   const issuedAt = Date.now();
-  const payload = `${uid}.${email}.${issuedAt}`;
+  const payload = Buffer.from(JSON.stringify({ uid, email: email.toLowerCase(), issuedAt }), 'utf8').toString('base64url');
   const sig = crypto.createHmac('sha256', SERVER_HMAC_SECRET).update(payload).digest('hex');
   return `${payload}.${sig}`;
+}
+
+function verifySessionToken(
+  token: string | undefined | null
+): { valid: boolean; uid: string | null; email: string | null; issuedAt: number | null; reason?: string } {
+  if (!token || typeof token !== 'string') {
+    return { valid: false, uid: null, email: null, issuedAt: null, reason: 'Missing session token.' };
+  }
+  const trimmed = token.replace(/^Bearer\s+/i, '').trim();
+  const dotIdx = trimmed.lastIndexOf('.');
+  if (dotIdx <= 0) {
+    return { valid: false, uid: null, email: null, issuedAt: null, reason: 'Malformed session token.' };
+  }
+  const payloadPart = trimmed.slice(0, dotIdx);
+  const sigPart = trimmed.slice(dotIdx + 1);
+  const expectedSig = crypto.createHmac('sha256', SERVER_HMAC_SECRET).update(payloadPart).digest('hex');
+  if (!timingSafeCompareHex(sigPart, expectedSig)) {
+    return { valid: false, uid: null, email: null, issuedAt: null, reason: 'Invalid session token signature.' };
+  }
+  try {
+    const decoded = JSON.parse(Buffer.from(payloadPart, 'base64url').toString('utf8'));
+    const uid = typeof decoded?.uid === 'string' ? decoded.uid : null;
+    const email = typeof decoded?.email === 'string' ? decoded.email.toLowerCase() : null;
+    const issuedAt = Number(decoded?.issuedAt);
+    if (!uid || !email || !Number.isFinite(issuedAt)) {
+      return { valid: false, uid: null, email: null, issuedAt: null, reason: 'Invalid session token claims.' };
+    }
+    if (Date.now() - issuedAt > SESSION_TTL_MS) {
+      return { valid: false, uid: null, email: null, issuedAt: null, reason: 'Session token expired.' };
+    }
+    return { valid: true, uid, email, issuedAt };
+  } catch {
+    return { valid: false, uid: null, email: null, issuedAt: null, reason: 'Corrupted session token payload.' };
+  }
+}
+
+function extractBearerSession(req: Request) {
+  const authHeader = req.headers.authorization;
+  if (typeof authHeader === 'string' && authHeader.trim()) {
+    return verifySessionToken(authHeader);
+  }
+  const tokenFromBody = typeof req.body?.sessionToken === 'string' ? req.body.sessionToken : undefined;
+  return verifySessionToken(tokenFromBody);
+}
+
+function getConfiguredAllowedOrigins(): string[] {
+  const fromEnv = (process.env.CORS_ALLOWED_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return Array.from(new Set([...DEFAULT_ALLOWED_CORS_ORIGINS, ...fromEnv]));
 }
 
 function getTodayDateString(): string {
@@ -113,36 +190,92 @@ function makeConnectionPairKey(uidA: string, uidB: string): string {
 }
 
 async function startServer() {
-  const app = express();
+  // Enforce production-safe non-debug runtime
+  process.env.DEBUG = 'false';
 
-  // Enterprise HTTP Security Headers
+  const app = express();
+  const allowedOrigins = getConfiguredAllowedOrigins();
+
+  // 1. Enterprise HTTP Security Headers (CSP, HSTS, CORP, COOP, Nosniff, Frame-Ancestors)
   app.disable('x-powered-by');
-  app.use((_req, res, next) => {
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'SAMEORIGIN');
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    res.setHeader('X-XSS-Protection', '0');
-    res.setHeader('Permissions-Policy', 'camera=(self), microphone=(self), geolocation=()');
+  app.use((req, res, next) => {
+    const isApiRoute = req.path.startsWith('/api');
+    const headers = buildEnterpriseSecurityHeadersSpec({ isApiRoute });
+    for (const [key, value] of Object.entries(headers)) {
+      res.setHeader(key, value);
+    }
     next();
   });
 
-  // Strict JSON body limit to prevent Denial-of-Memory payloads
-  app.use(express.json({ limit: '128kb' }));
+  // 2. Strict CORS Origin Allowlist Enforcement
+  app.use((req, res, next) => {
+    const originHeader = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
+    const corsCheck = validateCorsOrigin(originHeader, allowedOrigins);
+    res.setHeader('Vary', 'Origin');
 
-  // Sliding-Window HTTP Rate Limiters (Auth Brute-Force Guard + General API Guard)
+    if (!corsCheck.allowed) {
+      res.status(403).json({
+        error: corsCheck.reason || 'Cross-Origin Request Blocked by Zero-Trust CORS Policy.',
+      });
+      return;
+    }
+
+    if (corsCheck.allowOriginHeader) {
+      res.setHeader('Access-Control-Allow-Origin', corsCheck.allowOriginHeader);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      res.setHeader('Access-Control-Max-Age', '600');
+    }
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+
+    next();
+  });
+
+  // 3. Exposed Sensitive File Blocker (Blocks /.env, /.git, /firestore.rules, /server.ts, /package.json, /*.map, etc.)
+  app.use((req, res, next) => {
+    const fileCheck = isBlockedSensitiveFilePath(req.originalUrl || req.path);
+    if (fileCheck.blocked) {
+      res.status(403).json({
+        error: 'Access Denied: Sensitive system or configuration path is protected.',
+        reason: fileCheck.reason,
+      });
+      return;
+    }
+    next();
+  });
+
+  // 4. Strict JSON body limit (64KB) to prevent Denial-of-Memory payloads
+  app.use(express.json({ limit: '64kb' }));
+
+  // 5. 3-Tier Sliding-Window HTTP Rate Limiters (Admin 10/min, Auth 25/min, General API 120/min)
+  const adminRateMap = new Map<string, number[]>();
   const authRateMap = new Map<string, number[]>();
   const apiRateMap = new Map<string, number[]>();
+  let totalBlockedThreatsCount = 0;
+  let totalRateLimitedCount = 0;
 
   app.use('/api', (req, res, next) => {
-    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'local');
+    const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'local')
+      .split(',')[0]
+      .trim();
+    const isAdminRoute = req.path.startsWith('/admin');
     const isAuthRoute = req.path.startsWith('/auth/');
     const windowMs = 60_000;
-    const maxReq = isAuthRoute ? 25 : 120;
-    const store = isAuthRoute ? authRateMap : apiRateMap;
+    const maxReq = isAdminRoute
+      ? Math.max(3, Number(process.env.RATE_LIMIT_ADMIN_MAX_PER_MIN) || 10)
+      : isAuthRoute
+      ? Math.max(5, Number(process.env.RATE_LIMIT_AUTH_MAX_PER_MIN) || 25)
+      : Math.max(20, Number(process.env.RATE_LIMIT_API_MAX_PER_MIN) || 120);
+    const store = isAdminRoute ? adminRateMap : isAuthRoute ? authRateMap : apiRateMap;
 
+    const nowMs = Date.now();
     const check = checkSlidingWindowRateLimit(
       store.get(ip) || [],
-      Date.now(),
+      nowMs,
       windowMs,
       maxReq
     );
@@ -150,8 +283,10 @@ async function startServer() {
 
     res.setHeader('X-RateLimit-Limit', String(maxReq));
     res.setHeader('X-RateLimit-Remaining', String(check.remaining));
+    res.setHeader('X-RateLimit-Reset', String(Math.ceil((nowMs + windowMs) / 1000)));
 
     if (!check.allowed) {
+      totalRateLimitedCount += 1;
       res.setHeader('Retry-After', String(check.retryAfterSeconds));
       res.status(429).json({
         error: `Rate limit exceeded. Please wait ${check.retryAfterSeconds}s before retrying.`,
@@ -159,21 +294,15 @@ async function startServer() {
       return;
     }
 
-    // Inspect all incoming string body fields for SQLi / NoSQLi / XSS injection vectors
+    // Deep Form Sanitization & Injection Firewall on all incoming JSON bodies
     if (req.body && typeof req.body === 'object') {
-      for (const [key, val] of Object.entries(req.body)) {
-        if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-          res.status(400).json({ error: 'Blocked forbidden prototype property.' });
-          return;
-        }
-        if (typeof val === 'string' && key !== 'password') {
-          const threat = detectSecurityThreat(val);
-          if (!threat.safe) {
-            res.status(400).json({ error: threat.reason });
-            return;
-          }
-        }
+      const sanitizedCheck = sanitizeFormPayload(req.body as Record<string, unknown>);
+      if (!sanitizedCheck.safe) {
+        totalBlockedThreatsCount += 1;
+        res.status(400).json({ error: sanitizedCheck.reason || 'Blocked unsafe form payload.' });
+        return;
       }
+      req.body = sanitizedCheck.sanitized;
     }
 
     next();
@@ -399,7 +528,7 @@ async function startServer() {
       return;
     }
 
-    const salt = crypto.randomBytes(16).toString('hex');
+    const salt = crypto.randomBytes(32).toString('hex');
     const passwordHash = hashPassword(password, salt);
     const uid = `acct_${crypto.randomBytes(8).toString('hex')}`;
     const today = getTodayDateString();
@@ -432,6 +561,7 @@ async function startServer() {
       privacyVisibility: account.privacyVisibility,
       readReceiptsEnabled: account.readReceiptsEnabled,
       allowCallsFromConnectionsOnly: account.allowCallsFromConnectionsOnly,
+      isAdmin: account.email.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase(),
       sessionToken: signSessionToken(account.uid, account.email),
     });
   });
@@ -473,6 +603,7 @@ async function startServer() {
       privacyVisibility: account.privacyVisibility,
       readReceiptsEnabled: account.readReceiptsEnabled,
       allowCallsFromConnectionsOnly: account.allowCallsFromConnectionsOnly,
+      isAdmin: account.email.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase(),
       sessionToken: signSessionToken(account.uid, account.email),
     });
   });
@@ -480,20 +611,112 @@ async function startServer() {
   app.post('/api/auth/verify-password', (req, res) => {
     const email = sanitizeSafeText(String(req.body?.email || ''), 160).toLowerCase();
     const password = String(req.body?.password || '');
-    const account = accountsByEmail.get(email);
-    if (!account) {
-      res.json({ verified: true });
+    const session = extractBearerSession(req);
+
+    if (!email || !password || password.length < 8) {
+      res.status(401).json({
+        error: 'Valid account email and password (min 8 chars) are required for verification.',
+      });
       return;
     }
+
+    const account = accountsByEmail.get(email);
+    if (!account) {
+      // Only permit verification if the caller presents a cryptographically valid signed session token for this email
+      if (session.valid && session.email === email) {
+        res.json({ verified: true, authenticatedBy: 'hmac-session-token' });
+        return;
+      }
+      res.status(401).json({
+        error:
+          'Account session not found or unverified. Please sign in with your registered password.',
+      });
+      return;
+    }
+
     const attemptedHash = hashPassword(password, account.salt);
     if (!timingSafeCompareHex(attemptedHash, account.passwordHash)) {
       res.status(401).json({
         error:
-          'Password verification failed. Please enter your account password to confirm sign out.',
+          'Password verification failed. Please enter your account password to confirm action.',
       });
       return;
     }
-    res.json({ verified: true });
+    res.json({ verified: true, authenticatedBy: 'scrypt-password-hash' });
+  });
+
+  // Public-Safe Live Security Audit Status Endpoint (Zero secrets exposed)
+  app.get('/api/security/audit-status', (req, res) => {
+    const session = extractBearerSession(req);
+    const envAudit = auditEnvironmentSecurity({
+      NODE_ENV: process.env.NODE_ENV || 'production',
+      DEBUG: process.env.DEBUG || 'false',
+      PORT: '3000',
+    });
+    const report = buildFullSecurityAuditReport();
+
+    res.json({
+      ...report,
+      environmentAudit: {
+        safe: envAudit.safe,
+        debugDisabled: envAudit.debugModeOff,
+        leakedSecretKeysCount: envAudit.leakedClientKeys.length,
+        summary: envAudit.summary,
+      },
+      sessionStatus: {
+        authenticated: session.valid,
+        isAdmin:
+          session.valid &&
+          Boolean(session.email) &&
+          session.email!.toLowerCase() === BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase(),
+      },
+      runtimeMetrics: {
+        passwordKdf: 'scrypt (N=16384, r=8, p=1, salt=32B, keylen=64B)',
+        sessionmac: 'HMAC-SHA256 (TTL=12h, timingSafeEqual)',
+        corsAllowlistCount: allowedOrigins.length,
+        rateLimits: {
+          adminPerMin: 10,
+          authPerMin: 25,
+          apiPerMin: 120,
+          wsPer10Sec: 45,
+        },
+        blockedThreatsCount: totalBlockedThreatsCount,
+        rateLimitedCount: totalRateLimitedCount,
+      },
+    });
+  });
+
+  // Protected Admin Security Audit Endpoint (RBAC + Bearer Token + 10 req/min rate limit)
+  app.get('/api/admin/audit', (req, res) => {
+    const session = extractBearerSession(req);
+    const accessCheck = verifyUserAndAdminAccess({
+      uid: session.uid,
+      email: session.email,
+      tokenValid: session.valid,
+      requireAdmin: true,
+    });
+
+    if (!accessCheck.authorized) {
+      res.status(accessCheck.statusCode).json({
+        error: accessCheck.reason,
+        requiredRole: 'admin',
+      });
+      return;
+    }
+
+    const report = buildFullSecurityAuditReport();
+
+    res.json({
+      adminVerified: true,
+      adminEmail: session.email,
+      auditReport: report,
+      registeredAccountsCount: accountsByEmail.size,
+      onlineConnectionsCount: clients.size,
+      activeStudyRoomsCount: studyDesks.size,
+      blockedThreatsCount: totalBlockedThreatsCount,
+      rateLimitedCount: totalRateLimitedCount,
+      timestamp: new Date().toISOString(),
+    });
   });
 
   wss.on('connection', (ws) => {
@@ -1014,8 +1237,14 @@ async function startServer() {
           broadcastPresence();
           return;
         }
-      } catch (err) {
-        console.error('WebSocket message parse error:', err);
+      } catch {
+        // Production-safe WebSocket error handling: never leak stack traces or internal state
+        ws.send(
+          JSON.stringify({
+            type: 'server:security_notice',
+            reason: 'Malformed WebSocket frame rejected.',
+          })
+        );
       }
     });
 
@@ -1038,10 +1267,20 @@ async function startServer() {
     res.json({
       status: 'ok',
       service: 'Mr. Stranger Enterprise Real-Time Core',
+      debugMode: false,
       onlineCount: clients.size,
       activeStudyDesks: studyDesks.size,
       activeGameSessions: liveGameState.size,
-      securityGuards: ['scrypt', 'hmac-sha256', 'rate-limiter', 'sqli-nosqli-xss-shield'],
+      securityGuards: [
+        'scrypt-n16384-32b-salt',
+        'hmac-sha256-ttl-bearer',
+        'admin-rbac-guard',
+        '3-tier-sliding-rate-limiter',
+        'cors-origin-allowlist',
+        'csp-hsts-security-headers',
+        'exposed-file-blocker',
+        'sqli-nosqli-xss-form-sanitizer',
+      ],
       timestamp: new Date().toISOString(),
     });
   });
@@ -1054,11 +1293,31 @@ async function startServer() {
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(__dirname, 'dist');
-    app.use(express.static(distPath));
-    app.get('*', (_req, res) => {
+    app.use(
+      express.static(distPath, {
+        dotfiles: 'deny',
+        index: false,
+      })
+    );
+    app.get('*', (req, res) => {
+      const check = isBlockedSensitiveFilePath(req.path);
+      if (check.blocked) {
+        res.status(403).json({ error: 'Access Denied' });
+        return;
+      }
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Production-safe Global Error Handler (Debug Mode Off — never leaks stack traces)
+  app.use((_err: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (!res.headersSent) {
+      res.status(500).json({
+        error: 'An unexpected request error occurred.',
+        debugMode: false,
+      });
+    }
+  });
 
   const PORT = 3000;
   httpServer.listen(PORT, '0.0.0.0', () => {

@@ -22,6 +22,12 @@ service cloud.firestore {
     function isVerifiedUser() {
       return isSignedIn() && request.auth.token.email_verified == true;
     }
+    function isAdmin() {
+      return isVerifiedUser() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'mahitsaxena44@gmail.com'
+      );
+    }
 
     // Entity Validation Helpers
     function isValidUserPublicProfile(data) {
@@ -172,6 +178,15 @@ service cloud.firestore {
       data.createdAt is timestamp;
     }
 
+    function isValidAdminRoleRecord(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt']) &&
+      data.keys().hasOnly(['uid', 'email', 'role', 'createdAt']) &&
+      data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 && data.uid.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.email is string && data.email.size() >= 3 && data.email.size() <= 160 &&
+      data.role is string && data.role.size() <= 16 && data.role == 'admin' &&
+      data.createdAt is timestamp;
+    }
+
     // 1. Public User Profiles (No PII stored here)
     match /profiles/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (resource == null || existing().uid == userId);
@@ -187,10 +202,10 @@ service cloud.firestore {
         userId == request.auth.uid &&
         isValidUserPublicProfile(incoming()) &&
         incoming().uid == existing().uid &&
-        (incoming().createdAt == existing().createdAt || incoming().createdAt == request.time) &&
+        incoming().createdAt == existing().createdAt &&
         incoming().updatedAt == request.time &&
         incoming().diff(existing()).affectedKeys().hasOnly([
-          'displayName', 'bio', 'avatarUrl', 'streakCount', 'lastLoginDate', 'participationPoints', 'privacyVisibility', 'createdAt', 'updatedAt'
+          'displayName', 'bio', 'avatarUrl', 'streakCount', 'lastLoginDate', 'participationPoints', 'privacyVisibility', 'updatedAt'
         ]);
       allow delete: if false;
     }
@@ -314,7 +329,20 @@ service cloud.firestore {
         isValidStudyNote(incoming()) &&
         incoming().createdAt == request.time;
       allow update: if false;
-      allow delete: if isVerifiedUser() && isValidId(noteId) && existing().authorUid == request.auth.uid;
+      allow delete: if isVerifiedUser() && isValidId(noteId) && (existing().authorUid == request.auth.uid || isAdmin());
+    }
+
+    // 9. Administrator RBAC Vault (Protected Admin Routes & Privilege Isolation)
+    match /admins/{adminId} {
+      allow get: if isAdmin() && isValidId(adminId) && (resource == null || existing().role == 'admin');
+      allow list: if isAdmin() && existing().role == 'admin';
+      allow create: if isAdmin() &&
+        isValidId(adminId) &&
+        isValidAdminRoleRecord(incoming()) &&
+        incoming().uid == adminId &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isAdmin() && isValidId(adminId);
     }
   }
 }

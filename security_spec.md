@@ -20,6 +20,9 @@
 5. **Study Room Notes (`studyNotes/{noteId}`)**:
    - Only `authorUid == request.auth.uid` can create or delete their own study note.
    - `focusMinutes` must be between `1` and `240`.
+6. **Administrator RBAC (`admins/{adminId}`)**:
+   - Only a verified administrator (`isAdmin()`)—backed by `/admins/$(request.auth.uid)` or the bootstrapped admin email `mahitsaxena44@gmail.com` with `email_verified == true`—can read, create, update, or delete `/admins/{adminId}`.
+   - Regular users cannot read or enumerate `/admins/{adminId}` or escalate privileges.
 
 ## 2. The "Dirty Dozen" Payloads (Designed to Break Identity, Integrity & State)
 
@@ -34,4 +37,4 @@
 9. **Payload 9 (Timestamp Forgery)**: User `user_A` creates a profile with a forged past timestamp `createdAt` not matching `request.time`. -> `PERMISSION_DENIED`
 10. **Payload 10 (Immortal Field Mutation)**: User `user_A` updates `/profiles/user_A` and mutates `createdAt`. -> `PERMISSION_DENIED`
 11. **Payload 11 (Path ID Poisoning)**: User `user_A` attempts to create `/moments/invalid$id!with*spaces`. -> `PERMISSION_DENIED`
-12. **Payload 12 (Value Poisoning on Study Note)**: User `user_A` creates a study note with `focusMinutes: 999999` or string type. -> `PERMISSION_DENIED`
+12. **Payload 12 (Value Poisoning on Study Note & Admin Escalation)**: User `user_A` creates a study note with `focusMinutes: 999999` or attempts to write `/admins/user_A` without admin role. -> `PERMISSION_DENIED`

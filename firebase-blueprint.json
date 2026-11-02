@@ -399,6 +399,31 @@
         "visibility",
         "createdAt"
       ]
+    },
+    "AdminRoleRecord": {
+      "title": "AdminRoleRecord",
+      "description": "Strict Role-Based Access Control (RBAC) document granting administrative audit privileges.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "maxLength": 160
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
     }
   },
   "firestore": {
@@ -433,6 +458,10 @@
     "/studyNotes/{noteId}": {
       "schema": { "$ref": "#/entities/StudyNote" },
       "description": "Positive study room notes and focus records."
+    },
+    "/admins/{adminId}": {
+      "schema": { "$ref": "#/entities/AdminRoleRecord" },
+      "description": "RBAC administrator role assignments (readable and writable only by verified admins)."
     }
   }
 }

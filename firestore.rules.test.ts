@@ -34,4 +34,9 @@ test('Dirty Dozen Security Invariants in firestore.rules', () => {
   assert.ok(rulesText.includes('function isValidMomentComment(data)'));
   assert.ok(rulesText.includes('match /momentComments/{commentId}'));
   assert.ok(rulesText.includes('data.text is string && data.text.size() >= 1 && data.text.size() <= 400'));
+  // 14. Admin RBAC & strict createdAt immutability
+  assert.ok(rulesText.includes('function isAdmin()'));
+  assert.ok(rulesText.includes("request.auth.token.email == 'mahitsaxena44@gmail.com'"));
+  assert.ok(rulesText.includes('match /admins/{adminId}'));
+  assert.ok(!rulesText.includes('incoming().createdAt == existing().createdAt || incoming().createdAt == request.time'));
 });

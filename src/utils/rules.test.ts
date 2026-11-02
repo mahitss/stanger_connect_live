@@ -303,6 +303,21 @@ import {
   resolveWorkspaceQrScannerEventSound,
   WORKSPACE_QR_SCAN_HIGH_FREQ_HZ,
   resolveWorkspaceQrScanConfirmationChime,
+  BOOTSTRAPPED_ADMIN_EMAIL,
+  DEFAULT_ALLOWED_CORS_ORIGINS,
+  isBlockedSensitiveFilePath,
+  escapeHtmlEntities,
+  sanitizeFormPayload,
+  validateCorsOrigin,
+  buildEnterpriseSecurityHeadersSpec,
+  verifyUserAndAdminAccess,
+  auditEnvironmentSecurity,
+  buildFullSecurityAuditReport,
+  WORKSPACE_COMMAND_CATEGORIES,
+  WORKSPACE_COMMAND_PALETTE_ITEMS,
+  filterWorkspaceCommandPaletteItems,
+  resolveCommandPaletteKeyboardNavigation,
+  evaluateWorkspaceProductivitySummary,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -7310,7 +7325,7 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
   ]);
 
   // Sort by 'Alphabetical' ('alphabetical_asc') with custom unsorted room codes
-  const alphaScans = [
+  const alphaScans = normalizeStoredWorkspaceQrRecentScans([
     {
       roomCode: 'ZETA-ROOM',
       workspaceUrl: 'http://localhost:3000/?room=ZETA-ROOM',
@@ -7328,7 +7343,7 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
       isPinned: true,
       pinnedAtMs: 900,
     },
-  ];
+  ]);
   const sortedMostRecent = sortWorkspaceQrHistoryItems(
     alphaScans,
     'most_recent_desc'
@@ -7433,7 +7448,7 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
 
   const refDayMs = Date.UTC(2026, 10, 1, 12, 0, 0); // 2026-11-01 12:00 UTC
   const dayMs = 86_400_000;
-  const statsScans = [
+  const statsScans = normalizeStoredWorkspaceQrRecentScans([
     {
       id: 'st-1',
       roomCode: 'WORK-HUB1',
@@ -7462,7 +7477,7 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
       scannedAtMs: refDayMs - 5 * dayMs, // 5 days ago (dayIndex 1)
       category: 'Casual' as const,
     },
-  ];
+  ]);
 
   const statsSpec = buildWorkspaceQrHistoryStatisticsSpec(statsScans, {
     activeTab: 'statistics',
@@ -7791,3 +7806,251 @@ test('Workspace shell (#workspace-shell) QR Code popover supports Camera API QR 
     '2026-11-01 19:30:00 UTC'
   );
 });
+
+test('Enterprise Zero-Trust Security Audit & Hardening Suite: exposed file blocker, XSS/SQLi/NoSQLi form sanitization, CORS origin allowlist, security headers, RBAC access checks, env var audit, and 16-control audit report', () => {
+  // 1. Exposed Sensitive File Blocker
+  assert.equal(isBlockedSensitiveFilePath('/.env').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/.env.production').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/.git/config').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/firestore.rules').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/DRAFT_firestore.rules').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/firebase-blueprint.json').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/firebase-applet-config.json').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/server.ts').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/package.json').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/assets/app.js.map').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/../etc/passwd').blocked, true);
+  assert.equal(isBlockedSensitiveFilePath('/index.html').blocked, false);
+  assert.equal(isBlockedSensitiveFilePath('/api/health').blocked, false);
+
+  // 2. HTML Entity Escaping & Form Sanitization
+  assert.equal(
+    escapeHtmlEntities('<script>alert("xss")</script>'),
+    '&lt;script&gt;alert(&quot;xss&quot;)&lt;&#x2F;script&gt;'
+  );
+
+  const cleanForm = sanitizeFormPayload(
+    {
+      displayName: '  Aarav Mehta  ',
+      bio: 'Distributed Systems Engineer',
+      focusMinutes: 45,
+      active: true,
+    },
+    { displayName: 32, bio: 120 }
+  );
+  assert.equal(cleanForm.safe, true);
+  assert.equal(cleanForm.sanitized.displayName, 'Aarav Mehta');
+  assert.equal(cleanForm.sanitized.focusMinutes, 45);
+
+  const xssForm = sanitizeFormPayload({
+    comment: '<img src=x onerror=alert(1)>',
+  });
+  assert.equal(xssForm.safe, false);
+  assert.equal(xssForm.threatType, 'xss_injection');
+  assert.equal(xssForm.blockedField, 'comment');
+
+  const sqliForm = sanitizeFormPayload({
+    email: "admin@app.io' OR '1'='1",
+  });
+  assert.equal(sqliForm.safe, false);
+  assert.equal(sqliForm.threatType, 'sql_injection');
+
+  const nosqliForm = sanitizeFormPayload({
+    query: '{"$gt": ""}',
+  });
+  assert.equal(nosqliForm.safe, false);
+  assert.equal(nosqliForm.threatType, 'nosql_injection');
+
+  // 3. Strict CORS Origin Validation
+  const sameOriginCors = validateCorsOrigin(undefined);
+  assert.equal(sameOriginCors.allowed, true);
+  assert.equal(sameOriginCors.allowOriginHeader, null);
+
+  const localhostCors = validateCorsOrigin('http://localhost:3000');
+  assert.equal(localhostCors.allowed, true);
+  assert.equal(localhostCors.allowOriginHeader, 'http://localhost:3000');
+
+  const cloudRunCors = validateCorsOrigin(DEFAULT_ALLOWED_CORS_ORIGINS[2]);
+  assert.equal(cloudRunCors.allowed, true);
+
+  const untrustedCors = validateCorsOrigin('https://evil-attacker.example.com');
+  assert.equal(untrustedCors.allowed, false);
+  assert.equal(untrustedCors.allowOriginHeader, null);
+
+  const nullOriginCors = validateCorsOrigin('null');
+  assert.equal(nullOriginCors.allowed, false);
+
+  // 4. Enterprise Security Headers Spec
+  const apiHeaders = buildEnterpriseSecurityHeadersSpec({ isApiRoute: true });
+  assert.equal(apiHeaders['X-Content-Type-Options'], 'nosniff');
+  assert.equal(apiHeaders['X-Frame-Options'], 'SAMEORIGIN');
+  assert.equal(apiHeaders['Referrer-Policy'], 'no-referrer');
+  assert.equal(apiHeaders['Cross-Origin-Opener-Policy'], 'same-origin-allow-popups');
+  assert.equal(apiHeaders['Cross-Origin-Resource-Policy'], 'same-origin');
+  assert.ok(apiHeaders['Strict-Transport-Security'].includes('max-age=31536000'));
+  assert.ok(apiHeaders['Content-Security-Policy'].includes("default-src 'self'"));
+  assert.ok(apiHeaders['Content-Security-Policy'].includes("object-src 'none'"));
+  assert.equal(
+    apiHeaders['Cache-Control'],
+    'no-store, no-cache, must-revalidate, private'
+  );
+
+  // 5. Authentication & RBAC Admin / Resource Ownership Checks
+  const unauthCheck = verifyUserAndAdminAccess({
+    uid: null,
+    email: null,
+    tokenValid: false,
+  });
+  assert.equal(unauthCheck.authenticated, false);
+  assert.equal(unauthCheck.statusCode, 401);
+
+  const nonAdminOnAdminRoute = verifyUserAndAdminAccess({
+    uid: 'usr_regular',
+    email: 'member@example.com',
+    tokenValid: true,
+    requireAdmin: true,
+  });
+  assert.equal(nonAdminOnAdminRoute.authenticated, true);
+  assert.equal(nonAdminOnAdminRoute.authorized, false);
+  assert.equal(nonAdminOnAdminRoute.statusCode, 403);
+
+  const adminOnAdminRoute = verifyUserAndAdminAccess({
+    uid: 'usr_admin',
+    email: BOOTSTRAPPED_ADMIN_EMAIL,
+    tokenValid: true,
+    requireAdmin: true,
+  });
+  assert.equal(adminOnAdminRoute.authenticated, true);
+  assert.equal(adminOnAdminRoute.authorized, true);
+  assert.equal(adminOnAdminRoute.isAdmin, true);
+  assert.equal(adminOnAdminRoute.role, 'admin');
+  assert.equal(adminOnAdminRoute.statusCode, 200);
+
+  const crossUserForbidden = verifyUserAndAdminAccess({
+    uid: 'usr_a',
+    email: 'a@example.com',
+    tokenValid: true,
+    resourceOwnerUid: 'usr_b',
+  });
+  assert.equal(crossUserForbidden.authorized, false);
+  assert.equal(crossUserForbidden.statusCode, 403);
+
+  // 6. Environment Security Audit
+  const cleanEnv = auditEnvironmentSecurity({
+    NODE_ENV: 'production',
+    DEBUG: 'false',
+    PORT: '3000',
+  });
+  assert.equal(cleanEnv.safe, true);
+  assert.equal(cleanEnv.debugModeOff, true);
+  assert.equal(cleanEnv.noClientSecretLeaks, true);
+
+  const leakyEnv = auditEnvironmentSecurity({
+    DEBUG: 'true',
+    VITE_SECRET_API_KEY: 'super_secret_123',
+  });
+  assert.equal(leakyEnv.safe, false);
+  assert.equal(leakyEnv.debugModeOff, false);
+  assert.equal(leakyEnv.noClientSecretLeaks, false);
+  assert.deepEqual(leakyEnv.leakedClientKeys, ['VITE_SECRET_API_KEY']);
+
+  // 7. Full 16-Control Security Audit Report
+  const auditReport = buildFullSecurityAuditReport();
+  assert.equal(auditReport.status, 'PASS');
+  assert.equal(auditReport.scorePercent, 100);
+  assert.equal(auditReport.passedControlsCount, 16);
+  assert.equal(auditReport.totalControlsCount, 16);
+  assert.equal(auditReport.debugMode, false);
+  assert.equal(auditReport.leakedSecretsCount, 0);
+  assert.equal(auditReport.controls.length, 16);
+  assert.ok(auditReport.controls.every((c) => c.status === 'PASS' && c.verified));
+});
+
+test('Universal Workspace Command Palette filters commands by multi-token query and category, resolves keyboard arrow wraparound, and evaluates productivity summary', () => {
+  assert.equal(WORKSPACE_COMMAND_CATEGORIES.length, 5);
+  assert.equal(WORKSPACE_COMMAND_PALETTE_ITEMS.length, 12);
+
+  // 1. Default unfiltered returns all 12 items
+  const allItems = filterWorkspaceCommandPaletteItems('', 'All');
+  assert.equal(allItems.length, 12);
+
+  // 2. Category filtering
+  const studyItems = filterWorkspaceCommandPaletteItems('', 'Study & Focus');
+  assert.equal(studyItems.length, 3);
+  assert.ok(studyItems.every((item) => item.category === 'Study & Focus'));
+
+  const securityItems = filterWorkspaceCommandPaletteItems('', 'Security & Audit');
+  assert.equal(securityItems.length, 1);
+  assert.equal(securityItems[0].id, 'nav_security_center');
+
+  // 3. Multi-token search query filtering
+  const qrMatches = filterWorkspaceCommandPaletteItems('qr camera');
+  assert.equal(qrMatches.length, 1);
+  assert.equal(qrMatches[0].id, 'act_open_qr_scanner_hub');
+
+  const pomodoroMatches = filterWorkspaceCommandPaletteItems('25m sprint');
+  assert.equal(pomodoroMatches.length, 1);
+  assert.equal(pomodoroMatches[0].id, 'act_quick_pomodoro_25m');
+
+  // 4. Keyboard arrow wraparound navigation
+  assert.equal(
+    resolveCommandPaletteKeyboardNavigation({
+      currentIndex: 0,
+      itemCount: 5,
+      key: 'ArrowUp',
+    }),
+    4
+  );
+  assert.equal(
+    resolveCommandPaletteKeyboardNavigation({
+      currentIndex: 4,
+      itemCount: 5,
+      key: 'ArrowDown',
+    }),
+    0
+  );
+  assert.equal(
+    resolveCommandPaletteKeyboardNavigation({
+      currentIndex: 2,
+      itemCount: 5,
+      key: 'End',
+    }),
+    4
+  );
+  assert.equal(
+    resolveCommandPaletteKeyboardNavigation({
+      currentIndex: 3,
+      itemCount: 5,
+      key: 'Home',
+    }),
+    0
+  );
+
+  // 5. Workspace Productivity & Readiness Summary
+  const partialProgress = evaluateWorkspaceProductivitySummary({
+    dailyCompletedMinutes: 30,
+    dailyTargetMinutes: 60,
+    streakCount: 4,
+    recentQrScansCount: 3,
+    securityScorePercent: 100,
+  });
+  assert.equal(partialProgress.focusCompletionPercent, 50);
+  assert.equal(partialProgress.remainingMinutesToGoal, 30);
+  assert.equal(partialProgress.isDailyGoalReached, false);
+  assert.equal(partialProgress.focusStatusLabel, '30m / 60m (30m left)');
+  assert.equal(partialProgress.readinessScorePercent, 71);
+
+  const completedGoal = evaluateWorkspaceProductivitySummary({
+    dailyCompletedMinutes: 75,
+    dailyTargetMinutes: 60,
+    streakCount: 5,
+    recentQrScansCount: 5,
+    securityScorePercent: 100,
+  });
+  assert.equal(completedGoal.focusCompletionPercent, 100);
+  assert.equal(completedGoal.remainingMinutesToGoal, 0);
+  assert.equal(completedGoal.isDailyGoalReached, true);
+  assert.equal(completedGoal.readinessScorePercent, 100);
+});
+
+
