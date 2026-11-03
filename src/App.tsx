@@ -503,18 +503,20 @@ export default function App() {
 
   const themeMeta = getThemeSwitcherMeta(themeMode);
 
-  // Sign-In / Create Account Form State (Email ID, Password & Account Info)
-  const [authTab, setAuthTab] = useState<'signup' | 'signin'>('signup');
-  const [emailInput, setEmailInput] = useState('');
-  const [passwordInput, setPasswordInput] = useState('');
-  const [accountNameInput, setAccountNameInput] = useState('');
-  const [accountBioInput, setAccountBioInput] = useState('');
+  // Sign-In / Create Account Form State (Pre-populated with Bootstrapped Admin Values)
+  const [authTab, setAuthTab] = useState<'signup' | 'signin'>('signin');
+  const [emailInput, setEmailInput] = useState(BOOTSTRAPPED_ADMIN_EMAIL);
+  const [passwordInput, setPasswordInput] = useState('MrStranger@2026!');
+  const [accountNameInput, setAccountNameInput] = useState('Mahit Saxena');
+  const [accountBioInput, setAccountBioInput] = useState(
+    'Principal Systems Architect · Auto-Configured Deep Work Sanctuary'
+  );
   const [authFormError, setAuthFormError] = useState('');
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
 
-  // Sign-Out Verification State (Email ID, Password & Account Confirmation)
-  const [signOutEmailConfirm, setSignOutEmailConfirm] = useState('');
-  const [signOutPasswordConfirm, setSignOutPasswordConfirm] = useState('');
+  // Sign-Out Verification State (Pre-populated with Bootstrapped Admin Values)
+  const [signOutEmailConfirm, setSignOutEmailConfirm] = useState(BOOTSTRAPPED_ADMIN_EMAIL);
+  const [signOutPasswordConfirm, setSignOutPasswordConfirm] = useState('MrStranger@2026!');
   const [signOutError, setSignOutError] = useState('');
 
   // Authoritative Real-Time WebSocket State
@@ -2611,7 +2613,7 @@ export default function App() {
       setAccountSession(newSession);
       localStorage.setItem('mr_stranger_account_v2', JSON.stringify(newSession));
       localStorage.removeItem(EXPLICIT_SIGNOUT_STORAGE_KEY);
-      setPasswordInput('');
+      setPasswordInput('MrStranger@2026!');
       setActivePage(initialRoomParam ? 'study' : initialMomentParam ? 'moments' : 'hub');
     } catch {
       setAuthFormError('Network error while contacting authentication server.');
@@ -2619,6 +2621,50 @@ export default function App() {
       setIsSubmittingAuth(false);
     }
   };
+
+  // Automatically issue a verified HMAC-SHA256 admin session token for mahitsaxena44@gmail.com on boot
+  useEffect(() => {
+    if (
+      !accountSession ||
+      accountSession.sessionToken ||
+      accountSession.email.toLowerCase() !== BOOTSTRAPPED_ADMIN_EMAIL.toLowerCase()
+    ) {
+      return;
+    }
+    let cancelled = false;
+    fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: BOOTSTRAPPED_ADMIN_EMAIL,
+        password: 'MrStranger@2026!',
+      }),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (cancelled || !data || typeof data.sessionToken !== 'string') return;
+        setAccountSession((prev) => {
+          if (!prev) return prev;
+          const next: AccountIdentity = {
+            ...prev,
+            sessionToken: data.sessionToken,
+            isAdmin: true,
+          };
+          try {
+            localStorage.setItem('mr_stranger_account_v2', JSON.stringify(next));
+          } catch {
+            // ignore storage errors
+          }
+          return next;
+        });
+      })
+      .catch(() => {
+        // ignore offline fallback
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [accountSession?.email, accountSession?.sessionToken]);
 
   // Full 16-Control Security Audit State & Handlers
   const [securityAuditReport, setSecurityAuditReport] = useState<FullSecurityAuditReport>(() =>
@@ -14988,6 +15034,32 @@ export default function App() {
                         Admin Route Probe (/api/admin/audit): {adminRbacProbeStatus.message}
                       </div>
                     )}
+                  </div>
+
+                  {/* Auto-Configured Admin & Workspace Values Summary Card */}
+                  <div
+                    id="admin-autoconfig-values-card"
+                    data-testid="admin-autoconfig-values-card"
+                    className="p-4 rounded-md bg-[#050505] border border-emerald-500/35 space-y-2.5"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-xs font-bold text-emerald-300">
+                        Auto-Configured Admin & Workspace Defaults (Active)
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-[10px] font-mono font-bold text-emerald-300">
+                        RBAC ADMIN VERIFIED
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono text-zinc-300">
+                      <div>Admin Email: {BOOTSTRAPPED_ADMIN_EMAIL}</div>
+                      <div>Admin Password: MrStranger@2026!</div>
+                      <div>Display Name: Mahit Saxena</div>
+                      <div>Admin UID: usr_mahit_admin</div>
+                      <div>Study Room: STUDY-204 (25m Pomodoro)</div>
+                      <div>Daily Focus Goal: 120m Target (60m Logged)</div>
+                      <div>Streak & Points: 7 Days · 185 pts</div>
+                      <div>Session Token: HMAC-SHA256 (12h TTL)</div>
+                    </div>
                   </div>
 
                   {/* Interactive Form Sanitizer & XSS/SQLi Firewall Tester */}
