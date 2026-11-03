@@ -60,6 +60,9 @@ import {
   setIndividualStudyDeskCustomDuration,
   tickIndividualStudyDeskPomodoro,
   syncIndividualDeskPomodoroMapWithDesks,
+  applyIndividualStudyDeskUrgencyStage,
+  evaluateActiveStudyDeskPulseAnimationSpec,
+  StudyDeskPomodoroUrgencyStagePreset,
   WeeklyRoomFocusSortOrder,
   buildWeeklyFocusTimeByRoomCodeSummary,
 } from '../utils/rules';
@@ -668,6 +671,20 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       return {
         ...prev,
         [deskUid]: setIndividualStudyDeskCustomDuration(target, minutes),
+      };
+    });
+  };
+
+  const handleSelectIndividualDeskUrgencyStage = (
+    deskUid: string,
+    stage: StudyDeskPomodoroUrgencyStagePreset
+  ) => {
+    persistIndividualDeskTimersMap((prev) => {
+      const target = prev[deskUid];
+      if (!target) return prev;
+      return {
+        ...prev,
+        [deskUid]: applyIndividualStudyDeskUrgencyStage(target, stage),
       };
     });
   };
@@ -1487,10 +1504,25 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               {studyTogetherLobby.activeRoomPreset.activeScholarsPreview
                 .slice(0, 4)
                 .map((scholar) => {
+                  const currentUserDeskState =
+                    individualDeskTimersMap[currentUid] ||
+                    createIndividualStudyDeskPomodoroState({
+                      deskUid: currentUid,
+                      displayName: currentName,
+                      roomCode: activeRoomCode,
+                      subject: subject || `Studying: ${activeBook.title}`,
+                      initialMinutes: durationMinutes,
+                    });
+                  const currentUserPulseSpec =
+                    evaluateActiveStudyDeskPulseAnimationSpec({
+                      deskState: currentUserDeskState,
+                      isCurrentUserDesk: true,
+                      isRoomTimerRunning: isRunning,
+                      roomTimerRemainingSeconds: secondsLeft,
+                      roomTimerTotalSeconds: targetTotalSeconds,
+                    });
                   const isCurrentUserPulsing =
-                    scholar.isCurrentUser &&
-                    (isRunning ||
-                      individualDeskTimersMap[currentUid]?.status === 'running');
+                    scholar.isCurrentUser && currentUserPulseSpec.isPulsing;
                   return (
                   <div
                     key={scholar.id}
@@ -1502,10 +1534,26 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                     data-active-focus-pulse={
                       isCurrentUserPulsing ? 'true' : 'false'
                     }
+                    data-urgency-level={
+                      scholar.isCurrentUser
+                        ? currentUserPulseSpec.dataUrgencyLevel
+                        : 'none'
+                    }
+                    data-color-intensity={
+                      scholar.isCurrentUser
+                        ? String(currentUserPulseSpec.colorIntensityPercent)
+                        : '0'
+                    }
                     className={`group relative rounded-lg overflow-hidden border aspect-[16/10] bg-zinc-950 flex flex-col justify-between p-3 transition-all ${
                       scholar.isCurrentUser
                         ? isCurrentUserPulsing
-                          ? 'border-emerald-400/90 ring-1 ring-emerald-400/40 study-desk-active-focus-pulse'
+                          ? `${
+                              currentUserPulseSpec.urgencyLevel === 'critical'
+                                ? 'border-rose-500/90 ring-1 ring-rose-500/40'
+                                : currentUserPulseSpec.urgencyLevel === 'warming'
+                                ? 'border-amber-400/90 ring-1 ring-amber-400/40'
+                                : 'border-emerald-400/90 ring-1 ring-emerald-400/40'
+                            } ${currentUserPulseSpec.cardPulseClassName}`
                           : 'border-emerald-500/70 ring-1 ring-emerald-500/30'
                         : 'border-zinc-800/90 hover:border-zinc-700'
                     }`}
@@ -2092,10 +2140,13 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         activeRoomCode={activeRoomCode}
         currentUid={currentUid}
         isRoomTimerRunning={isRunning}
+        roomTimerRemainingSeconds={secondsLeft}
+        roomTimerTotalSeconds={targetTotalSeconds}
         deskTimersList={Object.values(individualDeskTimersMap)}
         onStartPauseDesk={handleStartPauseIndividualDeskPomodoro}
         onResetDesk={handleResetIndividualDeskPomodoro}
         onApplyDeskCustomDuration={handleApplyIndividualDeskCustomDuration}
+        onSelectDeskUrgencyStage={handleSelectIndividualDeskUrgencyStage}
         onStartAllDesks={handleStartAllIndividualDesks}
         onPauseAllDesks={handlePauseAllIndividualDesks}
         onResetAllDesks={handleResetAllIndividualDesks}
@@ -3108,9 +3159,12 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                       deskState={deskTimerState}
                       isCurrentUserDesk={desk.uid === currentUid}
                       isRoomTimerRunning={isRunning}
+                      roomTimerRemainingSeconds={secondsLeft}
+                      roomTimerTotalSeconds={targetTotalSeconds}
                       onStartPause={handleStartPauseIndividualDeskPomodoro}
                       onReset={handleResetIndividualDeskPomodoro}
                       onApplyCustomDuration={handleApplyIndividualDeskCustomDuration}
+                      onSelectUrgencyStage={handleSelectIndividualDeskUrgencyStage}
                       compact={true}
                     />
                   );

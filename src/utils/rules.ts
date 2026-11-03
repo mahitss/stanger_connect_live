@@ -20662,29 +20662,88 @@ export function buildWeeklyFocusTimeByRoomCodeSummary(params: {
 }
 
 // ============================================================================
-// ACTIVE STUDY DESK POMODORO PULSING ANIMATION SPEC
+// ACTIVE STUDY DESK POMODORO PULSING ANIMATION & URGENCY INTENSITY SPEC
 // ============================================================================
 
 export const ACTIVE_STUDY_DESK_PULSE_DURATION_MS = 2600;
+export const ACTIVE_STUDY_DESK_WARMING_PULSE_DURATION_MS = 1900;
+export const ACTIVE_STUDY_DESK_CRITICAL_PULSE_DURATION_MS = 1250;
+
+export const STUDY_DESK_URGENCY_WARMING_THRESHOLD_RATIO = 0.5;
+export const STUDY_DESK_URGENCY_CRITICAL_THRESHOLD_RATIO = 0.2;
+
+export type StudyDeskPomodoroUrgencyLevel =
+  | 'none'
+  | 'steady'
+  | 'warming'
+  | 'critical';
+
+export type StudyDeskPomodoroUrgencyStagePreset =
+  | 'steady'
+  | 'warming'
+  | 'critical';
+
+export type StudyDeskPomodoroUrgencyColorTone =
+  | 'zinc'
+  | 'emerald'
+  | 'amber'
+  | 'rose';
 
 export interface ActiveStudyDeskPulseAnimationSpec {
   deskUid: string;
   isCurrentUserDesk: boolean;
   isPomodoroRunning: boolean;
   isPulsing: boolean;
+  urgencyLevel: StudyDeskPomodoroUrgencyLevel;
+  urgencyColorTone: StudyDeskPomodoroUrgencyColorTone;
+  urgencyBadgeLabel: string;
+  remainingRatio: number;
+  remainingPercent: number;
+  colorIntensityPercent: number;
   cardPulseClassName: string;
+  urgencyPulseClassName: string;
+  cardSurfaceClassName: string;
+  progressBarColorClassName: string;
+  statusTextColorClassName: string;
+  dotColorClassName: string;
   indicatorPulseClassName: string;
   animationName: string;
   animationDurationMs: number;
   dataActiveFocusPulse: 'true' | 'false';
+  dataUrgencyLevel: StudyDeskPomodoroUrgencyLevel;
   roomVisibilityLabel: string;
   peerStatusBadgeText: string;
+}
+
+export function applyIndividualStudyDeskUrgencyStage(
+  state: IndividualStudyDeskPomodoroState,
+  stage: StudyDeskPomodoroUrgencyStagePreset,
+  nowMs: number = Date.now()
+): IndividualStudyDeskPomodoroState {
+  const totalSeconds = Math.max(60, Math.round(state.durationMinutes * 60));
+  const targetRatio =
+    stage === 'critical' ? 0.1 : stage === 'warming' ? 0.35 : 0.85;
+  const nextRemainingSeconds = Math.max(
+    5,
+    Math.min(totalSeconds, Math.round(totalSeconds * targetRatio))
+  );
+  const nextElapsedSeconds = Math.max(0, totalSeconds - nextRemainingSeconds);
+
+  return {
+    ...state,
+    status: 'running',
+    remainingSeconds: nextRemainingSeconds,
+    elapsedSeconds: nextElapsedSeconds,
+    updatedAtMs: nowMs,
+  };
 }
 
 export function evaluateActiveStudyDeskPulseAnimationSpec(params: {
   deskState: IndividualStudyDeskPomodoroState;
   isCurrentUserDesk: boolean;
   isRoomTimerRunning?: boolean;
+  roomTimerRemainingSeconds?: number;
+  roomTimerTotalSeconds?: number;
 }): ActiveStudyDeskPulseAnimationSpec {
   const isDeskTimerRunning = params.deskState.status === 'running';
   const isPomodoroRunning =
@@ -20693,28 +20752,208 @@ export function evaluateActiveStudyDeskPulseAnimationSpec(params: {
 
   const isPulsing = isPomodoroRunning;
 
+  const useRoomTimerFallback =
+    !isDeskTimerRunning &&
+    Boolean(params.isCurrentUserDesk && params.isRoomTimerRunning) &&
+    typeof params.roomTimerTotalSeconds === 'number' &&
+    params.roomTimerTotalSeconds > 0 &&
+    typeof params.roomTimerRemainingSeconds === 'number';
+
+  const totalSeconds = useRoomTimerFallback
+    ? Math.max(60, Math.round(Number(params.roomTimerTotalSeconds)))
+    : Math.max(60, Math.round(params.deskState.durationMinutes * 60));
+
+  const rawRemaining = useRoomTimerFallback
+    ? Number(params.roomTimerRemainingSeconds)
+    : params.deskState.remainingSeconds;
+
+  const safeRemainingSeconds = Math.max(
+    0,
+    Math.min(totalSeconds, Math.round(rawRemaining))
+  );
+
+  const remainingRatio = Number(
+    (safeRemainingSeconds / totalSeconds).toFixed(4)
+  );
+  const remainingPercent = Math.max(
+    0,
+    Math.min(100, Math.round(remainingRatio * 100))
+  );
+
+  if (!isPulsing) {
+    return {
+      deskUid: params.deskState.deskUid,
+      isCurrentUserDesk: params.isCurrentUserDesk,
+      isPomodoroRunning: false,
+      isPulsing: false,
+      urgencyLevel: 'none',
+      urgencyColorTone: 'zinc',
+      urgencyBadgeLabel:
+        params.deskState.status === 'paused' ? 'Paused' : 'Standby',
+      remainingRatio,
+      remainingPercent,
+      colorIntensityPercent: 0,
+      cardPulseClassName: '',
+      urgencyPulseClassName: '',
+      cardSurfaceClassName:
+        params.deskState.status === 'paused'
+          ? 'bg-[#0C0B08] border-amber-500/50'
+          : 'bg-[#050505] border-zinc-800/90 hover:border-zinc-700',
+      progressBarColorClassName:
+        params.deskState.status === 'paused'
+          ? 'bg-amber-400'
+          : params.deskState.status === 'completed'
+          ? 'bg-sky-400'
+          : 'bg-zinc-600',
+      statusTextColorClassName:
+        params.deskState.status === 'paused'
+          ? 'text-amber-300'
+          : params.deskState.status === 'completed'
+          ? 'text-sky-300'
+          : 'text-zinc-400',
+      dotColorClassName: 'bg-zinc-500',
+      indicatorPulseClassName: '',
+      animationName: 'none',
+      animationDurationMs: 0,
+      dataActiveFocusPulse: 'false',
+      dataUrgencyLevel: 'none',
+      roomVisibilityLabel:
+        params.deskState.status === 'paused' ? 'Timer Paused' : 'Ready at Desk',
+      peerStatusBadgeText: 'Ready',
+    };
+  }
+
+  if (remainingRatio <= STUDY_DESK_URGENCY_CRITICAL_THRESHOLD_RATIO) {
+    const colorIntensityPercent = Math.min(
+      100,
+      Math.max(
+        88,
+        Math.round(
+          88 +
+            ((STUDY_DESK_URGENCY_CRITICAL_THRESHOLD_RATIO - remainingRatio) /
+              STUDY_DESK_URGENCY_CRITICAL_THRESHOLD_RATIO) *
+              12
+        )
+      )
+    );
+
+    return {
+      deskUid: params.deskState.deskUid,
+      isCurrentUserDesk: params.isCurrentUserDesk,
+      isPomodoroRunning: true,
+      isPulsing: true,
+      urgencyLevel: 'critical',
+      urgencyColorTone: 'rose',
+      urgencyBadgeLabel: 'Final Sprint Urgency',
+      remainingRatio,
+      remainingPercent,
+      colorIntensityPercent,
+      cardPulseClassName:
+        'study-desk-active-focus-pulse study-desk-pulse-urgency-critical',
+      urgencyPulseClassName: 'study-desk-pulse-urgency-critical',
+      cardSurfaceClassName: 'bg-[#12080A] border-rose-500/85',
+      progressBarColorClassName: 'bg-rose-500',
+      statusTextColorClassName: 'text-rose-400',
+      dotColorClassName: 'bg-rose-400',
+      indicatorPulseClassName: 'study-desk-focus-indicator-pulse',
+      animationName: 'studyDeskUrgencyCriticalPulse',
+      animationDurationMs: ACTIVE_STUDY_DESK_CRITICAL_PULSE_DURATION_MS,
+      dataActiveFocusPulse: 'true',
+      dataUrgencyLevel: 'critical',
+      roomVisibilityLabel: params.isCurrentUserDesk
+        ? `Final Sprint · ${colorIntensityPercent}% Urgency Pulse`
+        : 'Peer in Final Sprint',
+      peerStatusBadgeText: 'Final Sprint',
+    };
+  }
+
+  if (remainingRatio <= STUDY_DESK_URGENCY_WARMING_THRESHOLD_RATIO) {
+    const colorIntensityPercent = Math.min(
+      85,
+      Math.max(
+        65,
+        Math.round(
+          65 +
+            ((STUDY_DESK_URGENCY_WARMING_THRESHOLD_RATIO - remainingRatio) /
+              (STUDY_DESK_URGENCY_WARMING_THRESHOLD_RATIO -
+                STUDY_DESK_URGENCY_CRITICAL_THRESHOLD_RATIO)) *
+              20
+        )
+      )
+    );
+
+    return {
+      deskUid: params.deskState.deskUid,
+      isCurrentUserDesk: params.isCurrentUserDesk,
+      isPomodoroRunning: true,
+      isPulsing: true,
+      urgencyLevel: 'warming',
+      urgencyColorTone: 'amber',
+      urgencyBadgeLabel: 'Mid-Session Pace',
+      remainingRatio,
+      remainingPercent,
+      colorIntensityPercent,
+      cardPulseClassName:
+        'study-desk-active-focus-pulse study-desk-pulse-urgency-warming',
+      urgencyPulseClassName: 'study-desk-pulse-urgency-warming',
+      cardSurfaceClassName: 'bg-[#0E0B07] border-amber-400/80',
+      progressBarColorClassName: 'bg-amber-400',
+      statusTextColorClassName: 'text-amber-300',
+      dotColorClassName: 'bg-amber-400',
+      indicatorPulseClassName: 'study-desk-focus-indicator-pulse',
+      animationName: 'studyDeskUrgencyWarmingPulse',
+      animationDurationMs: ACTIVE_STUDY_DESK_WARMING_PULSE_DURATION_MS,
+      dataActiveFocusPulse: 'true',
+      dataUrgencyLevel: 'warming',
+      roomVisibilityLabel: params.isCurrentUserDesk
+        ? `Warming Pace · ${colorIntensityPercent}% Intensity Pulse`
+        : 'Peer Mid-Session Focus',
+      peerStatusBadgeText: 'Warming Pace',
+    };
+  }
+
+  const colorIntensityPercent = Math.min(
+    60,
+    Math.max(
+      35,
+      Math.round(
+        35 +
+          ((1 - remainingRatio) /
+            (1 - STUDY_DESK_URGENCY_WARMING_THRESHOLD_RATIO)) *
+            25
+      )
+    )
+  );
+
   return {
     deskUid: params.deskState.deskUid,
     isCurrentUserDesk: params.isCurrentUserDesk,
-    isPomodoroRunning,
-    isPulsing,
-    cardPulseClassName: isPulsing ? 'study-desk-active-focus-pulse' : '',
-    indicatorPulseClassName: isPulsing
-      ? 'study-desk-focus-indicator-pulse'
-      : '',
-    animationName: isPulsing ? 'studyDeskActiveFocusPulse' : 'none',
-    animationDurationMs: isPulsing ? ACTIVE_STUDY_DESK_PULSE_DURATION_MS : 0,
-    dataActiveFocusPulse: isPulsing ? 'true' : 'false',
-    roomVisibilityLabel: isPulsing
-      ? params.isCurrentUserDesk
-        ? 'Active Focus · Pulsing to Room Peers'
-        : 'Peer Focusing Live'
-      : params.deskState.status === 'paused'
-      ? 'Timer Paused'
-      : 'Ready at Desk',
-    peerStatusBadgeText: isPulsing ? 'Focusing Live' : 'Ready',
+    isPomodoroRunning: true,
+    isPulsing: true,
+    urgencyLevel: 'steady',
+    urgencyColorTone: 'emerald',
+    urgencyBadgeLabel: 'Steady Focus',
+    remainingRatio,
+    remainingPercent,
+    colorIntensityPercent,
+    cardPulseClassName: 'study-desk-active-focus-pulse',
+    urgencyPulseClassName: 'study-desk-pulse-urgency-steady',
+    cardSurfaceClassName: 'bg-[#080D0B] border-emerald-500/70',
+    progressBarColorClassName: 'bg-emerald-400',
+    statusTextColorClassName: 'text-emerald-400',
+    dotColorClassName: 'bg-emerald-400',
+    indicatorPulseClassName: 'study-desk-focus-indicator-pulse',
+    animationName: 'studyDeskActiveFocusPulse',
+    animationDurationMs: ACTIVE_STUDY_DESK_PULSE_DURATION_MS,
+    dataActiveFocusPulse: 'true',
+    dataUrgencyLevel: 'steady',
+    roomVisibilityLabel: params.isCurrentUserDesk
+      ? 'Active Focus · Pulsing to Room Peers'
+      : 'Peer Focusing Live',
+    peerStatusBadgeText: 'Focusing Live',
   };
 }
+
 
 
 

@@ -348,6 +348,9 @@ import {
   resolveStudyRoomDisplayLabel,
   buildWeeklyFocusTimeByRoomCodeSummary,
   ACTIVE_STUDY_DESK_PULSE_DURATION_MS,
+  ACTIVE_STUDY_DESK_WARMING_PULSE_DURATION_MS,
+  ACTIVE_STUDY_DESK_CRITICAL_PULSE_DURATION_MS,
+  applyIndividualStudyDeskUrgencyStage,
   evaluateActiveStudyDeskPulseAnimationSpec,
 } from './rules.ts';
 
@@ -8572,6 +8575,98 @@ test('evaluateActiveStudyDeskPulseAnimationSpec applies subtle pulsing animation
   assert.equal(roomTimerSpec.dataActiveFocusPulse, 'true');
   assert.equal(roomTimerSpec.cardPulseClassName, 'study-desk-active-focus-pulse');
 });
+
+test('Active study desk pulsing animation dynamically changes color intensity, urgency level, and pulse speed based on remaining Pomodoro time', () => {
+  const baseDesk = startIndividualStudyDeskPomodoro(
+    createIndividualStudyDeskPomodoroState({
+      deskUid: 'usr_mahit_admin',
+      displayName: 'Mahit Saxena',
+      roomCode: 'STUDY-204',
+      subject: 'System Architecture & Deep Work',
+      initialMinutes: 25,
+    })
+  );
+
+  // 1. Steady Focus Stage (> 50% remaining time): Emerald tone, 2600ms pulse, 35-60% color intensity
+  const steadyDesk = applyIndividualStudyDeskUrgencyStage(baseDesk, 'steady');
+  const steadySpec = evaluateActiveStudyDeskPulseAnimationSpec({
+    deskState: steadyDesk,
+    isCurrentUserDesk: true,
+  });
+  assert.equal(steadySpec.isPulsing, true);
+  assert.equal(steadySpec.urgencyLevel, 'steady');
+  assert.equal(steadySpec.dataUrgencyLevel, 'steady');
+  assert.equal(steadySpec.urgencyColorTone, 'emerald');
+  assert.equal(steadySpec.remainingPercent, 85);
+  assert.ok(
+    steadySpec.colorIntensityPercent >= 35 &&
+      steadySpec.colorIntensityPercent <= 60
+  );
+  assert.equal(steadySpec.animationName, 'studyDeskActiveFocusPulse');
+  assert.equal(steadySpec.animationDurationMs, ACTIVE_STUDY_DESK_PULSE_DURATION_MS);
+
+  // 2. Warming Pace Stage (20% < remaining <= 50%): Amber tone, 1900ms pulse, 65-85% color intensity
+  const warmingDesk = applyIndividualStudyDeskUrgencyStage(baseDesk, 'warming');
+  const warmingSpec = evaluateActiveStudyDeskPulseAnimationSpec({
+    deskState: warmingDesk,
+    isCurrentUserDesk: true,
+  });
+  assert.equal(warmingSpec.isPulsing, true);
+  assert.equal(warmingSpec.urgencyLevel, 'warming');
+  assert.equal(warmingSpec.dataUrgencyLevel, 'warming');
+  assert.equal(warmingSpec.urgencyColorTone, 'amber');
+  assert.equal(warmingSpec.remainingPercent, 35);
+  assert.ok(
+    warmingSpec.colorIntensityPercent >= 65 &&
+      warmingSpec.colorIntensityPercent <= 85
+  );
+  assert.ok(
+    warmingSpec.colorIntensityPercent > steadySpec.colorIntensityPercent
+  );
+  assert.equal(
+    warmingSpec.cardPulseClassName,
+    'study-desk-active-focus-pulse study-desk-pulse-urgency-warming'
+  );
+  assert.equal(warmingSpec.animationName, 'studyDeskUrgencyWarmingPulse');
+  assert.equal(
+    warmingSpec.animationDurationMs,
+    ACTIVE_STUDY_DESK_WARMING_PULSE_DURATION_MS
+  );
+  assert.equal(warmingSpec.peerStatusBadgeText, 'Warming Pace');
+
+  // 3. Final Sprint Critical Urgency Stage (<= 20% remaining): Rose-Crimson tone, 1250ms pulse, 88-100% color intensity
+  const criticalDesk = applyIndividualStudyDeskUrgencyStage(
+    baseDesk,
+    'critical'
+  );
+  const criticalSpec = evaluateActiveStudyDeskPulseAnimationSpec({
+    deskState: criticalDesk,
+    isCurrentUserDesk: true,
+  });
+  assert.equal(criticalSpec.isPulsing, true);
+  assert.equal(criticalSpec.urgencyLevel, 'critical');
+  assert.equal(criticalSpec.dataUrgencyLevel, 'critical');
+  assert.equal(criticalSpec.urgencyColorTone, 'rose');
+  assert.equal(criticalSpec.remainingPercent, 10);
+  assert.ok(
+    criticalSpec.colorIntensityPercent >= 88 &&
+      criticalSpec.colorIntensityPercent <= 100
+  );
+  assert.ok(
+    criticalSpec.colorIntensityPercent > warmingSpec.colorIntensityPercent
+  );
+  assert.equal(
+    criticalSpec.cardPulseClassName,
+    'study-desk-active-focus-pulse study-desk-pulse-urgency-critical'
+  );
+  assert.equal(criticalSpec.animationName, 'studyDeskUrgencyCriticalPulse');
+  assert.equal(
+    criticalSpec.animationDurationMs,
+    ACTIVE_STUDY_DESK_CRITICAL_PULSE_DURATION_MS
+  );
+  assert.equal(criticalSpec.peerStatusBadgeText, 'Final Sprint');
+});
+
 
 
 

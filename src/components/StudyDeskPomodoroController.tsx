@@ -11,6 +11,7 @@ import {
 import {
   IndividualStudyDeskPomodoroState,
   INDIVIDUAL_DESK_POMODORO_PRESETS,
+  StudyDeskPomodoroUrgencyStagePreset,
   evaluateIndividualStudyDeskPomodoroMeta,
   evaluateActiveStudyDeskPulseAnimationSpec,
   formatStudyDurationLabel,
@@ -22,9 +23,15 @@ interface IndividualStudyDeskPomodoroCardProps {
   deskState: IndividualStudyDeskPomodoroState;
   isCurrentUserDesk: boolean;
   isRoomTimerRunning?: boolean;
+  roomTimerRemainingSeconds?: number;
+  roomTimerTotalSeconds?: number;
   onStartPause: (deskUid: string) => void;
   onReset: (deskUid: string) => void;
   onApplyCustomDuration: (deskUid: string, minutes: number) => void;
+  onSelectUrgencyStage?: (
+    deskUid: string,
+    stage: StudyDeskPomodoroUrgencyStagePreset
+  ) => void;
   compact?: boolean;
 }
 
@@ -34,9 +41,12 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
   deskState,
   isCurrentUserDesk,
   isRoomTimerRunning = false,
+  roomTimerRemainingSeconds,
+  roomTimerTotalSeconds,
   onStartPause,
   onReset,
   onApplyCustomDuration,
+  onSelectUrgencyStage,
   compact = false,
 }) => {
   const meta = evaluateIndividualStudyDeskPomodoroMeta(deskState);
@@ -44,6 +54,8 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
     deskState,
     isCurrentUserDesk,
     isRoomTimerRunning,
+    roomTimerRemainingSeconds,
+    roomTimerTotalSeconds,
   });
   const [customMinutesDraft, setCustomMinutesDraft] = useState<string>(
     String(deskState.durationMinutes)
@@ -72,14 +84,15 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
       data-is-current-user-desk={isCurrentUserDesk ? 'true' : 'false'}
       data-timer-status={deskState.status}
       data-active-focus-pulse={pulseSpec.dataActiveFocusPulse}
+      data-urgency-level={pulseSpec.dataUrgencyLevel}
+      data-urgency-color-tone={pulseSpec.urgencyColorTone}
+      data-color-intensity={String(pulseSpec.colorIntensityPercent)}
       data-duration-minutes={String(deskState.durationMinutes)}
       data-remaining-seconds={String(deskState.remainingSeconds)}
       className={`rounded-lg border transition-colors p-4 flex flex-col justify-between gap-4 ${
         pulseSpec.isPulsing
-          ? `bg-[#080D0B] border-emerald-500/70 ${pulseSpec.cardPulseClassName}`
-          : meta.isPaused
-          ? 'bg-[#0C0B08] border-amber-500/50'
-          : 'bg-[#050505] border-zinc-800/90 hover:border-zinc-700'
+          ? `${pulseSpec.cardSurfaceClassName} ${pulseSpec.cardPulseClassName}`
+          : pulseSpec.cardSurfaceClassName
       }`}
     >
       {/* Top Desk Identity & Live Status Row */}
@@ -90,7 +103,13 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
               {deskState.displayName}
             </span>
             {isCurrentUserDesk && (
-              <span className="text-[11px] font-mono text-emerald-400 shrink-0">
+              <span
+                className={`text-[11px] font-mono shrink-0 ${
+                  pulseSpec.isPulsing
+                    ? pulseSpec.statusTextColorClassName
+                    : 'text-emerald-400'
+                }`}
+              >
                 (Your Desk)
               </span>
             )}
@@ -101,24 +120,26 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
                 ? `desk-pomodoro-status-${deskState.deskUid}-compact`
                 : `desk-pomodoro-status-${deskState.deskUid}`
             }
-            className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold shrink-0 ${
-              pulseSpec.isPulsing
-                ? 'text-emerald-400'
-                : meta.isPaused
-                ? 'text-amber-300'
-                : meta.isCompleted
-                ? 'text-sky-300'
-                : 'text-zinc-400'
-            }`}
+            className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold shrink-0 ${pulseSpec.statusTextColorClassName}`}
           >
             {pulseSpec.isPulsing && (
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span
+                className={`w-1.5 h-1.5 rounded-full animate-pulse ${pulseSpec.dotColorClassName}`}
+              />
             )}
             {pulseSpec.isPulsing ? pulseSpec.peerStatusBadgeText : meta.statusLabel}
           </span>
         </div>
 
-        <div className="text-xs font-medium text-emerald-400 truncate">
+        <div
+          className={`text-xs font-medium truncate ${
+            pulseSpec.isPulsing && pulseSpec.urgencyLevel === 'critical'
+              ? 'text-rose-300'
+              : pulseSpec.isPulsing && pulseSpec.urgencyLevel === 'warming'
+              ? 'text-amber-300'
+              : 'text-emerald-400'
+          }`}
+        >
           {deskState.subject}
         </div>
         {pulseSpec.isPulsing && (
@@ -128,9 +149,9 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
                 ? `desk-pomodoro-pulse-visibility-${deskState.deskUid}-compact`
                 : `desk-pomodoro-pulse-visibility-${deskState.deskUid}`
             }
-            className="text-[10px] font-mono text-emerald-300/90 truncate"
+            className={`text-[10px] font-mono truncate ${pulseSpec.statusTextColorClassName}`}
           >
-            {pulseSpec.roomVisibilityLabel}
+            {pulseSpec.roomVisibilityLabel} · {pulseSpec.remainingPercent}% time left
           </div>
         )}
         {deskState.positiveNote && (
@@ -158,7 +179,13 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
                   ? `${meta.timerDisplayTestId}-compact`
                   : meta.timerDisplayTestId
               }
-              className="text-3xl font-bold font-mono tabular-nums tracking-tight text-white mt-0.5"
+              className={`text-3xl font-bold font-mono tabular-nums tracking-tight mt-0.5 ${
+                pulseSpec.isPulsing && pulseSpec.urgencyLevel === 'critical'
+                  ? 'text-rose-300'
+                  : pulseSpec.isPulsing && pulseSpec.urgencyLevel === 'warming'
+                  ? 'text-amber-200'
+                  : 'text-white'
+              }`}
             >
               {meta.remainingFormatted}
             </div>
@@ -173,7 +200,13 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
             </div>
             <div>
               Elapsed:{' '}
-              <span className="text-emerald-400 tabular-nums">
+              <span
+                className={`tabular-nums ${
+                  pulseSpec.isPulsing
+                    ? pulseSpec.statusTextColorClassName
+                    : 'text-emerald-400'
+                }`}
+              >
                 {meta.elapsedFormatted}
               </span>{' '}
               ({meta.progressPercent}%)
@@ -185,18 +218,82 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
         <div className="w-full h-2 bg-[#050505] border border-zinc-800 rounded-full overflow-hidden">
           <div
             data-testid={`desk-pomodoro-progress-bar-${deskState.deskUid}`}
-            className={`h-full transition-all duration-300 ${
-              meta.isRunning
-                ? 'bg-emerald-400'
-                : meta.isPaused
-                ? 'bg-amber-400'
-                : meta.isCompleted
-                ? 'bg-sky-400'
-                : 'bg-zinc-600'
-            }`}
+            className={`h-full transition-all duration-300 ${pulseSpec.progressBarColorClassName}`}
             style={{ width: `${meta.progressPercent}%` }}
           />
         </div>
+
+        {/* Session Urgency Stage Selector (Steady >50% · Warming ≤50% · Final Sprint ≤20%) */}
+        {onSelectUrgencyStage && (
+          <div className="pt-1 space-y-1">
+            <div className="flex items-center justify-between gap-2 text-[10px] font-mono text-zinc-400">
+              <span className="whitespace-nowrap">Urgency Intensity</span>
+              <span
+                data-testid={
+                  compact
+                    ? `desk-pomodoro-urgency-readout-${deskState.deskUid}-compact`
+                    : `desk-pomodoro-urgency-readout-${deskState.deskUid}`
+                }
+                className={`whitespace-nowrap truncate ${pulseSpec.statusTextColorClassName}`}
+              >
+                {pulseSpec.urgencyBadgeLabel}
+                {pulseSpec.isPulsing
+                  ? ` (${pulseSpec.colorIntensityPercent}%)`
+                  : ''}
+              </span>
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              <button
+                type="button"
+                data-testid={
+                  compact
+                    ? `desk-pomodoro-urgency-stage-steady-${deskState.deskUid}-compact`
+                    : `desk-pomodoro-urgency-stage-steady-${deskState.deskUid}`
+                }
+                onClick={() => onSelectUrgencyStage(deskState.deskUid, 'steady')}
+                className={`py-1 px-1.5 rounded text-[10px] font-mono border transition-colors cursor-pointer whitespace-nowrap truncate ${
+                  pulseSpec.urgencyLevel === 'steady'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/60 font-bold'
+                    : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'
+                }`}
+              >
+                Steady &gt;50%
+              </button>
+              <button
+                type="button"
+                data-testid={
+                  compact
+                    ? `desk-pomodoro-urgency-stage-warming-${deskState.deskUid}-compact`
+                    : `desk-pomodoro-urgency-stage-warming-${deskState.deskUid}`
+                }
+                onClick={() => onSelectUrgencyStage(deskState.deskUid, 'warming')}
+                className={`py-1 px-1.5 rounded text-[10px] font-mono border transition-colors cursor-pointer whitespace-nowrap truncate ${
+                  pulseSpec.urgencyLevel === 'warming'
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/60 font-bold'
+                    : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'
+                }`}
+              >
+                Warming ≤50%
+              </button>
+              <button
+                type="button"
+                data-testid={
+                  compact
+                    ? `desk-pomodoro-urgency-stage-critical-${deskState.deskUid}-compact`
+                    : `desk-pomodoro-urgency-stage-critical-${deskState.deskUid}`
+                }
+                onClick={() => onSelectUrgencyStage(deskState.deskUid, 'critical')}
+                className={`py-1 px-1.5 rounded text-[10px] font-mono border transition-colors cursor-pointer whitespace-nowrap truncate ${
+                  pulseSpec.urgencyLevel === 'critical'
+                    ? 'bg-rose-500/20 text-rose-300 border-rose-500/60 font-bold'
+                    : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'
+                }`}
+              >
+                Sprint ≤20%
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Primary Start / Pause / Reset Controls */}
         <div className="flex items-center gap-2 pt-1">
@@ -334,10 +431,16 @@ interface StudyDeskPomodoroControllerProps {
   activeRoomCode: string;
   currentUid: string;
   isRoomTimerRunning?: boolean;
+  roomTimerRemainingSeconds?: number;
+  roomTimerTotalSeconds?: number;
   deskTimersList: IndividualStudyDeskPomodoroState[];
   onStartPauseDesk: (deskUid: string) => void;
   onResetDesk: (deskUid: string) => void;
   onApplyDeskCustomDuration: (deskUid: string, minutes: number) => void;
+  onSelectDeskUrgencyStage?: (
+    deskUid: string,
+    stage: StudyDeskPomodoroUrgencyStagePreset
+  ) => void;
   onStartAllDesks: () => void;
   onPauseAllDesks: () => void;
   onResetAllDesks: () => void;
@@ -354,10 +457,13 @@ export const StudyDeskPomodoroController: React.FC<
   activeRoomCode,
   currentUid,
   isRoomTimerRunning = false,
+  roomTimerRemainingSeconds,
+  roomTimerTotalSeconds,
   deskTimersList,
   onStartPauseDesk,
   onResetDesk,
   onApplyDeskCustomDuration,
+  onSelectDeskUrgencyStage,
   onStartAllDesks,
   onPauseAllDesks,
   onResetAllDesks,
@@ -566,9 +672,12 @@ export const StudyDeskPomodoroController: React.FC<
             deskState={deskState}
             isCurrentUserDesk={deskState.deskUid === currentUid}
             isRoomTimerRunning={isRoomTimerRunning}
+            roomTimerRemainingSeconds={roomTimerRemainingSeconds}
+            roomTimerTotalSeconds={roomTimerTotalSeconds}
             onStartPause={onStartPauseDesk}
             onReset={onResetDesk}
             onApplyCustomDuration={onApplyDeskCustomDuration}
+            onSelectUrgencyStage={onSelectDeskUrgencyStage}
           />
         ))}
       </div>

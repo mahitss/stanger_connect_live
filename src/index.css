@@ -534,9 +534,57 @@ html.light textarea::placeholder {
   }
 }
 
+@keyframes studyDeskUrgencyWarmingPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(245, 158, 11, 0.18),
+      0 0 14px rgba(245, 158, 11, 0.22);
+    border-color: rgba(245, 158, 11, 0.72);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 5px rgba(251, 191, 36, 0.36),
+      0 0 28px rgba(245, 158, 11, 0.48);
+    border-color: rgba(253, 224, 71, 0.98);
+    transform: translate3d(0, -1px, 0) scale(1.008);
+  }
+}
+
+@keyframes studyDeskUrgencyCriticalPulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(244, 63, 94, 0.24),
+      0 0 16px rgba(244, 63, 94, 0.28);
+    border-color: rgba(244, 63, 94, 0.78);
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    box-shadow:
+      0 0 0 6px rgba(251, 113, 133, 0.46),
+      0 0 32px rgba(244, 63, 94, 0.62);
+    border-color: rgba(253, 164, 175, 1);
+    transform: translate3d(0, -1.5px, 0) scale(1.01);
+  }
+}
+
 .study-desk-active-focus-pulse,
 [data-active-focus-pulse='true'] {
   animation: studyDeskActiveFocusPulse 2600ms cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: transform, box-shadow, border-color;
+}
+
+.study-desk-pulse-urgency-warming,
+[data-active-focus-pulse='true'][data-urgency-level='warming'] {
+  animation: studyDeskUrgencyWarmingPulse 1900ms cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  will-change: transform, box-shadow, border-color;
+}
+
+.study-desk-pulse-urgency-critical,
+[data-active-focus-pulse='true'][data-urgency-level='critical'] {
+  animation: studyDeskUrgencyCriticalPulse 1250ms cubic-bezier(0.4, 0, 0.6, 1) infinite;
   will-change: transform, box-shadow, border-color;
 }
 
@@ -554,6 +602,9 @@ html.light textarea::placeholder {
   .reset-only-button-bounce-pop-active,
   .reset-only-icon-spin-pop-active,
   .study-desk-active-focus-pulse,
+  .study-desk-pulse-urgency-steady,
+  .study-desk-pulse-urgency-warming,
+  .study-desk-pulse-urgency-critical,
   [data-active-focus-pulse='true'],
   #online-directory-mood-filter-reset-only[data-bounce-pop-active='true'],
   #online-directory-quick-filter-icon-share-container #online-directory-quick-filter-share-checkmark,
