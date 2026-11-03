@@ -12,6 +12,7 @@ import {
   IndividualStudyDeskPomodoroState,
   INDIVIDUAL_DESK_POMODORO_PRESETS,
   evaluateIndividualStudyDeskPomodoroMeta,
+  evaluateActiveStudyDeskPulseAnimationSpec,
   formatStudyDurationLabel,
   clampIndividualDeskPomodoroMinutes,
   sanitizeSafeText,
@@ -20,6 +21,7 @@ import {
 interface IndividualStudyDeskPomodoroCardProps {
   deskState: IndividualStudyDeskPomodoroState;
   isCurrentUserDesk: boolean;
+  isRoomTimerRunning?: boolean;
   onStartPause: (deskUid: string) => void;
   onReset: (deskUid: string) => void;
   onApplyCustomDuration: (deskUid: string, minutes: number) => void;
@@ -31,12 +33,18 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
 > = ({
   deskState,
   isCurrentUserDesk,
+  isRoomTimerRunning = false,
   onStartPause,
   onReset,
   onApplyCustomDuration,
   compact = false,
 }) => {
   const meta = evaluateIndividualStudyDeskPomodoroMeta(deskState);
+  const pulseSpec = evaluateActiveStudyDeskPulseAnimationSpec({
+    deskState,
+    isCurrentUserDesk,
+    isRoomTimerRunning,
+  });
   const [customMinutesDraft, setCustomMinutesDraft] = useState<string>(
     String(deskState.durationMinutes)
   );
@@ -61,12 +69,14 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
       id={compact ? `${meta.cardElementId}-compact` : meta.cardElementId}
       data-testid={compact ? `${meta.cardTestId}-compact` : meta.cardTestId}
       data-desk-uid={deskState.deskUid}
+      data-is-current-user-desk={isCurrentUserDesk ? 'true' : 'false'}
       data-timer-status={deskState.status}
+      data-active-focus-pulse={pulseSpec.dataActiveFocusPulse}
       data-duration-minutes={String(deskState.durationMinutes)}
       data-remaining-seconds={String(deskState.remainingSeconds)}
       className={`rounded-lg border transition-colors p-4 flex flex-col justify-between gap-4 ${
-        meta.isRunning
-          ? 'bg-[#080D0B] border-emerald-500/60'
+        pulseSpec.isPulsing
+          ? `bg-[#080D0B] border-emerald-500/70 ${pulseSpec.cardPulseClassName}`
           : meta.isPaused
           ? 'bg-[#0C0B08] border-amber-500/50'
           : 'bg-[#050505] border-zinc-800/90 hover:border-zinc-700'
@@ -75,7 +85,7 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
       {/* Top Desk Identity & Live Status Row */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2 text-xs">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0">
             <span className="font-bold text-white truncate">
               {deskState.displayName}
             </span>
@@ -86,9 +96,13 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
             )}
           </div>
           <span
-            data-testid={`desk-pomodoro-status-${deskState.deskUid}`}
-            className={`font-mono text-[11px] font-semibold shrink-0 ${
-              meta.isRunning
+            data-testid={
+              compact
+                ? `desk-pomodoro-status-${deskState.deskUid}-compact`
+                : `desk-pomodoro-status-${deskState.deskUid}`
+            }
+            className={`inline-flex items-center gap-1.5 font-mono text-[11px] font-semibold shrink-0 ${
+              pulseSpec.isPulsing
                 ? 'text-emerald-400'
                 : meta.isPaused
                 ? 'text-amber-300'
@@ -97,13 +111,28 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
                 : 'text-zinc-400'
             }`}
           >
-            {meta.statusLabel}
+            {pulseSpec.isPulsing && (
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            )}
+            {pulseSpec.isPulsing ? pulseSpec.peerStatusBadgeText : meta.statusLabel}
           </span>
         </div>
 
         <div className="text-xs font-medium text-emerald-400 truncate">
           {deskState.subject}
         </div>
+        {pulseSpec.isPulsing && (
+          <div
+            data-testid={
+              compact
+                ? `desk-pomodoro-pulse-visibility-${deskState.deskUid}-compact`
+                : `desk-pomodoro-pulse-visibility-${deskState.deskUid}`
+            }
+            className="text-[10px] font-mono text-emerald-300/90 truncate"
+          >
+            {pulseSpec.roomVisibilityLabel}
+          </div>
+        )}
         {deskState.positiveNote && (
           <p className="text-[11px] text-zinc-400 leading-relaxed line-clamp-2">
             &ldquo;{deskState.positiveNote}&rdquo;
@@ -304,6 +333,7 @@ export const IndividualStudyDeskPomodoroCard: React.FC<
 interface StudyDeskPomodoroControllerProps {
   activeRoomCode: string;
   currentUid: string;
+  isRoomTimerRunning?: boolean;
   deskTimersList: IndividualStudyDeskPomodoroState[];
   onStartPauseDesk: (deskUid: string) => void;
   onResetDesk: (deskUid: string) => void;
@@ -323,6 +353,7 @@ export const StudyDeskPomodoroController: React.FC<
 > = ({
   activeRoomCode,
   currentUid,
+  isRoomTimerRunning = false,
   deskTimersList,
   onStartPauseDesk,
   onResetDesk,
@@ -534,6 +565,7 @@ export const StudyDeskPomodoroController: React.FC<
             key={deskState.deskUid}
             deskState={deskState}
             isCurrentUserDesk={deskState.deskUid === currentUid}
+            isRoomTimerRunning={isRoomTimerRunning}
             onStartPause={onStartPauseDesk}
             onReset={onResetDesk}
             onApplyCustomDuration={onApplyDeskCustomDuration}

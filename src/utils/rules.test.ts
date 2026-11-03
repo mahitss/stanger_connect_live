@@ -347,6 +347,8 @@ import {
   DEFAULT_WEEKLY_STUDY_ROOMS_BASELINE,
   resolveStudyRoomDisplayLabel,
   buildWeeklyFocusTimeByRoomCodeSummary,
+  ACTIVE_STUDY_DESK_PULSE_DURATION_MS,
+  evaluateActiveStudyDeskPulseAnimationSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -8511,5 +8513,65 @@ test('Weekly Focus Time per Room Code aggregates 7-day sessions, notes, and Pomo
   const roomCodesAsc = sortedRoomAsc.entries.map((e) => e.roomCode);
   assert.deepEqual(roomCodesAsc, [...roomCodesAsc].sort());
 });
+
+test('evaluateActiveStudyDeskPulseAnimationSpec applies subtle pulsing animation to the active study desk card when the Pomodoro timer is running and disables it when idle or paused', () => {
+  const idleDesk = createIndividualStudyDeskPomodoroState({
+    deskUid: 'usr_mahit_admin',
+    displayName: 'Mahit Saxena',
+    roomCode: 'STUDY-204',
+    subject: 'System Architecture & Deep Work',
+    initialMinutes: 25,
+  });
+
+  // 1. Idle desk with room timer stopped -> not pulsing
+  const idleSpec = evaluateActiveStudyDeskPulseAnimationSpec({
+    deskState: idleDesk,
+    isCurrentUserDesk: true,
+    isRoomTimerRunning: false,
+  });
+  assert.equal(idleSpec.isPulsing, false);
+  assert.equal(idleSpec.dataActiveFocusPulse, 'false');
+  assert.equal(idleSpec.cardPulseClassName, '');
+  assert.equal(idleSpec.animationName, 'none');
+
+  // 2. Starting the desk Pomodoro timer activates the subtle pulsing animation
+  const runningDesk = startIndividualStudyDeskPomodoro(idleDesk);
+  const runningSpec = evaluateActiveStudyDeskPulseAnimationSpec({
+    deskState: runningDesk,
+    isCurrentUserDesk: true,
+    isRoomTimerRunning: false,
+  });
+  assert.equal(runningSpec.isPulsing, true);
+  assert.equal(runningSpec.dataActiveFocusPulse, 'true');
+  assert.equal(runningSpec.cardPulseClassName, 'study-desk-active-focus-pulse');
+  assert.equal(runningSpec.animationName, 'studyDeskActiveFocusPulse');
+  assert.equal(runningSpec.animationDurationMs, ACTIVE_STUDY_DESK_PULSE_DURATION_MS);
+  assert.equal(
+    runningSpec.roomVisibilityLabel,
+    'Active Focus · Pulsing to Room Peers'
+  );
+
+  // 3. Pausing the desk Pomodoro timer stops the pulsing animation
+  const pausedDesk = pauseIndividualStudyDeskPomodoro(runningDesk);
+  const pausedSpec = evaluateActiveStudyDeskPulseAnimationSpec({
+    deskState: pausedDesk,
+    isCurrentUserDesk: true,
+    isRoomTimerRunning: false,
+  });
+  assert.equal(pausedSpec.isPulsing, false);
+  assert.equal(pausedSpec.dataActiveFocusPulse, 'false');
+  assert.equal(pausedSpec.cardPulseClassName, '');
+
+  // 4. Starting the room-wide Pomodoro timer also pulses the current user's active desk card
+  const roomTimerSpec = evaluateActiveStudyDeskPulseAnimationSpec({
+    deskState: idleDesk,
+    isCurrentUserDesk: true,
+    isRoomTimerRunning: true,
+  });
+  assert.equal(roomTimerSpec.isPulsing, true);
+  assert.equal(roomTimerSpec.dataActiveFocusPulse, 'true');
+  assert.equal(roomTimerSpec.cardPulseClassName, 'study-desk-active-focus-pulse');
+});
+
 
 

@@ -20661,6 +20661,62 @@ export function buildWeeklyFocusTimeByRoomCodeSummary(params: {
   };
 }
 
+// ============================================================================
+// ACTIVE STUDY DESK POMODORO PULSING ANIMATION SPEC
+// ============================================================================
+
+export const ACTIVE_STUDY_DESK_PULSE_DURATION_MS = 2600;
+
+export interface ActiveStudyDeskPulseAnimationSpec {
+  deskUid: string;
+  isCurrentUserDesk: boolean;
+  isPomodoroRunning: boolean;
+  isPulsing: boolean;
+  cardPulseClassName: string;
+  indicatorPulseClassName: string;
+  animationName: string;
+  animationDurationMs: number;
+  dataActiveFocusPulse: 'true' | 'false';
+  roomVisibilityLabel: string;
+  peerStatusBadgeText: string;
+}
+
+export function evaluateActiveStudyDeskPulseAnimationSpec(params: {
+  deskState: IndividualStudyDeskPomodoroState;
+  isCurrentUserDesk: boolean;
+  isRoomTimerRunning?: boolean;
+}): ActiveStudyDeskPulseAnimationSpec {
+  const isDeskTimerRunning = params.deskState.status === 'running';
+  const isPomodoroRunning =
+    isDeskTimerRunning ||
+    Boolean(params.isCurrentUserDesk && params.isRoomTimerRunning);
+
+  const isPulsing = isPomodoroRunning;
+
+  return {
+    deskUid: params.deskState.deskUid,
+    isCurrentUserDesk: params.isCurrentUserDesk,
+    isPomodoroRunning,
+    isPulsing,
+    cardPulseClassName: isPulsing ? 'study-desk-active-focus-pulse' : '',
+    indicatorPulseClassName: isPulsing
+      ? 'study-desk-focus-indicator-pulse'
+      : '',
+    animationName: isPulsing ? 'studyDeskActiveFocusPulse' : 'none',
+    animationDurationMs: isPulsing ? ACTIVE_STUDY_DESK_PULSE_DURATION_MS : 0,
+    dataActiveFocusPulse: isPulsing ? 'true' : 'false',
+    roomVisibilityLabel: isPulsing
+      ? params.isCurrentUserDesk
+        ? 'Active Focus · Pulsing to Room Peers'
+        : 'Peer Focusing Live'
+      : params.deskState.status === 'paused'
+      ? 'Timer Paused'
+      : 'Ready at Desk',
+    peerStatusBadgeText: isPulsing ? 'Focusing Live' : 'Ready',
+  };
+}
+
+
 
 
 

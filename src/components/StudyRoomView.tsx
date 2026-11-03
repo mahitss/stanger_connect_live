@@ -1486,7 +1486,12 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {studyTogetherLobby.activeRoomPreset.activeScholarsPreview
                 .slice(0, 4)
-                .map((scholar) => (
+                .map((scholar) => {
+                  const isCurrentUserPulsing =
+                    scholar.isCurrentUser &&
+                    (isRunning ||
+                      individualDeskTimersMap[currentUid]?.status === 'running');
+                  return (
                   <div
                     key={scholar.id}
                     data-testid={
@@ -1494,9 +1499,14 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                         ? 'live-grid-tile-current-user'
                         : `live-grid-tile-${scholar.id}`
                     }
+                    data-active-focus-pulse={
+                      isCurrentUserPulsing ? 'true' : 'false'
+                    }
                     className={`group relative rounded-lg overflow-hidden border aspect-[16/10] bg-zinc-950 flex flex-col justify-between p-3 transition-all ${
                       scholar.isCurrentUser
-                        ? 'border-emerald-500/70 ring-1 ring-emerald-500/30'
+                        ? isCurrentUserPulsing
+                          ? 'border-emerald-400/90 ring-1 ring-emerald-400/40 study-desk-active-focus-pulse'
+                          : 'border-emerald-500/70 ring-1 ring-emerald-500/30'
                         : 'border-zinc-800/90 hover:border-zinc-700'
                     }`}
                   >
@@ -1554,7 +1564,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                       </p>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
             </div>
 
             {/* Stage Footer Bar: Quick Seat Status + Room Participants */}
@@ -2080,6 +2091,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       <StudyDeskPomodoroController
         activeRoomCode={activeRoomCode}
         currentUid={currentUid}
+        isRoomTimerRunning={isRunning}
         deskTimersList={Object.values(individualDeskTimersMap)}
         onStartPauseDesk={handleStartPauseIndividualDeskPomodoro}
         onResetDesk={handleResetIndividualDeskPomodoro}
@@ -3095,6 +3107,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                       key={desk.uid}
                       deskState={deskTimerState}
                       isCurrentUserDesk={desk.uid === currentUid}
+                      isRoomTimerRunning={isRunning}
                       onStartPause={handleStartPauseIndividualDeskPomodoro}
                       onReset={handleResetIndividualDeskPomodoro}
                       onApplyCustomDuration={handleApplyIndividualDeskCustomDuration}
