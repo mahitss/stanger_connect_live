@@ -333,6 +333,17 @@ import {
   evaluateVerticalArchitectureScrollState,
   buildInitialCharacterMessengerBubbles,
   appendCharacterMessengerPing,
+  INDIVIDUAL_DESK_POMODORO_PRESETS,
+  clampIndividualDeskPomodoroMinutes,
+  createIndividualStudyDeskPomodoroState,
+  startIndividualStudyDeskPomodoro,
+  pauseIndividualStudyDeskPomodoro,
+  toggleIndividualStudyDeskPomodoro,
+  resetIndividualStudyDeskPomodoro,
+  setIndividualStudyDeskCustomDuration,
+  tickIndividualStudyDeskPomodoro,
+  evaluateIndividualStudyDeskPomodoroMeta,
+  syncIndividualDeskPomodoroMapWithDesks,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -8299,3 +8310,117 @@ test('QR scanner history search input filters by Room Category (Study, Work, Cas
   assert.equal(chips[1].isActive, true);
   assert.equal(chips[1].count, 2);
 });
+
+test('Individual Study Desk Custom-Duration Pomodoro Timer supports start, pause, resume, reset, custom duration clamping, tick completion, and multi-desk synchronization', () => {
+  assert.deepEqual(INDIVIDUAL_DESK_POMODORO_PRESETS, [15, 25, 45, 50, 60, 90]);
+  assert.equal(clampIndividualDeskPomodoroMinutes(0), 1);
+  assert.equal(clampIndividualDeskPomodoroMinutes(300), 240);
+  assert.equal(clampIndividualDeskPomodoroMinutes('35'), 35);
+  assert.equal(clampIndividualDeskPomodoroMinutes('invalid', 25), 25);
+
+  const initialDesk = createIndividualStudyDeskPomodoroState({
+    deskUid: 'usr_mahit_admin',
+    displayName: 'Mahit Saxena',
+    roomCode: 'STUDY-204',
+    subject: 'System Architecture & Deep Work',
+    initialMinutes: 25,
+    nowMs: 1_760_000_000_000,
+  });
+  assert.equal(initialDesk.status, 'idle');
+  assert.equal(initialDesk.durationMinutes, 25);
+  assert.equal(initialDesk.totalSeconds, 1500);
+  assert.equal(initialDesk.remainingSeconds, 1500);
+  assert.equal(initialDesk.elapsedSeconds, 0);
+
+  const idleMeta = evaluateIndividualStudyDeskPomodoroMeta(initialDesk);
+  assert.equal(idleMeta.remainingFormatted, '25:00');
+  assert.equal(idleMeta.primaryActionLabel, 'Start');
+  assert.equal(idleMeta.statusLabel, 'Ready');
+  assert.equal(idleMeta.progressPercent, 0);
+
+  // Start timer
+  const startedDesk = startIndividualStudyDeskPomodoro(initialDesk, 1_760_000_001_000);
+  assert.equal(startedDesk.status, 'running');
+  assert.equal(evaluateIndividualStudyDeskPomodoroMeta(startedDesk).primaryActionLabel, 'Pause');
+
+  // Tick 300 seconds (5 minutes)
+  const ticked = tickIndividualStudyDeskPomodoro(startedDesk, 300, 1_760_000_301_000);
+  assert.equal(ticked.justCompleted, false);
+  assert.equal(ticked.nextState.remainingSeconds, 1200);
+  assert.equal(ticked.nextState.elapsedSeconds, 300);
+  const runningMeta = evaluateIndividualStudyDeskPomodoroMeta(ticked.nextState);
+  assert.equal(runningMeta.remainingFormatted, '20:00');
+  assert.equal(runningMeta.elapsedFormatted, '05:00');
+  assert.equal(runningMeta.progressPercent, 20);
+
+  // Pause timer
+  const pausedDesk = pauseIndividualStudyDeskPomodoro(ticked.nextState, 1_760_000_302_000);
+  assert.equal(pausedDesk.status, 'paused');
+  assert.equal(evaluateIndividualStudyDeskPomodoroMeta(pausedDesk).primaryActionLabel, 'Resume');
+
+  // Resume via toggle
+  const resumedDesk = toggleIndividualStudyDeskPomodoro(pausedDesk, 1_760_000_303_000);
+  assert.equal(resumedDesk.status, 'running');
+
+  // Tick remaining 1200 seconds to completion
+  const completedTick = tickIndividualStudyDeskPomodoro(
+    resumedDesk,
+    1200,
+    1_760_001_503_000
+  );
+  assert.equal(completedTick.justCompleted, true);
+  assert.equal(completedTick.completedMinutes, 25);
+  assert.equal(completedTick.nextState.status, 'completed');
+  assert.equal(completedTick.nextState.remainingSeconds, 0);
+  assert.equal(completedTick.nextState.completedCyclesCount, 1);
+  assert.equal(
+    evaluateIndividualStudyDeskPomodoroMeta(completedTick.nextState).primaryActionLabel,
+    'Restart'
+  );
+
+  // Apply custom duration (e.g. 40 minutes)
+  const custom40Desk = setIndividualStudyDeskCustomDuration(
+    completedTick.nextState,
+    40,
+    1_760_001_504_000
+  );
+  assert.equal(custom40Desk.status, 'idle');
+  assert.equal(custom40Desk.durationMinutes, 40);
+  assert.equal(custom40Desk.totalSeconds, 2400);
+  assert.equal(custom40Desk.remainingSeconds, 2400);
+  assert.equal(custom40Desk.elapsedSeconds, 0);
+  assert.equal(
+    evaluateIndividualStudyDeskPomodoroMeta(custom40Desk).remainingFormatted,
+    '40:00'
+  );
+
+  // Reset desk timer
+  const startedCustom = startIndividualStudyDeskPomodoro(custom40Desk);
+  const tickedCustom = tickIndividualStudyDeskPomodoro(startedCustom, 120).nextState;
+  const resetDesk = resetIndividualStudyDeskPomodoro(tickedCustom);
+  assert.equal(resetDesk.status, 'idle');
+  assert.equal(resetDesk.remainingSeconds, 2400);
+  assert.equal(resetDesk.elapsedSeconds, 0);
+
+  // Sync map with room desks
+  const syncedMap = syncIndividualDeskPomodoroMapWithDesks({
+    currentMap: {},
+    desks: [
+      {
+        uid: 'usr_mahit_admin',
+        displayName: 'Mahit Saxena',
+        roomCode: 'STUDY-204',
+        subject: 'System Architecture',
+        positiveNote: 'Deep work',
+        timerMinutes: 25,
+      },
+    ],
+    activeRoomCode: 'STUDY-204',
+    currentUid: 'usr_mahit_admin',
+    currentName: 'Mahit Saxena',
+  });
+  assert.ok(syncedMap.usr_mahit_admin);
+  assert.ok(syncedMap.desk_peer_aravind);
+  assert.ok(syncedMap.desk_peer_elena);
+});
+

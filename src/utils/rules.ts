@@ -19831,6 +19831,419 @@ export function appendCharacterMessengerPing(
   return [...safeList, newBubble].slice(-25);
 }
 
+// ============================================================================
+// INDIVIDUAL STUDY DESK CUSTOM-DURATION POMODORO TIMER CONTROLLER
+// ============================================================================
+
+export type IndividualDeskPomodoroStatus =
+  | 'idle'
+  | 'running'
+  | 'paused'
+  | 'completed';
+
+export interface IndividualStudyDeskPomodoroState {
+  deskUid: string;
+  displayName: string;
+  roomCode: string;
+  subject: string;
+  positiveNote: string;
+  durationMinutes: number;
+  totalSeconds: number;
+  remainingSeconds: number;
+  elapsedSeconds: number;
+  status: IndividualDeskPomodoroStatus;
+  completedCyclesCount: number;
+  updatedAtMs: number;
+}
+
+export interface IndividualStudyDeskPomodoroMeta {
+  deskUid: string;
+  cardElementId: string;
+  cardTestId: string;
+  timerDisplayElementId: string;
+  timerDisplayTestId: string;
+  startPauseButtonId: string;
+  startPauseButtonTestId: string;
+  resetButtonId: string;
+  resetButtonTestId: string;
+  durationInputId: string;
+  durationInputTestId: string;
+  applyDurationButtonId: string;
+  applyDurationButtonTestId: string;
+  remainingFormatted: string;
+  elapsedFormatted: string;
+  targetFormatted: string;
+  progressPercent: number;
+  status: IndividualDeskPomodoroStatus;
+  statusLabel: string;
+  primaryActionLabel: 'Start' | 'Pause' | 'Resume' | 'Restart';
+  isRunning: boolean;
+  isPaused: boolean;
+  isCompleted: boolean;
+}
+
+export const INDIVIDUAL_DESK_POMODORO_STORAGE_KEY =
+  'mr_stranger_individual_desk_pomodoros_v1';
+
+export const INDIVIDUAL_DESK_POMODORO_PRESETS: readonly number[] = [
+  15, 25, 45, 50, 60, 90,
+];
+
+export const MIN_INDIVIDUAL_DESK_POMODORO_MINUTES = 1;
+export const MAX_INDIVIDUAL_DESK_POMODORO_MINUTES = 240;
+
+export function clampIndividualDeskPomodoroMinutes(
+  rawMinutes: unknown,
+  fallbackMinutes = 25
+): number {
+  const parsed = Number(rawMinutes);
+  if (!Number.isFinite(parsed)) {
+    return Math.min(
+      MAX_INDIVIDUAL_DESK_POMODORO_MINUTES,
+      Math.max(MIN_INDIVIDUAL_DESK_POMODORO_MINUTES, Math.round(fallbackMinutes) || 25)
+    );
+  }
+  const rounded = Math.round(parsed);
+  return Math.min(
+    MAX_INDIVIDUAL_DESK_POMODORO_MINUTES,
+    Math.max(MIN_INDIVIDUAL_DESK_POMODORO_MINUTES, rounded)
+  );
+}
+
+export function createIndividualStudyDeskPomodoroState(params: {
+  deskUid: string;
+  displayName: string;
+  roomCode: string;
+  subject?: string;
+  positiveNote?: string;
+  initialMinutes?: unknown;
+  nowMs?: number;
+}): IndividualStudyDeskPomodoroState {
+  const safeUid =
+    sanitizeSafeText(String(params.deskUid || 'desk_default'), 64).replace(
+      /[^a-zA-Z0-9_-]/g,
+      '_'
+    ) || 'desk_default';
+  const safeName =
+    sanitizeSafeText(String(params.displayName || 'Scholar'), 64) || 'Scholar';
+  const safeRoom = normalizeStudyRoomCode(params.roomCode || 'STUDY-204');
+  const safeSubject =
+    sanitizeSafeText(
+      String(params.subject || 'Deep Work & System Architecture'),
+      100
+    ) || 'Deep Work & System Architecture';
+  const safeNote =
+    sanitizeSafeText(
+      String(
+        params.positiveNote ||
+          'Focused in Study Room — every real timer-verified minute compounds.'
+      ),
+      240
+    ) || 'Focused in Study Room — every real timer-verified minute compounds.';
+  const clampedMins = clampIndividualDeskPomodoroMinutes(params.initialMinutes, 25);
+  const totalSeconds = clampedMins * 60;
+
+  return {
+    deskUid: safeUid,
+    displayName: safeName,
+    roomCode: safeRoom,
+    subject: safeSubject,
+    positiveNote: safeNote,
+    durationMinutes: clampedMins,
+    totalSeconds,
+    remainingSeconds: totalSeconds,
+    elapsedSeconds: 0,
+    status: 'idle',
+    completedCyclesCount: 0,
+    updatedAtMs: typeof params.nowMs === 'number' ? params.nowMs : Date.now(),
+  };
+}
+
+export function startIndividualStudyDeskPomodoro(
+  state: IndividualStudyDeskPomodoroState,
+  nowMs = Date.now()
+): IndividualStudyDeskPomodoroState {
+  const shouldRestartCycle =
+    state.status === 'completed' || state.remainingSeconds <= 0;
+  const totalSeconds = Math.max(60, state.durationMinutes * 60);
+  return {
+    ...state,
+    totalSeconds,
+    remainingSeconds: shouldRestartCycle ? totalSeconds : state.remainingSeconds,
+    elapsedSeconds: shouldRestartCycle ? 0 : state.elapsedSeconds,
+    status: 'running',
+    updatedAtMs: nowMs,
+  };
+}
+
+export function pauseIndividualStudyDeskPomodoro(
+  state: IndividualStudyDeskPomodoroState,
+  nowMs = Date.now()
+): IndividualStudyDeskPomodoroState {
+  if (state.status !== 'running') {
+    return state;
+  }
+  return {
+    ...state,
+    status: 'paused',
+    updatedAtMs: nowMs,
+  };
+}
+
+export function toggleIndividualStudyDeskPomodoro(
+  state: IndividualStudyDeskPomodoroState,
+  nowMs = Date.now()
+): IndividualStudyDeskPomodoroState {
+  if (state.status === 'running') {
+    return pauseIndividualStudyDeskPomodoro(state, nowMs);
+  }
+  return startIndividualStudyDeskPomodoro(state, nowMs);
+}
+
+export function resetIndividualStudyDeskPomodoro(
+  state: IndividualStudyDeskPomodoroState,
+  customMinutes?: unknown,
+  nowMs = Date.now()
+): IndividualStudyDeskPomodoroState {
+  const nextMinutes =
+    customMinutes !== undefined
+      ? clampIndividualDeskPomodoroMinutes(customMinutes, state.durationMinutes)
+      : clampIndividualDeskPomodoroMinutes(state.durationMinutes, 25);
+  const totalSeconds = nextMinutes * 60;
+  return {
+    ...state,
+    durationMinutes: nextMinutes,
+    totalSeconds,
+    remainingSeconds: totalSeconds,
+    elapsedSeconds: 0,
+    status: 'idle',
+    updatedAtMs: nowMs,
+  };
+}
+
+export function setIndividualStudyDeskCustomDuration(
+  state: IndividualStudyDeskPomodoroState,
+  rawCustomMinutes: unknown,
+  nowMs = Date.now()
+): IndividualStudyDeskPomodoroState {
+  const nextMinutes = clampIndividualDeskPomodoroMinutes(
+    rawCustomMinutes,
+    state.durationMinutes
+  );
+  const totalSeconds = nextMinutes * 60;
+  return {
+    ...state,
+    durationMinutes: nextMinutes,
+    totalSeconds,
+    remainingSeconds: totalSeconds,
+    elapsedSeconds: 0,
+    status: 'idle',
+    updatedAtMs: nowMs,
+  };
+}
+
+export function tickIndividualStudyDeskPomodoro(
+  state: IndividualStudyDeskPomodoroState,
+  deltaSeconds = 1,
+  nowMs = Date.now()
+): {
+  nextState: IndividualStudyDeskPomodoroState;
+  justCompleted: boolean;
+  completedMinutes: number;
+} {
+  if (state.status !== 'running') {
+    return {
+      nextState: state,
+      justCompleted: false,
+      completedMinutes: 0,
+    };
+  }
+  const step = Math.max(1, Math.round(Number(deltaSeconds) || 1));
+  const nextRemaining = Math.max(0, state.remainingSeconds - step);
+  const nextElapsed = Math.min(state.totalSeconds, state.elapsedSeconds + step);
+
+  if (nextRemaining === 0) {
+    return {
+      nextState: {
+        ...state,
+        remainingSeconds: 0,
+        elapsedSeconds: state.totalSeconds,
+        status: 'completed',
+        completedCyclesCount: state.completedCyclesCount + 1,
+        updatedAtMs: nowMs,
+      },
+      justCompleted: true,
+      completedMinutes: state.durationMinutes,
+    };
+  }
+
+  return {
+    nextState: {
+      ...state,
+      remainingSeconds: nextRemaining,
+      elapsedSeconds: nextElapsed,
+      updatedAtMs: nowMs,
+    },
+    justCompleted: false,
+    completedMinutes: 0,
+  };
+}
+
+export function evaluateIndividualStudyDeskPomodoroMeta(
+  state: IndividualStudyDeskPomodoroState
+): IndividualStudyDeskPomodoroMeta {
+  const safeTotal = Math.max(60, state.totalSeconds || state.durationMinutes * 60);
+  const safeRemaining = Math.max(0, Math.min(safeTotal, state.remainingSeconds));
+  const safeElapsed = Math.max(0, Math.min(safeTotal, state.elapsedSeconds));
+
+  const formatDeskClock = (secs: number): string =>
+    secs >= 3600 ? formatStudyTimerHMS(secs, true) : formatTimerMMSS(secs);
+
+  const progressPercent = Math.min(
+    100,
+    Math.max(0, Math.round((safeElapsed / safeTotal) * 100))
+  );
+
+  let statusLabel = 'Ready';
+  let primaryActionLabel: 'Start' | 'Pause' | 'Resume' | 'Restart' = 'Start';
+  if (state.status === 'running') {
+    statusLabel = 'Focusing Live';
+    primaryActionLabel = 'Pause';
+  } else if (state.status === 'paused') {
+    statusLabel = 'Paused';
+    primaryActionLabel = 'Resume';
+  } else if (state.status === 'completed') {
+    statusLabel = 'Pomodoro Complete';
+    primaryActionLabel = 'Restart';
+  }
+
+  const slug = state.deskUid.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+  return {
+    deskUid: state.deskUid,
+    cardElementId: `desk-pomodoro-card-${slug}`,
+    cardTestId: `desk-pomodoro-card-${slug}`,
+    timerDisplayElementId: `desk-pomodoro-timer-display-${slug}`,
+    timerDisplayTestId: `desk-pomodoro-timer-display-${slug}`,
+    startPauseButtonId: `desk-pomodoro-start-pause-btn-${slug}`,
+    startPauseButtonTestId: `desk-pomodoro-start-pause-btn-${slug}`,
+    resetButtonId: `desk-pomodoro-reset-btn-${slug}`,
+    resetButtonTestId: `desk-pomodoro-reset-btn-${slug}`,
+    durationInputId: `desk-pomodoro-duration-input-${slug}`,
+    durationInputTestId: `desk-pomodoro-duration-input-${slug}`,
+    applyDurationButtonId: `desk-pomodoro-apply-duration-btn-${slug}`,
+    applyDurationButtonTestId: `desk-pomodoro-apply-duration-btn-${slug}`,
+    remainingFormatted: formatDeskClock(safeRemaining),
+    elapsedFormatted: formatDeskClock(safeElapsed),
+    targetFormatted: formatDeskClock(safeTotal),
+    progressPercent,
+    status: state.status,
+    statusLabel,
+    primaryActionLabel,
+    isRunning: state.status === 'running',
+    isPaused: state.status === 'paused',
+    isCompleted: state.status === 'completed',
+  };
+}
+
+export function syncIndividualDeskPomodoroMapWithDesks(params: {
+  currentMap: Record<string, IndividualStudyDeskPomodoroState>;
+  desks: ReadonlyArray<{
+    uid: string;
+    displayName: string;
+    roomCode: string;
+    subject: string;
+    positiveNote: string;
+    timerMinutes: number;
+  }>;
+  activeRoomCode: string;
+  currentUid: string;
+  currentName: string;
+  nowMs?: number;
+}): Record<string, IndividualStudyDeskPomodoroState> {
+  const nowMs = typeof params.nowMs === 'number' ? params.nowMs : Date.now();
+  const nextMap: Record<string, IndividualStudyDeskPomodoroState> = {
+    ...params.currentMap,
+  };
+  const safeRoom = normalizeStudyRoomCode(params.activeRoomCode || 'STUDY-204');
+
+  for (const desk of params.desks) {
+    const existing = nextMap[desk.uid];
+    if (!existing) {
+      nextMap[desk.uid] = createIndividualStudyDeskPomodoroState({
+        deskUid: desk.uid,
+        displayName: desk.displayName,
+        roomCode: desk.roomCode || safeRoom,
+        subject: desk.subject,
+        positiveNote: desk.positiveNote,
+        initialMinutes: desk.timerMinutes,
+        nowMs,
+      });
+    } else {
+      nextMap[desk.uid] = {
+        ...existing,
+        displayName: desk.displayName || existing.displayName,
+        roomCode: desk.roomCode || existing.roomCode,
+        subject: desk.subject || existing.subject,
+        positiveNote: desk.positiveNote || existing.positiveNote,
+      };
+    }
+  }
+
+  // Ensure the current user's desk and two companion study desks in the room exist so individual desks can always be controlled
+  if (!nextMap[params.currentUid]) {
+    nextMap[params.currentUid] = createIndividualStudyDeskPomodoroState({
+      deskUid: params.currentUid,
+      displayName: params.currentName || 'Mahit Saxena',
+      roomCode: safeRoom,
+      subject: 'System Architecture & Deep Work',
+      positiveNote: 'Focused in Study Room — every real timer-verified minute compounds.',
+      initialMinutes: 25,
+      nowMs,
+    });
+  }
+
+  const companionDesks: ReadonlyArray<{
+    uid: string;
+    displayName: string;
+    subject: string;
+    positiveNote: string;
+    timerMinutes: number;
+  }> = [
+    {
+      uid: 'desk_peer_aravind',
+      displayName: 'Aravind Nair · Systems Desk',
+      subject: 'Distributed Consensus & Raft Proofs',
+      positiveNote: 'Running 45m deep-focus Pomodoro blocks.',
+      timerMinutes: 45,
+    },
+    {
+      uid: 'desk_peer_elena',
+      displayName: 'Elena Rostova · ML Research Desk',
+      subject: 'Transformer Attention Kernel Optimization',
+      positiveNote: 'Quiet 50m sprint — feel free to sync timers!',
+      timerMinutes: 50,
+    },
+  ];
+
+  for (const companion of companionDesks) {
+    if (!nextMap[companion.uid]) {
+      nextMap[companion.uid] = createIndividualStudyDeskPomodoroState({
+        deskUid: companion.uid,
+        displayName: companion.displayName,
+        roomCode: safeRoom,
+        subject: companion.subject,
+        positiveNote: companion.positiveNote,
+        initialMinutes: companion.timerMinutes,
+        nowMs,
+      });
+    }
+  }
+
+  return nextMap;
+}
+
+
 
 
 

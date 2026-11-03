@@ -50,10 +50,24 @@ import {
   MrStranger247RoomCategory,
   buildMrStrangerStudyTogetherLobby,
   resolveStudyTogetherQuickJoinAction,
+  IndividualStudyDeskPomodoroState,
+  INDIVIDUAL_DESK_POMODORO_STORAGE_KEY,
+  createIndividualStudyDeskPomodoroState,
+  startIndividualStudyDeskPomodoro,
+  pauseIndividualStudyDeskPomodoro,
+  toggleIndividualStudyDeskPomodoro,
+  resetIndividualStudyDeskPomodoro,
+  setIndividualStudyDeskCustomDuration,
+  tickIndividualStudyDeskPomodoro,
+  syncIndividualDeskPomodoroMapWithDesks,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
 import { StudyBooksLibrary } from './StudyBooksLibrary';
+import {
+  StudyDeskPomodoroController,
+  IndividualStudyDeskPomodoroCard,
+} from './StudyDeskPomodoroController';
 import {
   Volume2,
   VolumeX,
@@ -505,6 +519,210 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     }, 1000);
     return () => window.clearInterval(timer);
   }, [isRunning, durationMinutes, activeBook.title, subject]);
+
+  // Individual Study Desk Custom-Duration Pomodoro Timers State
+  const [individualDeskTimersMap, setIndividualDeskTimersMap] = useState<
+    Record<string, IndividualStudyDeskPomodoroState>
+  >(() => {
+    let storedMap: Record<string, IndividualStudyDeskPomodoroState> = {};
+    try {
+      const raw = localStorage.getItem(INDIVIDUAL_DESK_POMODORO_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          storedMap = parsed;
+        }
+      }
+    } catch {
+      // ignore storage errors
+    }
+    return syncIndividualDeskPomodoroMapWithDesks({
+      currentMap: storedMap,
+      desks: studyDesks.filter((d) => d.roomCode === activeRoomCode),
+      activeRoomCode,
+      currentUid,
+      currentName,
+    });
+  });
+
+  useEffect(() => {
+    setIndividualDeskTimersMap((prev) => {
+      const synced = syncIndividualDeskPomodoroMapWithDesks({
+        currentMap: prev,
+        desks: studyDesks.filter((d) => d.roomCode === activeRoomCode),
+        activeRoomCode,
+        currentUid,
+        currentName,
+      });
+      try {
+        localStorage.setItem(
+          INDIVIDUAL_DESK_POMODORO_STORAGE_KEY,
+          JSON.stringify(synced)
+        );
+      } catch {
+        // ignore
+      }
+      return synced;
+    });
+  }, [studyDesks, activeRoomCode, currentUid, currentName]);
+
+  const hasAnyRunningIndividualDesk = (
+    Object.values(individualDeskTimersMap) as IndividualStudyDeskPomodoroState[]
+  ).some((d) => d.status === 'running');
+
+  useEffect(() => {
+    if (!hasAnyRunningIndividualDesk) return;
+    const deskInterval = window.setInterval(() => {
+      setIndividualDeskTimersMap((prev) => {
+        const nextMap: Record<string, IndividualStudyDeskPomodoroState> = {};
+        let completedAny = false;
+        let completedSubject = '';
+        let completedSecs = 0;
+
+        for (const [uidKey, deskState] of Object.entries(prev) as Array<
+          [string, IndividualStudyDeskPomodoroState]
+        >) {
+          if (deskState.status === 'running') {
+            const tickRes = tickIndividualStudyDeskPomodoro(deskState, 1);
+            nextMap[uidKey] = tickRes.nextState;
+            if (tickRes.justCompleted) {
+              completedAny = true;
+              completedSubject = deskState.subject;
+              completedSecs = tickRes.completedMinutes * 60;
+            }
+          } else {
+            nextMap[uidKey] = deskState;
+          }
+        }
+
+        if (completedAny) {
+          soundEngine.playSfx('chime');
+          commitVerifiedStudySeconds(completedSecs, completedSubject);
+        }
+
+        try {
+          localStorage.setItem(
+            INDIVIDUAL_DESK_POMODORO_STORAGE_KEY,
+            JSON.stringify(nextMap)
+          );
+        } catch {
+          // ignore
+        }
+        return nextMap;
+      });
+    }, 1000);
+    return () => window.clearInterval(deskInterval);
+  }, [hasAnyRunningIndividualDesk]);
+
+  const persistIndividualDeskTimersMap = (
+    updater: (
+      prev: Record<string, IndividualStudyDeskPomodoroState>
+    ) => Record<string, IndividualStudyDeskPomodoroState>
+  ) => {
+    setIndividualDeskTimersMap((prev) => {
+      const next = updater(prev);
+      try {
+        localStorage.setItem(
+          INDIVIDUAL_DESK_POMODORO_STORAGE_KEY,
+          JSON.stringify(next)
+        );
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  };
+
+  const handleStartPauseIndividualDeskPomodoro = (deskUid: string) => {
+    persistIndividualDeskTimersMap((prev) => {
+      const target = prev[deskUid];
+      if (!target) return prev;
+      return {
+        ...prev,
+        [deskUid]: toggleIndividualStudyDeskPomodoro(target),
+      };
+    });
+  };
+
+  const handleResetIndividualDeskPomodoro = (deskUid: string) => {
+    persistIndividualDeskTimersMap((prev) => {
+      const target = prev[deskUid];
+      if (!target) return prev;
+      return {
+        ...prev,
+        [deskUid]: resetIndividualStudyDeskPomodoro(target),
+      };
+    });
+  };
+
+  const handleApplyIndividualDeskCustomDuration = (
+    deskUid: string,
+    minutes: number
+  ) => {
+    persistIndividualDeskTimersMap((prev) => {
+      const target = prev[deskUid];
+      if (!target) return prev;
+      return {
+        ...prev,
+        [deskUid]: setIndividualStudyDeskCustomDuration(target, minutes),
+      };
+    });
+  };
+
+  const handleStartAllIndividualDesks = () => {
+    persistIndividualDeskTimersMap((prev) => {
+      const next: Record<string, IndividualStudyDeskPomodoroState> = {};
+      for (const [k, v] of Object.entries(prev) as Array<
+        [string, IndividualStudyDeskPomodoroState]
+      >) {
+        next[k] = startIndividualStudyDeskPomodoro(v);
+      }
+      return next;
+    });
+  };
+
+  const handlePauseAllIndividualDesks = () => {
+    persistIndividualDeskTimersMap((prev) => {
+      const next: Record<string, IndividualStudyDeskPomodoroState> = {};
+      for (const [k, v] of Object.entries(prev) as Array<
+        [string, IndividualStudyDeskPomodoroState]
+      >) {
+        next[k] = pauseIndividualStudyDeskPomodoro(v);
+      }
+      return next;
+    });
+  };
+
+  const handleResetAllIndividualDesks = () => {
+    persistIndividualDeskTimersMap((prev) => {
+      const next: Record<string, IndividualStudyDeskPomodoroState> = {};
+      for (const [k, v] of Object.entries(prev) as Array<
+        [string, IndividualStudyDeskPomodoroState]
+      >) {
+        next[k] = resetIndividualStudyDeskPomodoro(v);
+      }
+      return next;
+    });
+  };
+
+  const handleCreateCustomDeskTimer = (params: {
+    displayName: string;
+    subject: string;
+    durationMinutes: number;
+  }) => {
+    const customUid = `desk_custom_${Date.now()}`;
+    persistIndividualDeskTimersMap((prev) => ({
+      ...prev,
+      [customUid]: createIndividualStudyDeskPomodoroState({
+        deskUid: customUid,
+        displayName: params.displayName,
+        roomCode: activeRoomCode,
+        subject: params.subject,
+        positiveNote: `Custom ${params.durationMinutes}m Pomodoro desk in ${activeRoomCode}`,
+        initialMinutes: params.durationMinutes,
+      }),
+    }));
+  };
 
   useEffect(() => {
     return () => {
@@ -1791,6 +2009,22 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       </div>
 
       {/* ====================================================================
+          DEDICATED INDIVIDUAL STUDY DESK POMODORO TIMER CONTROLLER
+          ==================================================================== */}
+      <StudyDeskPomodoroController
+        activeRoomCode={activeRoomCode}
+        currentUid={currentUid}
+        deskTimersList={Object.values(individualDeskTimersMap)}
+        onStartPauseDesk={handleStartPauseIndividualDeskPomodoro}
+        onResetDesk={handleResetIndividualDeskPomodoro}
+        onApplyDeskCustomDuration={handleApplyIndividualDeskCustomDuration}
+        onStartAllDesks={handleStartAllIndividualDesks}
+        onPauseAllDesks={handlePauseAllIndividualDesks}
+        onResetAllDesks={handleResetAllIndividualDesks}
+        onCreateCustomDeskTimer={handleCreateCustomDeskTimer}
+      />
+
+      {/* ====================================================================
           FULL CUSTOM STUDY TIMER CONTROL & STRICT REAL-TIMER RECORDING LEDGER
           ==================================================================== */}
       <div
@@ -2765,21 +2999,29 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               </p>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                {desksInCurrentRoom.map((desk) => (
-                  <div
-                    key={desk.uid}
-                    className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-1.5"
-                  >
-                    <div className="flex items-center justify-between text-xs text-zinc-400">
-                      <span className="font-semibold text-white">{desk.displayName}</span>
-                      <span className="font-mono tabular-nums">
-                        {formatStudyDurationLabel(desk.timerMinutes)} block
-                      </span>
-                    </div>
-                    <div className="text-xs font-medium text-emerald-400">{desk.subject}</div>
-                    <p className="text-xs text-zinc-300 leading-relaxed">"{desk.positiveNote}"</p>
-                  </div>
-                ))}
+                {desksInCurrentRoom.map((desk) => {
+                  const deskTimerState =
+                    individualDeskTimersMap[desk.uid] ||
+                    createIndividualStudyDeskPomodoroState({
+                      deskUid: desk.uid,
+                      displayName: desk.displayName,
+                      roomCode: desk.roomCode,
+                      subject: desk.subject,
+                      positiveNote: desk.positiveNote,
+                      initialMinutes: desk.timerMinutes,
+                    });
+                  return (
+                    <IndividualStudyDeskPomodoroCard
+                      key={desk.uid}
+                      deskState={deskTimerState}
+                      isCurrentUserDesk={desk.uid === currentUid}
+                      onStartPause={handleStartPauseIndividualDeskPomodoro}
+                      onReset={handleResetIndividualDeskPomodoro}
+                      onApplyCustomDuration={handleApplyIndividualDeskCustomDuration}
+                      compact={true}
+                    />
+                  );
+                })}
               </div>
             )}
           </div>
