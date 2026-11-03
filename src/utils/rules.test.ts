@@ -286,6 +286,13 @@ import {
   MAX_WORKSPACE_QR_SEARCH_HISTORY,
   WORKSPACE_QR_HISTORY_COPY_FEEDBACK_DURATION_MS,
   resolveWorkspaceQrHistoryCopyRoomCodeAction,
+  WORKSPACE_QR_HISTORY_SEARCH_SUPPORTED_FIELDS,
+  normalizeWorkspaceQrScanSourceChannel,
+  normalizeWorkspaceQrHistoryScanSourceFilter,
+  parseWorkspaceQrHistorySearchQuery,
+  evaluateWorkspaceQrHistoryEntrySearchMatch,
+  computeWorkspaceQrHistoryCountsByScanSource,
+  buildWorkspaceQrHistoryScanSourceFilterChips,
   filterWorkspaceQrSearchHistory,
   buildWorkspaceQrSearchHistorySpec,
   WORKSPACE_QR_SOUND_SETTINGS_STORAGE_KEY,
@@ -8152,6 +8159,143 @@ test('3D Glassy Architecture & Rolling Book kinematics evaluate book roll up/dow
   );
 });
 
+test('QR scanner history search input filters by Room Category (Study, Work, Casual) and Scan Source (camera vs share link)', () => {
+  assert.deepEqual(WORKSPACE_QR_HISTORY_SEARCH_SUPPORTED_FIELDS, [
+    'roomCode',
+    'category',
+    'scanSource',
+  ]);
+  assert.equal(normalizeWorkspaceQrScanSourceChannel('camera'), 'camera');
+  assert.equal(normalizeWorkspaceQrScanSourceChannel('share link'), 'share_link');
+  assert.equal(normalizeWorkspaceQrScanSourceChannel('share_link'), 'share_link');
+  assert.equal(normalizeWorkspaceQrHistoryScanSourceFilter('all'), 'all');
+  assert.equal(normalizeWorkspaceQrHistoryScanSourceFilter('camera'), 'camera');
+  assert.equal(normalizeWorkspaceQrHistoryScanSourceFilter('share link'), 'share_link');
 
+  const preset = buildAutoConfiguredWorkspacePreset({
+    todayDateKey: '2026-11-02',
+    nowMs: 1_762_000_000_000,
+  });
+  const scans = preset.seededQrScans;
+  assert.equal(scans.length, 3);
+  assert.equal(scans[0].roomCode, 'STUDY-204');
+  assert.equal(scans[0].category, 'Study');
+  assert.equal(scans[0].scanSource, 'camera');
+  assert.equal(scans[1].roomCode, 'ARCH-LAB');
+  assert.equal(scans[1].category, 'Work');
+  assert.equal(scans[1].scanSource, 'share_link');
+  assert.equal(scans[2].roomCode, 'LOUNGE-01');
+  assert.equal(scans[2].category, 'Casual');
+  assert.equal(scans[2].scanSource, 'camera');
 
+  // 1. Filter by Room Category via search input
+  const studyMatches = filterWorkspaceQrSearchHistory(scans, 'Study');
+  assert.deepEqual(
+    studyMatches.map((item) => item.roomCode),
+    ['STUDY-204']
+  );
 
+  const workMatches = filterWorkspaceQrSearchHistory(scans, 'Work');
+  assert.deepEqual(
+    workMatches.map((item) => item.roomCode),
+    ['ARCH-LAB']
+  );
+
+  const casualMatches = filterWorkspaceQrSearchHistory(scans, 'casual');
+  assert.deepEqual(
+    casualMatches.map((item) => item.roomCode),
+    ['LOUNGE-01']
+  );
+
+  const prefixedCategoryMatches = filterWorkspaceQrSearchHistory(
+    scans,
+    'category:work'
+  );
+  assert.deepEqual(
+    prefixedCategoryMatches.map((item) => item.roomCode),
+    ['ARCH-LAB']
+  );
+
+  // 2. Filter by Scan Source (camera vs share link) via search input
+  const cameraMatches = filterWorkspaceQrSearchHistory(scans, 'camera');
+  assert.deepEqual(
+    cameraMatches.map((item) => item.roomCode),
+    ['STUDY-204', 'LOUNGE-01']
+  );
+
+  const shareLinkMatches = filterWorkspaceQrSearchHistory(scans, 'share link');
+  assert.deepEqual(
+    shareLinkMatches.map((item) => item.roomCode),
+    ['ARCH-LAB']
+  );
+
+  const prefixedSourceCamera = filterWorkspaceQrSearchHistory(
+    scans,
+    'source:camera'
+  );
+  assert.deepEqual(
+    prefixedSourceCamera.map((item) => item.roomCode),
+    ['STUDY-204', 'LOUNGE-01']
+  );
+
+  const prefixedSourceShare = filterWorkspaceQrSearchHistory(
+    scans,
+    'source:share_link'
+  );
+  assert.deepEqual(
+    prefixedSourceShare.map((item) => item.roomCode),
+    ['ARCH-LAB']
+  );
+
+  // 3. Combined Room Category + Scan Source search query
+  const casualCameraMatches = filterWorkspaceQrSearchHistory(
+    scans,
+    'casual camera'
+  );
+  assert.deepEqual(
+    casualCameraMatches.map((item) => item.roomCode),
+    ['LOUNGE-01']
+  );
+
+  const workCameraMatches = filterWorkspaceQrSearchHistory(
+    scans,
+    'work camera'
+  );
+  assert.equal(workCameraMatches.length, 0);
+
+  // 4. Verify matchedFields and scanSourceFilterChips in buildWorkspaceQrSearchHistorySpec
+  const specForShareLink = buildWorkspaceQrSearchHistorySpec({
+    recentScans: scans,
+    searchQuery: 'share link',
+  });
+  assert.equal(specForShareLink.filteredCount, 1);
+  assert.equal(specForShareLink.activeScanSourceFilter, 'share_link');
+  assert.equal(specForShareLink.hasActiveScanSourceFilter, true);
+  assert.equal(specForShareLink.items[0].roomCode, 'ARCH-LAB');
+  assert.equal(specForShareLink.items[0].scanSourceChannel, 'share_link');
+  assert.equal(specForShareLink.items[0].scanSourceChannelLabel, 'Share Link');
+  assert.ok(specForShareLink.items[0].matchedFields.includes('scanSource'));
+  assert.deepEqual(specForShareLink.countsByScanSource, {
+    camera: 2,
+    share_link: 1,
+  });
+  assert.equal(specForShareLink.scanSourceFilterChips.length, 3);
+
+  const parsed = parseWorkspaceQrHistorySearchQuery('category:Casual source:camera');
+  assert.equal(parsed.categoryFilterFromQuery, 'Casual');
+  assert.equal(parsed.scanSourceFilterFromQuery, 'camera');
+
+  const evalMatch = evaluateWorkspaceQrHistoryEntrySearchMatch(
+    scans[1],
+    'Work Share Link'
+  );
+  assert.equal(evalMatch.matches, true);
+  assert.ok(evalMatch.matchedFields.includes('category'));
+  assert.ok(evalMatch.matchedFields.includes('scanSource'));
+
+  const counts = computeWorkspaceQrHistoryCountsByScanSource(scans);
+  assert.deepEqual(counts, { camera: 2, share_link: 1 });
+  const chips = buildWorkspaceQrHistoryScanSourceFilterChips(scans, 'camera');
+  assert.equal(chips[1].isActive, true);
+  assert.equal(chips[1].count, 2);
+});

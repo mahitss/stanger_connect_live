@@ -252,6 +252,7 @@ import {
   setWorkspaceQrRecentScanCategory,
   WorkspaceQrHistoryRoomCategory,
   WorkspaceQrHistoryCategoryFilter,
+  WorkspaceQrHistoryScanSourceFilter,
   WorkspaceQrHistorySortOrder,
   normalizeWorkspaceQrHistorySortOrder,
   buildWorkspaceQrHistoryCsvExport,
@@ -982,6 +983,8 @@ export default function App() {
     useState<string>('');
   const [workspaceHeaderQrHistoryCategoryFilter, setWorkspaceHeaderQrHistoryCategoryFilter] =
     useState<WorkspaceQrHistoryCategoryFilter>('all');
+  const [workspaceHeaderQrHistoryScanSourceFilter, setWorkspaceHeaderQrHistoryScanSourceFilter] =
+    useState<WorkspaceQrHistoryScanSourceFilter>('all');
   const [workspaceHeaderQrHistorySortOrder, setWorkspaceHeaderQrHistorySortOrder] =
     useState<WorkspaceQrHistorySortOrder>('most_recent_desc');
   const [workspaceHeaderQrHistoryActiveTab, setWorkspaceHeaderQrHistoryActiveTab] =
@@ -4307,6 +4310,7 @@ export default function App() {
     isHistoryExpanded: isWorkspaceHeaderQrHistoryExpanded,
     historySearchQuery: workspaceHeaderQrHistorySearchQuery,
     historyCategoryFilter: workspaceHeaderQrHistoryCategoryFilter,
+    historyScanSourceFilter: workspaceHeaderQrHistoryScanSourceFilter,
     historySortOrder: workspaceHeaderQrHistorySortOrder,
     historyActiveTab: workspaceHeaderQrHistoryActiveTab,
     copiedHistoryRoomCode: copiedQrHistoryRoomCode,
@@ -4455,6 +4459,7 @@ export default function App() {
     setRecentWorkspaceQrScans([]);
     setWorkspaceHeaderQrHistorySearchQuery('');
     setWorkspaceHeaderQrHistoryCategoryFilter('all');
+    setWorkspaceHeaderQrHistoryScanSourceFilter('all');
     setWorkspaceHeaderQrHistorySortOrder('most_recent_desc');
     setOpenQrHistoryCategoryPickerRoomCode(null);
     setSelectedQrHistoryDetailsRoomCode(null);
@@ -7349,6 +7354,17 @@ export default function App() {
                                         .historySearchInputAliasId
                                     }
                                     data-real-time-filter="true"
+                                    data-search-fields={workspaceHeaderQrMeta.searchHistory.searchSupportedFields.join(
+                                      ','
+                                    )}
+                                    data-active-category-filter={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeCategoryFilter
+                                    }
+                                    data-active-scan-source-filter={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeScanSourceFilter
+                                    }
                                     data-matched-count={String(
                                       workspaceHeaderQrMeta.searchHistory
                                         .filteredCount
@@ -7370,6 +7386,10 @@ export default function App() {
                                     aria-label={
                                       workspaceHeaderQrMeta.searchHistory
                                         .searchAriaLabel
+                                    }
+                                    title={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .searchFieldHintLabel
                                     }
                                     className="w-full pl-6 pr-20 py-1 rounded border border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-[#050505] text-[10px] font-mono text-slate-700 dark:text-zinc-200 placeholder:text-slate-400 dark:placeholder:text-zinc-500 focus:outline-none focus:border-emerald-500/60 [&::-webkit-search-cancel-button]:hidden [&::-webkit-search-decoration]:hidden"
                                   />
@@ -7393,7 +7413,11 @@ export default function App() {
                                       )}
                                       className={`px-1 py-0.5 rounded text-[9px] font-mono font-semibold leading-none ${
                                         workspaceHeaderQrMeta.searchHistory
-                                          .hasActiveSearchQuery
+                                          .hasActiveSearchQuery ||
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .hasActiveCategoryFilter ||
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .hasActiveScanSourceFilter
                                           ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
                                           : 'text-slate-400 dark:text-zinc-500'
                                       }`}
@@ -7403,8 +7427,10 @@ export default function App() {
                                           .filterStatusBadgeLabel
                                       }
                                     </span>
-                                    {workspaceHeaderQrMeta.searchHistory
-                                      .hasActiveSearchQuery && (
+                                    {(workspaceHeaderQrMeta.searchHistory
+                                      .hasActiveSearchQuery ||
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .hasActiveScanSourceFilter) && (
                                       <button
                                         type="button"
                                         id={
@@ -7415,11 +7441,14 @@ export default function App() {
                                           workspaceHeaderQrMeta.searchHistory
                                             .clearSearchButtonTestId
                                         }
-                                        onClick={() =>
+                                        onClick={() => {
                                           setWorkspaceHeaderQrHistorySearchQuery(
                                             ''
-                                          )
-                                        }
+                                          );
+                                          setWorkspaceHeaderQrHistoryScanSourceFilter(
+                                            'all'
+                                          );
+                                        }}
                                         aria-label="Clear Search History query"
                                         className="p-0.5 text-slate-400 hover:text-slate-600 dark:text-zinc-500 dark:hover:text-zinc-300"
                                       >
@@ -7427,6 +7456,18 @@ export default function App() {
                                       </button>
                                     )}
                                   </div>
+                                </div>
+
+                                <div
+                                  id="workspace-header-qr-search-history-field-hint"
+                                  data-testid="workspace-header-qr-search-history-field-hint"
+                                  className="text-[9px] font-mono text-slate-500 dark:text-zinc-400 flex items-center justify-between gap-1"
+                                >
+                                  <span>
+                                    Search by <strong className="text-slate-700 dark:text-zinc-300">Room Code</strong>,{' '}
+                                    <strong className="text-slate-700 dark:text-zinc-300">Room Category</strong> (Study, Work, Casual), or{' '}
+                                    <strong className="text-slate-700 dark:text-zinc-300">Scan Source</strong> (Camera, Share Link)
+                                  </span>
                                 </div>
 
                                 <div
@@ -7580,6 +7621,83 @@ export default function App() {
                                   </div>
                                 </div>
 
+                                <div
+                                  id={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .scanSourceFilterBarElementId
+                                  }
+                                  data-testid={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .scanSourceFilterBarTestId
+                                  }
+                                  data-active-scan-source-filter={
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .activeScanSourceFilter
+                                  }
+                                  data-camera-count={String(
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .countsByScanSource.camera
+                                  )}
+                                  data-share-link-count={String(
+                                    workspaceHeaderQrMeta.searchHistory
+                                      .countsByScanSource.share_link
+                                  )}
+                                  role="group"
+                                  aria-label="Filter QR History rooms by scan source"
+                                  className="flex flex-wrap items-center justify-between gap-1.5"
+                                >
+                                  <div className="flex flex-wrap items-center gap-1">
+                                    <span className="text-[9px] font-mono font-semibold text-slate-500 dark:text-zinc-400 mr-0.5">
+                                      Source:
+                                    </span>
+                                    {workspaceHeaderQrMeta.searchHistory.scanSourceFilterChips.map(
+                                      (sourceChip) => (
+                                        <button
+                                          key={sourceChip.key}
+                                          type="button"
+                                          id={sourceChip.elementId}
+                                          data-testid={sourceChip.testId}
+                                          data-scan-source-filter={sourceChip.key}
+                                          data-scan-source-count={String(
+                                            sourceChip.count
+                                          )}
+                                          data-active={
+                                            sourceChip.isActive ? 'true' : 'false'
+                                          }
+                                          aria-pressed={sourceChip.isActive}
+                                          aria-label={sourceChip.ariaLabel}
+                                          onClick={() => {
+                                            setWorkspaceHeaderQrHistoryScanSourceFilter(
+                                              sourceChip.key
+                                            );
+                                            if (uiSoundPrefs.enabled) {
+                                              playSubtleUiChime(
+                                                'ui_chime',
+                                                uiSoundPrefs.volumePercent
+                                              );
+                                            }
+                                          }}
+                                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors ${
+                                            sourceChip.isActive
+                                              ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                                              : 'bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-600 dark:bg-zinc-900/70 dark:hover:bg-zinc-800 dark:border-zinc-800 dark:text-zinc-400'
+                                          }`}
+                                        >
+                                          {sourceChip.key === 'camera' ? (
+                                            <Camera className="w-2.5 h-2.5 shrink-0" />
+                                          ) : sourceChip.key === 'share_link' ? (
+                                            <Link2 className="w-2.5 h-2.5 shrink-0" />
+                                          ) : null}
+                                          <span>{sourceChip.label}</span>
+                                          <span className="opacity-75">
+                                            ({sourceChip.count})
+                                          </span>
+                                        </button>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+
                                 {workspaceHeaderQrMeta.searchHistory
                                   .hasFilteredItems ? (
                                   <ul
@@ -7609,6 +7727,10 @@ export default function App() {
                                     data-category-filter={
                                       workspaceHeaderQrMeta.searchHistory
                                         .activeCategoryFilter
+                                    }
+                                    data-scan-source-filter={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .activeScanSourceFilter
                                     }
                                     data-filtered-count={String(
                                       workspaceHeaderQrMeta.searchHistory
@@ -7643,6 +7765,9 @@ export default function App() {
                                           data-matched-query={
                                             scanItem.matchedQuery
                                           }
+                                          data-matched-fields={scanItem.matchedFields.join(
+                                            ','
+                                          )}
                                           data-workspace-url={
                                             scanItem.workspaceUrl
                                           }
@@ -7657,6 +7782,12 @@ export default function App() {
                                           }
                                           data-scan-source-type={
                                             scanItem.scanSource.sourceType
+                                          }
+                                          data-scan-source-channel={
+                                            scanItem.scanSourceChannel
+                                          }
+                                          data-scan-source-label={
+                                            scanItem.scanSourceChannelLabel
                                           }
                                           data-details-modal-open={
                                             scanItem.isDetailsModalOpen
@@ -7702,6 +7833,9 @@ export default function App() {
                                               }
                                               data-scan-source={
                                                 scanItem.scanSource.sourceLabel
+                                              }
+                                              data-scan-source-channel={
+                                                scanItem.scanSourceChannel
                                               }
                                               aria-haspopup="dialog"
                                               aria-expanded={
@@ -7778,6 +7912,36 @@ export default function App() {
                                               />
                                               <span>{scanItem.categoryLabel}</span>
                                             </button>
+
+                                            <span
+                                              id={scanItem.scanSourceBadgeElementId}
+                                              data-testid={
+                                                scanItem.scanSourceBadgeTestId
+                                              }
+                                              data-scan-source-channel={
+                                                scanItem.scanSourceChannel
+                                              }
+                                              data-scan-source-label={
+                                                scanItem.scanSourceChannelLabel
+                                              }
+                                              title={`Scan Source: ${scanItem.scanSource.sourceBadgeLabel} (${scanItem.scanSource.sourceLabel})`}
+                                              className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-medium shrink-0 ${
+                                                scanItem.scanSourceChannel ===
+                                                'camera'
+                                                  ? 'bg-cyan-500/10 border-cyan-500/30 text-cyan-700 dark:text-cyan-300'
+                                                  : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-700 dark:text-indigo-300'
+                                              }`}
+                                            >
+                                              {scanItem.scanSourceChannel ===
+                                              'camera' ? (
+                                                <Camera className="w-2.5 h-2.5 shrink-0" />
+                                              ) : (
+                                                <Link2 className="w-2.5 h-2.5 shrink-0" />
+                                              )}
+                                              <span>
+                                                {scanItem.scanSourceChannelLabel}
+                                              </span>
+                                            </span>
 
                                             <select
                                               id={scanItem.categorySelectElementId}

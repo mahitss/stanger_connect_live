@@ -14491,6 +14491,25 @@ export function sortWorkspaceQrHistoryItems(
   return cloned;
 }
 
+export type WorkspaceQrScanSourceChannel = 'camera' | 'share_link';
+
+export type WorkspaceQrHistoryScanSourceFilter =
+  | 'all'
+  | WorkspaceQrScanSourceChannel;
+
+export type WorkspaceQrHistorySearchableField =
+  | 'roomCode'
+  | 'category'
+  | 'scanSource'
+  | 'moodFilter'
+  | 'workspaceUrl';
+
+export const WORKSPACE_QR_HISTORY_SEARCH_SUPPORTED_FIELDS: readonly [
+  'roomCode',
+  'category',
+  'scanSource',
+] = ['roomCode', 'category', 'scanSource'] as const;
+
 export interface WorkspaceQrRecentScanEntry {
   id: string;
   roomCode: string;
@@ -14504,6 +14523,11 @@ export interface WorkspaceQrRecentScanEntry {
   isPinned?: boolean;
   pinnedAtMs?: number;
   category?: WorkspaceQrHistoryRoomCategory;
+  scanSource?:
+    | WorkspaceQrScanSourceChannel
+    | 'url_qr_payload'
+    | 'direct_room_code'
+    | WorkspaceQrHistoryScanSourceDetails;
 }
 
 export interface WorkspaceQrRecentScansSpec {
@@ -14556,6 +14580,22 @@ export function normalizeStoredWorkspaceQrRecentScans(
         : 0;
     const category = normalizeWorkspaceQrHistoryRoomCategory(rec.category);
 
+    const rawScanSource =
+      typeof rec.scanSource === 'object' && rec.scanSource !== null
+        ? rec.scanSource.sourceChannel
+        : rec.scanSource;
+    const normalizedScanSource:
+      | WorkspaceQrScanSourceChannel
+      | 'url_qr_payload'
+      | 'direct_room_code'
+      | undefined =
+      rawScanSource === 'camera' ||
+      rawScanSource === 'share_link' ||
+      rawScanSource === 'url_qr_payload' ||
+      rawScanSource === 'direct_room_code'
+        ? rawScanSource
+        : undefined;
+
     parsedWithOrder.push({
       originalIndex: idx,
       entry: {
@@ -14584,6 +14624,7 @@ export function normalizeStoredWorkspaceQrRecentScans(
         isPinned,
         pinnedAtMs,
         category,
+        ...(normalizedScanSource ? { scanSource: normalizedScanSource } : {}),
       },
     });
   }
@@ -15060,6 +15101,9 @@ export type WorkspaceQrScanSourceType =
 
 export interface WorkspaceQrHistoryScanSourceDetails {
   sourceType: WorkspaceQrScanSourceType;
+  sourceChannel: WorkspaceQrScanSourceChannel;
+  sourceChannelLabel: 'Camera' | 'Share Link';
+  sourceBadgeLabel: 'Camera Scan' | 'Share Link';
   sourceLabel: 'Workspace URL QR Code' | 'Direct Room Code QR Scan';
   captureMethodLabel: 'Camera / Image Frame QR Decoder';
   originHost: string;
@@ -15071,6 +15115,41 @@ export interface WorkspaceQrHistoryScanSourceDetails {
   moodFilter: string;
   onlyInFocus: boolean;
   filterSummaryLabel: string;
+  searchKeywords: string[];
+}
+
+export function normalizeWorkspaceQrHistoryScanSourceFilter(
+  raw?: unknown
+): WorkspaceQrHistoryScanSourceFilter {
+  if (typeof raw !== 'string') return 'all';
+  const cleaned = raw.trim().toLowerCase().replace(/[\s-]+/g, '_');
+  if (
+    cleaned === 'camera' ||
+    cleaned === 'camera_scan' ||
+    cleaned === 'direct' ||
+    cleaned === 'direct_room_code'
+  ) {
+    return 'camera';
+  }
+  if (
+    cleaned === 'share_link' ||
+    cleaned === 'sharelink' ||
+    cleaned === 'share' ||
+    cleaned === 'link' ||
+    cleaned === 'url' ||
+    cleaned === 'url_qr_payload' ||
+    cleaned === 'workspace_url'
+  ) {
+    return 'share_link';
+  }
+  return 'all';
+}
+
+export function normalizeWorkspaceQrScanSourceChannel(
+  raw?: unknown
+): WorkspaceQrScanSourceChannel {
+  const filter = normalizeWorkspaceQrHistoryScanSourceFilter(raw);
+  return filter === 'camera' ? 'camera' : 'share_link';
 }
 
 export function resolveWorkspaceQrHistoryScanSourceDetails(
@@ -15087,13 +15166,61 @@ export function resolveWorkspaceQrHistoryScanSourceDetails(
     lowerRaw.startsWith('https://') ||
     lowerRaw.includes('?room=') ||
     lowerRaw.includes('&room=');
-  const sourceType: WorkspaceQrScanSourceType = isUrlPayload
-    ? 'url_qr_payload'
-    : 'direct_room_code';
+  const rawExplicitSource = entry?.scanSource;
+  const explicitSource =
+    typeof rawExplicitSource === 'object' && rawExplicitSource !== null
+      ? rawExplicitSource.sourceChannel
+      : rawExplicitSource;
+  const sourceType: WorkspaceQrScanSourceType =
+    explicitSource === 'direct_room_code'
+      ? 'direct_room_code'
+      : explicitSource === 'url_qr_payload'
+        ? 'url_qr_payload'
+        : isUrlPayload
+          ? 'url_qr_payload'
+          : 'direct_room_code';
+  const sourceChannel: WorkspaceQrScanSourceChannel =
+    explicitSource === 'camera' || explicitSource === 'direct_room_code'
+      ? 'camera'
+      : explicitSource === 'share_link' || explicitSource === 'url_qr_payload'
+        ? 'share_link'
+        : sourceType === 'direct_room_code'
+          ? 'camera'
+          : 'share_link';
+  const sourceChannelLabel: 'Camera' | 'Share Link' =
+    sourceChannel === 'camera' ? 'Camera' : 'Share Link';
+  const sourceBadgeLabel: 'Camera Scan' | 'Share Link' =
+    sourceChannel === 'camera' ? 'Camera Scan' : 'Share Link';
   const sourceLabel =
     sourceType === 'url_qr_payload'
       ? 'Workspace URL QR Code'
       : 'Direct Room Code QR Scan';
+
+  const searchKeywords =
+    sourceChannel === 'camera'
+      ? [
+          'camera',
+          'camera scan',
+          'camerascan',
+          'direct',
+          'direct room code',
+          'direct room code qr scan',
+          'direct_room_code',
+          'webcam',
+          'optical',
+        ]
+      : [
+          'share link',
+          'share_link',
+          'sharelink',
+          'share',
+          'link',
+          'shared link',
+          'url',
+          'workspace url',
+          'workspace url qr code',
+          'url_qr_payload',
+        ];
 
   let originHost = 'mrstranger.app';
   try {
@@ -15147,6 +15274,9 @@ export function resolveWorkspaceQrHistoryScanSourceDetails(
 
   return {
     sourceType,
+    sourceChannel,
+    sourceChannelLabel,
+    sourceBadgeLabel,
     sourceLabel,
     captureMethodLabel: 'Camera / Image Frame QR Decoder',
     originHost,
@@ -15158,6 +15288,7 @@ export function resolveWorkspaceQrHistoryScanSourceDetails(
     moodFilter,
     onlyInFocus,
     filterSummaryLabel,
+    searchKeywords,
   };
 }
 
@@ -15427,6 +15558,10 @@ export interface WorkspaceQrHistorySectionItemSpec
   scannedAtIso: string;
   relativeTimestampLabel: string;
   scanSource: WorkspaceQrHistoryScanSourceDetails;
+  scanSourceChannel: WorkspaceQrScanSourceChannel;
+  scanSourceChannelLabel: 'Camera' | 'Share Link';
+  scanSourceBadgeElementId: string;
+  scanSourceBadgeTestId: string;
   categoryTagElementId: string;
   categoryTagTestId: string;
   categoryDotElementId: string;
@@ -15487,6 +15622,7 @@ export interface WorkspaceQrHistorySectionItemSpec
   joinLinkHref: string;
   joinLinkAriaLabel: string;
   matchedQuery: string;
+  matchedFields: WorkspaceQrHistorySearchableField[];
   rankOrder: number;
 }
 
@@ -15910,6 +16046,281 @@ export function buildWorkspaceQrHistoryStatisticsSpec(
   };
 }
 
+export interface WorkspaceQrHistoryScanSourceFilterChipSpec {
+  key: WorkspaceQrHistoryScanSourceFilter;
+  value: WorkspaceQrHistoryScanSourceFilter;
+  label: 'All Sources' | 'Camera' | 'Share Link';
+  queryToken: '' | 'camera' | 'share link';
+  count: number;
+  isActive: boolean;
+  elementId: string;
+  testId: string;
+  ariaLabel: string;
+}
+
+export interface WorkspaceQrHistoryParsedSearchQuery {
+  rawQuery: string;
+  normalizedQuery: string;
+  compactQuery: string;
+  categoryFilterFromQuery: WorkspaceQrHistoryRoomCategory | null;
+  scanSourceFilterFromQuery: WorkspaceQrScanSourceChannel | null;
+  freeTextTokens: string[];
+  hasStructuredPrefix: boolean;
+}
+
+export function parseWorkspaceQrHistorySearchQuery(
+  rawQuery?: string | null
+): WorkspaceQrHistoryParsedSearchQuery {
+  const raw = typeof rawQuery === 'string' ? rawQuery.trim() : '';
+  const normalizedQuery = raw.toLowerCase();
+  const compactQuery = normalizedQuery.replace(/[\s_-]+/g, '');
+  if (!normalizedQuery) {
+    return {
+      rawQuery: '',
+      normalizedQuery: '',
+      compactQuery: '',
+      categoryFilterFromQuery: null,
+      scanSourceFilterFromQuery: null,
+      freeTextTokens: [],
+      hasStructuredPrefix: false,
+    };
+  }
+
+  let working = normalizedQuery;
+  let categoryFilterFromQuery: WorkspaceQrHistoryRoomCategory | null = null;
+  let scanSourceFilterFromQuery: WorkspaceQrScanSourceChannel | null = null;
+  let hasStructuredPrefix = false;
+
+  // Extract explicit category prefix: category:study, cat:work, room-category:casual
+  working = working.replace(
+    /\b(?:room[-_\s]?category|category|cat)\s*:\s*(study|work|casual)\b/gi,
+    (_match, catVal: string) => {
+      hasStructuredPrefix = true;
+      const lowerCat = catVal.toLowerCase();
+      if (lowerCat === 'study') categoryFilterFromQuery = 'Study';
+      else if (lowerCat === 'work') categoryFilterFromQuery = 'Work';
+      else if (lowerCat === 'casual') categoryFilterFromQuery = 'Casual';
+      return ' ';
+    }
+  );
+
+  // Extract explicit scan source prefix: source:camera, source:share link, source:share_link, source:url, source:direct
+  working = working.replace(
+    /\b(?:scan[-_\s]?source|source|src)\s*:\s*(camera\s+scan|camera|share[\s_-]+link|sharelink|share|link|url_qr_payload|url|direct_room_code|direct)\b/gi,
+    (_match, srcVal: string) => {
+      hasStructuredPrefix = true;
+      const resolved = normalizeWorkspaceQrHistoryScanSourceFilter(srcVal);
+      if (resolved !== 'all') {
+        scanSourceFilterFromQuery = resolved;
+      }
+      return ' ';
+    }
+  );
+
+  // Normalize multi-word scan-source phrases in free text so they stay together or match cleanly
+  const freeTextTokens = working
+    .replace(/\bshare[\s_-]+link\b/g, 'share_link')
+    .replace(/\bcamera[\s_-]+scan\b/g, 'camera_scan')
+    .replace(/\bdirect[\s_-]+room[\s_-]+code\b/g, 'direct_room_code')
+    .replace(/\bworkspace[\s_-]+url\b/g, 'workspace_url')
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && t !== 'category' && t !== 'source');
+
+  return {
+    rawQuery: raw,
+    normalizedQuery,
+    compactQuery,
+    categoryFilterFromQuery,
+    scanSourceFilterFromQuery,
+    freeTextTokens,
+    hasStructuredPrefix,
+  };
+}
+
+export function evaluateWorkspaceQrHistoryEntrySearchMatch(
+  entry: WorkspaceQrRecentScanEntry,
+  searchQuery?: string | null
+): {
+  matches: boolean;
+  matchedFields: WorkspaceQrHistorySearchableField[];
+} {
+  const parsed = parseWorkspaceQrHistorySearchQuery(searchQuery);
+  if (!parsed.normalizedQuery) {
+    return { matches: true, matchedFields: [] };
+  }
+
+  const matchedFieldsSet = new Set<WorkspaceQrHistorySearchableField>();
+  const category = normalizeWorkspaceQrHistoryRoomCategory(entry.category);
+  const catLower = category.toLowerCase();
+  const scanSource = resolveWorkspaceQrHistoryScanSourceDetails(entry);
+  const roomLower = entry.roomCode.toLowerCase();
+  const compactRoom = roomLower.replace(/[\s_-]+/g, '');
+  const moodLower = (entry.moodFilter || '').toLowerCase();
+  const urlLower = (entry.workspaceUrl || '').toLowerCase();
+
+  if (parsed.categoryFilterFromQuery) {
+    if (category !== parsed.categoryFilterFromQuery) {
+      return { matches: false, matchedFields: [] };
+    }
+    matchedFieldsSet.add('category');
+  }
+
+  if (parsed.scanSourceFilterFromQuery) {
+    if (scanSource.sourceChannel !== parsed.scanSourceFilterFromQuery) {
+      return { matches: false, matchedFields: [] };
+    }
+    matchedFieldsSet.add('scanSource');
+  }
+
+  if (parsed.freeTextTokens.length === 0) {
+    return {
+      matches: true,
+      matchedFields: Array.from(matchedFieldsSet),
+    };
+  }
+
+  // Also check full compact query against compact room code (e.g. "studyroom4" -> "STUDY-ROOM4")
+  if (
+    !parsed.hasStructuredPrefix &&
+    parsed.compactQuery.length > 0 &&
+    compactRoom.includes(parsed.compactQuery)
+  ) {
+    matchedFieldsSet.add('roomCode');
+    return {
+      matches: true,
+      matchedFields: Array.from(matchedFieldsSet),
+    };
+  }
+
+  for (const token of parsed.freeTextTokens) {
+    const cleanToken = token.toLowerCase();
+    const compactToken = cleanToken.replace(/[\s_-]+/g, '');
+    let tokenMatched = false;
+
+    // 1. Check Room Category ('Study', 'Work', 'Casual')
+    if (catLower.includes(cleanToken)) {
+      matchedFieldsSet.add('category');
+      tokenMatched = true;
+    }
+
+    // 2. Check Scan Source ('camera', 'camera_scan', 'share_link', 'share', 'link', 'direct', 'url')
+    const normalizedTokenSpaced = cleanToken.replace(/_/g, ' ');
+    if (
+      scanSource.sourceChannel === cleanToken ||
+      scanSource.sourceChannelLabel.toLowerCase().includes(normalizedTokenSpaced) ||
+      scanSource.sourceBadgeLabel.toLowerCase().includes(normalizedTokenSpaced) ||
+      scanSource.searchKeywords.some(
+        (kw) =>
+          kw.includes(normalizedTokenSpaced) ||
+          kw.replace(/[\s_-]+/g, '').includes(compactToken)
+      )
+    ) {
+      matchedFieldsSet.add('scanSource');
+      tokenMatched = true;
+    }
+
+    // 3. Check Room Code
+    if (
+      roomLower.includes(cleanToken) ||
+      (compactToken.length > 0 && compactRoom.includes(compactToken))
+    ) {
+      matchedFieldsSet.add('roomCode');
+      tokenMatched = true;
+    }
+
+    // 4. Check Mood Filter
+    if (moodLower.includes(cleanToken)) {
+      matchedFieldsSet.add('moodFilter');
+      tokenMatched = true;
+    }
+
+    // 5. Check Workspace URL (only when token isn't a non-matching category or scan-source keyword)
+    const isReservedSourceOrCatKeyword =
+      cleanToken === 'camera' ||
+      cleanToken === 'camera_scan' ||
+      cleanToken === 'share_link' ||
+      cleanToken === 'sharelink' ||
+      cleanToken === 'share' ||
+      cleanToken === 'link' ||
+      cleanToken === 'direct' ||
+      cleanToken === 'study' ||
+      cleanToken === 'work' ||
+      cleanToken === 'casual';
+    if (!isReservedSourceOrCatKeyword && urlLower.includes(cleanToken)) {
+      matchedFieldsSet.add('workspaceUrl');
+      tokenMatched = true;
+    }
+
+    if (!tokenMatched) {
+      return { matches: false, matchedFields: [] };
+    }
+  }
+
+  return {
+    matches: true,
+    matchedFields: Array.from(matchedFieldsSet),
+  };
+}
+
+export function computeWorkspaceQrHistoryCountsByScanSource(
+  entries: WorkspaceQrRecentScanEntry[] | unknown
+): Record<WorkspaceQrScanSourceChannel, number> {
+  const counts: Record<WorkspaceQrScanSourceChannel, number> = {
+    camera: 0,
+    share_link: 0,
+  };
+  if (!Array.isArray(entries)) return counts;
+  for (const item of entries) {
+    if (!item || typeof item !== 'object') continue;
+    const details = resolveWorkspaceQrHistoryScanSourceDetails(
+      item as Partial<WorkspaceQrRecentScanEntry>
+    );
+    counts[details.sourceChannel] += 1;
+  }
+  return counts;
+}
+
+export function buildWorkspaceQrHistoryScanSourceFilterChips(
+  savedEntries: WorkspaceQrRecentScanEntry[],
+  activeScanSourceFilter: WorkspaceQrHistoryScanSourceFilter
+): WorkspaceQrHistoryScanSourceFilterChipSpec[] {
+  const counts = computeWorkspaceQrHistoryCountsByScanSource(savedEntries);
+  const options: ReadonlyArray<{
+    key: WorkspaceQrHistoryScanSourceFilter;
+    label: 'All Sources' | 'Camera' | 'Share Link';
+    queryToken: '' | 'camera' | 'share link';
+    slug: string;
+  }> = [
+    { key: 'all', label: 'All Sources', queryToken: '', slug: 'all' },
+    { key: 'camera', label: 'Camera', queryToken: 'camera', slug: 'camera' },
+    {
+      key: 'share_link',
+      label: 'Share Link',
+      queryToken: 'share link',
+      slug: 'share-link',
+    },
+  ];
+  return options.map((opt) => {
+    const count =
+      opt.key === 'all' ? savedEntries.length : counts[opt.key];
+    return {
+      key: opt.key,
+      value: opt.key,
+      label: opt.label,
+      queryToken: opt.queryToken,
+      count,
+      isActive: activeScanSourceFilter === opt.key,
+      elementId: `workspace-header-qr-history-scan-source-filter-${opt.slug}`,
+      testId: `workspace-header-qr-history-scan-source-filter-${opt.slug}`,
+      ariaLabel:
+        opt.key === 'all'
+          ? `Show all scan sources (${count} scans)`
+          : `Filter QR history by ${opt.label} scan source (${count} scans)`,
+    };
+  });
+}
+
 export interface WorkspaceQrSearchHistorySpec {
   sectionElementId: 'workspace-header-qr-search-history-section';
   sectionTestId: 'workspace-header-qr-search-history-section';
@@ -15926,6 +16337,8 @@ export interface WorkspaceQrSearchHistorySpec {
   categoryFilterBarElementId: 'workspace-header-qr-history-category-filter-bar';
   categoryFilterBarTestId: 'workspace-header-qr-history-category-filter-bar';
   searchHistoryCategoryFilterBarElementId: 'workspace-header-qr-search-history-category-filter-bar';
+  scanSourceFilterBarElementId: 'workspace-header-qr-history-scan-source-filter-bar';
+  scanSourceFilterBarTestId: 'workspace-header-qr-history-scan-source-filter-bar';
   sortSelectElementId: 'workspace-header-qr-history-sort-select';
   sortSelectTestId: 'workspace-header-qr-history-sort-select';
   searchHistorySortSelectElementId: 'workspace-header-qr-search-history-sort-select';
@@ -15948,6 +16361,8 @@ export interface WorkspaceQrSearchHistorySpec {
   heading: 'Search History';
   searchPlaceholder: 'Filter scanned room codes...';
   searchAriaLabel: 'Filter scanned room codes in real-time';
+  searchFieldHintLabel: 'Filter by Room Code, Room Category (Study, Work, Casual), or Scan Source (Camera, Share Link)';
+  searchSupportedFields: typeof WORKSPACE_QR_HISTORY_SEARCH_SUPPORTED_FIELDS;
   sortSelectAriaLabel: 'Sort QR scanner history list';
   sortedBy: WorkspaceQrHistorySortOrder;
   sortOrder: WorkspaceQrHistorySortOrder;
@@ -15959,6 +16374,10 @@ export interface WorkspaceQrSearchHistorySpec {
   availableCategories: readonly WorkspaceQrHistoryRoomCategory[];
   countsByCategory: Record<WorkspaceQrHistoryRoomCategory, number>;
   categoryFilterChips: WorkspaceQrHistoryCategoryFilterChipSpec[];
+  activeScanSourceFilter: WorkspaceQrHistoryScanSourceFilter;
+  hasActiveScanSourceFilter: boolean;
+  countsByScanSource: Record<WorkspaceQrScanSourceChannel, number>;
+  scanSourceFilterChips: WorkspaceQrHistoryScanSourceFilterChipSpec[];
   pinButtonLabel: 'Pin';
   pinnedButtonLabel: 'Pinned';
   pinnedCount: number;
@@ -15991,7 +16410,8 @@ export function filterWorkspaceQrSearchHistory(
   searchQuery?: string | null,
   maxItems = MAX_WORKSPACE_QR_SEARCH_HISTORY,
   categoryFilter: WorkspaceQrHistoryCategoryFilter | string | null = 'all',
-  sortOrder: WorkspaceQrHistorySortOrder | string | null = 'most_recent_desc'
+  sortOrder: WorkspaceQrHistorySortOrder | string | null = 'most_recent_desc',
+  scanSourceFilter: WorkspaceQrHistoryScanSourceFilter | string | null = 'all'
 ): WorkspaceQrRecentScanEntry[] {
   const cap = Math.max(
     1,
@@ -16009,26 +16429,24 @@ export function filterWorkspaceQrSearchHistory(
             normalizedCategoryFilter
         );
 
-  const normalizedQuery = (searchQuery ?? '').trim().toLowerCase();
-  const queryFiltered = !normalizedQuery
-    ? categoryFiltered
-    : (() => {
-        const compactQuery = normalizedQuery.replace(/[\s_-]+/g, '');
-        return categoryFiltered.filter((entry) => {
-          const roomLower = entry.roomCode.toLowerCase();
-          const compactRoom = roomLower.replace(/[\s_-]+/g, '');
-          const catLower = normalizeWorkspaceQrHistoryRoomCategory(
-            entry.category
-          ).toLowerCase();
-          return (
-            roomLower.includes(normalizedQuery) ||
-            (compactQuery.length > 0 && compactRoom.includes(compactQuery)) ||
-            entry.workspaceUrl.toLowerCase().includes(normalizedQuery) ||
-            entry.moodFilter.toLowerCase().includes(normalizedQuery) ||
-            catLower.includes(normalizedQuery)
-          );
-        });
-      })();
+  const normalizedScanSourceFilter =
+    normalizeWorkspaceQrHistoryScanSourceFilter(scanSourceFilter);
+  const sourceFiltered =
+    normalizedScanSourceFilter === 'all'
+      ? categoryFiltered
+      : categoryFiltered.filter(
+          (entry) =>
+            resolveWorkspaceQrHistoryScanSourceDetails(entry).sourceChannel ===
+            normalizedScanSourceFilter
+        );
+
+  const rawQuery = (searchQuery ?? '').trim();
+  const queryFiltered = !rawQuery
+    ? sourceFiltered
+    : sourceFiltered.filter(
+        (entry) =>
+          evaluateWorkspaceQrHistoryEntrySearchMatch(entry, rawQuery).matches
+      );
 
   const resolvedSort = normalizeWorkspaceQrHistorySortOrder(sortOrder);
   if (resolvedSort === 'most_recent_desc') {
@@ -16082,6 +16500,7 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   recentScans?: WorkspaceQrRecentScanEntry[] | unknown;
   searchQuery?: string | null;
   categoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
+  scanSourceFilter?: WorkspaceQrHistoryScanSourceFilter | string | null;
   sortOrder?: WorkspaceQrHistorySortOrder | string | null;
   activeTab?: WorkspaceQrHistoryTab | string | null;
   referenceTimestampMs?: number;
@@ -16106,6 +16525,18 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     input?.categoryFilter
   );
   const hasActiveCategoryFilter = activeCategoryFilter !== 'all';
+  const parsedQuery = parseWorkspaceQrHistorySearchQuery(rawQuery);
+  const explicitScanSourceFilter = normalizeWorkspaceQrHistoryScanSourceFilter(
+    input?.scanSourceFilter
+  );
+  const activeScanSourceFilter: WorkspaceQrHistoryScanSourceFilter =
+    explicitScanSourceFilter !== 'all'
+      ? explicitScanSourceFilter
+      : parsedQuery.scanSourceFilterFromQuery ??
+        normalizeWorkspaceQrHistoryScanSourceFilter(
+          parsedQuery.freeTextTokens.join(' ')
+        );
+  const hasActiveScanSourceFilter = activeScanSourceFilter !== 'all';
   const sortOrder = normalizeWorkspaceQrHistorySortOrder(input?.sortOrder);
   const sortOrderLabel = getWorkspaceQrHistorySortLabel(sortOrder);
   const activeTab = normalizeWorkspaceQrHistoryTab(input?.activeTab);
@@ -16138,7 +16569,8 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     rawQuery,
     cap,
     activeCategoryFilter,
-    sortOrder
+    sortOrder,
+    explicitScanSourceFilter
   );
   const pinnedRoomCodes = savedEntries
     .filter((entry) => Boolean(entry.isPinned))
@@ -16148,6 +16580,12 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   const categoryFilterChips = buildWorkspaceQrHistoryCategoryFilterChips(
     savedEntries,
     activeCategoryFilter
+  );
+  const countsByScanSource =
+    computeWorkspaceQrHistoryCountsByScanSource(savedEntries);
+  const scanSourceFilterChips = buildWorkspaceQrHistoryScanSourceFilterChips(
+    savedEntries,
+    activeScanSourceFilter
   );
 
   const items: WorkspaceQrSearchHistoryItemSpec[] = filteredEntries.map(
@@ -16171,6 +16609,10 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         input?.referenceTimestampMs
       );
       const scanSource = resolveWorkspaceQrHistoryScanSourceDetails(entry);
+      const matchEval = evaluateWorkspaceQrHistoryEntrySearchMatch(
+        entry,
+        rawQuery
+      );
       const isDetailsModalOpen =
         detailsModal.isOpen &&
         detailsModal.selectedRoomCode === entry.roomCode;
@@ -16193,6 +16635,10 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         scannedAtIso: formattedTs.scannedAtIso,
         relativeTimestampLabel: formattedTs.relativeTimeLabel,
         scanSource,
+        scanSourceChannel: scanSource.sourceChannel,
+        scanSourceChannelLabel: scanSource.sourceChannelLabel,
+        scanSourceBadgeElementId: `workspace-header-qr-history-scan-source-badge-${idx}`,
+        scanSourceBadgeTestId: `workspace-header-qr-history-scan-source-badge-${idx}`,
         categoryTagElementId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryTagTestId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryDotElementId: `workspace-header-qr-history-category-dot-${idx}`,
@@ -16253,12 +16699,16 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
         joinLinkHref: entry.workspaceUrl,
         joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
         matchedQuery: rawQuery,
+        matchedFields: matchEval.matchedFields,
         rankOrder: idx + 1,
       };
     }
   );
 
-  const isFiltering = hasActiveSearchQuery || hasActiveCategoryFilter;
+  const isFiltering =
+    hasActiveSearchQuery ||
+    hasActiveCategoryFilter ||
+    explicitScanSourceFilter !== 'all';
 
   return {
     sectionElementId: 'workspace-header-qr-search-history-section',
@@ -16282,6 +16732,10 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
       'workspace-header-qr-history-category-filter-bar',
     searchHistoryCategoryFilterBarElementId:
       'workspace-header-qr-search-history-category-filter-bar',
+    scanSourceFilterBarElementId:
+      'workspace-header-qr-history-scan-source-filter-bar',
+    scanSourceFilterBarTestId:
+      'workspace-header-qr-history-scan-source-filter-bar',
     sortSelectElementId: 'workspace-header-qr-history-sort-select',
     sortSelectTestId: 'workspace-header-qr-history-sort-select',
     searchHistorySortSelectElementId:
@@ -16308,6 +16762,9 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     heading: 'Search History',
     searchPlaceholder: 'Filter scanned room codes...',
     searchAriaLabel: 'Filter scanned room codes in real-time',
+    searchFieldHintLabel:
+      'Filter by Room Code, Room Category (Study, Work, Casual), or Scan Source (Camera, Share Link)',
+    searchSupportedFields: WORKSPACE_QR_HISTORY_SEARCH_SUPPORTED_FIELDS,
     sortSelectAriaLabel: 'Sort QR scanner history list',
     sortedBy: sortOrder,
     sortOrder,
@@ -16319,6 +16776,10 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     availableCategories: WORKSPACE_QR_HISTORY_ROOM_CATEGORIES,
     countsByCategory,
     categoryFilterChips,
+    activeScanSourceFilter,
+    hasActiveScanSourceFilter,
+    countsByScanSource,
+    scanSourceFilterChips,
     pinButtonLabel: 'Pin',
     pinnedButtonLabel: 'Pinned',
     pinnedCount: pinnedRoomCodes.length,
@@ -16370,6 +16831,8 @@ export interface WorkspaceQrHistorySectionSpec {
   filterCountBadgeTestId: 'workspace-header-qr-history-filter-count-badge';
   categoryFilterBarElementId: 'workspace-header-qr-history-category-filter-bar';
   categoryFilterBarTestId: 'workspace-header-qr-history-category-filter-bar';
+  scanSourceFilterBarElementId: 'workspace-header-qr-history-scan-source-filter-bar';
+  scanSourceFilterBarTestId: 'workspace-header-qr-history-scan-source-filter-bar';
   sortSelectElementId: 'workspace-header-qr-history-sort-select';
   sortSelectTestId: 'workspace-header-qr-history-sort-select';
   exportCsvButtonElementId: 'workspace-header-qr-history-export-csv-btn';
@@ -16391,6 +16854,8 @@ export interface WorkspaceQrHistorySectionSpec {
   subtitle: 'Search History';
   searchPlaceholder: 'Filter scanned room codes...';
   searchAriaLabel: 'Filter scanned room codes in real-time';
+  searchFieldHintLabel: 'Filter by Room Code, Room Category (Study, Work, Casual), or Scan Source (Camera, Share Link)';
+  searchSupportedFields: typeof WORKSPACE_QR_HISTORY_SEARCH_SUPPORTED_FIELDS;
   sortSelectAriaLabel: 'Sort QR scanner history list';
   isRealTimeFiltering: true;
   searchQuery: string;
@@ -16400,6 +16865,10 @@ export interface WorkspaceQrHistorySectionSpec {
   availableCategories: readonly WorkspaceQrHistoryRoomCategory[];
   countsByCategory: Record<WorkspaceQrHistoryRoomCategory, number>;
   categoryFilterChips: WorkspaceQrHistoryCategoryFilterChipSpec[];
+  activeScanSourceFilter: WorkspaceQrHistoryScanSourceFilter;
+  hasActiveScanSourceFilter: boolean;
+  countsByScanSource: Record<WorkspaceQrScanSourceChannel, number>;
+  scanSourceFilterChips: WorkspaceQrHistoryScanSourceFilterChipSpec[];
   filteredCount: number;
   totalSavedCount: number;
   filterStatusBadgeLabel: string;
@@ -16440,6 +16909,7 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   isExpanded?: boolean;
   searchQuery?: string | null;
   categoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
+  scanSourceFilter?: WorkspaceQrHistoryScanSourceFilter | string | null;
   sortOrder?: WorkspaceQrHistorySortOrder | string | null;
   activeTab?: WorkspaceQrHistoryTab | string | null;
   referenceTimestampMs?: number;
@@ -16464,6 +16934,18 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     input?.categoryFilter
   );
   const hasActiveCategoryFilter = activeCategoryFilter !== 'all';
+  const parsedQuery = parseWorkspaceQrHistorySearchQuery(rawQuery);
+  const explicitScanSourceFilter = normalizeWorkspaceQrHistoryScanSourceFilter(
+    input?.scanSourceFilter
+  );
+  const activeScanSourceFilter: WorkspaceQrHistoryScanSourceFilter =
+    explicitScanSourceFilter !== 'all'
+      ? explicitScanSourceFilter
+      : parsedQuery.scanSourceFilterFromQuery ??
+        normalizeWorkspaceQrHistoryScanSourceFilter(
+          parsedQuery.freeTextTokens.join(' ')
+        );
+  const hasActiveScanSourceFilter = activeScanSourceFilter !== 'all';
   const sortOrder = normalizeWorkspaceQrHistorySortOrder(input?.sortOrder);
   const sortOrderLabel = getWorkspaceQrHistorySortLabel(sortOrder);
   const activeTab = normalizeWorkspaceQrHistoryTab(input?.activeTab);
@@ -16484,7 +16966,8 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     rawQuery,
     cap,
     activeCategoryFilter,
-    sortOrder
+    sortOrder,
+    explicitScanSourceFilter
   );
   const isExpanded = input?.isExpanded ?? true;
   const normalizedCopiedRoomCode = (input?.copiedRoomCode ?? '').trim()
@@ -16508,6 +16991,12 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     allSortedEntries,
     activeCategoryFilter
   );
+  const countsByScanSource =
+    computeWorkspaceQrHistoryCountsByScanSource(allSortedEntries);
+  const scanSourceFilterChips = buildWorkspaceQrHistoryScanSourceFilterChips(
+    allSortedEntries,
+    activeScanSourceFilter
+  );
 
   const items: WorkspaceQrHistorySectionItemSpec[] = sortedEntries.map(
     (entry, idx) => {
@@ -16530,6 +17019,10 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         input?.referenceTimestampMs
       );
       const scanSource = resolveWorkspaceQrHistoryScanSourceDetails(entry);
+      const matchEval = evaluateWorkspaceQrHistoryEntrySearchMatch(
+        entry,
+        rawQuery
+      );
       const isDetailsModalOpen =
         detailsModal.isOpen &&
         detailsModal.selectedRoomCode === entry.roomCode;
@@ -16552,6 +17045,10 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         scannedAtIso: formattedTs.scannedAtIso,
         relativeTimestampLabel: formattedTs.relativeTimeLabel,
         scanSource,
+        scanSourceChannel: scanSource.sourceChannel,
+        scanSourceChannelLabel: scanSource.sourceChannelLabel,
+        scanSourceBadgeElementId: `workspace-header-qr-history-scan-source-badge-${idx}`,
+        scanSourceBadgeTestId: `workspace-header-qr-history-scan-source-badge-${idx}`,
         categoryTagElementId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryTagTestId: `workspace-header-qr-history-category-tag-${idx}`,
         categoryDotElementId: `workspace-header-qr-history-category-dot-${idx}`,
@@ -16612,12 +17109,16 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
         joinLinkHref: entry.workspaceUrl,
         joinLinkAriaLabel: `Join scanned room ${entry.roomCode}`,
         matchedQuery: rawQuery,
+        matchedFields: matchEval.matchedFields,
         rankOrder: idx + 1,
       };
     }
   );
 
-  const isFiltering = hasActiveSearchQuery || hasActiveCategoryFilter;
+  const isFiltering =
+    hasActiveSearchQuery ||
+    hasActiveCategoryFilter ||
+    explicitScanSourceFilter !== 'all';
 
   return {
     sectionElementId: 'workspace-header-qr-history-section',
@@ -16635,6 +17136,10 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
       'workspace-header-qr-history-category-filter-bar',
     categoryFilterBarTestId:
       'workspace-header-qr-history-category-filter-bar',
+    scanSourceFilterBarElementId:
+      'workspace-header-qr-history-scan-source-filter-bar',
+    scanSourceFilterBarTestId:
+      'workspace-header-qr-history-scan-source-filter-bar',
     sortSelectElementId: 'workspace-header-qr-history-sort-select',
     sortSelectTestId: 'workspace-header-qr-history-sort-select',
     exportCsvButtonElementId: 'workspace-header-qr-history-export-csv-btn',
@@ -16656,6 +17161,9 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     subtitle: 'Search History',
     searchPlaceholder: 'Filter scanned room codes...',
     searchAriaLabel: 'Filter scanned room codes in real-time',
+    searchFieldHintLabel:
+      'Filter by Room Code, Room Category (Study, Work, Casual), or Scan Source (Camera, Share Link)',
+    searchSupportedFields: WORKSPACE_QR_HISTORY_SEARCH_SUPPORTED_FIELDS,
     sortSelectAriaLabel: 'Sort QR scanner history list',
     isRealTimeFiltering: true,
     searchQuery: rawQuery,
@@ -16665,6 +17173,10 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     availableCategories: WORKSPACE_QR_HISTORY_ROOM_CATEGORIES,
     countsByCategory,
     categoryFilterChips,
+    activeScanSourceFilter,
+    hasActiveScanSourceFilter,
+    countsByScanSource,
+    scanSourceFilterChips,
     filteredCount: items.length,
     totalSavedCount: allSortedEntries.length,
     filterStatusBadgeLabel: isFiltering
@@ -17563,6 +18075,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   isHistoryExpanded?: boolean;
   historySearchQuery?: string | null;
   historyCategoryFilter?: WorkspaceQrHistoryCategoryFilter | string | null;
+  historyScanSourceFilter?: WorkspaceQrHistoryScanSourceFilter | string | null;
   historySortOrder?: WorkspaceQrHistorySortOrder | string | null;
   historyActiveTab?: WorkspaceQrHistoryTab | string | null;
   historyStatsReferenceTimestampMs?: number;
@@ -17617,6 +18130,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     isExpanded: input?.isHistoryExpanded ?? true,
     searchQuery: input?.historySearchQuery,
     categoryFilter: input?.historyCategoryFilter,
+    scanSourceFilter: input?.historyScanSourceFilter,
     sortOrder: input?.historySortOrder,
     activeTab: input?.historyActiveTab,
     referenceTimestampMs: input?.historyStatsReferenceTimestampMs,
@@ -17630,6 +18144,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     recentScans: input?.recentScans ?? [],
     searchQuery: input?.historySearchQuery,
     categoryFilter: input?.historyCategoryFilter,
+    scanSourceFilter: input?.historyScanSourceFilter,
     sortOrder: input?.historySortOrder,
     activeTab: input?.historyActiveTab,
     referenceTimestampMs: input?.historyStatsReferenceTimestampMs,
@@ -18843,6 +19358,8 @@ export function buildAutoConfiguredWorkspacePreset(options?: {
         {
           roomCode: studyRoomCode,
           workspaceUrl: `https://mrstranger.app/?room=${encodeURIComponent(studyRoomCode)}`,
+          rawValue: studyRoomCode,
+          scanSource: 'camera',
           scannedAtMs: nowMs - 120_000,
           isPinned: true,
           category: 'Study',
@@ -18850,6 +19367,8 @@ export function buildAutoConfiguredWorkspacePreset(options?: {
         {
           roomCode: 'ARCH-LAB',
           workspaceUrl: 'https://mrstranger.app/?room=ARCH-LAB',
+          rawValue: 'https://mrstranger.app/?room=ARCH-LAB',
+          scanSource: 'share_link',
           scannedAtMs: nowMs - 3_600_000,
           isPinned: false,
           category: 'Work',
@@ -18857,6 +19376,8 @@ export function buildAutoConfiguredWorkspacePreset(options?: {
         {
           roomCode: 'LOUNGE-01',
           workspaceUrl: 'https://mrstranger.app/?room=LOUNGE-01',
+          rawValue: 'LOUNGE-01',
+          scanSource: 'camera',
           scannedAtMs: nowMs - 7_200_000,
           isPinned: false,
           category: 'Casual',
