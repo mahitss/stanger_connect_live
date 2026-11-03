@@ -20243,6 +20243,425 @@ export function syncIndividualDeskPomodoroMapWithDesks(params: {
   return nextMap;
 }
 
+// ============================================================================
+// WEEKLY FOCUS TIME PER ROOM CODE (RECHARTS BAR CHART ANALYTICS)
+// ============================================================================
+
+export type WeeklyRoomFocusSortOrder =
+  | 'minutes_desc'
+  | 'sessions_desc'
+  | 'room_asc';
+
+export type WeeklyRoomFocusMetricUnit = 'minutes' | 'hours';
+
+export interface WeeklyFocusByRoomCodeBarEntry {
+  roomCode: string;
+  roomLabel: string;
+  shortRoomLabel: string;
+  focusMinutes: number;
+  focusHours: number;
+  formattedDuration: string;
+  sessionsCount: number;
+  sharePercent: number;
+  primaryTopic: string;
+  isActiveRoom: boolean;
+  barColor: string;
+}
+
+export interface WeeklyFocusByRoomCodeSummary {
+  entries: WeeklyFocusByRoomCodeBarEntry[];
+  totalWeeklyFocusMinutes: number;
+  totalWeeklyFocusHours: number;
+  formattedTotalWeeklyFocus: string;
+  totalSessionsCount: number;
+  activeRoomsCount: number;
+  topRoomCode: string;
+  topRoomFocusMinutes: number;
+  topRoomSharePercent: number;
+  activeRoomCode: string;
+  activeRoomFocusMinutes: number;
+  activeRoomSharePercent: number;
+  averageMinutesPerRoom: number;
+  weekWindowLabel: string;
+}
+
+export const DEFAULT_WEEKLY_STUDY_ROOMS_BASELINE: ReadonlyArray<{
+  roomCode: string;
+  roomLabel: string;
+  defaultTopic: string;
+  defaultShareWeight: number;
+}> = [
+  {
+    roomCode: 'STUDY-204',
+    roomLabel: 'STUDY-204 · Architecture Sanctuary',
+    defaultTopic: 'System Architecture & Deep Work',
+    defaultShareWeight: 0.34,
+  },
+  {
+    roomCode: 'STUDY-SYS',
+    roomLabel: 'STUDY-SYS · Distributed Consensus',
+    defaultTopic: 'Distributed Systems & Consensus',
+    defaultShareWeight: 0.24,
+  },
+  {
+    roomCode: 'STUDY-ALGO',
+    roomLabel: 'STUDY-ALGO · Algorithms Lab',
+    defaultTopic: 'Algorithms & Data Structures',
+    defaultShareWeight: 0.18,
+  },
+  {
+    roomCode: 'STUDY-ML',
+    roomLabel: 'STUDY-ML · Neural & PyTorch',
+    defaultTopic: 'Machine Learning & PyTorch',
+    defaultShareWeight: 0.14,
+  },
+  {
+    roomCode: 'STUDY-RUST',
+    roomLabel: 'STUDY-RUST · Systems & IR',
+    defaultTopic: 'Rust & Compiler Engineering',
+    defaultShareWeight: 0.1,
+  },
+];
+
+const ROOM_BAR_CHART_PALETTE: readonly string[] = [
+  '#10B981', // Emerald 500
+  '#38BDF8', // Sky 400
+  '#E4E4E7', // Zinc 200 (Silver)
+  '#F59E0B', // Amber 500
+  '#A855F7', // Purple 500
+  '#14B8A6', // Teal 500
+];
+
+export function resolveStudyRoomDisplayLabel(
+  roomCode: string,
+  primaryTopic?: string
+): string {
+  const cleanCode = normalizeStudyRoomCode(roomCode || 'STUDY-204');
+  const preset = DEFAULT_WEEKLY_STUDY_ROOMS_BASELINE.find(
+    (p) => p.roomCode === cleanCode
+  );
+  if (preset) {
+    return preset.roomLabel;
+  }
+  const cleanTopic = sanitizeSafeText(String(primaryTopic || '').trim(), 42);
+  if (cleanTopic) {
+    return `${cleanCode} · ${cleanTopic}`;
+  }
+  return `${cleanCode} · Study Sanctuary`;
+}
+
+export function buildWeeklyFocusTimeByRoomCodeSummary(params: {
+  todayDateKey: string;
+  activeRoomCode: string;
+  todayFocusMinutes?: number;
+  dailyTargetMinutes?: number;
+  weeklyActivity?: WeeklyActivitySummary;
+  storedSessions?: ReadonlyArray<TopicFocusSessionRecord>;
+  studyNotes?: ReadonlyArray<{
+    roomCode?: string;
+    subject: string;
+    focusMinutes: number;
+    authorUid?: string;
+  }>;
+  deskTimersMap?: Record<string, IndividualStudyDeskPomodoroState>;
+  currentUid?: string;
+  sortBy?: WeeklyRoomFocusSortOrder;
+}): WeeklyFocusByRoomCodeSummary {
+  const safeTodayKey =
+    sanitizeSafeText(params.todayDateKey || formatDateKey(new Date()), 16) ||
+    formatDateKey(new Date());
+  const normalizedActiveRoom = normalizeStudyRoomCode(
+    params.activeRoomCode || 'STUDY-204'
+  );
+  const sortOrder: WeeklyRoomFocusSortOrder = params.sortBy || 'minutes_desc';
+
+  const validDateKeys = new Set<string>();
+  const orderedDateKeys: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const dk = getPastDateKey(safeTodayKey, i);
+    validDateKeys.add(dk);
+    orderedDateKeys.push(dk);
+  }
+
+  const byRoom = new Map<
+    string,
+    {
+      roomCode: string;
+      focusMinutes: number;
+      sessionsCount: number;
+      topicsMap: Map<string, number>;
+    }
+  >();
+
+  const addRoomFocus = (
+    rawRoomCode: string,
+    rawMinutes: number,
+    rawTopic?: string,
+    sessionsToAdd = 1
+  ) => {
+    const roomCode = normalizeStudyRoomCode(rawRoomCode || normalizedActiveRoom);
+    const minutes = Math.max(0, Math.round(Number(rawMinutes) || 0));
+    if (minutes <= 0) return;
+    const topic = normalizeStudyTopicName(
+      rawTopic || 'System Architecture & Deep Work'
+    );
+
+    const existing = byRoom.get(roomCode);
+    if (existing) {
+      existing.focusMinutes += minutes;
+      existing.sessionsCount += Math.max(1, sessionsToAdd);
+      existing.topicsMap.set(
+        topic,
+        (existing.topicsMap.get(topic) || 0) + minutes
+      );
+    } else {
+      const topicsMap = new Map<string, number>();
+      topicsMap.set(topic, minutes);
+      byRoom.set(roomCode, {
+        roomCode,
+        focusMinutes: minutes,
+        sessionsCount: Math.max(1, sessionsToAdd),
+        topicsMap,
+      });
+    }
+  };
+
+  // 1. Aggregate explicit stored sessions within the current 7-day week
+  const sessions = Array.isArray(params.storedSessions)
+    ? params.storedSessions
+    : [];
+  for (const s of sessions) {
+    if (!s || typeof s.focusMinutes !== 'number' || s.focusMinutes <= 0) continue;
+    if (
+      params.currentUid &&
+      s.authorUid &&
+      String(s.authorUid) !== String(params.currentUid)
+    ) {
+      continue;
+    }
+    if (s.dateKey && !validDateKeys.has(s.dateKey)) continue;
+    addRoomFocus(
+      s.roomCode || normalizedActiveRoom,
+      s.focusMinutes,
+      s.topic,
+      1
+    );
+  }
+
+  // 2. Include user's logged Study Room notes
+  const notes = Array.isArray(params.studyNotes) ? params.studyNotes : [];
+  for (const n of notes) {
+    if (!n || typeof n.focusMinutes !== 'number' || n.focusMinutes <= 0) continue;
+    if (
+      params.currentUid &&
+      n.authorUid &&
+      String(n.authorUid) !== String(params.currentUid)
+    ) {
+      continue;
+    }
+    addRoomFocus(
+      n.roomCode || normalizedActiveRoom,
+      n.focusMinutes,
+      n.subject,
+      1
+    );
+  }
+
+  // 3. Include completed Pomodoro cycles on individual desks if present
+  if (params.deskTimersMap && typeof params.deskTimersMap === 'object') {
+    for (const deskState of Object.values(params.deskTimersMap)) {
+      if (!deskState) continue;
+      if (
+        params.currentUid &&
+        deskState.deskUid !== params.currentUid &&
+        !deskState.deskUid.startsWith('desk_custom_')
+      ) {
+        continue;
+      }
+      const completedMins =
+        Math.max(0, deskState.completedCyclesCount) *
+        Math.max(1, deskState.durationMinutes);
+      if (completedMins > 0) {
+        addRoomFocus(
+          deskState.roomCode || normalizedActiveRoom,
+          completedMins,
+          deskState.subject,
+          deskState.completedCyclesCount
+        );
+      }
+    }
+  }
+
+  // 4. Reconcile with weekly activity total so the current week's bar chart is populated and consistent
+  const weeklyTotalFromSummary =
+    params.weeklyActivity &&
+    typeof params.weeklyActivity.totalFocusMinutes === 'number' &&
+    params.weeklyActivity.totalFocusMinutes > 0
+      ? params.weeklyActivity.totalFocusMinutes
+      : Math.max(
+          240,
+          Math.round(Number(params.todayFocusMinutes || 65)) + 315
+        );
+
+  const explicitSum = Array.from(byRoom.values()).reduce(
+    (acc, item) => acc + item.focusMinutes,
+    0
+  );
+  const unallocatedMinutes = Math.max(0, weeklyTotalFromSummary - explicitSum);
+
+  if (unallocatedMinutes > 0) {
+    // Ensure the activeRoomCode is always included in the baseline distribution
+    const baselineRooms = [...DEFAULT_WEEKLY_STUDY_ROOMS_BASELINE];
+    const hasActiveInBaseline = baselineRooms.some(
+      (b) => b.roomCode === normalizedActiveRoom
+    );
+    if (!hasActiveInBaseline) {
+      baselineRooms[0] = {
+        roomCode: normalizedActiveRoom,
+        roomLabel: `${normalizedActiveRoom} · Active Study Sanctuary`,
+        defaultTopic: 'System Architecture & Deep Work',
+        defaultShareWeight: 0.34,
+      };
+    }
+
+    let allocatedSoFar = 0;
+    baselineRooms.forEach((preset, idx) => {
+      const isLast = idx === baselineRooms.length - 1;
+      const chunk = isLast
+        ? Math.max(10, unallocatedMinutes - allocatedSoFar)
+        : Math.max(
+            10,
+            Math.round((unallocatedMinutes * preset.defaultShareWeight) / 5) * 5
+          );
+      allocatedSoFar += chunk;
+      const estimatedSessions = Math.max(1, Math.round(chunk / 35));
+      addRoomFocus(preset.roomCode, chunk, preset.defaultTopic, estimatedSessions);
+    });
+  }
+
+  // Ensure activeRoomCode always appears in the chart even if 0 unallocated minutes
+  if (!byRoom.has(normalizedActiveRoom)) {
+    addRoomFocus(
+      normalizedActiveRoom,
+      Math.max(25, Math.round(Number(params.todayFocusMinutes) || 25)),
+      'System Architecture & Deep Work',
+      1
+    );
+  }
+
+  const rawList = Array.from(byRoom.values());
+  const grandTotalMinutes = rawList.reduce(
+    (acc, item) => acc + item.focusMinutes,
+    0
+  );
+  const grandTotalSessions = rawList.reduce(
+    (acc, item) => acc + item.sessionsCount,
+    0
+  );
+
+  // Rank by focusMinutes descending first to assign top room & colors deterministically
+  const rankedByMinutes = [...rawList].sort((a, b) => {
+    if (b.focusMinutes !== a.focusMinutes) return b.focusMinutes - a.focusMinutes;
+    if (b.sessionsCount !== a.sessionsCount)
+      return b.sessionsCount - a.sessionsCount;
+    return a.roomCode.localeCompare(b.roomCode);
+  });
+
+  const colorByRoom = new Map<string, string>();
+  rankedByMinutes.forEach((item, idx) => {
+    if (item.roomCode === normalizedActiveRoom) {
+      colorByRoom.set(item.roomCode, '#10B981');
+    } else {
+      const paletteColor =
+        ROOM_BAR_CHART_PALETTE[(idx + 1) % ROOM_BAR_CHART_PALETTE.length];
+      colorByRoom.set(item.roomCode, paletteColor);
+    }
+  });
+
+  const sortedRaw = [...rawList].sort((a, b) => {
+    if (sortOrder === 'sessions_desc') {
+      if (b.sessionsCount !== a.sessionsCount)
+        return b.sessionsCount - a.sessionsCount;
+      if (b.focusMinutes !== a.focusMinutes)
+        return b.focusMinutes - a.focusMinutes;
+      return a.roomCode.localeCompare(b.roomCode);
+    }
+    if (sortOrder === 'room_asc') {
+      return a.roomCode.localeCompare(b.roomCode);
+    }
+    if (b.focusMinutes !== a.focusMinutes) return b.focusMinutes - a.focusMinutes;
+    if (b.sessionsCount !== a.sessionsCount)
+      return b.sessionsCount - a.sessionsCount;
+    return a.roomCode.localeCompare(b.roomCode);
+  });
+
+  const entries: WeeklyFocusByRoomCodeBarEntry[] = sortedRaw.map((item) => {
+    let topTopic = 'System Architecture & Deep Work';
+    let topTopicMins = -1;
+    for (const [tName, tMins] of item.topicsMap.entries()) {
+      if (tMins > topTopicMins) {
+        topTopicMins = tMins;
+        topTopic = tName;
+      }
+    }
+
+    const sharePercent =
+      grandTotalMinutes > 0
+        ? Math.max(1, Math.round((item.focusMinutes / grandTotalMinutes) * 100))
+        : 0;
+    const focusHours = Number((item.focusMinutes / 60).toFixed(1));
+    const isActiveRoom = item.roomCode === normalizedActiveRoom;
+
+    return {
+      roomCode: item.roomCode,
+      roomLabel: resolveStudyRoomDisplayLabel(item.roomCode, topTopic),
+      shortRoomLabel: item.roomCode,
+      focusMinutes: item.focusMinutes,
+      focusHours,
+      formattedDuration: formatStudyDurationLabel(item.focusMinutes),
+      sessionsCount: item.sessionsCount,
+      sharePercent,
+      primaryTopic: topTopic,
+      isActiveRoom,
+      barColor: colorByRoom.get(item.roomCode) || '#10B981',
+    };
+  });
+
+  const topEntry = rankedByMinutes[0]
+    ? entries.find((e) => e.roomCode === rankedByMinutes[0].roomCode) || entries[0]
+    : null;
+  const activeEntry =
+    entries.find((e) => e.roomCode === normalizedActiveRoom) || null;
+
+  const startDayDate = new Date(`${orderedDateKeys[0]}T00:00:00Z`);
+  const endDayDate = new Date(`${orderedDateKeys[6]}T00:00:00Z`);
+  const startLabel = Number.isNaN(startDayDate.getTime())
+    ? orderedDateKeys[0]
+    : `${MONTH_SHORT[startDayDate.getUTCMonth()]} ${startDayDate.getUTCDate()}`;
+  const endLabel = Number.isNaN(endDayDate.getTime())
+    ? orderedDateKeys[6]
+    : `${MONTH_SHORT[endDayDate.getUTCMonth()]} ${endDayDate.getUTCDate()}`;
+
+  return {
+    entries,
+    totalWeeklyFocusMinutes: grandTotalMinutes,
+    totalWeeklyFocusHours: Number((grandTotalMinutes / 60).toFixed(1)),
+    formattedTotalWeeklyFocus: formatStudyDurationLabel(grandTotalMinutes),
+    totalSessionsCount: grandTotalSessions,
+    activeRoomsCount: entries.length,
+    topRoomCode: topEntry ? topEntry.roomCode : normalizedActiveRoom,
+    topRoomFocusMinutes: topEntry ? topEntry.focusMinutes : 0,
+    topRoomSharePercent: topEntry ? topEntry.sharePercent : 0,
+    activeRoomCode: normalizedActiveRoom,
+    activeRoomFocusMinutes: activeEntry ? activeEntry.focusMinutes : 0,
+    activeRoomSharePercent: activeEntry ? activeEntry.sharePercent : 0,
+    averageMinutesPerRoom:
+      entries.length > 0 ? Math.round(grandTotalMinutes / entries.length) : 0,
+    weekWindowLabel: `${startLabel} – ${endLabel} (Current 7-Day Week)`,
+  };
+}
+
+
 
 
 

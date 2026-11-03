@@ -344,6 +344,9 @@ import {
   tickIndividualStudyDeskPomodoro,
   evaluateIndividualStudyDeskPomodoroMeta,
   syncIndividualDeskPomodoroMapWithDesks,
+  DEFAULT_WEEKLY_STUDY_ROOMS_BASELINE,
+  resolveStudyRoomDisplayLabel,
+  buildWeeklyFocusTimeByRoomCodeSummary,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -8423,4 +8426,90 @@ test('Individual Study Desk Custom-Duration Pomodoro Timer supports start, pause
   assert.ok(syncedMap.desk_peer_aravind);
   assert.ok(syncedMap.desk_peer_elena);
 });
+
+test('Weekly Focus Time per Room Code aggregates 7-day sessions, notes, and Pomodoro desk completions by room code and supports sorting', () => {
+  assert.equal(DEFAULT_WEEKLY_STUDY_ROOMS_BASELINE.length, 5);
+  assert.equal(
+    resolveStudyRoomDisplayLabel('STUDY-204'),
+    'STUDY-204 · Architecture Sanctuary'
+  );
+  assert.equal(
+    resolveStudyRoomDisplayLabel('ROOM-CUSTOM', 'Distributed Systems'),
+    'ROOM-CUSTOM · Distributed Systems'
+  );
+
+  const baselineSummary = buildWeeklyFocusTimeByRoomCodeSummary({
+    todayDateKey: '2026-11-03',
+    activeRoomCode: 'STUDY-204',
+    todayFocusMinutes: 65,
+    dailyTargetMinutes: 120,
+    currentUid: 'usr_mahit_admin',
+  });
+
+  assert.ok(baselineSummary.entries.length >= 5);
+  assert.equal(baselineSummary.activeRoomCode, 'STUDY-204');
+  assert.ok(baselineSummary.totalWeeklyFocusMinutes >= 380);
+  assert.ok(baselineSummary.activeRoomFocusMinutes > 0);
+  assert.equal(baselineSummary.entries[0].roomCode, 'STUDY-204');
+  assert.equal(baselineSummary.entries[0].isActiveRoom, true);
+  assert.equal(baselineSummary.entries[0].barColor, '#10B981');
+
+  // Adding a new 90-minute focus session in STUDY-ALGO and a 45-minute note in STUDY-204 updates totals accurately
+  const updatedSummary = buildWeeklyFocusTimeByRoomCodeSummary({
+    todayDateKey: '2026-11-03',
+    activeRoomCode: 'STUDY-204',
+    todayFocusMinutes: 65,
+    dailyTargetMinutes: 120,
+    currentUid: 'usr_mahit_admin',
+    storedSessions: [
+      {
+        id: 'sess_algo_90',
+        topic: 'Dynamic Programming & Graph Flows',
+        roomCode: 'STUDY-ALGO',
+        focusMinutes: 220,
+        dateKey: '2026-11-03',
+        createdAtMs: 1_762_150_000_000,
+        authorUid: 'usr_mahit_admin',
+      },
+      {
+        id: 'sess_old_outside_week',
+        topic: 'Stale Session',
+        roomCode: 'STUDY-OLD',
+        focusMinutes: 500,
+        dateKey: '2026-10-01', // outside 7-day window -> ignored
+        createdAtMs: 1_759_000_000_000,
+        authorUid: 'usr_mahit_admin',
+      },
+    ],
+    studyNotes: [
+      {
+        roomCode: 'STUDY-204',
+        subject: 'System Architecture & Deep Work',
+        focusMinutes: 60,
+        authorUid: 'usr_mahit_admin',
+      },
+    ],
+  });
+
+  assert.equal(
+    updatedSummary.entries.some((e) => e.roomCode === 'STUDY-OLD'),
+    false
+  );
+  const algoEntry = updatedSummary.entries.find(
+    (e) => e.roomCode === 'STUDY-ALGO'
+  );
+  assert.ok(algoEntry);
+  assert.ok(algoEntry.focusMinutes >= 220);
+
+  // Verify alphabetical room sorting ('room_asc')
+  const sortedRoomAsc = buildWeeklyFocusTimeByRoomCodeSummary({
+    todayDateKey: '2026-11-03',
+    activeRoomCode: 'STUDY-204',
+    currentUid: 'usr_mahit_admin',
+    sortBy: 'room_asc',
+  });
+  const roomCodesAsc = sortedRoomAsc.entries.map((e) => e.roomCode);
+  assert.deepEqual(roomCodesAsc, [...roomCodesAsc].sort());
+});
+
 

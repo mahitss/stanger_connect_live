@@ -60,6 +60,8 @@ import {
   setIndividualStudyDeskCustomDuration,
   tickIndividualStudyDeskPomodoro,
   syncIndividualDeskPomodoroMapWithDesks,
+  WeeklyRoomFocusSortOrder,
+  buildWeeklyFocusTimeByRoomCodeSummary,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
@@ -68,6 +70,7 @@ import {
   StudyDeskPomodoroController,
   IndividualStudyDeskPomodoroCard,
 } from './StudyDeskPomodoroController';
+import { StudyRoomWeeklyRoomFocusRechartsCard } from './StudyRoomWeeklyRoomFocusRechartsCard';
 import {
   Volume2,
   VolumeX,
@@ -1231,10 +1234,73 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     ? 0
     : ambientMixState.masterVolumePercent;
 
-  const mergedSessions =
-    topicFocusSessions && topicFocusSessions.length > 0
-      ? topicFocusSessions
-      : localStudySessions;
+  const [weeklyRoomSortBy, setWeeklyRoomSortBy] =
+    useState<WeeklyRoomFocusSortOrder>('minutes_desc');
+
+  const mergedSessions = React.useMemo(() => {
+    const byId = new Map<string, TopicFocusSessionRecord>();
+    for (const s of topicFocusSessions || []) {
+      if (s && s.id) byId.set(s.id, s);
+    }
+    for (const s of localStudySessions) {
+      if (s && s.id) byId.set(s.id, s);
+    }
+    return Array.from(byId.values());
+  }, [topicFocusSessions, localStudySessions]);
+
+  const handleLogWeeklyRoomFocusMinutes = (
+    roomCode: string,
+    topic: string,
+    minutes: number
+  ) => {
+    const cleanRoom = normalizeStudyRoomCode(roomCode || activeRoomCode);
+    const cleanTopic =
+      sanitizeSafeText(topic || 'System Architecture & Deep Work', 80) ||
+      'System Architecture & Deep Work';
+    const clampedMins = Math.min(240, Math.max(1, Math.round(Number(minutes) || 25)));
+    const todayKey = formatDateKey(new Date());
+
+    const newSession: TopicFocusSessionRecord = {
+      id: `room_focus_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      topic: cleanTopic,
+      roomCode: cleanRoom,
+      focusMinutes: clampedMins,
+      dateKey: todayKey,
+      createdAtMs: Date.now(),
+      authorUid: currentUid,
+    };
+
+    setLocalStudySessions((prev) => {
+      const next = [...prev, newSession];
+      try {
+        localStorage.setItem('mr_stranger_topic_sessions_v1', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+    setLocalAddedTodayMinutes((prev) => prev + clampedMins);
+
+    if (onLogTopicFocusSession) {
+      onLogTopicFocusSession(cleanTopic, cleanRoom, clampedMins);
+    } else {
+      onFocusMinutesLogged?.(clampedMins);
+    }
+  };
+
+  const weeklyFocusByRoomSummary = buildWeeklyFocusTimeByRoomCodeSummary({
+    todayDateKey: formatDateKey(new Date()),
+    activeRoomCode,
+    todayFocusMinutes:
+      todayFocusMinutes + (onLogTopicFocusSession ? 0 : localAddedTodayMinutes),
+    dailyTargetMinutes,
+    weeklyActivity: weeklyActivitySummary,
+    storedSessions: mergedSessions,
+    studyNotes,
+    deskTimersMap: individualDeskTimersMap,
+    currentUid,
+    sortBy: weeklyRoomSortBy,
+  });
 
   const studyFocus7DayTrend = buildStudyFocus7DaySessionTrend({
     todayDateKey: formatDateKey(new Date()),
@@ -2022,6 +2088,20 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         onPauseAllDesks={handlePauseAllIndividualDesks}
         onResetAllDesks={handleResetAllIndividualDesks}
         onCreateCustomDeskTimer={handleCreateCustomDeskTimer}
+      />
+
+      {/* ====================================================================
+          RECHARTS BAR CHART: WEEKLY TOTAL FOCUS TIME PER ROOM CODE
+          ==================================================================== */}
+      <StudyRoomWeeklyRoomFocusRechartsCard
+        summary={weeklyFocusByRoomSummary}
+        activeRoomCode={activeRoomCode}
+        sortBy={weeklyRoomSortBy}
+        onChangeSortBy={setWeeklyRoomSortBy}
+        onSelectRoomCode={(code, roomLabel) => {
+          onChangeRoomCode(code, roomLabel);
+        }}
+        onLogRoomFocusMinutes={handleLogWeeklyRoomFocusMinutes}
       />
 
       {/* ====================================================================
