@@ -20954,10 +20954,469 @@ export function evaluateActiveStudyDeskPulseAnimationSpec(params: {
   };
 }
 
+// ============================================================================
+// 30-DAY FOCUS HISTORY LINE CHART ANALYTICS (RECHARTS DAILY FOCUS MINUTES)
+// ============================================================================
 
+export const FOCUS_HISTORY_DAYS_WINDOW = 30;
 
+export interface FocusHistory30DayPoint {
+  dayIndex: number;
+  dateKey: string;
+  shortDateLabel: string;
+  compactTickLabel: string;
+  weekdayShort: string;
+  focusMinutes: number;
+  focusHours: number;
+  formattedDuration: string;
+  rolling7DayAvgMinutes: number;
+  dailyTargetMinutes: number;
+  goalMet: boolean;
+  goalCompletionPercent: number;
+  sessionsCount: number;
+  topRoomCode: string;
+  topTopic: string;
+  isToday: boolean;
+}
 
+export interface FocusHistory30DaySummary {
+  points: FocusHistory30DayPoint[];
+  windowLabel: string;
+  total30DayFocusMinutes: number;
+  total30DayFocusHours: number;
+  formattedTotal30DayFocus: string;
+  averageDailyFocusMinutes: number;
+  formattedAverageDailyFocus: string;
+  activeDaysCount: number;
+  goalMetDaysCount: number;
+  goalMetRatePercent: number;
+  currentStreakDays: number;
+  peakDay: {
+    dateKey: string;
+    shortDateLabel: string;
+    focusMinutes: number;
+    formattedDuration: string;
+    topRoomCode: string;
+    topTopic: string;
+  };
+  todayPoint: FocusHistory30DayPoint;
+  last7DaysTotalMinutes: number;
+  previous7DaysTotalMinutes: number;
+  weekOverWeekDeltaPercent: number;
+  availableRoomCodes: string[];
+  selectedRoomFilter: string;
+}
 
+const FOCUS_HISTORY_WEEKDAY_SHORT = [
+  'Sun',
+  'Mon',
+  'Tue',
+  'Wed',
+  'Thu',
+  'Fri',
+  'Sat',
+];
 
+const FOCUS_HISTORY_MONTH_SHORT = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+];
 
+const FOCUS_HISTORY_SEED_BLUEPRINTS: ReadonlyArray<{
+  minutes: number;
+  sessions: number;
+  roomSuffix: 'ACTIVE' | 'ROOM-ALGO' | 'ROOM-SYS' | 'ROOM-MATH' | 'ROOM-BIO';
+  topic: string;
+}> = [
+  { minutes: 85, sessions: 2, roomSuffix: 'ACTIVE', topic: 'Distributed Consensus & Raft Logs' },
+  { minutes: 110, sessions: 3, roomSuffix: 'ROOM-ALGO', topic: 'Dynamic Programming & Graph Cuts' },
+  { minutes: 95, sessions: 2, roomSuffix: 'ROOM-SYS', topic: 'Operating Systems Kernel Page Tables' },
+  { minutes: 130, sessions: 3, roomSuffix: 'ACTIVE', topic: 'Deep Work: Designing Data-Intensive Apps' },
+  { minutes: 75, sessions: 2, roomSuffix: 'ROOM-MATH', topic: 'Linear Algebra Spectral Decomposition' },
+  { minutes: 140, sessions: 4, roomSuffix: 'ACTIVE', topic: 'Zero-Trust Systems & Network Security' },
+  { minutes: 60, sessions: 1, roomSuffix: 'ROOM-BIO', topic: 'Computational Neuroscience & Synaptic Plasticity' },
+  { minutes: 125, sessions: 3, roomSuffix: 'ACTIVE', topic: 'Compiler Construction & SSA Optimization' },
+  { minutes: 105, sessions: 2, roomSuffix: 'ROOM-ALGO', topic: 'Shortest Path Heuristics & A* Search' },
+  { minutes: 90, sessions: 2, roomSuffix: 'ROOM-SYS', topic: 'Database B-Tree & LSM Storage Engines' },
+  { minutes: 150, sessions: 4, roomSuffix: 'ACTIVE', topic: 'High-Concurrency Lock-Free Ring Buffers' },
+  { minutes: 80, sessions: 2, roomSuffix: 'ROOM-MATH', topic: 'Stochastic Processes & Markov Chains' },
+  { minutes: 115, sessions: 3, roomSuffix: 'ACTIVE', topic: 'Vector Clocks & Eventual Consistency' },
+  { minutes: 70, sessions: 2, roomSuffix: 'ROOM-BIO', topic: 'Bioinformatics Sequence Alignment' },
+  { minutes: 135, sessions: 3, roomSuffix: 'ACTIVE', topic: 'System Architecture Case Studies' },
+  { minutes: 100, sessions: 2, roomSuffix: 'ROOM-ALGO', topic: 'Network Flow & Bipartite Matching' },
+  { minutes: 120, sessions: 3, roomSuffix: 'ROOM-SYS', topic: 'Virtual Memory & TLB Shootdown Analysis' },
+  { minutes: 160, sessions: 4, roomSuffix: 'ACTIVE', topic: 'Distributed Transactions & Two-Phase Commit' },
+  { minutes: 95, sessions: 2, roomSuffix: 'ROOM-MATH', topic: 'Convex Optimization & Gradient Descent' },
+  { minutes: 125, sessions: 3, roomSuffix: 'ACTIVE', topic: 'Clean Architecture & Domain Driven Design' },
+  { minutes: 85, sessions: 2, roomSuffix: 'ROOM-BIO', topic: 'Molecular Dynamics & Folding Simulations' },
+  { minutes: 145, sessions: 3, roomSuffix: 'ACTIVE', topic: 'Byzantine Fault Tolerance & Paxos Proofs' },
+  { minutes: 110, sessions: 3, roomSuffix: 'ROOM-ALGO', topic: 'Trie Compression & Suffix Automaton' },
+  { minutes: 130, sessions: 3, roomSuffix: 'ROOM-SYS', topic: 'Container Isolation & Linux cgroups' },
+  { minutes: 155, sessions: 4, roomSuffix: 'ACTIVE', topic: 'Full-Stack Observability & Tracing' },
+  { minutes: 105, sessions: 2, roomSuffix: 'ROOM-MATH', topic: 'Bayesian Inference & Monte Carlo Sampling' },
+  { minutes: 140, sessions: 3, roomSuffix: 'ACTIVE', topic: 'Storage Engine Write-Ahead Logging' },
+  { minutes: 120, sessions: 3, roomSuffix: 'ROOM-ALGO', topic: 'Amortized Analysis & Fibonacci Heaps' },
+  { minutes: 165, sessions: 4, roomSuffix: 'ACTIVE', topic: 'Real-Time Collaborative State Synchronization' },
+  { minutes: 135, sessions: 3, roomSuffix: 'ACTIVE', topic: 'Deep Focus Architecture & Synthesis' },
+];
 
+export function buildFocusHistory30DaySummary(params: {
+  todayDateKey: string;
+  todayFocusMinutes?: number;
+  dailyTargetMinutes?: number;
+  activeRoomCode?: string;
+  roomFilter?: string;
+  weeklyActivity?: WeeklyActivitySummary;
+  storedSessions?: TopicFocusSessionRecord[];
+  studyNotes?: Array<{
+    roomCode?: string;
+    subject?: string;
+    focusMinutes?: number;
+  }>;
+  deskTimersMap?: Record<string, IndividualStudyDeskPomodoroState>;
+  currentUid?: string;
+}): FocusHistory30DaySummary {
+  const normalizedActiveRoom =
+    normalizeStudyRoomCode(params.activeRoomCode || 'STUDY-204') || 'STUDY-204';
+  const normalizedFilter =
+    !params.roomFilter || params.roomFilter.trim().toUpperCase() === 'ALL'
+      ? 'ALL'
+      : normalizeStudyRoomCode(params.roomFilter) || 'ALL';
+  const clampedTarget = clampProductivityTarget(params.dailyTargetMinutes ?? 120);
+
+  const anchorDate = new Date(`${params.todayDateKey}T00:00:00Z`);
+  const safeAnchorMs = Number.isNaN(anchorDate.getTime())
+    ? Date.now()
+    : anchorDate.getTime();
+
+  const orderedDateKeys: string[] = [];
+  for (let offset = FOCUS_HISTORY_DAYS_WINDOW - 1; offset >= 0; offset -= 1) {
+    const d = new Date(safeAnchorMs - offset * 86400000);
+    orderedDateKeys.push(formatDateKey(d));
+  }
+
+  // Track per-day per-room focus minutes, session counts, and topics
+  interface DayRoomBucket {
+    minutesByRoom: Map<string, number>;
+    sessionsByRoom: Map<string, number>;
+    topicByRoom: Map<string, string>;
+  }
+
+  const bucketsByDate = new Map<string, DayRoomBucket>();
+  const allRoomsSet = new Set<string>([
+    normalizedActiveRoom,
+    'ROOM-ALGO',
+    'ROOM-SYS',
+    'ROOM-MATH',
+    'ROOM-BIO',
+  ]);
+
+  orderedDateKeys.forEach((dateKey, idx) => {
+    const blueprint =
+      FOCUS_HISTORY_SEED_BLUEPRINTS[idx % FOCUS_HISTORY_SEED_BLUEPRINTS.length];
+    const seedRoom =
+      blueprint.roomSuffix === 'ACTIVE'
+        ? normalizedActiveRoom
+        : blueprint.roomSuffix;
+    allRoomsSet.add(seedRoom);
+
+    const minutesByRoom = new Map<string, number>();
+    const sessionsByRoom = new Map<string, number>();
+    const topicByRoom = new Map<string, string>();
+
+    minutesByRoom.set(seedRoom, blueprint.minutes);
+    sessionsByRoom.set(seedRoom, blueprint.sessions);
+    topicByRoom.set(seedRoom, blueprint.topic);
+
+    // Also add a secondary room on every 3rd day so room filters have multi-day depth
+    const secondaryRoom =
+      seedRoom === normalizedActiveRoom ? 'ROOM-ALGO' : normalizedActiveRoom;
+    const secondaryMins = 25 + ((idx * 7) % 30);
+    minutesByRoom.set(
+      secondaryRoom,
+      (minutesByRoom.get(secondaryRoom) || 0) + secondaryMins
+    );
+    sessionsByRoom.set(
+      secondaryRoom,
+      (sessionsByRoom.get(secondaryRoom) || 0) + 1
+    );
+    if (!topicByRoom.has(secondaryRoom)) {
+      topicByRoom.set(secondaryRoom, 'Structured Pomodoro Sprint');
+    }
+
+    bucketsByDate.set(dateKey, {
+      minutesByRoom,
+      sessionsByRoom,
+      topicByRoom,
+    });
+  });
+
+  // Layer in weeklyActivity if provided
+  if (params.weeklyActivity?.days?.length) {
+    for (const dayItem of params.weeklyActivity.days) {
+      const bucket = bucketsByDate.get(dayItem.dateKey);
+      if (bucket && dayItem.focusMinutes > 0) {
+        const currentActiveRoomMins =
+          bucket.minutesByRoom.get(normalizedActiveRoom) || 0;
+        if (dayItem.focusMinutes > currentActiveRoomMins) {
+          bucket.minutesByRoom.set(normalizedActiveRoom, dayItem.focusMinutes);
+        }
+      }
+    }
+  }
+
+  // Layer in storedSessions across the 30-day window
+  for (const session of params.storedSessions || []) {
+    if (!session || session.focusMinutes <= 0) continue;
+    const dateKey =
+      session.dateKey && bucketsByDate.has(session.dateKey)
+        ? session.dateKey
+        : params.todayDateKey;
+    const bucket = bucketsByDate.get(dateKey);
+    if (!bucket) continue;
+
+    const rCode =
+      normalizeStudyRoomCode(session.roomCode || normalizedActiveRoom) ||
+      normalizedActiveRoom;
+    allRoomsSet.add(rCode);
+    const mins = Math.round(session.focusMinutes);
+    bucket.minutesByRoom.set(
+      rCode,
+      (bucket.minutesByRoom.get(rCode) || 0) + mins
+    );
+    bucket.sessionsByRoom.set(
+      rCode,
+      (bucket.sessionsByRoom.get(rCode) || 0) + 1
+    );
+    if (session.topic && session.topic.trim()) {
+      bucket.topicByRoom.set(rCode, session.topic.trim());
+    }
+  }
+
+  // Layer in today's completed desk Pomodoro minutes
+  const todayBucket = bucketsByDate.get(params.todayDateKey);
+  if (todayBucket && params.deskTimersMap) {
+    for (const deskTimer of Object.values(params.deskTimersMap)) {
+      if (!deskTimer) continue;
+      const isUserDesk =
+        !params.currentUid ||
+        deskTimer.deskUid === params.currentUid ||
+        deskTimer.deskUid.startsWith('desk_custom_');
+      const completedMins =
+        deskTimer.completedCyclesCount * deskTimer.durationMinutes +
+        Math.floor(deskTimer.elapsedSeconds / 60);
+      if (isUserDesk && completedMins > 0) {
+        const rCode =
+          normalizeStudyRoomCode(deskTimer.roomCode || normalizedActiveRoom) ||
+          normalizedActiveRoom;
+        allRoomsSet.add(rCode);
+        todayBucket.minutesByRoom.set(
+          rCode,
+          (todayBucket.minutesByRoom.get(rCode) || 0) + completedMins
+        );
+        todayBucket.sessionsByRoom.set(
+          rCode,
+          (todayBucket.sessionsByRoom.get(rCode) || 0) +
+            Math.max(1, deskTimer.completedCyclesCount)
+        );
+        if (deskTimer.subject) {
+          todayBucket.topicByRoom.set(rCode, deskTimer.subject);
+        }
+      }
+    }
+  }
+
+  // Ensure today's active room reflects at least todayFocusMinutes when viewing ALL or activeRoomCode
+  if (todayBucket && typeof params.todayFocusMinutes === 'number' && params.todayFocusMinutes > 0) {
+    const existingActiveMins =
+      todayBucket.minutesByRoom.get(normalizedActiveRoom) || 0;
+    if (params.todayFocusMinutes > existingActiveMins) {
+      todayBucket.minutesByRoom.set(
+        normalizedActiveRoom,
+        Math.round(params.todayFocusMinutes)
+      );
+    }
+  }
+
+  // Build the 30 daily points
+  const rawDailyMinutes: number[] = [];
+  const preliminaryPoints: Array<Omit<FocusHistory30DayPoint, 'rolling7DayAvgMinutes'>> =
+    orderedDateKeys.map((dateKey, idx) => {
+      const bucket = bucketsByDate.get(dateKey)!;
+      const dObj = new Date(`${dateKey}T00:00:00Z`);
+      const monthLabel = Number.isNaN(dObj.getTime())
+        ? dateKey.slice(5, 7)
+        : FOCUS_HISTORY_MONTH_SHORT[dObj.getUTCMonth()];
+      const dayNum = Number.isNaN(dObj.getTime())
+        ? Number(dateKey.slice(8, 10))
+        : dObj.getUTCDate();
+      const monthNum = Number.isNaN(dObj.getTime())
+        ? dateKey.slice(5, 7)
+        : String(dObj.getUTCMonth() + 1).padStart(2, '0');
+      const weekdayShort = Number.isNaN(dObj.getTime())
+        ? 'Day'
+        : FOCUS_HISTORY_WEEKDAY_SHORT[dObj.getUTCDay()];
+
+      let focusMinutes = 0;
+      let sessionsCount = 0;
+      let topRoomCode =
+        normalizedFilter === 'ALL' ? normalizedActiveRoom : normalizedFilter;
+      let topRoomMins = -1;
+      let topTopic = 'Deep Focus Architecture & Synthesis';
+
+      if (normalizedFilter === 'ALL') {
+        for (const [rCode, mins] of bucket.minutesByRoom.entries()) {
+          focusMinutes += mins;
+          sessionsCount += bucket.sessionsByRoom.get(rCode) || 1;
+          if (mins > topRoomMins) {
+            topRoomMins = mins;
+            topRoomCode = rCode;
+            topTopic =
+              bucket.topicByRoom.get(rCode) ||
+              'Deep Focus Architecture & Synthesis';
+          }
+        }
+      } else {
+        focusMinutes = bucket.minutesByRoom.get(normalizedFilter) || 0;
+        sessionsCount =
+          focusMinutes > 0
+            ? bucket.sessionsByRoom.get(normalizedFilter) || 1
+            : 0;
+        topRoomCode = normalizedFilter;
+        topTopic =
+          bucket.topicByRoom.get(normalizedFilter) ||
+          `Focused Study in ${normalizedFilter}`;
+      }
+
+      rawDailyMinutes.push(focusMinutes);
+      const focusHours = Number((focusMinutes / 60).toFixed(1));
+      const goalMet = focusMinutes >= clampedTarget;
+      const goalCompletionPercent = Math.min(
+        200,
+        Math.round((focusMinutes / Math.max(1, clampedTarget)) * 100)
+      );
+
+      return {
+        dayIndex: idx + 1,
+        dateKey,
+        shortDateLabel: `${monthLabel} ${dayNum}`,
+        compactTickLabel: `${monthNum}/${String(dayNum).padStart(2, '0')}`,
+        weekdayShort,
+        focusMinutes,
+        focusHours,
+        formattedDuration: formatStudyDurationLabel(focusMinutes),
+        dailyTargetMinutes: clampedTarget,
+        goalMet,
+        goalCompletionPercent,
+        sessionsCount,
+        topRoomCode,
+        topTopic,
+        isToday: dateKey === params.todayDateKey,
+      };
+    });
+
+  const points: FocusHistory30DayPoint[] = preliminaryPoints.map((pt, idx) => {
+    const windowStart = Math.max(0, idx - 6);
+    let sum = 0;
+    let count = 0;
+    for (let k = windowStart; k <= idx; k += 1) {
+      sum += rawDailyMinutes[k];
+      count += 1;
+    }
+    const rolling7DayAvgMinutes = count > 0 ? Math.round(sum / count) : pt.focusMinutes;
+    return {
+      ...pt,
+      rolling7DayAvgMinutes,
+    };
+  });
+
+  const total30DayFocusMinutes = points.reduce(
+    (acc, pt) => acc + pt.focusMinutes,
+    0
+  );
+  const total30DayFocusHours = Number((total30DayFocusMinutes / 60).toFixed(1));
+  const averageDailyFocusMinutes = Math.round(
+    total30DayFocusMinutes / FOCUS_HISTORY_DAYS_WINDOW
+  );
+  const activeDaysCount = points.filter((pt) => pt.focusMinutes > 0).length;
+  const goalMetDaysCount = points.filter((pt) => pt.goalMet).length;
+  const goalMetRatePercent = Math.round(
+    (goalMetDaysCount / FOCUS_HISTORY_DAYS_WINDOW) * 100
+  );
+
+  // Calculate consecutive active streak from today backwards
+  let currentStreakDays = 0;
+  for (let i = points.length - 1; i >= 0; i -= 1) {
+    if (points[i].focusMinutes > 0) {
+      currentStreakDays += 1;
+    } else {
+      break;
+    }
+  }
+
+  let peakPoint = points[0];
+  for (const pt of points) {
+    if (pt.focusMinutes >= peakPoint.focusMinutes) {
+      peakPoint = pt;
+    }
+  }
+
+  const todayPoint = points[points.length - 1];
+  const last7DaysTotalMinutes = points
+    .slice(-7)
+    .reduce((acc, pt) => acc + pt.focusMinutes, 0);
+  const previous7DaysTotalMinutes = points
+    .slice(-14, -7)
+    .reduce((acc, pt) => acc + pt.focusMinutes, 0);
+  const weekOverWeekDeltaPercent =
+    previous7DaysTotalMinutes > 0
+      ? Math.round(
+          ((last7DaysTotalMinutes - previous7DaysTotalMinutes) /
+            previous7DaysTotalMinutes) *
+            100
+        )
+      : 0;
+
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+
+  return {
+    points,
+    windowLabel: `${firstPoint.shortDateLabel} – ${lastPoint.shortDateLabel} (Past 30 Days)`,
+    total30DayFocusMinutes,
+    total30DayFocusHours,
+    formattedTotal30DayFocus: formatStudyDurationLabel(total30DayFocusMinutes),
+    averageDailyFocusMinutes,
+    formattedAverageDailyFocus: formatStudyDurationLabel(
+      averageDailyFocusMinutes
+    ),
+    activeDaysCount,
+    goalMetDaysCount,
+    goalMetRatePercent,
+    currentStreakDays,
+    peakDay: {
+      dateKey: peakPoint.dateKey,
+      shortDateLabel: peakPoint.shortDateLabel,
+      focusMinutes: peakPoint.focusMinutes,
+      formattedDuration: peakPoint.formattedDuration,
+      topRoomCode: peakPoint.topRoomCode,
+      topTopic: peakPoint.topTopic,
+    },
+    todayPoint,
+    last7DaysTotalMinutes,
+    previous7DaysTotalMinutes,
+    weekOverWeekDeltaPercent,
+    availableRoomCodes: Array.from(allRoomsSet),
+    selectedRoomFilter: normalizedFilter,
+  };
+}

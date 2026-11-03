@@ -65,6 +65,7 @@ import {
   StudyDeskPomodoroUrgencyStagePreset,
   WeeklyRoomFocusSortOrder,
   buildWeeklyFocusTimeByRoomCodeSummary,
+  buildFocusHistory30DaySummary,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
@@ -74,6 +75,7 @@ import {
   IndividualStudyDeskPomodoroCard,
 } from './StudyDeskPomodoroController';
 import { StudyRoomWeeklyRoomFocusRechartsCard } from './StudyRoomWeeklyRoomFocusRechartsCard';
+import { StudyRoomFocusHistory30DayRechartsCard } from './StudyRoomFocusHistory30DayRechartsCard';
 import {
   Volume2,
   VolumeX,
@@ -1253,6 +1255,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
 
   const [weeklyRoomSortBy, setWeeklyRoomSortBy] =
     useState<WeeklyRoomFocusSortOrder>('minutes_desc');
+  const [focusHistoryRoomFilter, setFocusHistoryRoomFilter] =
+    useState<string>('ALL');
 
   const mergedSessions = React.useMemo(() => {
     const byId = new Map<string, TopicFocusSessionRecord>();
@@ -1305,6 +1309,53 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     }
   };
 
+  const handleLogFocusHistoryDailyMinutes = (params: {
+    dateKey: string;
+    roomCode: string;
+    topic: string;
+    minutes: number;
+  }) => {
+    const cleanRoom = normalizeStudyRoomCode(params.roomCode || activeRoomCode);
+    const cleanTopic =
+      sanitizeSafeText(params.topic || 'Deep Focus Architecture & Synthesis', 80) ||
+      'Deep Focus Architecture & Synthesis';
+    const clampedMins = Math.min(
+      360,
+      Math.max(1, Math.round(Number(params.minutes) || 30))
+    );
+    const todayKey = formatDateKey(new Date());
+    const targetDateKey = params.dateKey || todayKey;
+
+    const newSession: TopicFocusSessionRecord = {
+      id: `focus_hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      topic: cleanTopic,
+      roomCode: cleanRoom,
+      focusMinutes: clampedMins,
+      dateKey: targetDateKey,
+      createdAtMs: Date.now(),
+      authorUid: currentUid,
+    };
+
+    setLocalStudySessions((prev) => {
+      const next = [...prev, newSession];
+      try {
+        localStorage.setItem('mr_stranger_topic_sessions_v1', JSON.stringify(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    if (targetDateKey === todayKey) {
+      setLocalAddedTodayMinutes((prev) => prev + clampedMins);
+      if (onLogTopicFocusSession) {
+        onLogTopicFocusSession(cleanTopic, cleanRoom, clampedMins);
+      } else {
+        onFocusMinutesLogged?.(clampedMins);
+      }
+    }
+  };
+
   const weeklyFocusByRoomSummary = buildWeeklyFocusTimeByRoomCodeSummary({
     todayDateKey: formatDateKey(new Date()),
     activeRoomCode,
@@ -1317,6 +1368,20 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     deskTimersMap: individualDeskTimersMap,
     currentUid,
     sortBy: weeklyRoomSortBy,
+  });
+
+  const focusHistory30DaySummary = buildFocusHistory30DaySummary({
+    todayDateKey: formatDateKey(new Date()),
+    todayFocusMinutes:
+      todayFocusMinutes + (onLogTopicFocusSession ? 0 : localAddedTodayMinutes),
+    dailyTargetMinutes,
+    activeRoomCode,
+    roomFilter: focusHistoryRoomFilter,
+    weeklyActivity: weeklyActivitySummary,
+    storedSessions: mergedSessions,
+    studyNotes,
+    deskTimersMap: individualDeskTimersMap,
+    currentUid,
   });
 
   const studyFocus7DayTrend = buildStudyFocus7DaySessionTrend({
@@ -2165,6 +2230,18 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           onChangeRoomCode(code, roomLabel);
         }}
         onLogRoomFocusMinutes={handleLogWeeklyRoomFocusMinutes}
+      />
+
+      {/* ====================================================================
+          RECHARTS LINE CHART: FOCUS HISTORY (PAST 30 DAYS DAILY FOCUS MINUTES)
+          ==================================================================== */}
+      <StudyRoomFocusHistory30DayRechartsCard
+        summary={focusHistory30DaySummary}
+        activeRoomCode={activeRoomCode}
+        dailyTargetMinutes={dailyTargetMinutes}
+        selectedRoomFilter={focusHistoryRoomFilter}
+        onChangeRoomFilter={setFocusHistoryRoomFilter}
+        onLogDailyFocusMinutes={handleLogFocusHistoryDailyMinutes}
       />
 
       {/* ====================================================================

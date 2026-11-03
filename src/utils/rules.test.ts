@@ -352,6 +352,8 @@ import {
   ACTIVE_STUDY_DESK_CRITICAL_PULSE_DURATION_MS,
   applyIndividualStudyDeskUrgencyStage,
   evaluateActiveStudyDeskPulseAnimationSpec,
+  FOCUS_HISTORY_DAYS_WINDOW,
+  buildFocusHistory30DaySummary,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -8667,6 +8669,84 @@ test('Active study desk pulsing animation dynamically changes color intensity, u
   assert.equal(criticalSpec.peerStatusBadgeText, 'Final Sprint');
 });
 
+test('buildFocusHistory30DaySummary aggregates daily focus minutes logged over the past 30 days, computes 7-day rolling averages, streak, goal completion rate, and room filtering', () => {
+  assert.equal(FOCUS_HISTORY_DAYS_WINDOW, 30);
 
+  const summary = buildFocusHistory30DaySummary({
+    todayDateKey: '2026-11-03',
+    todayFocusMinutes: 145,
+    dailyTargetMinutes: 120,
+    activeRoomCode: 'STUDY-204',
+    storedSessions: [
+      {
+        id: 'sess_today_1',
+        topic: 'Distributed Raft Consensus',
+        roomCode: 'STUDY-204',
+        focusMinutes: 40,
+        dateKey: '2026-11-03',
+        createdAtMs: 1_762_000_000_000,
+      },
+      {
+        id: 'sess_past_10',
+        topic: 'Graph Spectral Theory',
+        roomCode: 'ROOM-MATH',
+        focusMinutes: 65,
+        dateKey: '2026-10-25',
+        createdAtMs: 1_761_000_000_000,
+      },
+    ],
+  });
 
+  // 1. Exactly 30 daily data points ordered chronologically ending on todayDateKey
+  assert.equal(summary.points.length, 30);
+  assert.equal(summary.points[0].dateKey, '2026-10-05');
+  assert.equal(summary.points[29].dateKey, '2026-11-03');
+  assert.equal(summary.points[29].isToday, true);
+  assert.equal(summary.points[0].isToday, false);
+  assert.ok(summary.windowLabel.includes('Oct 5 – Nov 3 (Past 30 Days)'));
 
+  // 2. Every point has positive focus minutes, valid rolling7DayAvgMinutes, and formatted duration
+  for (const pt of summary.points) {
+    assert.ok(pt.focusMinutes > 0);
+    assert.ok(pt.rolling7DayAvgMinutes > 0);
+    assert.ok(pt.formattedDuration.length > 0);
+    assert.equal(pt.dailyTargetMinutes, 120);
+  }
+
+  // 3. Today's point reflects logged sessions and todayFocusMinutes
+  assert.ok(summary.todayPoint.focusMinutes >= 175);
+  assert.equal(summary.activeDaysCount, 30);
+  assert.equal(summary.currentStreakDays, 30);
+  assert.ok(summary.total30DayFocusMinutes > 3500);
+  assert.ok(summary.averageDailyFocusMinutes > 100);
+  assert.ok(summary.peakDay.focusMinutes >= summary.todayPoint.focusMinutes);
+
+  // 4. Filtering by specific room code ('ROOM-MATH') isolates that room's 30-day history
+  const mathRoomSummary = buildFocusHistory30DaySummary({
+    todayDateKey: '2026-11-03',
+    dailyTargetMinutes: 120,
+    activeRoomCode: 'STUDY-204',
+    roomFilter: 'ROOM-MATH',
+    storedSessions: [
+      {
+        id: 'sess_past_10',
+        topic: 'Graph Spectral Theory',
+        roomCode: 'ROOM-MATH',
+        focusMinutes: 65,
+        dateKey: '2026-10-25',
+        createdAtMs: 1_761_000_000_000,
+      },
+    ],
+  });
+  assert.equal(mathRoomSummary.selectedRoomFilter, 'ROOM-MATH');
+  assert.equal(mathRoomSummary.points.length, 30);
+  assert.ok(
+    mathRoomSummary.total30DayFocusMinutes < summary.total30DayFocusMinutes
+  );
+  const oct25Point = mathRoomSummary.points.find(
+    (p) => p.dateKey === '2026-10-25'
+  );
+  assert.ok(oct25Point);
+  assert.ok(oct25Point.focusMinutes >= 65);
+  assert.equal(oct25Point.topTopic, 'Graph Spectral Theory');
+});
