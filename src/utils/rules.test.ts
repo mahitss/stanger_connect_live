@@ -382,6 +382,13 @@ import {
   DAILY_GOAL_REACHED_TOAST_ELEMENT_ID,
   resolveDailyGoalReachedTransition,
   evaluateDailyFocusGoalReachedToast,
+  WORKSPACE_QR_DETECTION_FLASH_DURATION_MS,
+  WORKSPACE_QR_DETECTION_FLASH_TOAST_DELAY_MS,
+  WORKSPACE_QR_DETECTION_FLASH_OVERLAY_ID,
+  WORKSPACE_QR_DETECTION_FLASH_BADGE_ID,
+  WORKSPACE_QR_SIMULATE_DETECT_BUTTON_ID,
+  evaluateWorkspaceQrDetectionFlashSpec,
+  resolveWorkspaceQrDetectionFlashSequence,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9220,3 +9227,92 @@ test('resolveDailyGoalReachedTransition and evaluateDailyFocusGoalReachedToast t
   assert.ok(forcedToast.subtitle.includes('+15m bonus focus'));
 });
 
+test('evaluateWorkspaceQrDetectionFlashSpec, resolveWorkspaceQrDetectionFlashSequence, and getWorkspaceHeaderQrCodeMeta trigger a subtle flash animation on the QR scanner popover upon code detection before showing the join toast', () => {
+  assert.equal(WORKSPACE_QR_DETECTION_FLASH_DURATION_MS, 480);
+  assert.equal(WORKSPACE_QR_DETECTION_FLASH_TOAST_DELAY_MS, 320);
+  assert.equal(
+    WORKSPACE_QR_DETECTION_FLASH_OVERLAY_ID,
+    'workspace-header-qr-detection-flash-overlay'
+  );
+  assert.equal(
+    WORKSPACE_QR_DETECTION_FLASH_BADGE_ID,
+    'workspace-header-qr-detection-flash-badge'
+  );
+  assert.equal(
+    WORKSPACE_QR_SIMULATE_DETECT_BUTTON_ID,
+    'workspace-header-qr-simulate-detect-btn'
+  );
+
+  // 1. Default idle state
+  const idleFlash = evaluateWorkspaceQrDetectionFlashSpec({
+    isFlashActive: false,
+    flashTriggerCount: 0,
+  });
+  assert.equal(idleFlash.popoverElementId, 'workspace-header-qr-popover');
+  assert.equal(idleFlash.isFlashActive, false);
+  assert.equal(idleFlash.flashTriggerCount, 0);
+  assert.equal(idleFlash.animationName, 'none');
+  assert.equal(idleFlash.ordersFlashBeforeJoinToast, true);
+  assert.deepEqual(idleFlash.overlayOpacityKeyframes, [0, 0, 0, 0]);
+  assert.deepEqual(idleFlash.popoverScaleKeyframes, [1, 1, 1]);
+
+  // 2. Valid QR code detection triggers immediate flash animation and delays join toast by 320ms
+  const nowMs = 1_760_000_500_000;
+  const detectedSeq = resolveWorkspaceQrDetectionFlashSequence({
+    rawScannedValue: 'https://mrstranger.app/?room=STUDY-408',
+    fallbackOrigin: 'https://mrstranger.app',
+    previousFlashCount: 2,
+    nowMs,
+  });
+  assert.equal(detectedSeq.detected, true);
+  assert.equal(detectedSeq.shouldTriggerFlash, true);
+  assert.equal(detectedSeq.shouldHideJoinToastDuringFlashLeadIn, true);
+  assert.equal(detectedSeq.shouldShowJoinToastAfterFlash, true);
+  assert.equal(detectedSeq.nextFlashCount, 3);
+  assert.equal(detectedSeq.toastDelayMs, 320);
+  assert.equal(detectedSeq.flashDurationMs, 480);
+  assert.equal(detectedSeq.toastVisibleAtMs, nowMs + 320);
+  assert.equal(detectedSeq.flashEndsAtMs, nowMs + 480);
+  assert.equal(detectedSeq.parsedResult.roomCode, 'STUDY-408');
+  assert.equal(detectedSeq.flashSpec.isFlashActive, true);
+  assert.equal(
+    detectedSeq.flashSpec.animationName,
+    'qrScannerDetectionSubtleFlash'
+  );
+  assert.deepEqual(
+    detectedSeq.flashSpec.overlayOpacityKeyframes,
+    [0, 0.38, 0.16, 0]
+  );
+  assert.deepEqual(detectedSeq.flashSpec.popoverScaleKeyframes, [1, 1.012, 1]);
+  assert.equal(
+    detectedSeq.flashSpec.confirmationLabel,
+    'QR Code Detected · STUDY-408'
+  );
+
+  // 3. Invalid QR payload does not trigger flash or join toast
+  const invalidSeq = resolveWorkspaceQrDetectionFlashSequence({
+    rawScannedValue: '   ',
+    previousFlashCount: 3,
+    nowMs,
+  });
+  assert.equal(invalidSeq.detected, false);
+  assert.equal(invalidSeq.shouldTriggerFlash, false);
+  assert.equal(invalidSeq.shouldShowJoinToastAfterFlash, false);
+  assert.equal(invalidSeq.nextFlashCount, 3);
+
+  // 4. Verify getWorkspaceHeaderQrCodeMeta exposes detectionFlash metadata
+  const qrMeta = getWorkspaceHeaderQrCodeMeta({
+    isOpen: true,
+    isDetectionFlashActive: true,
+    detectionFlashCount: 4,
+    lastJoinedWorkspaceRoomCode: 'STUDY-408',
+    roomCode: 'STUDY-408',
+  });
+  assert.equal(qrMeta.detectionFlash.isFlashActive, true);
+  assert.equal(qrMeta.detectionFlash.flashTriggerCount, 4);
+  assert.equal(qrMeta.detectionFlash.detectedRoomCode, 'STUDY-408');
+  assert.equal(
+    qrMeta.detectionFlash.overlayElementId,
+    'workspace-header-qr-detection-flash-overlay'
+  );
+});

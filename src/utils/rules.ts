@@ -17992,6 +17992,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   soundVolumeSection: WorkspaceQrSoundVolumeSectionSpec;
   scanConfirmationChime: WorkspaceQrScanConfirmationChimeSpec;
   scanChimePlayedCount: number;
+  detectionFlash: WorkspaceQrDetectionFlashSpec;
   popoverElementId: 'workspace-header-qr-popover';
   popoverTestId: 'workspace-header-qr-popover';
   generationCountHiddenInputId: 'workspace-header-qr-generation-count-state';
@@ -18089,6 +18090,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     | unknown;
   uiSoundPreferences?: UiSoundEffectPreferences | null;
   scanChimePlayedCount?: number;
+  isDetectionFlashActive?: boolean;
+  detectionFlashCount?: number;
   generationCount?: number;
   downloadCount?: number;
   roomCode?: string | null;
@@ -18207,6 +18210,12 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     soundVolumeSection,
     scanConfirmationChime,
     scanChimePlayedCount,
+    detectionFlash: evaluateWorkspaceQrDetectionFlashSpec({
+      isFlashActive: Boolean(input?.isDetectionFlashActive),
+      flashTriggerCount: input?.detectionFlashCount ?? 0,
+      detectedRoomCode: lastJoinedWorkspaceRoomCode,
+      fallbackRoomCode: roomCode,
+    }),
     popoverElementId: 'workspace-header-qr-popover',
     popoverTestId: 'workspace-header-qr-popover',
     generationCountHiddenInputId: 'workspace-header-qr-generation-count-state',
@@ -23182,3 +23191,174 @@ export function evaluateDailyFocusGoalReachedToast(params: {
     dismissKey,
   };
 }
+
+// ============================================================================
+// QR SCANNER POPOVER DETECTION FLASH ANIMATION (VISUAL CONFIRMATION BEFORE JOIN TOAST)
+// ============================================================================
+
+export const WORKSPACE_QR_DETECTION_FLASH_DURATION_MS = 480;
+export const WORKSPACE_QR_DETECTION_FLASH_TOAST_DELAY_MS = 320;
+export const WORKSPACE_QR_DETECTION_FLASH_OVERLAY_ID =
+  'workspace-header-qr-detection-flash-overlay';
+export const WORKSPACE_QR_DETECTION_FLASH_BADGE_ID =
+  'workspace-header-qr-detection-flash-badge';
+export const WORKSPACE_QR_SIMULATE_DETECT_BUTTON_ID =
+  'workspace-header-qr-simulate-detect-btn';
+
+export interface WorkspaceQrDetectionFlashSpec {
+  popoverElementId: 'workspace-header-qr-popover';
+  overlayElementId: typeof WORKSPACE_QR_DETECTION_FLASH_OVERLAY_ID;
+  overlayTestId: typeof WORKSPACE_QR_DETECTION_FLASH_OVERLAY_ID;
+  badgeElementId: typeof WORKSPACE_QR_DETECTION_FLASH_BADGE_ID;
+  badgeTestId: typeof WORKSPACE_QR_DETECTION_FLASH_BADGE_ID;
+  simulateButtonId: typeof WORKSPACE_QR_SIMULATE_DETECT_BUTTON_ID;
+  simulateButtonTestId: typeof WORKSPACE_QR_SIMULATE_DETECT_BUTTON_ID;
+  isFlashActive: boolean;
+  flashTriggerCount: number;
+  detectedRoomCode: string | null;
+  flashDurationMs: number;
+  flashDurationSec: number;
+  toastDelayAfterFlashMs: number;
+  ordersFlashBeforeJoinToast: true;
+  animationName: 'qrScannerDetectionSubtleFlash' | 'none';
+  animationType: 'subtle-emerald-shutter-flash';
+  popoverFlashClassName: string;
+  viewportFlashClassName: string;
+  overlayOpacityKeyframes: [number, number, number, number];
+  popoverScaleKeyframes: [number, number, number];
+  borderGlowShadow: string;
+  confirmationLabel: string;
+  statusAnnouncement: string;
+}
+
+export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
+  isFlashActive?: boolean;
+  flashTriggerCount?: number;
+  detectedRoomCode?: string | null;
+  fallbackRoomCode?: string | null;
+}): WorkspaceQrDetectionFlashSpec {
+  const isFlashActive = Boolean(input?.isFlashActive);
+  const flashTriggerCount = Math.max(
+    0,
+    Math.floor(Number(input?.flashTriggerCount) || 0)
+  );
+  const cleanDetectedRoom =
+    String(input?.detectedRoomCode || '').trim() || null;
+  const fallbackRoom =
+    String(input?.fallbackRoomCode || 'STUDY-204').trim() || 'STUDY-204';
+  const targetRoomLabel = cleanDetectedRoom || fallbackRoom;
+
+  return {
+    popoverElementId: 'workspace-header-qr-popover',
+    overlayElementId: WORKSPACE_QR_DETECTION_FLASH_OVERLAY_ID,
+    overlayTestId: WORKSPACE_QR_DETECTION_FLASH_OVERLAY_ID,
+    badgeElementId: WORKSPACE_QR_DETECTION_FLASH_BADGE_ID,
+    badgeTestId: WORKSPACE_QR_DETECTION_FLASH_BADGE_ID,
+    simulateButtonId: WORKSPACE_QR_SIMULATE_DETECT_BUTTON_ID,
+    simulateButtonTestId: WORKSPACE_QR_SIMULATE_DETECT_BUTTON_ID,
+    isFlashActive,
+    flashTriggerCount,
+    detectedRoomCode: cleanDetectedRoom,
+    flashDurationMs: WORKSPACE_QR_DETECTION_FLASH_DURATION_MS,
+    flashDurationSec: Number(
+      (WORKSPACE_QR_DETECTION_FLASH_DURATION_MS / 1000).toFixed(2)
+    ),
+    toastDelayAfterFlashMs: WORKSPACE_QR_DETECTION_FLASH_TOAST_DELAY_MS,
+    ordersFlashBeforeJoinToast: true,
+    animationName: isFlashActive ? 'qrScannerDetectionSubtleFlash' : 'none',
+    animationType: 'subtle-emerald-shutter-flash',
+    popoverFlashClassName: isFlashActive
+      ? 'qr-scanner-popover-detection-flash-active ring-2 ring-emerald-400/80 border-emerald-400 shadow-[0_0_36px_rgba(16,185,129,0.42)]'
+      : '',
+    viewportFlashClassName: isFlashActive
+      ? 'qr-scanner-viewport-detection-flash-active ring-2 ring-emerald-400/90 border-emerald-400 bg-emerald-500/10'
+      : '',
+    overlayOpacityKeyframes: isFlashActive ? [0, 0.38, 0.16, 0] : [0, 0, 0, 0],
+    popoverScaleKeyframes: isFlashActive ? [1, 1.012, 1] : [1, 1, 1],
+    borderGlowShadow: isFlashActive
+      ? '0 0 0 2px rgba(52, 211, 153, 0.78), 0 0 34px rgba(16, 185, 129, 0.42)'
+      : 'none',
+    confirmationLabel: isFlashActive
+      ? `QR Code Detected · ${targetRoomLabel}`
+      : cleanDetectedRoom
+        ? `Last Detected · ${cleanDetectedRoom}`
+        : 'Ready for QR Detection',
+    statusAnnouncement: isFlashActive
+      ? `QR code detected for ${targetRoomLabel} — confirming before showing join toast`
+      : 'QR scanner popover ready',
+  };
+}
+
+export interface WorkspaceQrDetectionFlashSequenceResult {
+  detected: boolean;
+  shouldTriggerFlash: boolean;
+  shouldHideJoinToastDuringFlashLeadIn: boolean;
+  shouldShowJoinToastAfterFlash: boolean;
+  flashDurationMs: number;
+  toastDelayMs: number;
+  toastVisibleAtMs: number;
+  flashEndsAtMs: number;
+  nextFlashCount: number;
+  parsedResult: ParsedWorkspaceQrScanResult;
+  flashSpec: WorkspaceQrDetectionFlashSpec;
+}
+
+export function resolveWorkspaceQrDetectionFlashSequence(params: {
+  rawScannedValue: string;
+  fallbackOrigin?: string;
+  previousFlashCount?: number;
+  nowMs?: number;
+}): WorkspaceQrDetectionFlashSequenceResult {
+  const prevCount = Math.max(
+    0,
+    Math.floor(Number(params.previousFlashCount) || 0)
+  );
+  const nowMs =
+    typeof params.nowMs === 'number' && Number.isFinite(params.nowMs)
+      ? Math.floor(params.nowMs)
+      : Date.now();
+  const parsedResult = parseScannedWorkspaceQrPayload(
+    params.rawScannedValue,
+    params.fallbackOrigin || 'http://localhost:3000'
+  );
+
+  if (!parsedResult.isValid) {
+    return {
+      detected: false,
+      shouldTriggerFlash: false,
+      shouldHideJoinToastDuringFlashLeadIn: false,
+      shouldShowJoinToastAfterFlash: false,
+      flashDurationMs: WORKSPACE_QR_DETECTION_FLASH_DURATION_MS,
+      toastDelayMs: 0,
+      toastVisibleAtMs: nowMs,
+      flashEndsAtMs: nowMs,
+      nextFlashCount: prevCount,
+      parsedResult,
+      flashSpec: evaluateWorkspaceQrDetectionFlashSpec({
+        isFlashActive: false,
+        flashTriggerCount: prevCount,
+        detectedRoomCode: null,
+      }),
+    };
+  }
+
+  const nextFlashCount = prevCount + 1;
+  return {
+    detected: true,
+    shouldTriggerFlash: true,
+    shouldHideJoinToastDuringFlashLeadIn: true,
+    shouldShowJoinToastAfterFlash: true,
+    flashDurationMs: WORKSPACE_QR_DETECTION_FLASH_DURATION_MS,
+    toastDelayMs: WORKSPACE_QR_DETECTION_FLASH_TOAST_DELAY_MS,
+    toastVisibleAtMs: nowMs + WORKSPACE_QR_DETECTION_FLASH_TOAST_DELAY_MS,
+    flashEndsAtMs: nowMs + WORKSPACE_QR_DETECTION_FLASH_DURATION_MS,
+    nextFlashCount,
+    parsedResult,
+    flashSpec: evaluateWorkspaceQrDetectionFlashSpec({
+      isFlashActive: true,
+      flashTriggerCount: nextFlashCount,
+      detectedRoomCode: parsedResult.roomCode,
+    }),
+  };
+}
+

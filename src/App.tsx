@@ -278,6 +278,7 @@ import {
   DAILY_GOAL_REACHED_BONUS_POINTS,
   resolveDailyGoalReachedTransition,
   evaluateDailyFocusGoalReachedToast,
+  resolveWorkspaceQrDetectionFlashSequence,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -1063,6 +1064,16 @@ export default function App() {
     });
   const [workspaceHeaderQrScanChimeCount, setWorkspaceHeaderQrScanChimeCount] =
     useState<number>(0);
+  const [
+    isWorkspaceHeaderQrDetectionFlashActive,
+    setIsWorkspaceHeaderQrDetectionFlashActive,
+  ] = useState<boolean>(false);
+  const [
+    workspaceHeaderQrDetectionFlashCount,
+    setWorkspaceHeaderQrDetectionFlashCount,
+  ] = useState<number>(0);
+  const workspaceHeaderQrDetectionFlashTimerRef = useRef<number | null>(null);
+  const workspaceHeaderQrScanToastLeadInTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrScanToastTimerRef = useRef<number | null>(null);
   const [workspaceHeaderQrCameraError, setWorkspaceHeaderQrCameraError] =
     useState<string>('');
@@ -1104,6 +1115,12 @@ export default function App() {
       }
       if (workspaceHeaderQrPngTimerRef.current !== null) {
         window.clearTimeout(workspaceHeaderQrPngTimerRef.current);
+      }
+      if (workspaceHeaderQrDetectionFlashTimerRef.current !== null) {
+        window.clearTimeout(workspaceHeaderQrDetectionFlashTimerRef.current);
+      }
+      if (workspaceHeaderQrScanToastLeadInTimerRef.current !== null) {
+        window.clearTimeout(workspaceHeaderQrScanToastLeadInTimerRef.current);
       }
       if (workspaceHeaderQrScanToastTimerRef.current !== null) {
         window.clearTimeout(workspaceHeaderQrScanToastTimerRef.current);
@@ -4421,6 +4438,8 @@ export default function App() {
     qrScannerSoundVolumePreferences,
     uiSoundPreferences: uiSoundPrefs,
     scanChimePlayedCount: workspaceHeaderQrScanChimeCount,
+    isDetectionFlashActive: isWorkspaceHeaderQrDetectionFlashActive,
+    detectionFlashCount: workspaceHeaderQrDetectionFlashCount,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
@@ -4809,6 +4828,10 @@ export default function App() {
   };
 
   const handleDismissWorkspaceQrScanToast = () => {
+    if (workspaceHeaderQrScanToastLeadInTimerRef.current !== null) {
+      window.clearTimeout(workspaceHeaderQrScanToastLeadInTimerRef.current);
+      workspaceHeaderQrScanToastLeadInTimerRef.current = null;
+    }
     if (workspaceHeaderQrScanToastTimerRef.current !== null) {
       window.clearTimeout(workspaceHeaderQrScanToastTimerRef.current);
       workspaceHeaderQrScanToastTimerRef.current = null;
@@ -4904,8 +4927,13 @@ export default function App() {
       typeof window !== 'undefined' && window.location?.origin
         ? window.location.origin
         : 'http://localhost:3000';
-    const parsed = parseScannedWorkspaceQrPayload(rawScannedValue, fallbackOrigin);
-    if (!parsed.isValid) {
+    const flashSequence = resolveWorkspaceQrDetectionFlashSequence({
+      rawScannedValue,
+      fallbackOrigin,
+      previousFlashCount: workspaceHeaderQrDetectionFlashCount,
+    });
+    const parsed = flashSequence.parsedResult;
+    if (!flashSequence.detected || !parsed.isValid) {
       setWorkspaceHeaderQrCameraError(parsed.errorMessage);
       const errorSoundSpec = resolveWorkspaceQrScannerEventSound({
         eventCategory: 'scanErrors',
@@ -4920,6 +4948,17 @@ export default function App() {
       setLastSoundFeedback(errorSoundSpec.feedbackMessage);
       return false;
     }
+
+    // 1. Trigger immediate subtle 'flash' animation on the QR scanner popover before showing the join toast
+    setIsWorkspaceHeaderQrDetectionFlashActive(true);
+    setWorkspaceHeaderQrDetectionFlashCount(flashSequence.nextFlashCount);
+    if (workspaceHeaderQrDetectionFlashTimerRef.current !== null) {
+      window.clearTimeout(workspaceHeaderQrDetectionFlashTimerRef.current);
+    }
+    workspaceHeaderQrDetectionFlashTimerRef.current = window.setTimeout(() => {
+      setIsWorkspaceHeaderQrDetectionFlashActive(false);
+      workspaceHeaderQrDetectionFlashTimerRef.current = null;
+    }, flashSequence.flashDurationMs);
 
     // Play high-frequency confirmation chime immediately upon successful QR scan detection
     const scanChimeSpec = resolveWorkspaceQrScanConfirmationChime({
@@ -4962,14 +5001,23 @@ export default function App() {
       }
       return recorded.updatedScans;
     });
-    setIsWorkspaceHeaderQrScanToastVisible(true);
+
+    // 2. Keep join toast hidden during the flash confirmation lead-in, then display the join toast
+    setIsWorkspaceHeaderQrScanToastVisible(false);
+    if (workspaceHeaderQrScanToastLeadInTimerRef.current !== null) {
+      window.clearTimeout(workspaceHeaderQrScanToastLeadInTimerRef.current);
+    }
     if (workspaceHeaderQrScanToastTimerRef.current !== null) {
       window.clearTimeout(workspaceHeaderQrScanToastTimerRef.current);
     }
-    workspaceHeaderQrScanToastTimerRef.current = window.setTimeout(() => {
-      setIsWorkspaceHeaderQrScanToastVisible(false);
-      workspaceHeaderQrScanToastTimerRef.current = null;
-    }, WORKSPACE_QR_SCAN_TOAST_DURATION_MS);
+    workspaceHeaderQrScanToastLeadInTimerRef.current = window.setTimeout(() => {
+      workspaceHeaderQrScanToastLeadInTimerRef.current = null;
+      setIsWorkspaceHeaderQrScanToastVisible(true);
+      workspaceHeaderQrScanToastTimerRef.current = window.setTimeout(() => {
+        setIsWorkspaceHeaderQrScanToastVisible(false);
+        workspaceHeaderQrScanToastTimerRef.current = null;
+      }, WORKSPACE_QR_SCAN_TOAST_DURATION_MS);
+    }, flashSequence.toastDelayMs);
 
     if (parsed.hasFilterParams) {
       setDirectoryAudienceFilter(parsed.audienceFilter);
@@ -6482,15 +6530,83 @@ export default function App() {
                       data-scan-chime-count={String(
                         workspaceHeaderQrMeta.scanChimePlayedCount
                       )}
+                      data-detection-flash-active={
+                        workspaceHeaderQrMeta.detectionFlash.isFlashActive
+                          ? 'true'
+                          : 'false'
+                      }
+                      data-detection-flash-count={String(
+                        workspaceHeaderQrMeta.detectionFlash.flashTriggerCount
+                      )}
+                      data-detection-flash-animation={
+                        workspaceHeaderQrMeta.detectionFlash.animationName
+                      }
+                      data-orders-flash-before-toast="true"
                       role="dialog"
                       aria-modal="false"
                       aria-label={workspaceHeaderQrMeta.dialogTitle}
                       initial={{ opacity: 0, y: 6, scale: 0.96 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      animate={{
+                        opacity: 1,
+                        y: 0,
+                        scale:
+                          workspaceHeaderQrMeta.detectionFlash.popoverScaleKeyframes,
+                      }}
                       exit={{ opacity: 0, y: 6, scale: 0.96 }}
-                      transition={{ duration: 0.18, ease: 'easeOut' }}
-                      className="absolute left-0 top-full mt-2 z-50 w-80 sm:w-[29.5rem] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans"
+                      transition={{ duration: 0.24, ease: 'easeOut' }}
+                      className={`absolute left-0 top-full mt-2 z-50 w-80 sm:w-[29.5rem] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans transition-all duration-200 ${workspaceHeaderQrMeta.detectionFlash.popoverFlashClassName}`}
                     >
+                      {/* Subtle Detection Flash Overlay (Immediate Visual Confirmation Before Showing Join Toast) */}
+                      <AnimatePresence initial={false}>
+                        {workspaceHeaderQrMeta.detectionFlash.isFlashActive && (
+                          <motion.div
+                            key={`qr-detection-flash-${workspaceHeaderQrMeta.detectionFlash.flashTriggerCount}`}
+                            id={workspaceHeaderQrMeta.detectionFlash.overlayElementId}
+                            data-testid={
+                              workspaceHeaderQrMeta.detectionFlash.overlayTestId
+                            }
+                            data-flash-count={String(
+                              workspaceHeaderQrMeta.detectionFlash.flashTriggerCount
+                            )}
+                            data-detected-room={
+                              workspaceHeaderQrMeta.detectionFlash.detectedRoomCode ||
+                              workspaceHeaderQrMeta.roomCode
+                            }
+                            aria-live="polite"
+                            initial={{ opacity: 0 }}
+                            animate={{
+                              opacity:
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .overlayOpacityKeyframes,
+                            }}
+                            exit={{ opacity: 0 }}
+                            transition={{
+                              duration:
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .flashDurationSec,
+                              ease: 'easeOut',
+                            }}
+                            className="pointer-events-none absolute inset-0 z-30 rounded-lg bg-gradient-to-br from-emerald-300/40 via-white/30 to-emerald-500/30 ring-2 ring-inset ring-emerald-400/90 flex items-start justify-center pt-2.5"
+                          >
+                            <span
+                              id={workspaceHeaderQrMeta.detectionFlash.badgeElementId}
+                              data-testid={
+                                workspaceHeaderQrMeta.detectionFlash.badgeTestId
+                              }
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-950/95 border border-emerald-400/80 text-[11px] font-mono font-bold text-emerald-200 shadow-lg"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                              <span>
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .confirmationLabel
+                                }
+                              </span>
+                            </span>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+
                       <div className="flex items-start justify-between gap-2">
                         <div className="space-y-1">
                           <div className="flex items-center flex-wrap gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
@@ -6526,11 +6642,17 @@ export default function App() {
                       </div>
 
                       <div
-                        className={`flex flex-col items-center justify-center rounded-lg border ${
+                        data-testid="workspace-header-qr-scan-viewport-card"
+                        data-flash-active={
+                          workspaceHeaderQrMeta.detectionFlash.isFlashActive
+                            ? 'true'
+                            : 'false'
+                        }
+                        className={`relative flex flex-col items-center justify-center rounded-lg border transition-all duration-200 ${
                           workspaceHeaderQrMeta.isCameraScanning
                             ? 'border-emerald-500/40 bg-slate-950 p-2.5 text-zinc-100'
                             : 'border-slate-200 dark:border-zinc-800 bg-white p-3'
-                        }`}
+                        } ${workspaceHeaderQrMeta.detectionFlash.viewportFlashClassName}`}
                       >
                         <svg
                           id={workspaceHeaderQrMeta.svgElementId}
@@ -6731,37 +6853,64 @@ export default function App() {
                           </button>
                         </div>
 
-                        <button
-                          type="button"
-                          id={workspaceHeaderQrMeta.scanCameraButtonId}
-                          data-testid={workspaceHeaderQrMeta.scanCameraButtonTestId}
-                          data-camera-scanning={
-                            workspaceHeaderQrMeta.isCameraScanning ? 'true' : 'false'
-                          }
-                          data-camera-status={workspaceHeaderQrMeta.cameraScanStatus}
-                          data-facing-mode={workspaceHeaderQrMeta.cameraFacingMode}
-                          aria-pressed={workspaceHeaderQrMeta.isCameraScanning}
-                          aria-label={workspaceHeaderQrMeta.scanCameraAriaLabel}
-                          title={workspaceHeaderQrMeta.scanCameraTitle}
-                          onClick={handleToggleWorkspaceHeaderQrCameraScanner}
-                          className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
-                            workspaceHeaderQrMeta.isCameraScanning
-                              ? 'border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300'
-                              : 'border-slate-300 dark:border-zinc-700 bg-slate-900 hover:bg-slate-800 text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-100'
-                          }`}
-                        >
-                          {workspaceHeaderQrMeta.isCameraScanning ? (
-                            <>
-                              <X className="w-3.5 h-3.5 shrink-0" />
-                              <span>{workspaceHeaderQrMeta.stopCameraButtonLabel}</span>
-                            </>
-                          ) : (
-                            <>
-                              <Camera className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                              <span>{workspaceHeaderQrMeta.scanCameraButtonLabel}</span>
-                            </>
-                          )}
-                        </button>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          <button
+                            type="button"
+                            id={workspaceHeaderQrMeta.scanCameraButtonId}
+                            data-testid={workspaceHeaderQrMeta.scanCameraButtonTestId}
+                            data-camera-scanning={
+                              workspaceHeaderQrMeta.isCameraScanning ? 'true' : 'false'
+                            }
+                            data-camera-status={workspaceHeaderQrMeta.cameraScanStatus}
+                            data-facing-mode={workspaceHeaderQrMeta.cameraFacingMode}
+                            aria-pressed={workspaceHeaderQrMeta.isCameraScanning}
+                            aria-label={workspaceHeaderQrMeta.scanCameraAriaLabel}
+                            title={workspaceHeaderQrMeta.scanCameraTitle}
+                            onClick={handleToggleWorkspaceHeaderQrCameraScanner}
+                            className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
+                              workspaceHeaderQrMeta.isCameraScanning
+                                ? 'border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300'
+                                : 'border-slate-300 dark:border-zinc-700 bg-slate-900 hover:bg-slate-800 text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-100'
+                            }`}
+                          >
+                            {workspaceHeaderQrMeta.isCameraScanning ? (
+                              <>
+                                <X className="w-3.5 h-3.5 shrink-0" />
+                                <span>{workspaceHeaderQrMeta.stopCameraButtonLabel}</span>
+                              </>
+                            ) : (
+                              <>
+                                <Camera className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                                <span>{workspaceHeaderQrMeta.scanCameraButtonLabel}</span>
+                              </>
+                            )}
+                          </button>
+
+                          <button
+                            type="button"
+                            id={workspaceHeaderQrMeta.detectionFlash.simulateButtonId}
+                            data-testid={
+                              workspaceHeaderQrMeta.detectionFlash.simulateButtonTestId
+                            }
+                            onClick={() =>
+                              handleApplyScannedWorkspaceQrPayload(
+                                `${
+                                  typeof window !== 'undefined' &&
+                                  window.location?.origin
+                                    ? window.location.origin
+                                    : 'http://localhost:3000'
+                                }/?room=${encodeURIComponent(
+                                  activeStudyRoomCode || 'STUDY-204'
+                                )}`
+                              )
+                            }
+                            title="Simulate detecting a workspace QR code to trigger the subtle confirmation flash followed by the join toast"
+                            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 text-xs font-semibold transition-colors whitespace-nowrap"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                            <span>Test QR Detection Flash</span>
+                          </button>
+                        </div>
 
                         {lastScannedWorkspaceQrResult && (
                           <div
