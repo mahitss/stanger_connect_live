@@ -354,6 +354,13 @@ import {
   evaluateActiveStudyDeskPulseAnimationSpec,
   FOCUS_HISTORY_DAYS_WINDOW,
   buildFocusHistory30DaySummary,
+  AMBIENT_ENVIRONMENT_BALANCE_PRESETS,
+  evaluateAmbientEnvironmentBalanceSpec,
+  adjustAmbientSoundscapeBalanceVolume,
+  STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS,
+  normalizeStudyRoomSoundscapePresetId,
+  resolveActiveStudyRoomSoundscapePreset,
+  applyStudyRoomSoundscapePreset,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -8750,3 +8757,136 @@ test('buildFocusHistory30DaySummary aggregates daily focus minutes logged over t
   assert.ok(oct25Point.focusMinutes >= 65);
   assert.equal(oct25Point.topTopic, 'Graph Spectral Theory');
 });
+
+test('evaluateAmbientEnvironmentBalanceSpec and adjustAmbientSoundscapeBalanceVolume control ambient soundscape volume and compute local environment balance zones', () => {
+  assert.equal(AMBIENT_ENVIRONMENT_BALANCE_PRESETS.length, 4);
+
+  let mix = DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE; // Default 75% master volume
+  mix = toggleAmbientLayer(mix, 'rainfall');
+  mix = toggleAmbientLayer(mix, 'coffeeshop');
+
+  // 1. Default 75% volume -> Immersive Focus Mix (75% Ambient / 25% Local Room)
+  const immersiveSpec = evaluateAmbientEnvironmentBalanceSpec(mix);
+  assert.equal(immersiveSpec.effectiveVolumePercent, 75);
+  assert.equal(immersiveSpec.localEnvironmentSharePercent, 25);
+  assert.equal(immersiveSpec.isMuted, false);
+  assert.equal(immersiveSpec.balanceZone, 'immersive_focus');
+  assert.ok(
+    immersiveSpec.balanceZoneLabel.includes('75% Ambient / 25% Local Room')
+  );
+  assert.equal(immersiveSpec.activeLayersCount, 2);
+  assert.ok(immersiveSpec.activeLayersSummary.includes('Rain (70%) + Cafe (55%)'));
+
+  // 2. Adjust slider to 50% -> Balanced Blend (50% Ambient / 50% Local Room)
+  mix = adjustAmbientSoundscapeBalanceVolume(mix, 50);
+  const balancedSpec = evaluateAmbientEnvironmentBalanceSpec(mix);
+  assert.equal(balancedSpec.effectiveVolumePercent, 50);
+  assert.equal(balancedSpec.localEnvironmentSharePercent, 50);
+  assert.equal(balancedSpec.balanceZone, 'balanced_blend');
+  assert.ok(
+    balancedSpec.balanceZoneLabel.includes('50% Ambient / 50% Local Room')
+  );
+
+  // 3. Adjust slider to 25% -> Subtle Background (25% Ambient / 75% Local Room)
+  mix = adjustAmbientSoundscapeBalanceVolume(mix, 25);
+  const subtleSpec = evaluateAmbientEnvironmentBalanceSpec(mix);
+  assert.equal(subtleSpec.effectiveVolumePercent, 25);
+  assert.equal(subtleSpec.localEnvironmentSharePercent, 75);
+  assert.equal(subtleSpec.balanceZone, 'subtle_local');
+
+  // 4. Step delta +70% -> 95% Full Acoustic Masking (95% Ambient / 5% Local Room)
+  mix = adjustAmbientSoundscapeBalanceVolume(mix, undefined, 70);
+  const isolationSpec = evaluateAmbientEnvironmentBalanceSpec(mix);
+  assert.equal(isolationSpec.effectiveVolumePercent, 95);
+  assert.equal(isolationSpec.localEnvironmentSharePercent, 5);
+  assert.equal(isolationSpec.balanceZone, 'full_isolation');
+
+  // 5. Mute / 0% -> Muted (0% Ambient / 100% Local Environment)
+  mix = adjustAmbientSoundscapeBalanceVolume(mix, 0);
+  const mutedSpec = evaluateAmbientEnvironmentBalanceSpec(mix);
+  assert.equal(mutedSpec.effectiveVolumePercent, 0);
+  assert.equal(mutedSpec.localEnvironmentSharePercent, 100);
+  assert.equal(mutedSpec.isMuted, true);
+  assert.equal(mutedSpec.balanceZone, 'muted');
+});
+
+test('STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS, applyStudyRoomSoundscapePreset, and resolveActiveStudyRoomSoundscapePreset switch between Rain, Cafe, Forest, and White Noise while preserving the volume slider', () => {
+  const presetIds = STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS.map((p) => p.id);
+  assert.ok(presetIds.includes('rain'));
+  assert.ok(presetIds.includes('cafe'));
+  assert.ok(presetIds.includes('forest'));
+  assert.ok(presetIds.includes('whitenoise'));
+  assert.ok(presetIds.includes('binaural'));
+  assert.ok(presetIds.includes('lofi'));
+  assert.ok(presetIds.includes('rainy_cafe'));
+  assert.ok(presetIds.includes('off'));
+
+  // 1. Normalization handles friendly names and IDs
+  assert.equal(normalizeStudyRoomSoundscapePresetId('Rain'), 'rain');
+  assert.equal(normalizeStudyRoomSoundscapePresetId('Cafe'), 'cafe');
+  assert.equal(normalizeStudyRoomSoundscapePresetId('Forest'), 'forest');
+  assert.equal(normalizeStudyRoomSoundscapePresetId('White Noise'), 'whitenoise');
+  assert.equal(normalizeStudyRoomSoundscapePresetId('off'), 'off');
+
+  // 2. Start from default state and set volume slider to 60%
+  let mix = adjustAmbientSoundscapeBalanceVolume(
+    DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE,
+    60
+  );
+  assert.equal(mix.masterVolumePercent, 60);
+  assert.equal(resolveActiveStudyRoomSoundscapePreset(mix).activePresetId, 'off');
+
+  // 3. Switch to Rain preset -> activates rainfall (80%) while keeping volume slider at 60%
+  mix = applyStudyRoomSoundscapePreset(mix, 'rain');
+  assert.equal(mix.masterVolumePercent, 60);
+  assert.equal(mix.isMasterMuted, false);
+  assert.equal(mix.layers.rainfall.enabled, true);
+  assert.equal(mix.layers.rainfall.volumePercent, 80);
+  assert.equal(mix.layers.coffeeshop.enabled, false);
+  const rainResolved = resolveActiveStudyRoomSoundscapePreset(mix);
+  assert.equal(rainResolved.activePresetId, 'rain');
+  assert.equal(rainResolved.shortLabel, 'Rain');
+
+  // 4. Switch to Cafe preset -> activates coffeeshop (75%), turns off rainfall, keeps volume slider at 60%
+  mix = applyStudyRoomSoundscapePreset(mix, 'cafe');
+  assert.equal(mix.masterVolumePercent, 60);
+  assert.equal(mix.layers.coffeeshop.enabled, true);
+  assert.equal(mix.layers.coffeeshop.volumePercent, 75);
+  assert.equal(mix.layers.rainfall.enabled, false);
+  const cafeResolved = resolveActiveStudyRoomSoundscapePreset(mix);
+  assert.equal(cafeResolved.activePresetId, 'cafe');
+  assert.equal(cafeResolved.shortLabel, 'Cafe');
+
+  // 5. Switch to Forest preset -> activates woodland blend (rainfall 55%, binaural 45%, whitenoise 25%) while keeping volume slider at 60%
+  mix = applyStudyRoomSoundscapePreset(mix, 'forest');
+  assert.equal(mix.masterVolumePercent, 60);
+  assert.equal(mix.layers.rainfall.enabled, true);
+  assert.equal(mix.layers.rainfall.volumePercent, 55);
+  assert.equal(mix.layers.binaural.enabled, true);
+  assert.equal(mix.layers.binaural.volumePercent, 45);
+  assert.equal(mix.layers.whitenoise.enabled, true);
+  assert.equal(mix.layers.whitenoise.volumePercent, 25);
+  assert.equal(mix.layers.coffeeshop.enabled, false);
+  const forestResolved = resolveActiveStudyRoomSoundscapePreset(mix);
+  assert.equal(forestResolved.activePresetId, 'forest');
+  assert.equal(forestResolved.shortLabel, 'Forest');
+
+  // 6. Switch to White Noise preset -> activates whitenoise (70%), keeps volume slider at 60%
+  mix = applyStudyRoomSoundscapePreset(mix, 'whitenoise');
+  assert.equal(mix.masterVolumePercent, 60);
+  assert.equal(mix.layers.whitenoise.enabled, true);
+  assert.equal(mix.layers.whitenoise.volumePercent, 70);
+  assert.equal(mix.layers.rainfall.enabled, false);
+  assert.equal(mix.layers.binaural.enabled, false);
+  const wnResolved = resolveActiveStudyRoomSoundscapePreset(mix);
+  assert.equal(wnResolved.activePresetId, 'whitenoise');
+  assert.equal(wnResolved.shortLabel, 'White Noise');
+
+  // 7. Switch to Off preset -> disables all layers while preserving volume slider at 60%
+  mix = applyStudyRoomSoundscapePreset(mix, 'off');
+  assert.equal(mix.masterVolumePercent, 60);
+  assert.equal(getActiveAmbientLayers(mix).length, 0);
+  assert.equal(resolveActiveStudyRoomSoundscapePreset(mix).activePresetId, 'off');
+});
+
+

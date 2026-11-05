@@ -21420,3 +21420,535 @@ export function buildFocusHistory30DaySummary(params: {
     selectedRoomFilter: normalizedFilter,
   };
 }
+
+// ============================================================================
+// DEDICATED STUDY ROOM AMBIENT SOUNDSCAPE & LOCAL ENVIRONMENT VOLUME BALANCE
+// ============================================================================
+
+export type AmbientEnvironmentBalanceZone =
+  | 'muted'
+  | 'subtle_local'
+  | 'balanced_blend'
+  | 'immersive_focus'
+  | 'full_isolation';
+
+export interface AmbientEnvironmentBalancePreset {
+  id: Exclude<AmbientEnvironmentBalanceZone, 'muted'>;
+  percent: number;
+  label: string;
+  environmentHint: string;
+}
+
+export const AMBIENT_ENVIRONMENT_BALANCE_PRESETS: ReadonlyArray<AmbientEnvironmentBalancePreset> =
+  [
+    {
+      id: 'subtle_local',
+      percent: 25,
+      label: 'Subtle (25%)',
+      environmentHint: '75% Local Room Awareness',
+    },
+    {
+      id: 'balanced_blend',
+      percent: 50,
+      label: 'Balanced (50%)',
+      environmentHint: '50/50 Room & Soundscape Blend',
+    },
+    {
+      id: 'immersive_focus',
+      percent: 75,
+      label: 'Immersive (75%)',
+      environmentHint: '25% Local Room · Deep Focus',
+    },
+    {
+      id: 'full_isolation',
+      percent: 100,
+      label: 'Full Masking (100%)',
+      environmentHint: 'Maximum Acoustic Isolation',
+    },
+  ];
+
+export interface AmbientEnvironmentBalanceSpec {
+  effectiveVolumePercent: number;
+  localEnvironmentSharePercent: number;
+  isMuted: boolean;
+  balanceZone: AmbientEnvironmentBalanceZone;
+  balanceZoneLabel: string;
+  recommendedUseCase: string;
+  activeLayersCount: number;
+  activeLayersSummary: string;
+  sliderAriaValueText: string;
+}
+
+export function evaluateAmbientEnvironmentBalanceSpec(
+  mixState: AmbientMultiLayerMixState
+): AmbientEnvironmentBalanceSpec {
+  const rawMaster = Math.min(
+    100,
+    Math.max(0, Math.round(Number(mixState?.masterVolumePercent) || 0))
+  );
+  const isMuted = Boolean(mixState?.isMasterMuted || rawMaster === 0);
+  const effectiveVolumePercent = isMuted ? 0 : rawMaster;
+  const localEnvironmentSharePercent = Math.max(0, 100 - effectiveVolumePercent);
+
+  const activeLayers = getActiveAmbientLayers(
+    mixState || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE
+  );
+  const activeLayersCount = activeLayers.length;
+  const activeLayersSummary =
+    activeLayersCount === 0
+      ? 'No soundscape layers active — click a track to blend'
+      : activeLayers
+          .map((l) => {
+            const meta = AMBIENT_SOUNDSCAPES.find((s) => s.id === l.id);
+            return `${meta?.shortLabel || l.id} (${l.volumePercent}%)`;
+          })
+          .join(' + ');
+
+  if (isMuted) {
+    return {
+      effectiveVolumePercent: 0,
+      localEnvironmentSharePercent: 100,
+      isMuted: true,
+      balanceZone: 'muted',
+      balanceZoneLabel: 'Muted · 0% Ambient / 100% Local Environment',
+      recommendedUseCase:
+        'Full local room awareness — ambient soundscapes silenced',
+      activeLayersCount,
+      activeLayersSummary,
+      sliderAriaValueText:
+        '0% ambient soundscape volume, 100% local environment awareness (Muted)',
+    };
+  }
+
+  if (effectiveVolumePercent <= 35) {
+    return {
+      effectiveVolumePercent,
+      localEnvironmentSharePercent,
+      isMuted: false,
+      balanceZone: 'subtle_local',
+      balanceZoneLabel: `Subtle Background · ${effectiveVolumePercent}% Ambient / ${localEnvironmentSharePercent}% Local Room`,
+      recommendedUseCase:
+        'Ideal for quiet libraries or staying aware of nearby conversations',
+      activeLayersCount,
+      activeLayersSummary,
+      sliderAriaValueText: `${effectiveVolumePercent}% ambient soundscape volume, ${localEnvironmentSharePercent}% local environment balance (Subtle Background)`,
+    };
+  }
+
+  if (effectiveVolumePercent <= 65) {
+    return {
+      effectiveVolumePercent,
+      localEnvironmentSharePercent,
+      isMuted: false,
+      balanceZone: 'balanced_blend',
+      balanceZoneLabel: `Balanced Blend · ${effectiveVolumePercent}% Ambient / ${localEnvironmentSharePercent}% Local Room`,
+      recommendedUseCase:
+        'Natural acoustic equilibrium between your room and study soundscapes',
+      activeLayersCount,
+      activeLayersSummary,
+      sliderAriaValueText: `${effectiveVolumePercent}% ambient soundscape volume, ${localEnvironmentSharePercent}% local environment balance (Balanced Blend)`,
+    };
+  }
+
+  if (effectiveVolumePercent <= 85) {
+    return {
+      effectiveVolumePercent,
+      localEnvironmentSharePercent,
+      isMuted: false,
+      balanceZone: 'immersive_focus',
+      balanceZoneLabel: `Immersive Focus Mix · ${effectiveVolumePercent}% Ambient / ${localEnvironmentSharePercent}% Local Room`,
+      recommendedUseCase:
+        'Deep work acoustic cocoon that softens background distractions',
+      activeLayersCount,
+      activeLayersSummary,
+      sliderAriaValueText: `${effectiveVolumePercent}% ambient soundscape volume, ${localEnvironmentSharePercent}% local environment balance (Immersive Focus)`,
+    };
+  }
+
+  return {
+    effectiveVolumePercent,
+    localEnvironmentSharePercent,
+    isMuted: false,
+    balanceZone: 'full_isolation',
+    balanceZoneLabel: `Full Acoustic Masking · ${effectiveVolumePercent}% Ambient / ${localEnvironmentSharePercent}% Local Room`,
+    recommendedUseCase:
+      'Maximum ambient soundscape presence for noisy cafes or shared spaces',
+    activeLayersCount,
+    activeLayersSummary,
+    sliderAriaValueText: `${effectiveVolumePercent}% ambient soundscape volume, ${localEnvironmentSharePercent}% local environment balance (Full Isolation)`,
+  };
+}
+
+export function adjustAmbientSoundscapeBalanceVolume(
+  mixState: AmbientMultiLayerMixState,
+  targetVolumePercent?: number,
+  stepDelta = 0
+): AmbientMultiLayerMixState {
+  const currentEffective = mixState.isMasterMuted
+    ? 0
+    : mixState.masterVolumePercent;
+  const baseTarget =
+    typeof targetVolumePercent === 'number' &&
+    Number.isFinite(targetVolumePercent)
+      ? targetVolumePercent
+      : currentEffective + stepDelta;
+  const clamped = Math.min(100, Math.max(0, Math.round(baseTarget)));
+  return updateAmbientMasterVolume(mixState, clamped);
+}
+
+// ============================================================================
+// STUDY ROOM AMBIENT SOUNDSCAPE PRESET SWITCHER (DROPDOWN & BUTTONS + FOREST)
+// ============================================================================
+
+export type StudyRoomSoundscapePresetId =
+  | 'off'
+  | 'rain'
+  | 'cafe'
+  | 'forest'
+  | 'whitenoise'
+  | 'binaural'
+  | 'lofi'
+  | 'rainy_cafe';
+
+export interface StudyRoomSoundscapePresetItem {
+  id: StudyRoomSoundscapePresetId;
+  label: string;
+  shortLabel: string;
+  description: string;
+  acousticProfile: string;
+  layers: Partial<Record<AmbientTrackId, number>>;
+}
+
+export const STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS: ReadonlyArray<StudyRoomSoundscapePresetItem> =
+  [
+    {
+      id: 'rain',
+      label: 'Rain (Steady Rainfall)',
+      shortLabel: 'Rain',
+      description: 'Warm rainfall acoustic bed with gentle window droplets',
+      acousticProfile: 'Rain 80% · 120Hz–920Hz Low-Pass Pink',
+      layers: {
+        rainfall: 80,
+      },
+    },
+    {
+      id: 'cafe',
+      label: 'Cafe (Coffee Shop Murmur)',
+      shortLabel: 'Cafe',
+      description: 'Organic coffee shop murmur and soft porcelain acoustics',
+      acousticProfile: 'Cafe 75% · 460Hz Room Envelope',
+      layers: {
+        coffeeshop: 75,
+      },
+    },
+    {
+      id: 'forest',
+      label: 'Forest (Woodland Canopy & Stream)',
+      shortLabel: 'Forest',
+      description: 'Rustling woodland canopy breeze, forest stream, and natural harmonics',
+      acousticProfile: 'Rain 55% + Alpha Harmonic 45% + Canopy Air 25%',
+      layers: {
+        rainfall: 55,
+        binaural: 45,
+        whitenoise: 25,
+      },
+    },
+    {
+      id: 'whitenoise',
+      label: 'White Noise (Acoustic Shield)',
+      shortLabel: 'White Noise',
+      description: 'Calibrated broadband masking to block external room distractions',
+      acousticProfile: 'White Noise 70% · 20Hz–4.2kHz Mask',
+      layers: {
+        whitenoise: 70,
+      },
+    },
+    {
+      id: 'binaural',
+      label: 'Alpha Focus (432Hz Binaural)',
+      shortLabel: 'Alpha Focus',
+      description: 'Phase-locked 8Hz alpha harmonic entrainment for deep study',
+      acousticProfile: 'Alpha Focus 65% · 216Hz L / 224Hz R',
+      layers: {
+        binaural: 65,
+      },
+    },
+    {
+      id: 'lofi',
+      label: 'Lo-Fi Chords (Analog Study Pad)',
+      shortLabel: 'Lo-Fi Chords',
+      description: 'Warm Cmaj7–Am7–Fmaj7–G6 harmonic study progression',
+      acousticProfile: 'Lo-Fi Chords 75% · 20 BPM Warm Pad',
+      layers: {
+        lofi: 75,
+      },
+    },
+    {
+      id: 'rainy_cafe',
+      label: 'Rainy Café Blend (Dual Layer)',
+      shortLabel: 'Rainy Café',
+      description: 'Cozy windowside rainfall layered over warm coffee shop ambiance',
+      acousticProfile: 'Rain 70% + Cafe 55%',
+      layers: {
+        rainfall: 70,
+        coffeeshop: 55,
+      },
+    },
+    {
+      id: 'off',
+      label: 'Off (Local Environment Only)',
+      shortLabel: 'Off',
+      description: 'All ambient soundscape presets paused while keeping volume slider level',
+      acousticProfile: '0 Active Layers · 100% Local Room',
+      layers: {},
+    },
+  ];
+
+export function normalizeStudyRoomSoundscapePresetId(
+  rawInput: string | null | undefined
+): StudyRoomSoundscapePresetId {
+  const cleaned = String(rawInput || '')
+    .trim()
+    .toLowerCase();
+  if (!cleaned || cleaned === 'off' || cleaned === 'none' || cleaned === 'silent') {
+    return 'off';
+  }
+  if (cleaned === 'rain' || cleaned === 'rainfall') return 'rain';
+  if (
+    cleaned === 'cafe' ||
+    cleaned === 'café' ||
+    cleaned === 'coffeeshop' ||
+    cleaned === 'coffee shop'
+  ) {
+    return 'cafe';
+  }
+  if (cleaned === 'forest' || cleaned === 'woodland' || cleaned === 'woods') {
+    return 'forest';
+  }
+  if (
+    cleaned === 'whitenoise' ||
+    cleaned === 'white noise' ||
+    cleaned === 'white_noise'
+  ) {
+    return 'whitenoise';
+  }
+  if (
+    cleaned === 'binaural' ||
+    cleaned === 'alpha' ||
+    cleaned === 'alpha focus' ||
+    cleaned === '432hz alpha focus'
+  ) {
+    return 'binaural';
+  }
+  if (
+    cleaned === 'lofi' ||
+    cleaned === 'lo-fi' ||
+    cleaned === 'lo-fi chords' ||
+    cleaned === 'lo-fi study chords'
+  ) {
+    return 'lofi';
+  }
+  if (
+    cleaned === 'rainy_cafe' ||
+    cleaned === 'rainy cafe' ||
+    cleaned === 'rainy café'
+  ) {
+    return 'rainy_cafe';
+  }
+  return 'off';
+}
+
+export interface ActiveStudyRoomSoundscapePresetSummary {
+  activePresetId: StudyRoomSoundscapePresetId | 'custom';
+  activePreset: StudyRoomSoundscapePresetItem | null;
+  displayLabel: string;
+  shortLabel: string;
+  description: string;
+  acousticProfile: string;
+  isCustomBlend: boolean;
+}
+
+export function resolveActiveStudyRoomSoundscapePreset(
+  mixState: AmbientMultiLayerMixState
+): ActiveStudyRoomSoundscapePresetSummary {
+  const activeLayers = getActiveAmbientLayers(
+    mixState || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE
+  );
+  if (activeLayers.length === 0) {
+    const offPreset = STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS.find(
+      (p) => p.id === 'off'
+    )!;
+    return {
+      activePresetId: 'off',
+      activePreset: offPreset,
+      displayLabel: offPreset.label,
+      shortLabel: offPreset.shortLabel,
+      description: offPreset.description,
+      acousticProfile: offPreset.acousticProfile,
+      isCustomBlend: false,
+    };
+  }
+
+  // First check exact layer+volume match against multi-layer or single-layer presets
+  for (const preset of STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS) {
+    if (preset.id === 'off') continue;
+    const presetTrackIds = Object.keys(preset.layers) as AmbientTrackId[];
+    if (presetTrackIds.length !== activeLayers.length) continue;
+    const exactMatch = presetTrackIds.every(
+      (tid) =>
+        Boolean(mixState.layers[tid]?.enabled) &&
+        mixState.layers[tid]?.volumePercent === preset.layers[tid]
+    );
+    if (exactMatch) {
+      return {
+        activePresetId: preset.id,
+        activePreset: preset,
+        displayLabel: preset.label,
+        shortLabel: preset.shortLabel,
+        description: preset.description,
+        acousticProfile: preset.acousticProfile,
+        isCustomBlend: false,
+      };
+    }
+  }
+
+  // Next check single-track active match (even if the user adjusted that single track's individual volume)
+  if (activeLayers.length === 1) {
+    const singleTrackId = activeLayers[0].id;
+    const singleMap: Record<AmbientTrackId, StudyRoomSoundscapePresetId> = {
+      rainfall: 'rain',
+      coffeeshop: 'cafe',
+      whitenoise: 'whitenoise',
+      binaural: 'binaural',
+      lofi: 'lofi',
+    };
+    const mappedId = singleMap[singleTrackId];
+    const preset = STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS.find(
+      (p) => p.id === mappedId
+    );
+    if (preset) {
+      return {
+        activePresetId: preset.id,
+        activePreset: preset,
+        displayLabel: preset.label,
+        shortLabel: preset.shortLabel,
+        description: preset.description,
+        acousticProfile: `${preset.shortLabel} ${activeLayers[0].volumePercent}%`,
+        isCustomBlend: false,
+      };
+    }
+  }
+
+  // Check if active tracks match Forest (rainfall + binaural + whitenoise) or Rainy Cafe (rainfall + coffeeshop)
+  const activeIdsSet = new Set(activeLayers.map((l) => l.id));
+  if (
+    activeLayers.length === 3 &&
+    activeIdsSet.has('rainfall') &&
+    activeIdsSet.has('binaural') &&
+    activeIdsSet.has('whitenoise')
+  ) {
+    const forestPreset = STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS.find(
+      (p) => p.id === 'forest'
+    )!;
+    return {
+      activePresetId: 'forest',
+      activePreset: forestPreset,
+      displayLabel: forestPreset.label,
+      shortLabel: forestPreset.shortLabel,
+      description: forestPreset.description,
+      acousticProfile: forestPreset.acousticProfile,
+      isCustomBlend: false,
+    };
+  }
+
+  if (
+    activeLayers.length === 2 &&
+    activeIdsSet.has('rainfall') &&
+    activeIdsSet.has('coffeeshop')
+  ) {
+    const rainyCafePreset = STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS.find(
+      (p) => p.id === 'rainy_cafe'
+    )!;
+    return {
+      activePresetId: 'rainy_cafe',
+      activePreset: rainyCafePreset,
+      displayLabel: rainyCafePreset.label,
+      shortLabel: rainyCafePreset.shortLabel,
+      description: rainyCafePreset.description,
+      acousticProfile: rainyCafePreset.acousticProfile,
+      isCustomBlend: false,
+    };
+  }
+
+  const blendSummary = activeLayers
+    .map((l) => {
+      const m = AMBIENT_SOUNDSCAPES.find((s) => s.id === l.id);
+      return `${m?.shortLabel || l.id} (${l.volumePercent}%)`;
+    })
+    .join(' + ');
+
+  return {
+    activePresetId: 'custom',
+    activePreset: null,
+    displayLabel: `Custom Multi-Layer Blend (${activeLayers.length} Layers)`,
+    shortLabel: 'Custom Blend',
+    description: 'Custom multi-layer soundscape combination active',
+    acousticProfile: blendSummary,
+    isCustomBlend: true,
+  };
+}
+
+export function applyStudyRoomSoundscapePreset(
+  mixState: AmbientMultiLayerMixState,
+  presetInput: StudyRoomSoundscapePresetId | string
+): AmbientMultiLayerMixState {
+  const safeState = mixState || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE;
+  const presetId = normalizeStudyRoomSoundscapePresetId(presetInput);
+  const preset =
+    STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS.find((p) => p.id === presetId) ||
+    STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS.find((p) => p.id === 'off')!;
+
+  if (preset.id === 'off') {
+    return stopAllAmbientLayers(safeState);
+  }
+
+  const nextLayers = { ...safeState.layers };
+  for (const trackId of AMBIENT_TRACK_IDS) {
+    const prevLayer =
+      nextLayers[trackId] || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE.layers[trackId];
+    const targetLayerVol = preset.layers[trackId];
+    if (typeof targetLayerVol === 'number' && targetLayerVol > 0) {
+      const clampedVol = clampAmbientVolumePercent(targetLayerVol);
+      nextLayers[trackId] = {
+        ...prevLayer,
+        id: trackId,
+        enabled: true,
+        volumePercent: clampedVol,
+        lastNonZeroVolumePercent: clampedVol,
+      };
+    } else {
+      nextLayers[trackId] = {
+        ...prevLayer,
+        id: trackId,
+        enabled: false,
+      };
+    }
+  }
+
+  // Keep the user's existing volume slider setting if > 0; if muted/0, restore lastNonZeroMasterVolumePercent
+  const preservedMasterVolume =
+    !safeState.isMasterMuted && safeState.masterVolumePercent > 0
+      ? clampAmbientVolumePercent(safeState.masterVolumePercent)
+      : safeState.lastNonZeroMasterVolumePercent > 0
+      ? clampAmbientVolumePercent(safeState.lastNonZeroMasterVolumePercent)
+      : 75;
+
+  return {
+    ...safeState,
+    layers: nextLayers,
+    masterVolumePercent: preservedMasterVolume,
+    isMasterMuted: false,
+    lastNonZeroMasterVolumePercent: preservedMasterVolume,
+  };
+}
+

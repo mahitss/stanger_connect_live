@@ -66,6 +66,13 @@ import {
   WeeklyRoomFocusSortOrder,
   buildWeeklyFocusTimeByRoomCodeSummary,
   buildFocusHistory30DaySummary,
+  AMBIENT_ENVIRONMENT_BALANCE_PRESETS,
+  evaluateAmbientEnvironmentBalanceSpec,
+  adjustAmbientSoundscapeBalanceVolume,
+  STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS,
+  StudyRoomSoundscapePresetId,
+  resolveActiveStudyRoomSoundscapePreset,
+  applyStudyRoomSoundscapePreset,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
@@ -81,6 +88,7 @@ import {
   VolumeX,
   CloudRain,
   Coffee,
+  Trees,
   Radio,
   Waves,
   Music,
@@ -1249,9 +1257,54 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     (c) => !c.roomCode || c.roomCode === activeRoomCode
   );
   const isSeated = desksInCurrentRoom.some((d) => d.uid === currentUid);
-  const effectiveVolumePercent = ambientMixState.isMasterMuted
-    ? 0
-    : ambientMixState.masterVolumePercent;
+  const ambientBalanceSpec =
+    evaluateAmbientEnvironmentBalanceSpec(ambientMixState);
+  const effectiveVolumePercent = ambientBalanceSpec.effectiveVolumePercent;
+  const activeSoundscapePresetSummary =
+    resolveActiveStudyRoomSoundscapePreset(ambientMixState);
+
+  const handleAdjustAmbientBalanceVolume = (
+    targetVolume?: number,
+    stepDelta = 0
+  ) => {
+    const nextMix = adjustAmbientSoundscapeBalanceVolume(
+      ambientMixState,
+      targetVolume,
+      stepDelta
+    );
+    syncAndPersistAmbientMix(nextMix);
+  };
+
+  const handleSelectSoundscapePreset = (
+    presetInput: StudyRoomSoundscapePresetId | string
+  ) => {
+    if (presetInput === 'custom') return;
+    const nextMix = applyStudyRoomSoundscapePreset(
+      ambientMixState,
+      presetInput
+    );
+    syncAndPersistAmbientMix(nextMix);
+  };
+
+  const renderPresetSwitcherIcon = (presetId: StudyRoomSoundscapePresetId) => {
+    switch (presetId) {
+      case 'rain':
+      case 'rainy_cafe':
+        return <CloudRain className="w-3.5 h-3.5 shrink-0" />;
+      case 'cafe':
+        return <Coffee className="w-3.5 h-3.5 shrink-0" />;
+      case 'forest':
+        return <Trees className="w-3.5 h-3.5 shrink-0" />;
+      case 'whitenoise':
+        return <Radio className="w-3.5 h-3.5 shrink-0" />;
+      case 'binaural':
+        return <Waves className="w-3.5 h-3.5 shrink-0" />;
+      case 'lofi':
+        return <Music className="w-3.5 h-3.5 shrink-0" />;
+      default:
+        return <VolumeX className="w-3.5 h-3.5 shrink-0" />;
+    }
+  };
 
   const [weeklyRoomSortBy, setWeeklyRoomSortBy] =
     useState<WeeklyRoomFocusSortOrder>('minutes_desc');
@@ -2194,6 +2247,270 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 )}
               </>
             )}
+          </div>
+        </div>
+
+        {/* Dedicated Ambient Soundscape Volume & Local Environment Balance Control */}
+        <div
+          id="study-room-ambient-volume-balance-bar"
+          data-testid="study-room-ambient-volume-balance-bar"
+          role="region"
+          aria-label="Ambient Soundscape Volume and Local Environment Balance Control"
+          className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3.5"
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <Sliders className="w-4 h-4 text-emerald-400 shrink-0" />
+                <label
+                  htmlFor="study-room-ambient-volume-slider"
+                  className="font-semibold text-white cursor-pointer"
+                >
+                  Ambient Soundscape Volume &amp; Local Environment Balance
+                </label>
+                <span aria-hidden="true" className="text-zinc-600">
+                  ·
+                </span>
+                <span
+                  data-testid="study-room-environment-balance-label"
+                  className="font-mono text-emerald-400 tabular-nums"
+                >
+                  {ambientBalanceSpec.balanceZoneLabel}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400">
+                {ambientBalanceSpec.recommendedUseCase} —{' '}
+                <span className="font-mono text-zinc-300">
+                  {ambientBalanceSpec.activeLayersSummary}
+                </span>
+              </p>
+            </div>
+
+            {/* Balance Zone Presets */}
+            <div
+              className="flex flex-wrap items-center gap-1.5 shrink-0"
+              role="group"
+              aria-label="Ambient soundscape to local environment balance presets"
+            >
+              {AMBIENT_ENVIRONMENT_BALANCE_PRESETS.map((preset) => {
+                const isSelected =
+                  !ambientBalanceSpec.isMuted &&
+                  ambientBalanceSpec.effectiveVolumePercent === preset.percent;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() =>
+                      handleAdjustAmbientBalanceVolume(preset.percent)
+                    }
+                    title={preset.environmentHint}
+                    data-testid={`study-room-balance-preset-${preset.percent}`}
+                    className={`px-2.5 py-1 text-xs font-mono rounded border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                      isSelected
+                        ? 'bg-emerald-500 text-black border-emerald-400 font-bold'
+                        : 'bg-[#0A0A0C] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                    }`}
+                  >
+                    {preset.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Ambient Soundscape Preset Switcher (Dropdown + Preset Buttons: Rain, Cafe, Forest, White Noise, etc.) */}
+          <div
+            data-testid="study-room-ambient-preset-switcher"
+            className="p-3 rounded-md bg-[#0A0A0C] border border-zinc-800/90 space-y-2.5"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <label
+                  htmlFor="study-room-ambient-preset-select"
+                  className="font-semibold text-white whitespace-nowrap"
+                >
+                  Ambient Soundscape Preset:
+                </label>
+                <select
+                  id="study-room-ambient-preset-select"
+                  aria-label="Select Ambient Soundscape Preset"
+                  data-testid="study-room-ambient-preset-select"
+                  value={activeSoundscapePresetSummary.activePresetId}
+                  onChange={(e) => handleSelectSoundscapePreset(e.target.value)}
+                  className="px-3 py-1.5 text-xs font-mono bg-[#050505] text-white border border-zinc-700 hover:border-emerald-500/60 focus:border-emerald-400 rounded-md cursor-pointer focus:outline-none"
+                >
+                  {STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS.map((preset) => (
+                    <option key={preset.id} value={preset.id}>
+                      {preset.label}
+                    </option>
+                  ))}
+                  {activeSoundscapePresetSummary.isCustomBlend && (
+                    <option value="custom">
+                      {activeSoundscapePresetSummary.displayLabel}
+                    </option>
+                  )}
+                </select>
+                <span
+                  data-testid="study-room-active-preset-badge"
+                  className="text-[11px] font-mono text-emerald-400 tabular-nums"
+                >
+                  Active: {activeSoundscapePresetSummary.shortLabel} ·{' '}
+                  {activeSoundscapePresetSummary.acousticProfile}
+                </span>
+              </div>
+
+              <span className="text-[11px] text-zinc-400">
+                {activeSoundscapePresetSummary.description}
+              </span>
+            </div>
+
+            {/* Dedicated Preset Buttons (Rain, Cafe, Forest, White Noise, Alpha Focus, Lo-Fi Chords, Rainy Café, Off) */}
+            <div
+              role="group"
+              aria-label="Ambient Soundscape Preset Buttons"
+              data-testid="study-room-ambient-preset-buttons"
+              className="flex flex-wrap items-center gap-1.5"
+            >
+              {STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS.map((preset) => {
+                const isPresetSelected =
+                  activeSoundscapePresetSummary.activePresetId === preset.id;
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    aria-pressed={isPresetSelected}
+                    onClick={() => handleSelectSoundscapePreset(preset.id)}
+                    title={preset.description}
+                    data-testid={`study-room-preset-btn-${preset.id}`}
+                    className={`px-2.5 py-1.5 rounded text-xs font-mono border flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                      isPresetSelected
+                        ? 'bg-emerald-500 text-black border-emerald-400 font-bold'
+                        : 'bg-[#050505] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                    }`}
+                  >
+                    {renderPresetSwitcherIcon(preset.id)}
+                    <span>{preset.shortLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Dedicated Volume Range Slider + Visual Dual-Balance Meter + Fine Step Controls */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+            <div className="lg:col-span-7 flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={handleToggleMuteWorkspaceAudio}
+                aria-label={
+                  ambientBalanceSpec.isMuted
+                    ? 'Unmute ambient soundscapes'
+                    : 'Mute ambient soundscapes'
+                }
+                data-testid="study-room-ambient-mute-btn"
+                className={`p-2 rounded border transition-colors cursor-pointer shrink-0 ${
+                  ambientBalanceSpec.isMuted
+                    ? 'bg-amber-500/15 border-amber-500/40 text-amber-300'
+                    : 'bg-[#0A0A0C] border-zinc-800 text-emerald-400 hover:border-zinc-700'
+                }`}
+              >
+                {ambientBalanceSpec.isMuted ? (
+                  <VolumeX className="w-4 h-4" />
+                ) : (
+                  <Volume2 className="w-4 h-4" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleAdjustAmbientBalanceVolume(undefined, -5)}
+                aria-label="Decrease ambient soundscape volume by 5 percent"
+                data-testid="study-room-ambient-vol-minus-btn"
+                className="px-2 py-1 text-xs font-mono bg-[#0A0A0C] hover:bg-zinc-900 text-zinc-300 border border-zinc-800 rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              >
+                -5%
+              </button>
+
+              <div className="flex-1 space-y-1">
+                <input
+                  id="study-room-ambient-volume-slider"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={effectiveVolumePercent}
+                  aria-label="Ambient Soundscape Volume"
+                  aria-valuetext={ambientBalanceSpec.sliderAriaValueText}
+                  onChange={(e) =>
+                    handleAdjustAmbientBalanceVolume(Number(e.target.value))
+                  }
+                  data-testid="study-room-ambient-volume-slider"
+                  className="w-full accent-emerald-400 cursor-pointer"
+                />
+                <div className="flex items-center justify-between text-[10px] font-mono text-zinc-400 tabular-nums">
+                  <span>
+                    Ambient Soundscapes:{' '}
+                    <strong className="text-emerald-400">
+                      {effectiveVolumePercent}%
+                    </strong>
+                  </span>
+                  <span>
+                    Local Room Awareness:{' '}
+                    <strong className="text-zinc-200">
+                      {ambientBalanceSpec.localEnvironmentSharePercent}%
+                    </strong>
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleAdjustAmbientBalanceVolume(undefined, 5)}
+                aria-label="Increase ambient soundscape volume by 5 percent"
+                data-testid="study-room-ambient-vol-plus-btn"
+                className="px-2 py-1 text-xs font-mono bg-[#0A0A0C] hover:bg-zinc-900 text-zinc-300 border border-zinc-800 rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
+              >
+                +5%
+              </button>
+
+              <span
+                data-testid="study-room-ambient-volume-readout"
+                className="text-sm font-mono font-bold tabular-nums text-white min-w-[46px] text-right shrink-0"
+              >
+                {effectiveVolumePercent}%
+              </span>
+            </div>
+
+            {/* Quick Soundscape Layer Toggles Right in the Balance Bar */}
+            <div className="lg:col-span-5 flex flex-wrap items-center justify-start lg:justify-end gap-1.5">
+              <span className="text-[11px] font-mono text-zinc-400 mr-1 whitespace-nowrap">
+                Layer Mix:
+              </span>
+              {AMBIENT_SOUNDSCAPES.map((sound) => {
+                const trackId = sound.id as AmbientTrackId;
+                const layer = ambientMixState.layers[trackId];
+                const isTrackOn = Boolean(
+                  layer?.enabled && layer.volumePercent > 0
+                );
+                return (
+                  <button
+                    key={sound.id}
+                    type="button"
+                    aria-pressed={isTrackOn}
+                    onClick={() => handleToggleSoundscapeLayer(sound.id)}
+                    data-testid={`study-room-quick-sound-${sound.id}`}
+                    className={`px-2.5 py-1 rounded text-[11px] font-mono border flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                      isTrackOn
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-semibold'
+                        : 'bg-[#0A0A0C] text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'
+                    }`}
+                  >
+                    {renderSoundscapeIcon(sound.id)}
+                    <span>{sound.shortLabel}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </div>
