@@ -17570,6 +17570,86 @@ export interface WorkspaceQrSoundVolumeSectionSpec {
   ];
 }
 
+export const WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_BAR_ID =
+  'workspace-header-qr-successful-scan-chime-toggle-bar';
+export const WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_ID =
+  'workspace-header-qr-successful-scan-chime-toggle';
+export const WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_STATUS_BADGE_ID =
+  'workspace-header-qr-successful-scan-chime-status-badge';
+
+export interface WorkspaceQrSuccessfulScanChimeToggleSpec {
+  barElementId: typeof WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_BAR_ID;
+  barTestId: typeof WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_BAR_ID;
+  toggleElementId: typeof WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_ID;
+  toggleTestId: typeof WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_ID;
+  settingsToggleElementId: 'workspace-header-qr-sound-toggle-successful-scans';
+  statusBadgeElementId: typeof WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_STATUS_BADGE_ID;
+  statusBadgeTestId: typeof WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_STATUS_BADGE_ID;
+  settingKey: 'successfulScans';
+  chimeEventType: 'qr_scan_confirm';
+  frequenciesHz: [number, number];
+  enabled: boolean;
+  statusText: 'Chime On' | 'Chime Off';
+  statusBadgeLabel: 'Chime On' | 'Chime Off';
+  volumePercent: number;
+  chimeVolumePercent: number;
+  generalUiVolumePercent: number;
+  independentOfUiVolume: true;
+  isIndependentOfGeneralUiVolume: true;
+  label: 'Successful Scan Audio Chime';
+  description: string;
+  subtitle: string;
+  volumeBadgeText: string;
+  ariaLabel: string;
+}
+
+export function buildWorkspaceQrSuccessfulScanChimeToggleSpec(input?: {
+  preferences?: WorkspaceQrScannerSoundPreferences | unknown;
+  volumePreferences?: WorkspaceQrScannerSoundVolumePreferences | unknown;
+  uiSoundPreferences?: UiSoundEffectPreferences | null;
+}): WorkspaceQrSuccessfulScanChimeToggleSpec {
+  const prefs = normalizeWorkspaceQrScannerSoundPreferences(input?.preferences);
+  const volumePrefs = normalizeWorkspaceQrScannerSoundVolumePreferences(
+    input?.volumePreferences,
+    DEFAULT_WORKSPACE_QR_SCAN_SOUND_VOLUME_PERCENT
+  );
+  const generalUiVolumePercent = clampSoundVolumePercent(
+    input?.uiSoundPreferences?.volumePercent ??
+      DEFAULT_UI_SOUND_PREFERENCES.volumePercent
+  );
+  const chimeVolumePercent = volumePrefs.successfulScansVolumePercent;
+  const enabled = Boolean(prefs.successfulScans);
+  const description = `Plays C6 → E6 confirmation chime at ${chimeVolumePercent}% scan volume (independent of general UI volume)`;
+
+  return {
+    barElementId: WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_BAR_ID,
+    barTestId: WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_BAR_ID,
+    toggleElementId: WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_ID,
+    toggleTestId: WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_ID,
+    settingsToggleElementId: 'workspace-header-qr-sound-toggle-successful-scans',
+    statusBadgeElementId: WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_STATUS_BADGE_ID,
+    statusBadgeTestId: WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_STATUS_BADGE_ID,
+    settingKey: 'successfulScans',
+    chimeEventType: 'qr_scan_confirm',
+    frequenciesHz: [1046.5, 1318.51],
+    enabled,
+    statusText: enabled ? 'Chime On' : 'Chime Off',
+    statusBadgeLabel: enabled ? 'Chime On' : 'Chime Off',
+    volumePercent: chimeVolumePercent,
+    chimeVolumePercent,
+    generalUiVolumePercent,
+    independentOfUiVolume: true,
+    isIndependentOfGeneralUiVolume: true,
+    label: 'Successful Scan Audio Chime',
+    description,
+    subtitle: description,
+    volumeBadgeText: `${chimeVolumePercent}% Scan Vol`,
+    ariaLabel: `Toggle Successful Scan Audio Chime (${
+      enabled ? 'currently On' : 'currently Off'
+    }, independent of general UI notification volume)`,
+  };
+}
+
 export interface WorkspaceQrSoundSettingsSectionSpec {
   sectionElementId: 'workspace-header-qr-sound-settings-section';
   sectionTestId: 'workspace-header-qr-sound-settings-section';
@@ -17588,6 +17668,7 @@ export interface WorkspaceQrSoundSettingsSectionSpec {
   statusBadgeLabel: string;
   preferences: WorkspaceQrScannerSoundPreferences;
   serializedPreferencesJson: string;
+  successfulScanChimeToggle: WorkspaceQrSuccessfulScanChimeToggleSpec;
   volumeSection: WorkspaceQrSoundVolumeSectionSpec;
   items: [
     WorkspaceQrSoundSettingItemSpec,
@@ -17602,14 +17683,15 @@ export function buildWorkspaceQrSoundSettingsSectionSpec(input?: {
   uiSoundPreferences?: UiSoundEffectPreferences | null;
 }): WorkspaceQrSoundSettingsSectionSpec {
   const prefs = normalizeWorkspaceQrScannerSoundPreferences(input?.preferences);
-  const fallbackVol = clampSoundVolumePercent(
-    input?.uiSoundPreferences?.volumePercent ??
-      DEFAULT_UI_SOUND_PREFERENCES.volumePercent
-  );
   const volumePrefs = normalizeWorkspaceQrScannerSoundVolumePreferences(
     input?.volumePreferences,
-    fallbackVol
+    DEFAULT_WORKSPACE_QR_SCAN_SOUND_VOLUME_PERCENT
   );
+  const successfulScanChimeToggle = buildWorkspaceQrSuccessfulScanChimeToggleSpec({
+    preferences: prefs,
+    volumePreferences: volumePrefs,
+    uiSoundPreferences: input?.uiSoundPreferences,
+  });
   const confirmChime = getUiSoundChimeSpec(
     'qr_scan_confirm',
     false,
@@ -17829,6 +17911,7 @@ export function buildWorkspaceQrSoundSettingsSectionSpec(input?: {
     statusBadgeLabel: `${enabledCount}/3 On`,
     preferences: prefs,
     serializedPreferencesJson: JSON.stringify(prefs),
+    successfulScanChimeToggle,
     volumeSection,
     items,
   };
@@ -17840,6 +17923,7 @@ export interface WorkspaceQrScannerEventSoundResolution {
   shouldPlay: boolean;
   isGlobalSoundEnabled: boolean;
   isIndividualToggleEnabled: boolean;
+  isIndependentOfGeneralUiVolume: boolean;
   chime: UiSoundChimeSpec;
   frequenciesHz: [number, number];
   noteNames: string;
@@ -17861,7 +17945,11 @@ export function resolveWorkspaceQrScannerEventSound(input: {
   const scannerPrefs = normalizeWorkspaceQrScannerSoundPreferences(
     input.scannerSoundPreferences
   );
-  const fallbackVol = clampSoundVolumePercent(uiPrefs.volumePercent);
+  const isIndependentOfGeneralUiVolume =
+    input.eventCategory === 'successfulScans';
+  const fallbackVol = isIndependentOfGeneralUiVolume
+    ? DEFAULT_WORKSPACE_QR_SCAN_SOUND_VOLUME_PERCENT
+    : clampSoundVolumePercent(uiPrefs.volumePercent);
   const volumePercent = resolveWorkspaceQrScannerEventVolumePercent(
     input.scannerSoundVolumePreferences ?? input.scannerSoundPreferences,
     input.eventCategory,
@@ -17869,8 +17957,9 @@ export function resolveWorkspaceQrScannerEventSound(input: {
   );
   const isGlobalSoundEnabled = Boolean(uiPrefs.enabled);
   const isIndividualToggleEnabled = Boolean(scannerPrefs[input.eventCategory]);
-  const shouldPlay =
-    isGlobalSoundEnabled && isIndividualToggleEnabled && volumePercent > 0;
+  const shouldPlay = isIndependentOfGeneralUiVolume
+    ? isIndividualToggleEnabled && volumePercent > 0
+    : isGlobalSoundEnabled && isIndividualToggleEnabled && volumePercent > 0;
   const roomCode = normalizeStudyRoomCode(input.roomCode || 'STUDY-GLOBAL');
 
   const chimeType:
@@ -17908,6 +17997,7 @@ export function resolveWorkspaceQrScannerEventSound(input: {
     shouldPlay,
     isGlobalSoundEnabled,
     isIndividualToggleEnabled,
+    isIndependentOfGeneralUiVolume,
     chime,
     frequenciesHz: chime.frequenciesHz,
     noteNames: chime.noteNames,
@@ -17918,6 +18008,9 @@ export function resolveWorkspaceQrScannerEventSound(input: {
 
 export interface WorkspaceQrScanConfirmationChimeSpec {
   shouldPlay: boolean;
+  isSuccessfulScanChimeEnabled: boolean;
+  isIndependentOfUiNotificationVolume: boolean;
+  generalUiNotificationVolumePercent: number;
   chimeType: 'qr_scan_confirm';
   chime: UiSoundChimeSpec;
   isHighFrequency: true;
@@ -17934,23 +18027,41 @@ export function resolveWorkspaceQrScanConfirmationChime(input?: {
   scannerSoundVolumePreferences?:
     | WorkspaceQrScannerSoundVolumePreferences
     | unknown;
+  successfulScanChimeEnabled?: boolean;
   roomCode?: string | null;
   isAppInBackground?: boolean;
 }): WorkspaceQrScanConfirmationChimeSpec {
   const prefs = input?.preferences ?? DEFAULT_UI_SOUND_PREFERENCES;
+  const generalUiNotificationVolumePercent = clampSoundVolumePercent(
+    prefs.volumePercent
+  );
+  const hasDedicatedScannerConfig =
+    input?.scannerSoundPreferences !== undefined ||
+    input?.scannerSoundVolumePreferences !== undefined ||
+    typeof input?.successfulScanChimeEnabled === 'boolean';
+
   const scannerPrefs = normalizeWorkspaceQrScannerSoundPreferences(
     input?.scannerSoundPreferences
   );
-  const fallbackVol = clampSoundVolumePercent(prefs.volumePercent);
+
+  const isSuccessfulScanChimeEnabled =
+    typeof input?.successfulScanChimeEnabled === 'boolean'
+      ? input.successfulScanChimeEnabled
+      : hasDedicatedScannerConfig
+        ? Boolean(scannerPrefs.successfulScans)
+        : Boolean(prefs.enabled && scannerPrefs.successfulScans);
+
+  const fallbackVol = hasDedicatedScannerConfig
+    ? DEFAULT_WORKSPACE_QR_SCAN_SOUND_VOLUME_PERCENT
+    : generalUiNotificationVolumePercent;
+
   const volumePercent = resolveWorkspaceQrScannerEventVolumePercent(
     input?.scannerSoundVolumePreferences ?? input?.scannerSoundPreferences,
     'successfulScans',
     fallbackVol
   );
-  const shouldPlay =
-    Boolean(prefs.enabled) &&
-    Boolean(scannerPrefs.successfulScans) &&
-    volumePercent > 0;
+
+  const shouldPlay = Boolean(isSuccessfulScanChimeEnabled) && volumePercent > 0;
   const roomCode = normalizeStudyRoomCode(input?.roomCode || 'STUDY-GLOBAL');
   const chime = getUiSoundChimeSpec(
     'qr_scan_confirm',
@@ -17960,6 +18071,9 @@ export function resolveWorkspaceQrScanConfirmationChime(input?: {
 
   return {
     shouldPlay,
+    isSuccessfulScanChimeEnabled,
+    isIndependentOfUiNotificationVolume: true,
+    generalUiNotificationVolumePercent,
     chimeType: 'qr_scan_confirm',
     chime,
     isHighFrequency: true,
@@ -17969,7 +18083,7 @@ export function resolveWorkspaceQrScanConfirmationChime(input?: {
     roomCode,
     feedbackMessage: shouldPlay
       ? `High-frequency QR scan confirmation chime played for ${roomCode} (${chime.noteNames})`
-      : `QR scan detected for ${roomCode} (Sound alerts muted)`,
+      : `QR scan detected for ${roomCode} (Successful scan audio chime disabled)`,
   };
 }
 
@@ -17990,6 +18104,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   historyDetailsModal: WorkspaceQrHistoryItemDetailsModalSpec;
   soundSettingsSection: WorkspaceQrSoundSettingsSectionSpec;
   soundVolumeSection: WorkspaceQrSoundVolumeSectionSpec;
+  successfulScanChimeToggle: WorkspaceQrSuccessfulScanChimeToggleSpec;
   scanConfirmationChime: WorkspaceQrScanConfirmationChimeSpec;
   scanChimePlayedCount: number;
   detectionFlash: WorkspaceQrDetectionFlashSpec;
@@ -18164,10 +18279,12 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     uiSoundPreferences: input?.uiSoundPreferences,
   });
   const soundVolumeSection = soundSettingsSection.volumeSection;
+  const successfulScanChimeToggle = soundSettingsSection.successfulScanChimeToggle;
   const scanConfirmationChime = resolveWorkspaceQrScanConfirmationChime({
     preferences: input?.uiSoundPreferences,
     scannerSoundPreferences: input?.qrScannerSoundPreferences,
     scannerSoundVolumePreferences: input?.qrScannerSoundVolumePreferences,
+    successfulScanChimeEnabled: successfulScanChimeToggle.enabled,
     roomCode: lastJoinedWorkspaceRoomCode || roomCode,
   });
 
@@ -18177,7 +18294,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
       : cameraScanStatus === 'scanning'
         ? 'Camera Active · Scanning QR'
         : cameraScanStatus === 'detected'
-          ? `Joined ${lastJoinedWorkspaceRoomCode || roomCode}`
+           ? `Joined ${lastJoinedWorkspaceRoomCode || roomCode}`
           : cameraScanStatus === 'permission_denied'
             ? 'Camera Permission Denied'
             : cameraScanStatus === 'camera_unavailable'
@@ -18208,6 +18325,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     historyDetailsModal,
     soundSettingsSection,
     soundVolumeSection,
+    successfulScanChimeToggle,
     scanConfirmationChime,
     scanChimePlayedCount,
     detectionFlash: evaluateWorkspaceQrDetectionFlashSpec({

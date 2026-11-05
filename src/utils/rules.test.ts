@@ -389,6 +389,10 @@ import {
   WORKSPACE_QR_SIMULATE_DETECT_BUTTON_ID,
   evaluateWorkspaceQrDetectionFlashSpec,
   resolveWorkspaceQrDetectionFlashSequence,
+  WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_BAR_ID,
+  WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_ID,
+  WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_STATUS_BADGE_ID,
+  buildWorkspaceQrSuccessfulScanChimeToggleSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9316,3 +9320,127 @@ test('evaluateWorkspaceQrDetectionFlashSpec, resolveWorkspaceQrDetectionFlashSeq
     'workspace-header-qr-detection-flash-overlay'
   );
 });
+
+test('QR scanner popover successful scan audio chime toggle enables/disables the successful scan chime independently of general UI notification volume', () => {
+  // 1. Default toggle spec is enabled at 65% scan volume and explicitly marked independent of general UI notification volume
+  const defaultSpec = buildWorkspaceQrSuccessfulScanChimeToggleSpec();
+  assert.equal(
+    defaultSpec.barElementId,
+    WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_BAR_ID
+  );
+  assert.equal(
+    defaultSpec.toggleElementId,
+    WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_ID
+  );
+  assert.equal(
+    defaultSpec.statusBadgeElementId,
+    WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_STATUS_BADGE_ID
+  );
+  assert.equal(defaultSpec.enabled, true);
+  assert.equal(defaultSpec.volumePercent, 65);
+  assert.equal(defaultSpec.independentOfUiVolume, true);
+  assert.equal(defaultSpec.statusText, 'Chime On');
+  assert.equal(defaultSpec.chimeEventType, 'qr_scan_confirm');
+  assert.deepEqual(defaultSpec.frequenciesHz, [1046.5, 1318.51]);
+
+  // 2. Even when general UI notification sound is muted/disabled (enabled: false, volumePercent: 0),
+  //    having the QR scanner 'successfulScans' toggle enabled still plays the successful scan chime at its own scanner volume
+  const mutedUiPrefs = {
+    ...DEFAULT_UI_SOUND_PREFERENCES,
+    enabled: false,
+    volumePercent: 0,
+  };
+  const activeScanChimeWithMutedUi = resolveWorkspaceQrScanConfirmationChime({
+    preferences: mutedUiPrefs,
+    scannerSoundPreferences: {
+      ...DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES,
+      successfulScans: true,
+    },
+    scannerSoundVolumePreferences: {
+      ...DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES,
+      successfulScansVolumePercent: 72,
+    },
+    roomCode: 'STUDY-305',
+  });
+  assert.equal(activeScanChimeWithMutedUi.shouldPlay, true);
+  assert.equal(activeScanChimeWithMutedUi.volumePercent, 72);
+  assert.equal(
+    activeScanChimeWithMutedUi.isIndependentOfUiNotificationVolume,
+    true
+  );
+  assert.equal(activeScanChimeWithMutedUi.chime.eventType, 'qr_scan_confirm');
+  assert.ok(
+    activeScanChimeWithMutedUi.feedbackMessage.includes(
+      'High-frequency QR scan confirmation chime played for STUDY-305'
+    )
+  );
+
+  const eventSoundWithMutedUi = resolveWorkspaceQrScannerEventSound({
+    eventCategory: 'successfulScans',
+    scannerSoundPreferences: {
+      ...DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES,
+      successfulScans: true,
+    },
+    scannerSoundVolumePreferences: {
+      ...DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES,
+      successfulScansVolumePercent: 72,
+    },
+    uiSoundPreferences: mutedUiPrefs,
+    roomCode: 'STUDY-305',
+  });
+  assert.equal(eventSoundWithMutedUi.shouldPlay, true);
+  assert.equal(eventSoundWithMutedUi.volumePercent, 72);
+  assert.equal(eventSoundWithMutedUi.isIndependentOfGeneralUiVolume, true);
+
+  // 3. Even when general UI notification sound is 100% enabled,
+  //    toggling 'successfulScans' off in the QR scanner popover disables the successful scan chime
+  const loudUiPrefs = {
+    ...DEFAULT_UI_SOUND_PREFERENCES,
+    enabled: true,
+    volumePercent: 100,
+  };
+  const toggledOffPrefs = toggleWorkspaceQrScannerSoundPreference(
+    DEFAULT_WORKSPACE_QR_SCANNER_SOUND_PREFERENCES,
+    'successfulScans'
+  );
+  assert.equal(toggledOffPrefs.nextValue, false);
+  assert.equal(toggledOffPrefs.updatedPreferences.successfulScans, false);
+
+  const disabledScanChimeWithLoudUi = resolveWorkspaceQrScanConfirmationChime({
+    preferences: loudUiPrefs,
+    scannerSoundPreferences: toggledOffPrefs.updatedPreferences,
+    scannerSoundVolumePreferences:
+      DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES,
+    roomCode: 'STUDY-305',
+  });
+  assert.equal(disabledScanChimeWithLoudUi.shouldPlay, false);
+  assert.ok(
+    disabledScanChimeWithLoudUi.feedbackMessage.includes(
+      'Successful scan audio chime disabled'
+    )
+  );
+
+  // 4. Verify getWorkspaceHeaderQrCodeMeta exposes successfulScanChimeToggle reflecting the current toggle state
+  const qrMetaDisabled = getWorkspaceHeaderQrCodeMeta({
+    isOpen: true,
+    uiSoundPreferences: loudUiPrefs,
+    qrScannerSoundPreferences: toggledOffPrefs.updatedPreferences,
+    qrScannerSoundVolumePreferences: {
+      ...DEFAULT_WORKSPACE_QR_SCANNER_SOUND_VOLUME_PREFERENCES,
+      successfulScansVolumePercent: 80,
+    },
+    roomCode: 'STUDY-305',
+  });
+  assert.equal(qrMetaDisabled.successfulScanChimeToggle.enabled, false);
+  assert.equal(
+    qrMetaDisabled.successfulScanChimeToggle.statusText,
+    'Chime Off'
+  );
+  assert.equal(qrMetaDisabled.successfulScanChimeToggle.volumePercent, 80);
+  assert.equal(
+    qrMetaDisabled.successfulScanChimeToggle.independentOfUiVolume,
+    true
+  );
+  assert.equal(qrMetaDisabled.scanConfirmationChime.shouldPlay, false);
+});
+

@@ -6912,6 +6912,139 @@ export default function App() {
                           </button>
                         </div>
 
+                        {/* Dedicated User-Selectable Toggle for 'Successful Scan' Audio Chime (Independent of General UI Notification Volume) */}
+                        <div
+                          id={
+                            workspaceHeaderQrMeta.successfulScanChimeToggle
+                              .barElementId
+                          }
+                          data-testid={
+                            workspaceHeaderQrMeta.successfulScanChimeToggle
+                              .barTestId
+                          }
+                          data-enabled={
+                            workspaceHeaderQrMeta.successfulScanChimeToggle
+                              .enabled
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-scan-volume-percent={String(
+                            workspaceHeaderQrMeta.successfulScanChimeToggle
+                              .volumePercent
+                          )}
+                          data-independent-of-ui-volume={
+                            workspaceHeaderQrMeta.successfulScanChimeToggle
+                              .independentOfUiVolume
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-ui-notification-volume-percent={String(
+                            uiSoundPrefs.volumePercent
+                          )}
+                          data-ui-notification-enabled={
+                            uiSoundPrefs.enabled ? 'true' : 'false'
+                          }
+                          className="flex items-center justify-between gap-2.5 px-2.5 py-2 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50/90 dark:bg-zinc-900/70"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {workspaceHeaderQrMeta.successfulScanChimeToggle
+                                .enabled ? (
+                                <Volume2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                              ) : (
+                                <VolumeX className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500 shrink-0" />
+                              )}
+                              <span className="text-[11px] font-bold text-slate-800 dark:text-zinc-100 truncate">
+                                {
+                                  workspaceHeaderQrMeta
+                                    .successfulScanChimeToggle.label
+                                }
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-mono tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">
+                                {
+                                  workspaceHeaderQrMeta
+                                    .successfulScanChimeToggle.volumePercent
+                                }
+                                % Scan Vol · Independent of UI Vol
+                              </span>
+                            </div>
+                            <p className="mt-0.5 text-[10px] text-slate-500 dark:text-zinc-400 leading-snug">
+                              {
+                                workspaceHeaderQrMeta.successfulScanChimeToggle
+                                  .description
+                              }
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            role="switch"
+                            id={
+                              workspaceHeaderQrMeta.successfulScanChimeToggle
+                                .toggleElementId
+                            }
+                            data-testid={
+                              workspaceHeaderQrMeta.successfulScanChimeToggle
+                                .toggleTestId
+                            }
+                            data-setting-key="successfulScans"
+                            data-enabled={
+                              workspaceHeaderQrMeta.successfulScanChimeToggle
+                                .enabled
+                                ? 'true'
+                                : 'false'
+                            }
+                            data-scan-volume-percent={String(
+                              workspaceHeaderQrMeta.successfulScanChimeToggle
+                                .volumePercent
+                            )}
+                            data-independent-of-ui-volume="true"
+                            aria-checked={
+                              workspaceHeaderQrMeta.successfulScanChimeToggle
+                                .enabled
+                            }
+                            aria-label={
+                              workspaceHeaderQrMeta.successfulScanChimeToggle
+                                .ariaLabel
+                            }
+                            onClick={() =>
+                              handleToggleWorkspaceQrScannerSoundPreference(
+                                'successfulScans'
+                              )
+                            }
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-[11px] font-mono tabular-nums font-bold shrink-0 transition-all cursor-pointer ${
+                              workspaceHeaderQrMeta.successfulScanChimeToggle
+                                .enabled
+                                ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/50 text-emerald-700 dark:text-emerald-300 shadow-xs'
+                                : 'bg-slate-200/80 hover:bg-slate-300/80 border-slate-300 text-slate-600 dark:bg-zinc-800 dark:hover:bg-zinc-700 dark:border-zinc-700 dark:text-zinc-400'
+                            }`}
+                          >
+                            <span
+                              className={`w-2 h-2 rounded-full transition-colors ${
+                                workspaceHeaderQrMeta.successfulScanChimeToggle
+                                  .enabled
+                                  ? 'bg-emerald-500 dark:bg-emerald-400'
+                                  : 'bg-slate-400 dark:bg-zinc-500'
+                              }`}
+                            />
+                            <span
+                              id={
+                                workspaceHeaderQrMeta.successfulScanChimeToggle
+                                  .statusBadgeElementId
+                              }
+                              data-testid={
+                                workspaceHeaderQrMeta.successfulScanChimeToggle
+                                  .statusBadgeTestId
+                              }
+                            >
+                              {
+                                workspaceHeaderQrMeta.successfulScanChimeToggle
+                                  .statusText
+                              }
+                            </span>
+                          </button>
+                        </div>
+
                         {lastScannedWorkspaceQrResult && (
                           <div
                             id={workspaceHeaderQrMeta.scanResultBannerId}
