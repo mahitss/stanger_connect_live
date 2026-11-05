@@ -377,6 +377,11 @@ import {
   evaluateCustomFocusSessionDurationSpec,
   adjustCustomFocusSessionDurationByDelta,
   applyUserSavedCustomFocusDurations,
+  DAILY_GOAL_REACHED_BONUS_POINTS,
+  DAILY_GOAL_REACHED_TOAST_DURATION_MS,
+  DAILY_GOAL_REACHED_TOAST_ELEMENT_ID,
+  resolveDailyGoalReachedTransition,
+  evaluateDailyFocusGoalReachedToast,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9114,7 +9119,104 @@ test('evaluateCustomFocusSessionDurationSpec, adjustCustomFocusSessionDurationBy
   assert.deepEqual(saved, [42, 35, 52, 75]);
 });
 
+test('resolveDailyGoalReachedTransition and evaluateDailyFocusGoalReachedToast trigger toast notification when daily focus goal is reached with points earned and session streak summary', () => {
+  assert.equal(DAILY_GOAL_REACHED_BONUS_POINTS, 25);
+  assert.equal(DAILY_GOAL_REACHED_TOAST_DURATION_MS, 8500);
+  assert.equal(
+    DAILY_GOAL_REACHED_TOAST_ELEMENT_ID,
+    'daily-focus-goal-reached-toast'
+  );
 
+  // 1. Not yet reached (95m / 120m) -> no goal bonus, toast hidden
+  const preTransition = resolveDailyGoalReachedTransition({
+    previousCompletedMinutes: 70,
+    nextCompletedMinutes: 95,
+    targetMinutes: 120,
+    basePointsAwarded: 15,
+  });
+  assert.equal(preTransition.crossedGoalNow, false);
+  assert.equal(preTransition.isGoalReachedAfter, false);
+  assert.equal(preTransition.goalBonusPoints, 0);
+  assert.equal(preTransition.totalPointsAwarded, 15);
 
+  const notReachedToast = evaluateDailyFocusGoalReachedToast({
+    dateKey: '2026-11-05',
+    previousCompletedMinutes: 70,
+    completedMinutes: 95,
+    targetMinutes: 120,
+    todayPointsEarned: 55,
+    totalParticipationPoints: 200,
+    streakCount: 7,
+  });
+  assert.equal(notReachedToast.isGoalReached, false);
+  assert.equal(notReachedToast.justCrossedGoalThreshold, false);
+  assert.equal(notReachedToast.shouldShowToast, false);
 
+  // 2. Crossing from 95m -> 120m (100% of 120m target) triggers toast and awards +25 goal bonus points
+  const crossTransition = resolveDailyGoalReachedTransition({
+    previousCompletedMinutes: 95,
+    nextCompletedMinutes: 120,
+    targetMinutes: 120,
+    basePointsAwarded: 15,
+  });
+  assert.equal(crossTransition.crossedGoalNow, true);
+  assert.equal(crossTransition.isGoalReachedAfter, true);
+  assert.equal(crossTransition.goalBonusPoints, 25);
+  assert.equal(crossTransition.totalPointsAwarded, 40);
+
+  const reachedToast = evaluateDailyFocusGoalReachedToast({
+    dateKey: '2026-11-05',
+    previousCompletedMinutes: 95,
+    completedMinutes: 120,
+    targetMinutes: 120,
+    todayPointsEarned: 95,
+    lastSessionPointsAwarded: 40,
+    totalParticipationPoints: 240,
+    streakCount: 8,
+    consecutiveGoalDays: 5,
+  });
+  assert.equal(reachedToast.toastElementId, 'daily-focus-goal-reached-toast');
+  assert.equal(reachedToast.isGoalReached, true);
+  assert.equal(reachedToast.justCrossedGoalThreshold, true);
+  assert.equal(reachedToast.shouldShowToast, true);
+  assert.equal(reachedToast.progressPercent, 100);
+  assert.equal(reachedToast.todayPointsEarned, 95);
+  assert.equal(reachedToast.goalCompletionBonusPoints, 25);
+  assert.equal(reachedToast.totalParticipationPoints, 240);
+  assert.equal(reachedToast.streakCount, 8);
+  assert.equal(reachedToast.sessionStreakBadgeLabel, '8-Day Session Streak');
+  assert.equal(
+    reachedToast.pointsEarnedSummaryLabel,
+    '+95 pts Earned Today (+25 Goal Bonus) · 240 Total Pts'
+  );
+  assert.ok(reachedToast.celebrationMessage.includes('8-day session streak'));
+
+  // 3. Dismissing the toast for the active target key hides it unless forceVisible is set
+  const dismissedToast = evaluateDailyFocusGoalReachedToast({
+    dateKey: '2026-11-05',
+    previousCompletedMinutes: 95,
+    completedMinutes: 120,
+    targetMinutes: 120,
+    todayPointsEarned: 95,
+    totalParticipationPoints: 240,
+    streakCount: 8,
+    dismissedKey: reachedToast.dismissKey,
+  });
+  assert.equal(dismissedToast.shouldShowToast, false);
+
+  const forcedToast = evaluateDailyFocusGoalReachedToast({
+    dateKey: '2026-11-05',
+    previousCompletedMinutes: 120,
+    completedMinutes: 135,
+    targetMinutes: 120,
+    todayPointsEarned: 110,
+    totalParticipationPoints: 255,
+    streakCount: 8,
+    dismissedKey: reachedToast.dismissKey,
+    forceVisible: true,
+  });
+  assert.equal(forcedToast.shouldShowToast, true);
+  assert.equal(forcedToast.surplusMinutes, 15);
+  assert.ok(forcedToast.subtitle.includes('+15m bonus focus'));
+});
 

@@ -22990,6 +22990,195 @@ export function applyUserSavedCustomFocusDurations(
   return deduped;
 }
 
+// ============================================================================
+// DAILY FOCUS GOAL REACHED TOAST NOTIFICATION (POINTS EARNED & SESSION STREAK)
+// ============================================================================
 
+export const DAILY_GOAL_REACHED_BONUS_POINTS = 25;
+export const DAILY_GOAL_REACHED_TOAST_DURATION_MS = 8500;
+export const DAILY_GOAL_REACHED_TOAST_ELEMENT_ID =
+  'daily-focus-goal-reached-toast';
 
+export interface DailyGoalReachedTransitionResult {
+  crossedGoalNow: boolean;
+  isGoalReachedAfter: boolean;
+  previousCompletedMinutes: number;
+  nextCompletedMinutes: number;
+  targetMinutes: number;
+  basePointsAwarded: number;
+  goalBonusPoints: number;
+  totalPointsAwarded: number;
+}
 
+export function resolveDailyGoalReachedTransition(params: {
+  previousCompletedMinutes: number;
+  nextCompletedMinutes: number;
+  targetMinutes: number;
+  basePointsAwarded?: number;
+}): DailyGoalReachedTransitionResult {
+  const safeTarget = clampProductivityTarget(params.targetMinutes);
+  const prevCompleted = Math.max(
+    0,
+    Math.round(Number(params.previousCompletedMinutes) || 0)
+  );
+  const nextCompleted = Math.max(
+    0,
+    Math.round(Number(params.nextCompletedMinutes) || 0)
+  );
+  const basePoints = Math.max(
+    0,
+    Math.round(Number(params.basePointsAwarded) || 0)
+  );
+
+  const wasReachedBefore = prevCompleted >= safeTarget;
+  const isGoalReachedAfter = nextCompleted >= safeTarget;
+  const crossedGoalNow = !wasReachedBefore && isGoalReachedAfter;
+  const goalBonusPoints = crossedGoalNow ? DAILY_GOAL_REACHED_BONUS_POINTS : 0;
+
+  return {
+    crossedGoalNow,
+    isGoalReachedAfter,
+    previousCompletedMinutes: prevCompleted,
+    nextCompletedMinutes: nextCompleted,
+    targetMinutes: safeTarget,
+    basePointsAwarded: basePoints,
+    goalBonusPoints,
+    totalPointsAwarded: basePoints + goalBonusPoints,
+  };
+}
+
+export interface DailyFocusGoalReachedToastSpec {
+  toastElementId: string;
+  toastTestId: string;
+  isGoalReached: boolean;
+  justCrossedGoalThreshold: boolean;
+  shouldShowToast: boolean;
+  completedMinutes: number;
+  targetMinutes: number;
+  progressPercent: number;
+  surplusMinutes: number;
+  sessionPointsEarned: number;
+  goalCompletionBonusPoints: number;
+  todayPointsEarned: number;
+  totalParticipationPoints: number;
+  streakCount: number;
+  consecutiveGoalDays: number;
+  title: string;
+  subtitle: string;
+  pointsEarnedSummaryLabel: string;
+  sessionPointsBadgeLabel: string;
+  totalPointsBadgeLabel: string;
+  sessionStreakBadgeLabel: string;
+  streakSummaryText: string;
+  celebrationMessage: string;
+  dismissKey: string;
+}
+
+export function evaluateDailyFocusGoalReachedToast(params: {
+  dateKey?: string;
+  previousCompletedMinutes?: number | null;
+  completedMinutes: number;
+  targetMinutes: number;
+  todayPointsEarned: number;
+  lastSessionPointsAwarded?: number;
+  totalParticipationPoints: number;
+  streakCount: number;
+  consecutiveGoalDays?: number;
+  dismissedKey?: string | null;
+  forceVisible?: boolean;
+  hasTriggeredToday?: boolean;
+}): DailyFocusGoalReachedToastSpec {
+  const cleanDateKey = String(params.dateKey || 'today').trim() || 'today';
+  const goalProgress = computeProductivityGoalProgress(
+    params.targetMinutes,
+    params.completedMinutes
+  );
+  const isGoalReached = goalProgress.isGoalReached;
+  const prevMins =
+    typeof params.previousCompletedMinutes === 'number' &&
+    Number.isFinite(params.previousCompletedMinutes)
+      ? Math.max(0, Math.round(params.previousCompletedMinutes))
+      : null;
+
+  const justCrossedGoalThreshold =
+    isGoalReached && prevMins !== null && prevMins < goalProgress.targetMinutes;
+
+  const surplusMinutes = Math.max(
+    0,
+    goalProgress.completedMinutes - goalProgress.targetMinutes
+  );
+
+  const goalCompletionBonusPoints = isGoalReached
+    ? DAILY_GOAL_REACHED_BONUS_POINTS
+    : 0;
+  const sessionPointsEarned = Math.max(
+    goalCompletionBonusPoints,
+    Math.round(Number(params.lastSessionPointsAwarded) || goalCompletionBonusPoints)
+  );
+  const todayPointsEarned = Math.max(
+    sessionPointsEarned,
+    Math.round(Number(params.todayPointsEarned) || 0)
+  );
+  const totalParticipationPoints = Math.max(
+    todayPointsEarned,
+    Math.round(Number(params.totalParticipationPoints) || 0)
+  );
+  const streakCount = Math.max(1, Math.round(Number(params.streakCount) || 1));
+  const consecutiveGoalDays = Math.max(
+    1,
+    Math.round(Number(params.consecutiveGoalDays) || streakCount)
+  );
+
+  const dismissKey = `${cleanDateKey}|${goalProgress.targetMinutes}`;
+  const isDismissed =
+    Boolean(params.dismissedKey) &&
+    params.dismissedKey === dismissKey &&
+    !params.forceVisible;
+
+  const shouldShowToast = Boolean(
+    params.forceVisible ||
+      (isGoalReached &&
+        !isDismissed &&
+        (justCrossedGoalThreshold || params.hasTriggeredToday !== false))
+  );
+
+  const title = 'Daily Focus Goal Reached!';
+  const subtitle =
+    surplusMinutes > 0
+      ? `100% Target Complete · ${goalProgress.completedMinutes}m / ${goalProgress.targetMinutes}m (+${surplusMinutes}m bonus focus)`
+      : `100% Target Complete · ${goalProgress.completedMinutes}m / ${goalProgress.targetMinutes}m`;
+
+  const pointsEarnedSummaryLabel = `+${todayPointsEarned} pts Earned Today (+${goalCompletionBonusPoints} Goal Bonus) · ${totalParticipationPoints} Total Pts`;
+  const sessionPointsBadgeLabel = `+${todayPointsEarned} pts Today`;
+  const totalPointsBadgeLabel = `${totalParticipationPoints} Total Pts`;
+  const sessionStreakBadgeLabel = `${streakCount}-Day Session Streak`;
+  const streakSummaryText = `${streakCount}-day active focus streak · ${consecutiveGoalDays} consecutive daily goal${consecutiveGoalDays === 1 ? '' : 's'} crushed`;
+  const celebrationMessage = `You reached your ${goalProgress.targetMinutes}m daily focus goal! Earned +${todayPointsEarned} points today (${totalParticipationPoints} total) and extended your ${streakCount}-day session streak.`;
+
+  return {
+    toastElementId: DAILY_GOAL_REACHED_TOAST_ELEMENT_ID,
+    toastTestId: DAILY_GOAL_REACHED_TOAST_ELEMENT_ID,
+    isGoalReached,
+    justCrossedGoalThreshold,
+    shouldShowToast,
+    completedMinutes: goalProgress.completedMinutes,
+    targetMinutes: goalProgress.targetMinutes,
+    progressPercent: goalProgress.progressPercent,
+    surplusMinutes,
+    sessionPointsEarned,
+    goalCompletionBonusPoints,
+    todayPointsEarned,
+    totalParticipationPoints,
+    streakCount,
+    consecutiveGoalDays,
+    title,
+    subtitle,
+    pointsEarnedSummaryLabel,
+    sessionPointsBadgeLabel,
+    totalPointsBadgeLabel,
+    sessionStreakBadgeLabel,
+    streakSummaryText,
+    celebrationMessage,
+    dismissKey,
+  };
+}

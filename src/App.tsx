@@ -275,6 +275,9 @@ import {
   AUTO_CONFIGURED_WORKSPACE_STORAGE_KEY,
   EXPLICIT_SIGNOUT_STORAGE_KEY,
   buildAutoConfiguredWorkspacePreset,
+  DAILY_GOAL_REACHED_BONUS_POINTS,
+  resolveDailyGoalReachedTransition,
+  evaluateDailyFocusGoalReachedToast,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -820,6 +823,13 @@ export default function App() {
     }
     return 25;
   });
+  const [dailyGoalToastDismissedKey, setDailyGoalToastDismissedKey] = useState<
+    string | null
+  >(null);
+  const [dailyGoalToastForceVisible, setDailyGoalToastForceVisible] =
+    useState<boolean>(false);
+  const [lastSessionPointsAwarded, setLastSessionPointsAwarded] =
+    useState<number>(25);
   const [streakReminderPrefs, setStreakReminderPrefs] =
     useState<StreakFocusReminderPreferences>(() => {
       try {
@@ -2381,6 +2391,12 @@ export default function App() {
   const persistProductivityGoal = (nextTarget: number, nextCompleted: number) => {
     const clampedTarget = clampProductivityTarget(nextTarget);
     const safeCompleted = Math.max(0, Math.round(nextCompleted));
+    const goalTransition = resolveDailyGoalReachedTransition({
+      previousCompletedMinutes: dailyCompletedMinutes,
+      nextCompletedMinutes: safeCompleted,
+      targetMinutes: clampedTarget,
+      basePointsAwarded: 0,
+    });
     setDailyTargetMinutes(clampedTarget);
     setDailyCompletedMinutes(safeCompleted);
     setTargetInputMinutes(String(clampedTarget));
@@ -2405,6 +2421,14 @@ export default function App() {
       localStorage.setItem('mr_stranger_weekly_activity_v1', JSON.stringify(nextHist));
       return nextHist;
     });
+    if (goalTransition.crossedGoalNow) {
+      setDailyGoalToastDismissedKey(null);
+      setDailyGoalToastForceVisible(true);
+      awardParticipation(goalTransition.goalBonusPoints);
+      if (uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+    }
   };
 
   const handleSetDailyProductivityTarget = (e: React.FormEvent) => {
@@ -2445,9 +2469,16 @@ export default function App() {
 
   const handleLogFocusMinutes = (minutesToAdd: number) => {
     const added = Math.max(1, Math.round(minutesToAdd));
-    persistProductivityGoal(dailyTargetMinutes, dailyCompletedMinutes + added);
+    const basePts = Math.max(5, Math.round(added / 2));
+    const nextMins = dailyCompletedMinutes + added;
+    const crossedNow =
+      dailyCompletedMinutes < dailyTargetMinutes && nextMins >= dailyTargetMinutes;
+    setLastSessionPointsAwarded(
+      basePts + (crossedNow ? DAILY_GOAL_REACHED_BONUS_POINTS : 0)
+    );
+    persistProductivityGoal(dailyTargetMinutes, nextMins);
     markFocusSessionStartedToday();
-    awardParticipation(Math.max(5, Math.round(added / 2)));
+    awardParticipation(basePts);
   };
 
   const handleQuickStartPomodoro = () => {
@@ -2456,10 +2487,26 @@ export default function App() {
       currentCompletedMinutes: dailyCompletedMinutes,
       currentParticipationPoints: currentIdentity?.participationPoints ?? 25,
     });
+    const crossedNow =
+      dailyCompletedMinutes < dailyTargetMinutes &&
+      result.nextCompletedMinutes >= dailyTargetMinutes;
+    setLastSessionPointsAwarded(
+      result.pointsAwarded + (crossedNow ? DAILY_GOAL_REACHED_BONUS_POINTS : 0)
+    );
     persistProductivityGoal(dailyTargetMinutes, result.nextCompletedMinutes);
     markFocusSessionStartedToday();
     awardParticipation(result.pointsAwarded);
     setQuickStartFeedback(result.feedbackMessage);
+  };
+
+  const handleCompleteDailyGoalNow = () => {
+    const remaining = Math.max(0, dailyTargetMinutes - dailyCompletedMinutes);
+    if (remaining > 0) {
+      handleLogFocusMinutes(remaining);
+    } else {
+      setDailyGoalToastDismissedKey(null);
+      setDailyGoalToastForceVisible(true);
+    }
   };
 
   const handleLogTopicFocusSession = (
@@ -2468,6 +2515,13 @@ export default function App() {
     minutesToAdd: number
   ) => {
     const added = Math.max(1, Math.round(minutesToAdd));
+    const basePts = Math.max(5, Math.round(added / 2));
+    const nextMins = dailyCompletedMinutes + added;
+    const crossedNow =
+      dailyCompletedMinutes < dailyTargetMinutes && nextMins >= dailyTargetMinutes;
+    setLastSessionPointsAwarded(
+      basePts + (crossedNow ? DAILY_GOAL_REACHED_BONUS_POINTS : 0)
+    );
     const cleanTopic = normalizeStudyTopicName(rawTopic);
     const cleanRoomCode = sanitizeSafeText(
       String(rawRoomCode || activeStudyRoomCode || 'STUDY-GLOBAL').toUpperCase(),
@@ -2487,9 +2541,9 @@ export default function App() {
       localStorage.setItem('mr_stranger_topic_sessions_v1', JSON.stringify(next));
       return next;
     });
-    persistProductivityGoal(dailyTargetMinutes, dailyCompletedMinutes + added);
+    persistProductivityGoal(dailyTargetMinutes, nextMins);
     markFocusSessionStartedToday();
-    awardParticipation(Math.max(5, Math.round(added / 2)));
+    awardParticipation(basePts);
   };
 
   const persistUiSoundPreferences = (nextPrefs: UiSoundEffectPreferences) => {
@@ -5295,6 +5349,29 @@ export default function App() {
       dismissedDateKey: todayDateStr,
       simulatedPastCutoff: false,
     }));
+  };
+
+  const dailyGoalReachedToast = evaluateDailyFocusGoalReachedToast({
+    dateKey: todayDateStr,
+    previousCompletedMinutes:
+      prevCompletedMinutesRef.current !== dailyCompletedMinutes
+        ? prevCompletedMinutesRef.current
+        : lastCompletedMinutesSnapshot,
+    completedMinutes: dailyCompletedMinutes,
+    targetMinutes: dailyTargetMinutes,
+    todayPointsEarned,
+    lastSessionPointsAwarded,
+    totalParticipationPoints: currentIdentity.participationPoints,
+    streakCount: currentIdentity.streakCount,
+    consecutiveGoalDays: userBadgeSummary.consecutiveGoalDays,
+    dismissedKey: dailyGoalToastDismissedKey,
+    forceVisible: dailyGoalToastForceVisible,
+    hasTriggeredToday: goalProgress.isGoalReached,
+  });
+
+  const handleDismissDailyGoalReachedToast = () => {
+    setDailyGoalToastForceVisible(false);
+    setDailyGoalToastDismissedKey(dailyGoalReachedToast.dismissKey);
   };
 
   const handleToggleStreakReminderEnabled = () => {
@@ -9418,6 +9495,19 @@ export default function App() {
                       className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
                     >
                       +25m Pomodoro
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCompleteDailyGoalNow}
+                      data-testid="daily-goal-complete-or-toast-btn"
+                      className="px-3 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 shadow-sm"
+                    >
+                      <Trophy className="w-3.5 h-3.5 text-black shrink-0" />
+                      <span>
+                        {goalProgress.isGoalReached
+                          ? 'Show Goal Reached Toast'
+                          : `Complete Goal (+${goalProgress.remainingMinutes}m)`}
+                      </span>
                     </button>
                     <button
                       type="button"
@@ -15474,6 +15564,152 @@ export default function App() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* Celebratory Daily Focus Goal Reached Toast Notification (Points Earned & Session Streak Summary) */}
+      <AnimatePresence initial={false}>
+        {dailyGoalReachedToast.shouldShowToast && (
+          <motion.aside
+            key="daily-focus-goal-reached-toast"
+            id={dailyGoalReachedToast.toastElementId}
+            data-testid={dailyGoalReachedToast.toastTestId}
+            data-completed-minutes={String(dailyGoalReachedToast.completedMinutes)}
+            data-target-minutes={String(dailyGoalReachedToast.targetMinutes)}
+            data-today-points={String(dailyGoalReachedToast.todayPointsEarned)}
+            data-total-points={String(dailyGoalReachedToast.totalParticipationPoints)}
+            data-streak-count={String(dailyGoalReachedToast.streakCount)}
+            role="status"
+            aria-live="polite"
+            initial={{ opacity: 0, y: 18, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 14, scale: 0.96 }}
+            transition={{ duration: 0.24, ease: 'easeOut' }}
+            className="fixed bottom-5 right-5 z-50 w-[calc(100vw-2.5rem)] max-w-md rounded-xl border border-emerald-400/50 bg-[#0A0F0D]/95 backdrop-blur-md p-4 shadow-[0_20px_50px_rgba(16,185,129,0.28)]"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-3 min-w-0">
+                <div className="w-10 h-10 rounded-lg bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-300 shrink-0 mt-0.5">
+                  <Trophy className="w-5 h-5" />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      data-testid="daily-goal-toast-title"
+                      className="text-sm font-bold text-white tracking-tight"
+                    >
+                      {dailyGoalReachedToast.title}
+                    </span>
+                    <span
+                      data-testid="daily-goal-toast-progress-summary"
+                      className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-[10px] font-mono font-semibold text-emerald-300 tabular-nums"
+                    >
+                      {dailyGoalReachedToast.progressPercent}% ({dailyGoalReachedToast.completedMinutes}m / {dailyGoalReachedToast.targetMinutes}m)
+                    </span>
+                  </div>
+                  <p
+                    data-testid="daily-goal-toast-celebration-message"
+                    className="text-xs text-zinc-200 leading-relaxed"
+                  >
+                    {dailyGoalReachedToast.celebrationMessage}
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDismissDailyGoalReachedToast}
+                data-testid="daily-goal-toast-close-btn"
+                aria-label="Dismiss daily focus goal reached notification"
+                className="p-1 rounded-md text-zinc-400 hover:text-white hover:bg-zinc-800/80 transition-colors shrink-0"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Points Earned & Session Streak Summary Grid */}
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <div
+                data-testid="daily-goal-toast-points-summary"
+                className="px-3 py-2 rounded-lg bg-black/50 border border-emerald-500/30 space-y-0.5"
+              >
+                <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-emerald-300/90">
+                  <Zap className="w-3 h-3 text-emerald-400 shrink-0" />
+                  <span>Points Earned</span>
+                </div>
+                <div
+                  data-testid="daily-goal-toast-today-points"
+                  className="text-xs font-mono font-bold text-white tabular-nums"
+                >
+                  {dailyGoalReachedToast.sessionPointsBadgeLabel}{' '}
+                  <span className="text-emerald-300 font-semibold">
+                    (+{dailyGoalReachedToast.goalCompletionBonusPoints} Bonus)
+                  </span>
+                </div>
+                <div
+                  data-testid="daily-goal-toast-total-points"
+                  className="text-[11px] font-mono text-zinc-400 tabular-nums"
+                >
+                  {dailyGoalReachedToast.totalPointsBadgeLabel}
+                </div>
+              </div>
+
+              <div
+                data-testid="daily-goal-toast-streak-card"
+                className="px-3 py-2 rounded-lg bg-black/50 border border-amber-400/35 space-y-0.5"
+              >
+                <div className="flex items-center gap-1.5 text-[10px] font-mono uppercase tracking-wider text-amber-300/90">
+                  <Flame className="w-3 h-3 text-amber-400 shrink-0" />
+                  <span>Session Streak</span>
+                </div>
+                <div
+                  data-testid="daily-goal-toast-streak-badge"
+                  className="text-xs font-mono font-bold text-amber-300 tabular-nums"
+                >
+                  {dailyGoalReachedToast.sessionStreakBadgeLabel}
+                </div>
+                <div
+                  data-testid="daily-goal-toast-streak-summary"
+                  className="text-[11px] font-mono text-zinc-400 truncate tabular-nums"
+                >
+                  {dailyGoalReachedToast.consecutiveGoalDays}d Goal Hit Streak
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-3 pt-2.5 border-t border-emerald-500/20 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  data-testid="daily-goal-toast-share-btn"
+                  onClick={() => {
+                    handleShareDailyGoalToFeed();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-semibold transition-colors whitespace-nowrap shrink-0"
+                >
+                  <Share2 className="w-3.5 h-3.5" />
+                  <span>Share Milestone</span>
+                </button>
+                <button
+                  type="button"
+                  data-testid="daily-goal-toast-bonus-15m-btn"
+                  onClick={() => handleLogFocusMinutes(15)}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs font-mono font-semibold transition-colors whitespace-nowrap shrink-0"
+                >
+                  <span>+15m Bonus</span>
+                </button>
+              </div>
+
+              <button
+                type="button"
+                data-testid="daily-goal-toast-dismiss-btn"
+                onClick={handleDismissDailyGoalReachedToast}
+                className="px-2.5 py-1.5 rounded-md text-[11px] font-medium text-zinc-400 hover:text-white hover:bg-zinc-900 transition-colors whitespace-nowrap shrink-0"
+              >
+                Dismiss
+              </button>
             </div>
           </motion.aside>
         )}
