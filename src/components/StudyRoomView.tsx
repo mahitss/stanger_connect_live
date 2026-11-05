@@ -79,6 +79,8 @@ import {
   AmbientPresetCrossfadePlan,
   buildAmbientPresetCrossfadePlan,
   interpolateAmbientCrossfadeMixAtProgress,
+  CurrentDayFocusBreakSlotRecord,
+  buildCurrentDayFocusVsBreakSummary,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
@@ -89,6 +91,7 @@ import {
 } from './StudyDeskPomodoroController';
 import { StudyRoomWeeklyRoomFocusRechartsCard } from './StudyRoomWeeklyRoomFocusRechartsCard';
 import { StudyRoomFocusHistory30DayRechartsCard } from './StudyRoomFocusHistory30DayRechartsCard';
+import { StudyRoomCurrentDayFocusBreakRechartsCard } from './StudyRoomCurrentDayFocusBreakRechartsCard';
 import {
   Volume2,
   VolumeX,
@@ -1431,6 +1434,22 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     useState<WeeklyRoomFocusSortOrder>('minutes_desc');
   const [focusHistoryRoomFilter, setFocusHistoryRoomFilter] =
     useState<string>('ALL');
+  const [currentDayRoomFilter, setCurrentDayRoomFilter] =
+    useState<string>('ALL');
+  const [intradayFocusBreakLogs, setIntradayFocusBreakLogs] = useState<
+    CurrentDayFocusBreakSlotRecord[]
+  >(() => {
+    try {
+      const raw = localStorage.getItem('mr_stranger_intraday_focus_break_v1');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
 
   const mergedSessions = React.useMemo(() => {
     const byId = new Map<string, TopicFocusSessionRecord>();
@@ -1442,6 +1461,62 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     }
     return Array.from(byId.values());
   }, [topicFocusSessions, localStudySessions]);
+
+  const handleLogIntradayFocusBreakSession = (params: {
+    slotKey: string;
+    focusMinutes: number;
+    breakMinutes: number;
+    roomCode: string;
+    topic: string;
+    cadenceLabel?: string;
+  }) => {
+    const cleanRoom = normalizeStudyRoomCode(params.roomCode || activeRoomCode);
+    const cleanTopic =
+      sanitizeSafeText(params.topic || 'System Design & Deep Focus Sprint', 80) ||
+      'System Design & Deep Focus Sprint';
+    const clampedFocus = Math.min(
+      180,
+      Math.max(5, Math.round(Number(params.focusMinutes) || 25))
+    );
+    const clampedBreak = Math.min(
+      90,
+      Math.max(0, Math.round(Number(params.breakMinutes) || 5))
+    );
+    const todayKey = formatDateKey(new Date());
+
+    const newEntry: CurrentDayFocusBreakSlotRecord = {
+      id: `intraday_fb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      dateKey: todayKey,
+      slotKey: params.slotKey || '14:00',
+      focusMinutes: clampedFocus,
+      breakMinutes: clampedBreak,
+      roomCode: cleanRoom,
+      topic: cleanTopic,
+      cadenceLabel:
+        params.cadenceLabel || `${clampedFocus}m Focus · ${clampedBreak}m Break`,
+      createdAtMs: Date.now(),
+    };
+
+    setIntradayFocusBreakLogs((prev) => {
+      const next = [...prev, newEntry];
+      try {
+        localStorage.setItem(
+          'mr_stranger_intraday_focus_break_v1',
+          JSON.stringify(next)
+        );
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+
+    setLocalAddedTodayMinutes((prev) => prev + clampedFocus);
+    if (onLogTopicFocusSession) {
+      onLogTopicFocusSession(cleanTopic, cleanRoom, clampedFocus);
+    } else {
+      onFocusMinutesLogged?.(clampedFocus);
+    }
+  };
 
   const handleLogWeeklyRoomFocusMinutes = (
     roomCode: string,
@@ -1542,6 +1617,20 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     deskTimersMap: individualDeskTimersMap,
     currentUid,
     sortBy: weeklyRoomSortBy,
+  });
+
+  const currentDayFocusBreakSummary = buildCurrentDayFocusVsBreakSummary({
+    todayDateKey: formatDateKey(new Date()),
+    activeRoomCode,
+    roomFilter: currentDayRoomFilter,
+    todayFocusMinutes:
+      todayFocusMinutes + (onLogTopicFocusSession ? 0 : localAddedTodayMinutes),
+    storedSessions: mergedSessions,
+    intradayFocusBreakLogs,
+    deskTimersMap: individualDeskTimersMap,
+    liveRoomTimerElapsedSeconds: elapsedSessionSeconds,
+    liveRoomTimerRunning: isRunning,
+    currentUid,
   });
 
   const focusHistory30DaySummary = buildFocusHistory30DaySummary({
@@ -2795,6 +2884,17 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           onChangeRoomCode(code, roomLabel);
         }}
         onLogRoomFocusMinutes={handleLogWeeklyRoomFocusMinutes}
+      />
+
+      {/* ====================================================================
+          RECHARTS DYNAMIC LINE CHART: TODAY'S FOCUS SESSIONS VS. BREAK PERIODS
+          ==================================================================== */}
+      <StudyRoomCurrentDayFocusBreakRechartsCard
+        summary={currentDayFocusBreakSummary}
+        activeRoomCode={activeRoomCode}
+        selectedRoomFilter={currentDayRoomFilter}
+        onChangeRoomFilter={setCurrentDayRoomFilter}
+        onLogIntradayFocusBreakSession={handleLogIntradayFocusBreakSession}
       />
 
       {/* ====================================================================

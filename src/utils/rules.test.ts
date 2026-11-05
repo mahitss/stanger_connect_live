@@ -367,6 +367,11 @@ import {
   interpolateAmbientCrossfadeGainAtProgress,
   buildAmbientPresetCrossfadePlan,
   interpolateAmbientCrossfadeMixAtProgress,
+  INTRADAY_FOCUS_BREAK_TIME_SLOTS,
+  CURRENT_DAY_FOCUS_BREAK_QUICK_PRESETS,
+  normalizeIntradaySlotKey,
+  resolveIntradaySlotKeyFromTimestamp,
+  buildCurrentDayFocusVsBreakSummary,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -8963,6 +8968,95 @@ test('buildAmbientPresetCrossfadePlan and interpolateAmbientCrossfadeMixAtProgre
     Number(((0.6 + 0.4125) / 2).toFixed(4))
   );
 });
+
+test('buildCurrentDayFocusVsBreakSummary computes chronological intraday focus vs break points, cumulative curves, focus-to-break ratios, and room filters', () => {
+  assert.equal(INTRADAY_FOCUS_BREAK_TIME_SLOTS.length, 9);
+  assert.equal(CURRENT_DAY_FOCUS_BREAK_QUICK_PRESETS.length, 3);
+  assert.equal(normalizeIntradaySlotKey('09:30'), '09:30');
+  assert.equal(normalizeIntradaySlotKey('9:30 AM'), '09:30');
+  assert.equal(normalizeIntradaySlotKey('10:15'), '09:30');
+
+  const todayKey = '2026-11-05';
+  const baseSummary = buildCurrentDayFocusVsBreakSummary({
+    todayDateKey: todayKey,
+    activeRoomCode: 'STUDY-GROUP25',
+    roomFilter: 'ALL',
+  });
+
+  assert.equal(baseSummary.todayDateKey, todayKey);
+  assert.equal(baseSummary.points.length, 9);
+  assert.equal(baseSummary.points[0].slotKey, '08:00');
+  assert.equal(baseSummary.points[0].slotLabel, '8:00 AM');
+  assert.equal(baseSummary.points[8].slotKey, '20:00');
+  assert.ok(baseSummary.totalFocusMinutes > 0);
+  assert.ok(baseSummary.totalBreakMinutes > 0);
+  assert.equal(
+    baseSummary.totalActiveMinutes,
+    baseSummary.totalFocusMinutes + baseSummary.totalBreakMinutes
+  );
+
+  // Cumulative focus & break minutes on the final slot equal the daily totals
+  const lastSlot = baseSummary.points[baseSummary.points.length - 1];
+  assert.equal(lastSlot.cumulativeFocusMinutes, baseSummary.totalFocusMinutes);
+  assert.equal(lastSlot.cumulativeBreakMinutes, baseSummary.totalBreakMinutes);
+
+  // Logging a new intraday focus & break session (+50m focus, +10m break at 17:00 in STUDY-GROUP25)
+  const updatedSummary = buildCurrentDayFocusVsBreakSummary({
+    todayDateKey: todayKey,
+    activeRoomCode: 'STUDY-GROUP25',
+    roomFilter: 'ALL',
+    intradayFocusBreakLogs: [
+      {
+        id: 'log_1',
+        dateKey: todayKey,
+        slotKey: '17:00',
+        focusMinutes: 50,
+        breakMinutes: 10,
+        roomCode: 'STUDY-GROUP25',
+        topic: 'Distributed Raft Log Replication',
+        cadenceLabel: '50m Focus · 10m Break (Deep Sprint)',
+      },
+    ],
+  });
+
+  assert.equal(
+    updatedSummary.totalFocusMinutes,
+    baseSummary.totalFocusMinutes + 50
+  );
+  assert.equal(
+    updatedSummary.totalBreakMinutes,
+    baseSummary.totalBreakMinutes + 10
+  );
+  const slot1700 = updatedSummary.points.find((p) => p.slotKey === '17:00')!;
+  const baseSlot1700 = baseSummary.points.find((p) => p.slotKey === '17:00')!;
+  assert.equal(slot1700.focusMinutes, baseSlot1700.focusMinutes + 50);
+  assert.equal(slot1700.breakMinutes, baseSlot1700.breakMinutes + 10);
+  assert.equal(slot1700.topic, 'Distributed Raft Log Replication');
+
+  // Filtering by a specific room code scopes focus & break minutes strictly to that room
+  const filteredRoomSummary = buildCurrentDayFocusVsBreakSummary({
+    todayDateKey: todayKey,
+    activeRoomCode: 'STUDY-GROUP25',
+    roomFilter: 'STUDY-GROUP25',
+    intradayFocusBreakLogs: [
+      {
+        id: 'log_1',
+        dateKey: todayKey,
+        slotKey: '17:00',
+        focusMinutes: 50,
+        breakMinutes: 10,
+        roomCode: 'STUDY-GROUP25',
+        topic: 'Distributed Raft Log Replication',
+      },
+    ],
+  });
+  assert.equal(filteredRoomSummary.selectedRoomFilter, 'STUDY-GROUP25');
+  assert.ok(
+    filteredRoomSummary.totalFocusMinutes < updatedSummary.totalFocusMinutes
+  );
+  assert.ok(filteredRoomSummary.totalFocusMinutes >= 50);
+});
+
 
 
 

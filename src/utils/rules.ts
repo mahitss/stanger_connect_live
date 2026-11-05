@@ -22180,4 +22180,692 @@ export function interpolateAmbientCrossfadeMixAtProgress(
   };
 }
 
+// ============================================================================
+// STUDY ROOM CURRENT-DAY FOCUS SESSIONS VS. BREAK PERIODS LINE CHART TELEMETRY
+// ============================================================================
+
+export type CurrentDayFocusBreakChartMode =
+  | 'slot_minutes'
+  | 'cumulative_minutes';
+
+export interface IntradayFocusBreakSlotTemplate {
+  slotKey: string;
+  slotLabel: string;
+  windowRangeLabel: string;
+  startHour24: number;
+  endHour24: number;
+}
+
+export const INTRADAY_FOCUS_BREAK_TIME_SLOTS: ReadonlyArray<IntradayFocusBreakSlotTemplate> =
+  [
+    {
+      slotKey: '08:00',
+      slotLabel: '8:00 AM',
+      windowRangeLabel: '08:00 AM – 09:30 AM',
+      startHour24: 8,
+      endHour24: 9.5,
+    },
+    {
+      slotKey: '09:30',
+      slotLabel: '9:30 AM',
+      windowRangeLabel: '09:30 AM – 11:00 AM',
+      startHour24: 9.5,
+      endHour24: 11,
+    },
+    {
+      slotKey: '11:00',
+      slotLabel: '11:00 AM',
+      windowRangeLabel: '11:00 AM – 12:30 PM',
+      startHour24: 11,
+      endHour24: 12.5,
+    },
+    {
+      slotKey: '12:30',
+      slotLabel: '12:30 PM',
+      windowRangeLabel: '12:30 PM – 02:00 PM',
+      startHour24: 12.5,
+      endHour24: 14,
+    },
+    {
+      slotKey: '14:00',
+      slotLabel: '2:00 PM',
+      windowRangeLabel: '02:00 PM – 03:30 PM',
+      startHour24: 14,
+      endHour24: 15.5,
+    },
+    {
+      slotKey: '15:30',
+      slotLabel: '3:30 PM',
+      windowRangeLabel: '03:30 PM – 05:00 PM',
+      startHour24: 15.5,
+      endHour24: 17,
+    },
+    {
+      slotKey: '17:00',
+      slotLabel: '5:00 PM',
+      windowRangeLabel: '05:00 PM – 06:30 PM',
+      startHour24: 17,
+      endHour24: 18.5,
+    },
+    {
+      slotKey: '18:30',
+      slotLabel: '6:30 PM',
+      windowRangeLabel: '06:30 PM – 08:00 PM',
+      startHour24: 18.5,
+      endHour24: 20,
+    },
+    {
+      slotKey: '20:00',
+      slotLabel: '8:00 PM',
+      windowRangeLabel: '08:00 PM – 09:30 PM',
+      startHour24: 20,
+      endHour24: 21.5,
+    },
+  ];
+
+export interface CurrentDayFocusBreakQuickPreset {
+  id: 'pomodoro_25_5' | 'deep_50_10' | 'recovery_15_15';
+  label: string;
+  shortLabel: string;
+  focusMinutes: number;
+  breakMinutes: number;
+  cadenceLabel: string;
+}
+
+export const CURRENT_DAY_FOCUS_BREAK_QUICK_PRESETS: ReadonlyArray<CurrentDayFocusBreakQuickPreset> =
+  [
+    {
+      id: 'pomodoro_25_5',
+      label: '+25m Focus / +5m Break (Pomodoro)',
+      shortLabel: '+25m / +5m Break',
+      focusMinutes: 25,
+      breakMinutes: 5,
+      cadenceLabel: '25m Focus · 5m Break (Pomodoro)',
+    },
+    {
+      id: 'deep_50_10',
+      label: '+50m Focus / +10m Break (Deep Sprint)',
+      shortLabel: '+50m / +10m Break',
+      focusMinutes: 50,
+      breakMinutes: 10,
+      cadenceLabel: '50m Focus · 10m Break (Deep Sprint)',
+    },
+    {
+      id: 'recovery_15_15',
+      label: '+15m Focus / +15m Break (Recovery Block)',
+      shortLabel: '+15m / +15m Break',
+      focusMinutes: 15,
+      breakMinutes: 15,
+      cadenceLabel: '15m Focus · 15m Break (Active Recovery)',
+    },
+  ];
+
+export interface CurrentDayFocusBreakSlotRecord {
+  id: string;
+  dateKey: string;
+  slotKey: string;
+  focusMinutes: number;
+  breakMinutes: number;
+  roomCode: string;
+  topic: string;
+  cadenceLabel?: string;
+  createdAtMs?: number;
+}
+
+export interface CurrentDayFocusBreakPoint {
+  slotIndex: number;
+  slotKey: string;
+  slotLabel: string;
+  windowRangeLabel: string;
+  focusMinutes: number;
+  breakMinutes: number;
+  totalSlotMinutes: number;
+  cumulativeFocusMinutes: number;
+  cumulativeBreakMinutes: number;
+  focusSharePercent: number;
+  breakSharePercent: number;
+  formattedFocusDuration: string;
+  formattedBreakDuration: string;
+  sessionsCount: number;
+  roomCode: string;
+  topic: string;
+  cadenceLabel: string;
+  hasLiveTimerContribution: boolean;
+}
+
+export type CurrentDayRecoveryBalanceStatus =
+  | 'optimal_cadence'
+  | 'needs_recovery_break'
+  | 'high_recovery';
+
+export interface CurrentDayFocusBreakSummary {
+  todayDateKey: string;
+  points: CurrentDayFocusBreakPoint[];
+  totalFocusMinutes: number;
+  totalBreakMinutes: number;
+  totalActiveMinutes: number;
+  formattedTotalFocus: string;
+  formattedTotalBreak: string;
+  formattedTotalActive: string;
+  focusEfficiencyPercent: number;
+  breakShareOverallPercent: number;
+  focusToBreakRatioValue: number;
+  focusToBreakRatioLabel: string;
+  recommendedBreakMinutesForFocus: number;
+  recoveryBalanceStatus: CurrentDayRecoveryBalanceStatus;
+  recoveryBalanceLabel: string;
+  totalSessionsCount: number;
+  activeSlotsCount: number;
+  peakFocusSlot: CurrentDayFocusBreakPoint;
+  peakBreakSlot: CurrentDayFocusBreakPoint;
+  availableRoomCodes: string[];
+  selectedRoomFilter: string;
+}
+
+export function normalizeIntradaySlotKey(rawSlotOrTime?: string | null): string {
+  const cleaned = String(rawSlotOrTime || '').trim();
+  const directMatch = INTRADAY_FOCUS_BREAK_TIME_SLOTS.find(
+    (s) =>
+      s.slotKey === cleaned ||
+      s.slotLabel.toLowerCase() === cleaned.toLowerCase()
+  );
+  if (directMatch) return directMatch.slotKey;
+
+  const hhmmMatch = cleaned.match(/^(\d{1,2}):(\d{2})/);
+  if (hhmmMatch) {
+    const hours = Number(hhmmMatch[1]);
+    const mins = Number(hhmmMatch[2]);
+    if (Number.isFinite(hours) && Number.isFinite(mins)) {
+      const decimalHour = hours + mins / 60;
+      for (const slot of INTRADAY_FOCUS_BREAK_TIME_SLOTS) {
+        if (decimalHour < slot.endHour24) {
+          return slot.slotKey;
+        }
+      }
+      return INTRADAY_FOCUS_BREAK_TIME_SLOTS[
+        INTRADAY_FOCUS_BREAK_TIME_SLOTS.length - 1
+      ].slotKey;
+    }
+  }
+
+  return '14:00';
+}
+
+export function resolveIntradaySlotKeyFromTimestamp(timestampMs?: number): string {
+  if (typeof timestampMs !== 'number' || !Number.isFinite(timestampMs) || timestampMs <= 0) {
+    return '14:00';
+  }
+  const d = new Date(timestampMs);
+  if (Number.isNaN(d.getTime())) return '14:00';
+  const decimalHour = d.getHours() + d.getMinutes() / 60;
+  for (const slot of INTRADAY_FOCUS_BREAK_TIME_SLOTS) {
+    if (decimalHour < slot.endHour24) {
+      return slot.slotKey;
+    }
+  }
+  return INTRADAY_FOCUS_BREAK_TIME_SLOTS[
+    INTRADAY_FOCUS_BREAK_TIME_SLOTS.length - 1
+  ].slotKey;
+}
+
+export function buildCurrentDayFocusVsBreakSummary(params: {
+  todayDateKey: string;
+  activeRoomCode: string;
+  roomFilter?: string;
+  todayFocusMinutes?: number;
+  storedSessions?: TopicFocusSessionRecord[];
+  intradayFocusBreakLogs?: CurrentDayFocusBreakSlotRecord[];
+  deskTimersMap?: Record<string, IndividualStudyDeskPomodoroState>;
+  liveRoomTimerElapsedSeconds?: number;
+  liveRoomTimerRunning?: boolean;
+  currentUid?: string;
+}): CurrentDayFocusBreakSummary {
+  const normalizedActiveRoom =
+    normalizeStudyRoomCode(params.activeRoomCode || 'STUDY-1') || 'STUDY-1';
+  const rawFilter = String(params.roomFilter || 'ALL').trim().toUpperCase();
+  const normalizedFilter =
+    !rawFilter || rawFilter === 'ALL'
+      ? 'ALL'
+      : normalizeStudyRoomCode(rawFilter);
+
+  const allRoomsSet = new Set<string>([
+    normalizedActiveRoom,
+    ...DEFAULT_WEEKLY_STUDY_ROOMS_BASELINE.map((b) => b.roomCode),
+  ]);
+
+  interface SlotBucket {
+    focusByRoom: Map<string, number>;
+    breakByRoom: Map<string, number>;
+    sessionsByRoom: Map<string, number>;
+    topicByRoom: Map<string, string>;
+    cadenceByRoom: Map<string, string>;
+    hasLiveTimerContribution: boolean;
+  }
+
+  const bucketsBySlot = new Map<string, SlotBucket>();
+  for (const slot of INTRADAY_FOCUS_BREAK_TIME_SLOTS) {
+    bucketsBySlot.set(slot.slotKey, {
+      focusByRoom: new Map<string, number>(),
+      breakByRoom: new Map<string, number>(),
+      sessionsByRoom: new Map<string, number>(),
+      topicByRoom: new Map<string, string>(),
+      cadenceByRoom: new Map<string, string>(),
+      hasLiveTimerContribution: false,
+    });
+  }
+
+  // Deterministic current-day baseline across morning/midday/afternoon/evening slots
+  const secondaryRoom =
+    normalizedActiveRoom === 'STUDY-GROUP25' ? 'STUDY-SOLO' : 'STUDY-GROUP25';
+  const tertiaryRoom =
+    normalizedActiveRoom === 'STUDY-NATURE' ? 'STUDY-CAMERA' : 'STUDY-NATURE';
+
+  const baselineSlots: Array<{
+    slotKey: string;
+    roomCode: string;
+    focusMins: number;
+    breakMins: number;
+    sessions: number;
+    topic: string;
+    cadence: string;
+  }> = [
+    {
+      slotKey: '08:00',
+      roomCode: normalizedActiveRoom,
+      focusMins: 50,
+      breakMins: 10,
+      sessions: 2,
+      topic: 'Morning Deep Work Architecture Sprint',
+      cadence: '2× 25m Focus · 5m Break',
+    },
+    {
+      slotKey: '09:30',
+      roomCode: normalizedActiveRoom,
+      focusMins: 45,
+      breakMins: 15,
+      sessions: 2,
+      topic: 'Distributed Systems Consensus Notes',
+      cadence: '45m Focus · 15m Recovery Break',
+    },
+    {
+      slotKey: '11:00',
+      roomCode: secondaryRoom,
+      focusMins: 25,
+      breakMins: 5,
+      sessions: 1,
+      topic: 'Algorithmic Complexity Drill',
+      cadence: '25m Focus · 5m Break (Pomodoro)',
+    },
+    {
+      slotKey: '12:30',
+      roomCode: secondaryRoom,
+      focusMins: 20,
+      breakMins: 25,
+      sessions: 1,
+      topic: 'Midday Flashcard Review & Mindful Break',
+      cadence: '20m Light Review · 25m Midday Break',
+    },
+    {
+      slotKey: '14:00',
+      roomCode: normalizedActiveRoom,
+      focusMins: 55,
+      breakMins: 10,
+      sessions: 2,
+      topic: 'System Design & State Machine Verification',
+      cadence: '55m Focus · 10m Break',
+    },
+    {
+      slotKey: '15:30',
+      roomCode: tertiaryRoom,
+      focusMins: 40,
+      breakMins: 10,
+      sessions: 2,
+      topic: 'Research Paper Synthesis & Annotation',
+      cadence: '40m Focus · 10m Break',
+    },
+    {
+      slotKey: '17:00',
+      roomCode: normalizedActiveRoom,
+      focusMins: 30,
+      breakMins: 10,
+      sessions: 1,
+      topic: 'Late Afternoon Problem Set Execution',
+      cadence: '30m Focus · 10m Recovery',
+    },
+    {
+      slotKey: '18:30',
+      roomCode: secondaryRoom,
+      focusMins: 25,
+      breakMins: 10,
+      sessions: 1,
+      topic: 'Evening Revision & Summary Synthesis',
+      cadence: '25m Focus · 10m Break',
+    },
+    {
+      slotKey: '20:00',
+      roomCode: normalizedActiveRoom,
+      focusMins: 25,
+      breakMins: 5,
+      sessions: 1,
+      topic: 'Nightly Retrospective & Next-Day Prep',
+      cadence: '25m Focus · 5m Break',
+    },
+  ];
+
+  for (const b of baselineSlots) {
+    const bucket = bucketsBySlot.get(b.slotKey);
+    if (!bucket) continue;
+    allRoomsSet.add(b.roomCode);
+    bucket.focusByRoom.set(
+      b.roomCode,
+      (bucket.focusByRoom.get(b.roomCode) || 0) + b.focusMins
+    );
+    bucket.breakByRoom.set(
+      b.roomCode,
+      (bucket.breakByRoom.get(b.roomCode) || 0) + b.breakMins
+    );
+    bucket.sessionsByRoom.set(
+      b.roomCode,
+      (bucket.sessionsByRoom.get(b.roomCode) || 0) + b.sessions
+    );
+    bucket.topicByRoom.set(b.roomCode, b.topic);
+    bucket.cadenceByRoom.set(b.roomCode, b.cadence);
+  }
+
+  // Layer in today's storedSessions
+  for (const session of params.storedSessions || []) {
+    if (!session || session.focusMinutes <= 0) continue;
+    if (session.dateKey && session.dateKey !== params.todayDateKey) continue;
+    const slotKey = resolveIntradaySlotKeyFromTimestamp(session.createdAtMs);
+    const bucket = bucketsBySlot.get(slotKey);
+    if (!bucket) continue;
+
+    const rCode =
+      normalizeStudyRoomCode(session.roomCode || normalizedActiveRoom) ||
+      normalizedActiveRoom;
+    allRoomsSet.add(rCode);
+    const focusMins = Math.round(session.focusMinutes);
+    // Estimate standard 1:5 Pomodoro break recovery (min 5m) for general topic focus sessions
+    const derivedBreakMins = Math.max(5, Math.round(focusMins / 5));
+
+    bucket.focusByRoom.set(
+      rCode,
+      (bucket.focusByRoom.get(rCode) || 0) + focusMins
+    );
+    bucket.breakByRoom.set(
+      rCode,
+      (bucket.breakByRoom.get(rCode) || 0) + derivedBreakMins
+    );
+    bucket.sessionsByRoom.set(
+      rCode,
+      (bucket.sessionsByRoom.get(rCode) || 0) + 1
+    );
+    if (session.topic && session.topic.trim()) {
+      bucket.topicByRoom.set(rCode, session.topic.trim());
+    }
+    bucket.cadenceByRoom.set(
+      rCode,
+      `${focusMins}m Focus · ${derivedBreakMins}m Break`
+    );
+  }
+
+  // Layer in explicit intraday focus vs. break logs
+  for (const entry of params.intradayFocusBreakLogs || []) {
+    if (!entry) continue;
+    if (entry.dateKey && entry.dateKey !== params.todayDateKey) continue;
+    const slotKey = normalizeIntradaySlotKey(entry.slotKey);
+    const bucket = bucketsBySlot.get(slotKey);
+    if (!bucket) continue;
+
+    const rCode =
+      normalizeStudyRoomCode(entry.roomCode || normalizedActiveRoom) ||
+      normalizedActiveRoom;
+    allRoomsSet.add(rCode);
+    const focusMins = Math.max(0, Math.round(Number(entry.focusMinutes) || 0));
+    const breakMins = Math.max(0, Math.round(Number(entry.breakMinutes) || 0));
+    if (focusMins === 0 && breakMins === 0) continue;
+
+    bucket.focusByRoom.set(
+      rCode,
+      (bucket.focusByRoom.get(rCode) || 0) + focusMins
+    );
+    bucket.breakByRoom.set(
+      rCode,
+      (bucket.breakByRoom.get(rCode) || 0) + breakMins
+    );
+    bucket.sessionsByRoom.set(
+      rCode,
+      (bucket.sessionsByRoom.get(rCode) || 0) + 1
+    );
+    if (entry.topic && entry.topic.trim()) {
+      bucket.topicByRoom.set(rCode, entry.topic.trim());
+    }
+    bucket.cadenceByRoom.set(
+      rCode,
+      entry.cadenceLabel || `${focusMins}m Focus · ${breakMins}m Break`
+    );
+  }
+
+  // Layer in active individual study desk Pomodoro cycles & elapsed minutes into 14:00 (afternoon active slot)
+  const liveSlotBucket = bucketsBySlot.get('14:00');
+  if (liveSlotBucket && params.deskTimersMap) {
+    for (const deskTimer of Object.values(params.deskTimersMap)) {
+      if (!deskTimer) continue;
+      const isUserDesk =
+        !params.currentUid ||
+        deskTimer.deskUid === params.currentUid ||
+        deskTimer.deskUid.startsWith('desk_custom_');
+      const deskFocusMins =
+        deskTimer.completedCyclesCount * deskTimer.durationMinutes +
+        Math.floor(deskTimer.elapsedSeconds / 60);
+      const deskBreakMins =
+        deskTimer.completedCyclesCount * 5 +
+        (deskTimer.status === 'paused' && deskTimer.elapsedSeconds > 0 ? 5 : 0);
+
+      if (isUserDesk && (deskFocusMins > 0 || deskBreakMins > 0)) {
+        const rCode =
+          normalizeStudyRoomCode(deskTimer.roomCode || normalizedActiveRoom) ||
+          normalizedActiveRoom;
+        allRoomsSet.add(rCode);
+        if (deskFocusMins > 0) {
+          liveSlotBucket.focusByRoom.set(
+            rCode,
+            (liveSlotBucket.focusByRoom.get(rCode) || 0) + deskFocusMins
+          );
+          liveSlotBucket.sessionsByRoom.set(
+            rCode,
+            (liveSlotBucket.sessionsByRoom.get(rCode) || 0) +
+              Math.max(1, deskTimer.completedCyclesCount)
+          );
+        }
+        if (deskBreakMins > 0) {
+          liveSlotBucket.breakByRoom.set(
+            rCode,
+            (liveSlotBucket.breakByRoom.get(rCode) || 0) + deskBreakMins
+          );
+        }
+        if (deskTimer.subject) {
+          liveSlotBucket.topicByRoom.set(rCode, deskTimer.subject);
+        }
+        liveSlotBucket.hasLiveTimerContribution =
+          liveSlotBucket.hasLiveTimerContribution || deskTimer.status === 'running';
+      }
+    }
+  }
+
+  // Layer in live room timer elapsed minutes if running or > 60s
+  if (
+    liveSlotBucket &&
+    typeof params.liveRoomTimerElapsedSeconds === 'number' &&
+    params.liveRoomTimerElapsedSeconds >= 60
+  ) {
+    const liveRoomMins = Math.floor(params.liveRoomTimerElapsedSeconds / 60);
+    liveSlotBucket.focusByRoom.set(
+      normalizedActiveRoom,
+      (liveSlotBucket.focusByRoom.get(normalizedActiveRoom) || 0) + liveRoomMins
+    );
+    liveSlotBucket.hasLiveTimerContribution =
+      liveSlotBucket.hasLiveTimerContribution || Boolean(params.liveRoomTimerRunning);
+  }
+
+  let runningCumulativeFocus = 0;
+  let runningCumulativeBreak = 0;
+
+  const points: CurrentDayFocusBreakPoint[] =
+    INTRADAY_FOCUS_BREAK_TIME_SLOTS.map((slot, idx) => {
+      const bucket = bucketsBySlot.get(slot.slotKey)!;
+      let focusMinutes = 0;
+      let breakMinutes = 0;
+      let sessionsCount = 0;
+      let topRoomCode =
+        normalizedFilter === 'ALL' ? normalizedActiveRoom : normalizedFilter;
+      let topRoomFocus = -1;
+      let topic = 'Deep Focus & Recovery Block';
+      let cadenceLabel = '25m Focus · 5m Break';
+
+      if (normalizedFilter === 'ALL') {
+        const roomsInSlot = new Set<string>([
+          ...bucket.focusByRoom.keys(),
+          ...bucket.breakByRoom.keys(),
+        ]);
+        for (const rCode of roomsInSlot) {
+          const fMins = bucket.focusByRoom.get(rCode) || 0;
+          const bMins = bucket.breakByRoom.get(rCode) || 0;
+          focusMinutes += fMins;
+          breakMinutes += bMins;
+          sessionsCount += bucket.sessionsByRoom.get(rCode) || (fMins > 0 ? 1 : 0);
+          if (fMins > topRoomFocus) {
+            topRoomFocus = fMins;
+            topRoomCode = rCode;
+            topic = bucket.topicByRoom.get(rCode) || topic;
+            cadenceLabel = bucket.cadenceByRoom.get(rCode) || cadenceLabel;
+          }
+        }
+      } else {
+        focusMinutes = bucket.focusByRoom.get(normalizedFilter) || 0;
+        breakMinutes = bucket.breakByRoom.get(normalizedFilter) || 0;
+        sessionsCount =
+          focusMinutes > 0 || breakMinutes > 0
+            ? bucket.sessionsByRoom.get(normalizedFilter) || 1
+            : 0;
+        topRoomCode = normalizedFilter;
+        topic =
+          bucket.topicByRoom.get(normalizedFilter) ||
+          `Focused Study in ${normalizedFilter}`;
+        cadenceLabel =
+          bucket.cadenceByRoom.get(normalizedFilter) ||
+          `${focusMinutes}m Focus · ${breakMinutes}m Break`;
+      }
+
+      runningCumulativeFocus += focusMinutes;
+      runningCumulativeBreak += breakMinutes;
+      const totalSlotMinutes = focusMinutes + breakMinutes;
+      const focusSharePercent =
+        totalSlotMinutes > 0
+          ? Math.round((focusMinutes / totalSlotMinutes) * 100)
+          : 0;
+      const breakSharePercent =
+        totalSlotMinutes > 0 ? Math.max(0, 100 - focusSharePercent) : 0;
+
+      return {
+        slotIndex: idx + 1,
+        slotKey: slot.slotKey,
+        slotLabel: slot.slotLabel,
+        windowRangeLabel: slot.windowRangeLabel,
+        focusMinutes,
+        breakMinutes,
+        totalSlotMinutes,
+        cumulativeFocusMinutes: runningCumulativeFocus,
+        cumulativeBreakMinutes: runningCumulativeBreak,
+        focusSharePercent,
+        breakSharePercent,
+        formattedFocusDuration: formatStudyDurationLabel(focusMinutes),
+        formattedBreakDuration: formatStudyDurationLabel(breakMinutes),
+        sessionsCount,
+        roomCode: topRoomCode,
+        topic,
+        cadenceLabel,
+        hasLiveTimerContribution: bucket.hasLiveTimerContribution,
+      };
+    });
+
+  const totalFocusMinutes = points.reduce((acc, p) => acc + p.focusMinutes, 0);
+  const totalBreakMinutes = points.reduce((acc, p) => acc + p.breakMinutes, 0);
+  const totalActiveMinutes = totalFocusMinutes + totalBreakMinutes;
+  const focusEfficiencyPercent =
+    totalActiveMinutes > 0
+      ? Math.round((totalFocusMinutes / totalActiveMinutes) * 100)
+      : 0;
+  const breakShareOverallPercent =
+    totalActiveMinutes > 0 ? Math.max(0, 100 - focusEfficiencyPercent) : 0;
+
+  const focusToBreakRatioValue =
+    totalBreakMinutes > 0
+      ? Number((totalFocusMinutes / totalBreakMinutes).toFixed(1))
+      : totalFocusMinutes;
+  const focusToBreakRatioLabel =
+    totalBreakMinutes > 0
+      ? `${focusToBreakRatioValue.toFixed(1)} : 1`
+      : `${totalFocusMinutes} : 0`;
+
+  const recommendedBreakMinutesForFocus = Math.max(
+    5,
+    Math.round(totalFocusMinutes / 5)
+  );
+
+  let recoveryBalanceStatus: CurrentDayRecoveryBalanceStatus = 'optimal_cadence';
+  let recoveryBalanceLabel = 'Optimal Pomodoro Recovery Cadence';
+  if (focusToBreakRatioValue > 6.0) {
+    recoveryBalanceStatus = 'needs_recovery_break';
+    recoveryBalanceLabel = 'High Focus Load — Schedule a 10m Recovery Break';
+  } else if (focusToBreakRatioValue > 0 && focusToBreakRatioValue < 2.2) {
+    recoveryBalanceStatus = 'high_recovery';
+    recoveryBalanceLabel = 'Recovery-Heavy Day — Ready for Deep Focus Sprint';
+  }
+
+  const totalSessionsCount = points.reduce(
+    (acc, p) => acc + p.sessionsCount,
+    0
+  );
+  const activeSlotsCount = points.filter(
+    (p) => p.focusMinutes > 0 || p.breakMinutes > 0
+  ).length;
+
+  let peakFocusSlot = points[0];
+  let peakBreakSlot = points[0];
+  for (const pt of points) {
+    if (pt.focusMinutes >= peakFocusSlot.focusMinutes) {
+      peakFocusSlot = pt;
+    }
+    if (pt.breakMinutes >= peakBreakSlot.breakMinutes) {
+      peakBreakSlot = pt;
+    }
+  }
+
+  return {
+    todayDateKey: params.todayDateKey,
+    points,
+    totalFocusMinutes,
+    totalBreakMinutes,
+    totalActiveMinutes,
+    formattedTotalFocus: formatStudyDurationLabel(totalFocusMinutes),
+    formattedTotalBreak: formatStudyDurationLabel(totalBreakMinutes),
+    formattedTotalActive: formatStudyDurationLabel(totalActiveMinutes),
+    focusEfficiencyPercent,
+    breakShareOverallPercent,
+    focusToBreakRatioValue,
+    focusToBreakRatioLabel,
+    recommendedBreakMinutesForFocus,
+    recoveryBalanceStatus,
+    recoveryBalanceLabel,
+    totalSessionsCount,
+    activeSlotsCount,
+    peakFocusSlot,
+    peakBreakSlot,
+    availableRoomCodes: Array.from(allRoomsSet),
+    selectedRoomFilter: normalizedFilter,
+  };
+}
+
+
 
