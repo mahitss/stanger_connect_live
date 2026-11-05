@@ -81,6 +81,11 @@ import {
   interpolateAmbientCrossfadeMixAtProgress,
   CurrentDayFocusBreakSlotRecord,
   buildCurrentDayFocusVsBreakSummary,
+  DEFAULT_POMODORO_FOCUS_MINUTES,
+  DEFAULT_SAVED_CUSTOM_FOCUS_DURATIONS,
+  evaluateCustomFocusSessionDurationSpec,
+  adjustCustomFocusSessionDurationByDelta,
+  applyUserSavedCustomFocusDurations,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
@@ -254,13 +259,38 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     'countdown'
   );
 
-  // Custom Duration Inputs (Hours + Minutes)
+  // Custom Duration Inputs (Direct Minutes + Hours + Minutes + Saved Non-Pomodoro Presets)
+  const [customDirectMinutesInput, setCustomDirectMinutesInput] =
+    useState<string>(() => String(durationMinutes));
   const [customHoursInput, setCustomHoursInput] = useState<string>(() =>
     String(Math.floor(durationMinutes / 60))
   );
   const [customMinutesInput, setCustomMinutesInput] = useState<string>(() =>
     String(durationMinutes % 60)
   );
+  const [savedCustomFocusDurations, setSavedCustomFocusDurations] = useState<
+    number[]
+  >(() => {
+    try {
+      const raw = localStorage.getItem(
+        'mr_stranger_saved_custom_focus_durations_v1'
+      );
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed.map((n) => Number(n)).filter((n) => n >= 1 && n <= 720);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    return [...DEFAULT_SAVED_CUSTOM_FOCUS_DURATIONS];
+  });
+  const [keepCustomDurationOnRoomJoin, setKeepCustomDurationOnRoomJoin] =
+    useState<boolean>(true);
+  const [customDurationStatusToast, setCustomDurationStatusToast] = useState<
+    string | null
+  >(null);
   const [dailyGoalHoursInput, setDailyGoalHoursInput] = useState<string>(() =>
     String(Math.floor(dailyTargetMinutes / 60))
   );
@@ -829,28 +859,121 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     }
   };
 
-  const applyCustomStudyMinutes = (mins: number) => {
-    const config = parseAndClampCustomStudyDuration({ totalMinutes: mins });
-    setDurationMinutes(config.totalMinutes);
-    setSecondsLeft(config.totalSeconds);
+  const activeCustomFocusDurationSpec = evaluateCustomFocusSessionDurationSpec({
+    totalMinutes: durationMinutes,
+  });
+
+  const applyCustomStudyMinutes = (
+    mins: number,
+    options?: { startImmediately?: boolean; toastMessage?: string }
+  ) => {
+    const spec = evaluateCustomFocusSessionDurationSpec({ totalMinutes: mins });
+    setDurationMinutes(spec.durationMinutes);
+    setSecondsLeft(spec.totalSeconds);
     setElapsedSessionSeconds(0);
     setAlreadyRecordedSeconds(0);
-    setCustomHoursInput(String(config.hours));
-    setCustomMinutesInput(String(config.minutes));
-    setIsRunning(false);
+    setCustomDirectMinutesInput(String(spec.durationMinutes));
+    setCustomHoursInput(String(spec.hours));
+    setCustomMinutesInput(String(spec.minutes));
+    setIsRunning(Boolean(options?.startImmediately));
     setVerificationFeedback(null);
+
+    // Synchronize the user's active desk timer in individualDeskTimersMap as well
+    persistIndividualDeskTimersMap((prev) => {
+      const existing =
+        prev[currentUid] ||
+        createIndividualStudyDeskPomodoroState({
+          deskUid: currentUid,
+          displayName: currentName,
+          roomCode: activeRoomCode,
+          subject: subject || `Studying: ${activeBook.title}`,
+          initialMinutes: spec.durationMinutes,
+        });
+      const updated = setIndividualStudyDeskCustomDuration(
+        existing,
+        spec.durationMinutes
+      );
+      return {
+        ...prev,
+        [currentUid]: options?.startImmediately
+          ? startIndividualStudyDeskPomodoro(updated)
+          : updated,
+      };
+    });
+
     try {
       localStorage.setItem(
         'mr_stranger_custom_study_duration_v1',
-        String(config.totalMinutes)
+        String(spec.durationMinutes)
       );
     } catch {
       // ignore
     }
+
+    if (options?.toastMessage) {
+      setCustomDurationStatusToast(options.toastMessage);
+      window.setTimeout(() => {
+        setCustomDurationStatusToast(null);
+      }, 3500);
+    }
   };
 
   const handleSelectDuration = (mins: number) => {
-    applyCustomStudyMinutes(mins);
+    const spec = evaluateCustomFocusSessionDurationSpec({ totalMinutes: mins });
+    applyCustomStudyMinutes(spec.durationMinutes, {
+      toastMessage: `Set focus session duration to ${spec.formattedDurationLabel} (${spec.formattedFullHMS})`,
+    });
+  };
+
+  const handleStepCustomFocusDuration = (deltaMinutes: number) => {
+    const nextSpec = adjustCustomFocusSessionDurationByDelta(
+      durationMinutes,
+      deltaMinutes
+    );
+    applyCustomStudyMinutes(nextSpec.durationMinutes, {
+      toastMessage: `Adjusted focus duration (${
+        deltaMinutes > 0 ? `+${deltaMinutes}m` : `${deltaMinutes}m`
+      }) → ${nextSpec.formattedDurationLabel} (${nextSpec.formattedFullHMS})`,
+    });
+  };
+
+  const handleDirectCustomMinutesApply = (
+    e: React.FormEvent,
+    startImmediately = false
+  ) => {
+    e.preventDefault();
+    const spec = evaluateCustomFocusSessionDurationSpec({
+      totalMinutes: customDirectMinutesInput,
+    });
+    applyCustomStudyMinutes(spec.durationMinutes, {
+      startImmediately,
+      toastMessage: startImmediately
+        ? `Started custom ${spec.formattedDurationLabel} (${spec.formattedFullHMS}) focus session`
+        : `Applied custom focus duration: ${spec.formattedDurationLabel} (${spec.formattedFullHMS})`,
+    });
+  };
+
+  const handleSaveCurrentCustomDurationPreset = () => {
+    const spec = evaluateCustomFocusSessionDurationSpec({
+      totalMinutes: customDirectMinutesInput || durationMinutes,
+    });
+    const nextSaved = applyUserSavedCustomFocusDurations(
+      savedCustomFocusDurations,
+      spec.durationMinutes,
+      6
+    );
+    setSavedCustomFocusDurations(nextSaved);
+    try {
+      localStorage.setItem(
+        'mr_stranger_saved_custom_focus_durations_v1',
+        JSON.stringify(nextSaved)
+      );
+    } catch {
+      // ignore
+    }
+    applyCustomStudyMinutes(spec.durationMinutes, {
+      toastMessage: `Saved & applied custom ${spec.durationMinutes}m focus preset (${spec.formattedFullHMS})`,
+    });
   };
 
   const handleCustomDurationFormSubmit = (e: React.FormEvent) => {
@@ -859,7 +982,9 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       hours: customHoursInput,
       minutes: customMinutesInput,
     });
-    applyCustomStudyMinutes(config.totalMinutes);
+    applyCustomStudyMinutes(config.totalMinutes, {
+      toastMessage: `Applied custom focus duration: ${config.formattedLabel} (${config.formattedTargetHMS})`,
+    });
   };
 
   const handleSaveDailyTargetFromStudyMode = (e: React.FormEvent) => {
@@ -1156,16 +1281,22 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       currentPositiveNote: positiveNote,
     });
 
+    const targetFocusDuration =
+      keepCustomDurationOnRoomJoin &&
+      durationMinutes !== DEFAULT_POMODORO_FOCUS_MINUTES
+        ? durationMinutes
+        : resolved.durationMinutes;
+
     setNewRoomTitle(resolved.roomName);
     setSubject(resolved.subject);
-    applyCustomStudyMinutes(resolved.durationMinutes);
+    applyCustomStudyMinutes(targetFocusDuration, { startImmediately: true });
     onChangeRoomCode(resolved.roomCode, resolved.roomName);
     onJoinDesk(
       resolved.roomCode,
       resolved.roomName,
       sanitizeSafeText(resolved.subject, 100),
       sanitizeSafeText(resolved.positiveNote, 400),
-      resolved.durationMinutes
+      targetFocusDuration
     );
     setIsRunning(true);
 
@@ -1182,7 +1313,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     }
 
     setLastJoinedRoomToast(
-      `Joined ${resolved.roomName} (${resolved.roomCode}) · ${resolved.durationMinutes}m live session started!`
+      `Joined ${resolved.roomName} (${resolved.roomCode}) · ${targetFocusDuration}m live focus session started!`
     );
     window.setTimeout(() => {
       setLastJoinedRoomToast((prev) =>
@@ -1971,6 +2102,234 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 )}
               </div>
             </div>
+          </div>
+        </div>
+
+        {/* ====================================================================
+            DEDICATED CUSTOM FOCUS SESSION DURATION BAR (OVERRIDE POMODORO)
+            ==================================================================== */}
+        <div
+          id="study-room-custom-focus-duration-bar"
+          data-testid="study-room-custom-focus-duration-bar"
+          data-duration-mode={activeCustomFocusDurationSpec.mode}
+          data-duration-minutes={activeCustomFocusDurationSpec.durationMinutes}
+          role="region"
+          aria-label="Set Custom Focus Session Duration"
+          className="p-4 sm:p-5 rounded-xl bg-[#050507] border border-zinc-800/90 space-y-4"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3 border-b border-zinc-800/80 pb-3.5">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <Clock className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span className="font-bold text-white">
+                  Custom Focus Session Duration
+                </span>
+                <span aria-hidden="true" className="text-zinc-600">
+                  ·
+                </span>
+                <span
+                  data-testid="study-room-focus-duration-mode-badge"
+                  className={`font-mono tabular-nums ${
+                    activeCustomFocusDurationSpec.isCustomNonPomodoro
+                      ? 'text-emerald-400 font-semibold'
+                      : 'text-amber-300'
+                  }`}
+                >
+                  {activeCustomFocusDurationSpec.modeStatusLabel}
+                </span>
+                <span aria-hidden="true" className="text-zinc-600">
+                  ·
+                </span>
+                <span
+                  data-testid="study-room-focus-cadence-badge"
+                  className="font-mono text-zinc-300 tabular-nums"
+                >
+                  {activeCustomFocusDurationSpec.sessionCadenceBadge}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400">
+                Override the default 25-minute Pomodoro timer with any custom
+                focus duration (1 to 720 minutes) via slider, direct minute
+                entry, step controls, or saved custom presets.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <label className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-300 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={keepCustomDurationOnRoomJoin}
+                  onChange={(e) =>
+                    setKeepCustomDurationOnRoomJoin(e.target.checked)
+                  }
+                  data-testid="study-room-keep-custom-duration-checkbox"
+                  className="rounded border-zinc-700 bg-zinc-900 text-emerald-500"
+                />
+                <span>Keep custom duration on room switch</span>
+              </label>
+
+              <button
+                type="button"
+                onClick={() =>
+                  applyCustomStudyMinutes(DEFAULT_POMODORO_FOCUS_MINUTES, {
+                    toastMessage:
+                      'Reset to default 25m Pomodoro focus duration (0:25:00)',
+                  })
+                }
+                data-testid="study-room-reset-default-pomodoro-btn"
+                className={`px-2.5 py-1 text-xs font-mono rounded border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                  !activeCustomFocusDurationSpec.isCustomNonPomodoro
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/50 font-semibold'
+                    : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border-zinc-800'
+                }`}
+              >
+                Default 25m Pomodoro
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+            {/* Left 5 Cols: Custom Duration Range Slider (5m - 240m) + Step Buttons */}
+            <div className="lg:col-span-5 space-y-2.5">
+              <div className="flex items-center justify-between text-xs font-mono">
+                <label
+                  htmlFor="study-room-custom-focus-duration-slider"
+                  className="text-zinc-300"
+                >
+                  Drag Focus Duration (5m – 240m):
+                </label>
+                <span
+                  data-testid="study-room-custom-slider-value-label"
+                  className="text-emerald-400 font-bold tabular-nums"
+                >
+                  {activeCustomFocusDurationSpec.formattedDurationLabel} (
+                  {activeCustomFocusDurationSpec.formattedFullHMS})
+                </span>
+              </div>
+
+              <input
+                id="study-room-custom-focus-duration-slider"
+                type="range"
+                min={5}
+                max={240}
+                step={5}
+                value={activeCustomFocusDurationSpec.sliderMinutesValue}
+                onChange={(e) => {
+                  const nextMins = Number(e.target.value);
+                  applyCustomStudyMinutes(nextMins);
+                }}
+                aria-label="Custom focus session duration slider in minutes"
+                data-testid="study-room-custom-focus-duration-slider"
+                className="w-full h-2 rounded-lg appearance-none bg-zinc-800 accent-emerald-400 cursor-pointer"
+              />
+
+              <div className="flex flex-wrap items-center justify-between gap-1.5">
+                {([-15, -5, 5, 15, 30] as const).map((delta) => (
+                  <button
+                    key={delta}
+                    type="button"
+                    onClick={() => handleStepCustomFocusDuration(delta)}
+                    data-testid={`study-room-custom-duration-step-${
+                      delta > 0 ? `plus-${delta}` : `minus-${Math.abs(delta)}`
+                    }`}
+                    className="px-2.5 py-1 text-xs font-mono bg-[#0A0A0C] hover:bg-zinc-900 text-zinc-200 border border-zinc-800 rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                  >
+                    {delta > 0 ? `+${delta}m` : `${delta}m`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Middle 4 Cols: Saved Custom Non-Pomodoro Duration Chips */}
+            <div className="lg:col-span-4 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-mono text-zinc-400">
+                  Saved Custom Durations (Non-Pomodoro):
+                </span>
+                <button
+                  type="button"
+                  onClick={handleSaveCurrentCustomDurationPreset}
+                  data-testid="study-room-save-custom-duration-chip-btn"
+                  className="text-[11px] font-mono text-emerald-400 hover:text-emerald-300 underline cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  + Save {durationMinutes}m Preset
+                </button>
+              </div>
+              <div
+                className="flex flex-wrap items-center gap-1.5"
+                data-testid="study-room-saved-custom-durations-list"
+              >
+                {savedCustomFocusDurations.map((mins) => {
+                  const isCurrent = durationMinutes === mins;
+                  return (
+                    <button
+                      key={mins}
+                      type="button"
+                      onClick={() => handleSelectDuration(mins)}
+                      data-testid={`study-room-saved-custom-duration-${mins}m-btn`}
+                      className={`px-2.5 py-1 text-xs font-mono tabular-nums rounded border transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                        isCurrent
+                          ? 'bg-emerald-500 text-black border-emerald-400 font-bold'
+                          : 'bg-[#0A0A0C] text-zinc-300 border-zinc-800 hover:border-zinc-600 hover:text-white'
+                      }`}
+                    >
+                      {formatStudyDurationLabel(mins)}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Right 3 Cols: Direct Custom Minute Input & Apply / Start Buttons */}
+            <form
+              onSubmit={(e) => handleDirectCustomMinutesApply(e, false)}
+              className="lg:col-span-3 space-y-2"
+              data-testid="study-room-direct-custom-duration-form"
+            >
+              <label
+                htmlFor="study-room-custom-focus-minutes-input"
+                className="block text-xs font-mono text-zinc-300"
+              >
+                Exact Custom Minutes (1–720m):
+              </label>
+              <div className="flex items-center gap-1.5">
+                <input
+                  id="study-room-custom-focus-minutes-input"
+                  type="number"
+                  min={1}
+                  max={720}
+                  value={customDirectMinutesInput}
+                  onChange={(e) => setCustomDirectMinutesInput(e.target.value)}
+                  data-testid="study-room-custom-focus-minutes-input"
+                  className="w-24 px-2.5 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white"
+                />
+                <button
+                  type="submit"
+                  data-testid="study-room-apply-custom-focus-duration-btn"
+                  className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Set Duration
+                </button>
+                <button
+                  type="button"
+                  onClick={(e) => handleDirectCustomMinutesApply(e, true)}
+                  data-testid="study-room-apply-and-start-custom-focus-btn"
+                  className="px-3 py-1.5 text-xs font-semibold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                >
+                  Start Now
+                </button>
+              </div>
+              {customDurationStatusToast && (
+                <div
+                  role="status"
+                  data-testid="study-room-custom-duration-toast"
+                  className="text-[11px] font-mono text-emerald-400 flex items-center gap-1 truncate"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">{customDurationStatusToast}</span>
+                </div>
+              )}
+            </form>
           </div>
         </div>
 

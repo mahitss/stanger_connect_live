@@ -372,6 +372,11 @@ import {
   normalizeIntradaySlotKey,
   resolveIntradaySlotKeyFromTimestamp,
   buildCurrentDayFocusVsBreakSummary,
+  DEFAULT_POMODORO_FOCUS_MINUTES,
+  DEFAULT_SAVED_CUSTOM_FOCUS_DURATIONS,
+  evaluateCustomFocusSessionDurationSpec,
+  adjustCustomFocusSessionDurationByDelta,
+  applyUserSavedCustomFocusDurations,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9056,6 +9061,59 @@ test('buildCurrentDayFocusVsBreakSummary computes chronological intraday focus v
   );
   assert.ok(filteredRoomSummary.totalFocusMinutes >= 50);
 });
+
+test('evaluateCustomFocusSessionDurationSpec, adjustCustomFocusSessionDurationByDelta, and applyUserSavedCustomFocusDurations allow setting custom focus session durations instead of default Pomodoro times', () => {
+  assert.equal(DEFAULT_POMODORO_FOCUS_MINUTES, 25);
+  assert.deepEqual(DEFAULT_SAVED_CUSTOM_FOCUS_DURATIONS, [35, 52, 75, 90, 105]);
+
+  // 1. Default 25m Pomodoro detection
+  const defaultSpec = evaluateCustomFocusSessionDurationSpec({ totalMinutes: 25 });
+  assert.equal(defaultSpec.durationMinutes, 25);
+  assert.equal(defaultSpec.mode, 'default_pomodoro');
+  assert.equal(defaultSpec.isCustomNonPomodoro, false);
+  assert.equal(defaultSpec.suggestedBreakMinutes, 5);
+  assert.equal(defaultSpec.formattedFullHMS, '0:25:00');
+  assert.equal(defaultSpec.sessionCadenceBadge, 'Default 25m Pomodoro · 5m Break');
+
+  // 2. Custom non-Pomodoro duration (e.g. 52 minutes or 1h 15m = 75 minutes)
+  const custom52 = evaluateCustomFocusSessionDurationSpec({ totalMinutes: 52 });
+  assert.equal(custom52.durationMinutes, 52);
+  assert.equal(custom52.hours, 0);
+  assert.equal(custom52.minutes, 52);
+  assert.equal(custom52.totalSeconds, 3120);
+  assert.equal(custom52.mode, 'custom_duration');
+  assert.equal(custom52.isCustomNonPomodoro, true);
+  assert.equal(custom52.suggestedBreakMinutes, 10);
+  assert.equal(custom52.formattedFullHMS, '0:52:00');
+  assert.equal(custom52.sessionCadenceBadge, 'Custom 52m Focus · 10m Break');
+
+  const customHoursMins = evaluateCustomFocusSessionDurationSpec({
+    hours: 1,
+    minutes: 35,
+  });
+  assert.equal(customHoursMins.durationMinutes, 95);
+  assert.equal(customHoursMins.hours, 1);
+  assert.equal(customHoursMins.minutes, 35);
+  assert.equal(customHoursMins.formattedFullHMS, '1:35:00');
+  assert.equal(customHoursMins.isCustomNonPomodoro, true);
+  assert.equal(customHoursMins.suggestedBreakMinutes, 19);
+
+  // 3. Step adjustments (+15m, -10m) and boundary clamping (1m..720m)
+  const steppedUp = adjustCustomFocusSessionDurationByDelta(25, 15);
+  assert.equal(steppedUp.durationMinutes, 40);
+  assert.equal(steppedUp.isCustomNonPomodoro, true);
+
+  const clampedLow = adjustCustomFocusSessionDurationByDelta(5, -20);
+  assert.equal(clampedLow.durationMinutes, 1);
+
+  const clampedHigh = adjustCustomFocusSessionDurationByDelta(700, 50);
+  assert.equal(clampedHigh.durationMinutes, 720);
+
+  // 4. Saving custom focus durations deduplicates and prepends most recent
+  const saved = applyUserSavedCustomFocusDurations([35, 52, 75], 42, 5);
+  assert.deepEqual(saved, [42, 35, 52, 75]);
+});
+
 
 
 

@@ -22867,5 +22867,129 @@ export function buildCurrentDayFocusVsBreakSummary(params: {
   };
 }
 
+// ============================================================================
+// STUDY ROOM CUSTOM FOCUS SESSION DURATION CONFIGURATOR (OVERRIDE POMODORO)
+// ============================================================================
+
+export const DEFAULT_POMODORO_FOCUS_MINUTES = 25;
+export const MIN_CUSTOM_FOCUS_SESSION_MINUTES = 1;
+export const MAX_CUSTOM_FOCUS_SESSION_MINUTES = 720;
+export const DEFAULT_SAVED_CUSTOM_FOCUS_DURATIONS: ReadonlyArray<number> = [
+  35, 52, 75, 90, 105,
+];
+
+export type StudyRoomFocusDurationMode =
+  | 'default_pomodoro'
+  | 'custom_duration';
+
+export interface CustomFocusSessionDurationSpec {
+  durationMinutes: number;
+  hours: number;
+  minutes: number;
+  totalSeconds: number;
+  formattedHMS: string;
+  formattedFullHMS: string;
+  formattedDurationLabel: string;
+  mode: StudyRoomFocusDurationMode;
+  isCustomNonPomodoro: boolean;
+  suggestedBreakMinutes: number;
+  sessionCadenceBadge: string;
+  modeStatusLabel: string;
+  sliderMinutesValue: number;
+}
+
+export function evaluateCustomFocusSessionDurationSpec(params: {
+  totalMinutes?: number | string;
+  hours?: number | string;
+  minutes?: number | string;
+}): CustomFocusSessionDurationSpec {
+  const parsed = parseAndClampCustomStudyDuration(params);
+  const durationMinutes = Math.min(
+    MAX_CUSTOM_FOCUS_SESSION_MINUTES,
+    Math.max(MIN_CUSTOM_FOCUS_SESSION_MINUTES, parsed.totalMinutes)
+  );
+  const hours = Math.floor(durationMinutes / 60);
+  const minutes = durationMinutes % 60;
+  const totalSeconds = durationMinutes * 60;
+  const isCustomNonPomodoro = durationMinutes !== DEFAULT_POMODORO_FOCUS_MINUTES;
+  const mode: StudyRoomFocusDurationMode = isCustomNonPomodoro
+    ? 'custom_duration'
+    : 'default_pomodoro';
+  const suggestedBreakMinutes = Math.max(
+    5,
+    Math.min(45, Math.round(durationMinutes / 5))
+  );
+  const formattedDurationLabel = formatStudyDurationLabel(durationMinutes);
+  const formattedHMS = formatStudyTimerHMS(totalSeconds, durationMinutes >= 60);
+  const formattedFullHMS = formatStudyTimerHMS(totalSeconds, true);
+
+  const sessionCadenceBadge = isCustomNonPomodoro
+    ? `Custom ${formattedDurationLabel} Focus · ${suggestedBreakMinutes}m Break`
+    : `Default 25m Pomodoro · 5m Break`;
+  const modeStatusLabel = isCustomNonPomodoro
+    ? `Custom Duration Active (${formattedDurationLabel} / ${formattedFullHMS})`
+    : `Default Pomodoro Active (25m / 0:25:00)`;
+
+  const sliderMinutesValue = Math.min(240, Math.max(5, durationMinutes));
+
+  return {
+    durationMinutes,
+    hours,
+    minutes,
+    totalSeconds,
+    formattedHMS,
+    formattedFullHMS,
+    formattedDurationLabel,
+    mode,
+    isCustomNonPomodoro,
+    suggestedBreakMinutes,
+    sessionCadenceBadge,
+    modeStatusLabel,
+    sliderMinutesValue,
+  };
+}
+
+export function adjustCustomFocusSessionDurationByDelta(
+  currentMinutes: number,
+  deltaMinutes: number
+): CustomFocusSessionDurationSpec {
+  const base = Number.isFinite(currentMinutes)
+    ? Math.round(currentMinutes)
+    : DEFAULT_POMODORO_FOCUS_MINUTES;
+  const delta = Number.isFinite(deltaMinutes) ? Math.round(deltaMinutes) : 0;
+  const nextTotal = Math.min(
+    MAX_CUSTOM_FOCUS_SESSION_MINUTES,
+    Math.max(MIN_CUSTOM_FOCUS_SESSION_MINUTES, base + delta)
+  );
+  return evaluateCustomFocusSessionDurationSpec({ totalMinutes: nextTotal });
+}
+
+export function applyUserSavedCustomFocusDurations(
+  existingSavedMinutes: ReadonlyArray<number>,
+  newCustomMinutes: number,
+  maxSaved = 6
+): number[] {
+  const clampedNew = Math.min(
+    MAX_CUSTOM_FOCUS_SESSION_MINUTES,
+    Math.max(
+      MIN_CUSTOM_FOCUS_SESSION_MINUTES,
+      Math.round(Number(newCustomMinutes) || DEFAULT_POMODORO_FOCUS_MINUTES)
+    )
+  );
+  const deduped: number[] = [clampedNew];
+  for (const item of existingSavedMinutes || []) {
+    const clean = Math.min(
+      MAX_CUSTOM_FOCUS_SESSION_MINUTES,
+      Math.max(MIN_CUSTOM_FOCUS_SESSION_MINUTES, Math.round(Number(item) || 0))
+    );
+    if (clean > 0 && !deduped.includes(clean)) {
+      deduped.push(clean);
+    }
+    if (deduped.length >= maxSaved) break;
+  }
+  return deduped;
+}
+
+
 
 
