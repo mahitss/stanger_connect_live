@@ -361,6 +361,12 @@ import {
   normalizeStudyRoomSoundscapePresetId,
   resolveActiveStudyRoomSoundscapePreset,
   applyStudyRoomSoundscapePreset,
+  DEFAULT_AMBIENT_CROSSFADE_DURATION_MS,
+  AMBIENT_CROSSFADE_DURATION_OPTIONS,
+  clampAmbientCrossfadeDurationMs,
+  interpolateAmbientCrossfadeGainAtProgress,
+  buildAmbientPresetCrossfadePlan,
+  interpolateAmbientCrossfadeMixAtProgress,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -8888,5 +8894,75 @@ test('STUDY_ROOM_AMBIENT_SOUNDSCAPE_PRESETS, applyStudyRoomSoundscapePreset, and
   assert.equal(getActiveAmbientLayers(mix).length, 0);
   assert.equal(resolveActiveStudyRoomSoundscapePreset(mix).activePresetId, 'off');
 });
+
+test('buildAmbientPresetCrossfadePlan and interpolateAmbientCrossfadeMixAtProgress compute seamless equal-power cross-fade envelopes when switching between soundscape presets', () => {
+  assert.equal(DEFAULT_AMBIENT_CROSSFADE_DURATION_MS, 1400);
+  assert.equal(AMBIENT_CROSSFADE_DURATION_OPTIONS.length, 3);
+  assert.equal(clampAmbientCrossfadeDurationMs(50), 200);
+  assert.equal(clampAmbientCrossfadeDurationMs(9000), 5000);
+  assert.equal(clampAmbientCrossfadeDurationMs(1400), 1400);
+
+  // 1. Switch from Rain (rainfall 80% @ 75% master -> 0.60 gain) to Cafe (coffeeshop 75% @ 75% master -> 0.5625 gain)
+  const rainMix = applyStudyRoomSoundscapePreset(
+    DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE,
+    'rain'
+  );
+  const cafeMix = applyStudyRoomSoundscapePreset(rainMix, 'cafe');
+
+  const rainToCafePlan = buildAmbientPresetCrossfadePlan({
+    previousMix: rainMix,
+    nextMix: cafeMix,
+    durationMs: 1400,
+  });
+
+  assert.equal(rainToCafePlan.fromPresetId, 'rain');
+  assert.equal(rainToCafePlan.toPresetId, 'cafe');
+  assert.equal(rainToCafePlan.fromShortLabel, 'Rain');
+  assert.equal(rainToCafePlan.toShortLabel, 'Cafe');
+  assert.equal(rainToCafePlan.durationMs, 1400);
+  assert.equal(rainToCafePlan.durationSeconds, 1.4);
+  assert.equal(rainToCafePlan.hasAudioShift, true);
+  assert.deepEqual(rainToCafePlan.fadingOutTracks, ['rainfall']);
+  assert.deepEqual(rainToCafePlan.fadingInTracks, ['coffeeshop']);
+  assert.ok(
+    rainToCafePlan.activeTransitionBadgeLabel.includes(
+      'Cross-fading Rain → Cafe (1.4s equal-power transition)'
+    )
+  );
+
+  // Progress 0.0 -> pure Rain (rainfall = 0.6, coffeeshop = 0)
+  const startGains = interpolateAmbientCrossfadeMixAtProgress(rainToCafePlan, 0);
+  assert.equal(startGains.rainfall, 0.6);
+  assert.equal(startGains.coffeeshop, 0);
+
+  // Progress 0.5 -> equal-power cosine/sine midpoint (~0.7071 of each track's gain, avoiding a linear 50% dip)
+  const midGains = interpolateAmbientCrossfadeMixAtProgress(rainToCafePlan, 0.5);
+  assert.ok(midGains.rainfall > 0.42 && midGains.rainfall < 0.43);
+  assert.ok(midGains.coffeeshop > 0.39 && midGains.coffeeshop < 0.41);
+
+  // Progress 1.0 -> pure Cafe (rainfall = 0, coffeeshop = 0.5625)
+  const endGains = interpolateAmbientCrossfadeMixAtProgress(rainToCafePlan, 1);
+  assert.equal(endGains.rainfall, 0);
+  assert.equal(endGains.coffeeshop, 0.5625);
+
+  // 2. Switch from Rain to Forest (rainfall cross-adjusts 80% -> 55%, binaural & whitenoise fade in)
+  const forestMix = applyStudyRoomSoundscapePreset(rainMix, 'forest');
+  const rainToForestPlan = buildAmbientPresetCrossfadePlan({
+    previousMix: rainMix,
+    nextMix: forestMix,
+    durationMs: 2400,
+  });
+  assert.equal(rainToForestPlan.durationMs, 2400);
+  assert.deepEqual(rainToForestPlan.crossAdjustingTracks, ['rainfall']);
+  assert.deepEqual(rainToForestPlan.fadingInTracks, ['whitenoise', 'binaural']);
+  assert.equal(
+    interpolateAmbientCrossfadeGainAtProgress(
+      rainToForestPlan.trackEnvelopes.rainfall,
+      0.5
+    ),
+    Number(((0.6 + 0.4125) / 2).toFixed(4))
+  );
+});
+
 
 

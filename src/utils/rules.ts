@@ -21952,3 +21952,232 @@ export function applyStudyRoomSoundscapePreset(
   };
 }
 
+// ============================================================================
+// AMBIENT SOUNDSCAPE PRESET CROSS-FADE TRANSITION ENGINE (EQUAL-POWER CURVE)
+// ============================================================================
+
+export const DEFAULT_AMBIENT_CROSSFADE_DURATION_MS = 1400;
+export const MIN_AMBIENT_CROSSFADE_DURATION_MS = 200;
+export const MAX_AMBIENT_CROSSFADE_DURATION_MS = 5000;
+
+export interface AmbientCrossfadeDurationOption {
+  durationMs: number;
+  label: string;
+  shortLabel: string;
+  description: string;
+}
+
+export const AMBIENT_CROSSFADE_DURATION_OPTIONS: ReadonlyArray<AmbientCrossfadeDurationOption> =
+  [
+    {
+      durationMs: 800,
+      label: '0.8s Fast Cross-Fade',
+      shortLabel: '0.8s Fast',
+      description: 'Brisk 800ms equal-power blend between presets',
+    },
+    {
+      durationMs: 1400,
+      label: '1.4s Smooth Cross-Fade (Default)',
+      shortLabel: '1.4s Smooth',
+      description: 'Natural 1.4s studio equal-power acoustic transition',
+    },
+    {
+      durationMs: 2400,
+      label: '2.4s Deep Cross-Fade',
+      shortLabel: '2.4s Deep',
+      description: 'Gradual 2.4s atmospheric overlap across soundscapes',
+    },
+  ];
+
+export function clampAmbientCrossfadeDurationMs(rawDurationMs: unknown): number {
+  const num = Number(rawDurationMs);
+  if (!Number.isFinite(num)) return DEFAULT_AMBIENT_CROSSFADE_DURATION_MS;
+  return Math.min(
+    MAX_AMBIENT_CROSSFADE_DURATION_MS,
+    Math.max(MIN_AMBIENT_CROSSFADE_DURATION_MS, Math.round(num))
+  );
+}
+
+export type AmbientTrackCrossfadeDirection =
+  | 'fade_in'
+  | 'fade_out'
+  | 'cross_adjust'
+  | 'steady';
+
+export interface AmbientLayerCrossfadeEnvelope {
+  trackId: AmbientTrackId;
+  label: string;
+  fromGain: number;
+  toGain: number;
+  fromVolumePercent: number;
+  toVolumePercent: number;
+  direction: AmbientTrackCrossfadeDirection;
+  equalPowerMidpointGain: number;
+}
+
+export interface AmbientPresetCrossfadePlan {
+  fromPresetId: StudyRoomSoundscapePresetId | 'custom';
+  toPresetId: StudyRoomSoundscapePresetId | 'custom';
+  fromShortLabel: string;
+  toShortLabel: string;
+  durationMs: number;
+  durationSeconds: number;
+  curveType: 'equal_power_cosine';
+  hasAudioShift: boolean;
+  fadingInTracks: AmbientTrackId[];
+  fadingOutTracks: AmbientTrackId[];
+  crossAdjustingTracks: AmbientTrackId[];
+  trackEnvelopes: Record<AmbientTrackId, AmbientLayerCrossfadeEnvelope>;
+  activeTransitionBadgeLabel: string;
+  settledBadgeLabel: string;
+}
+
+export function interpolateAmbientCrossfadeGainAtProgress(
+  envelope: Pick<AmbientLayerCrossfadeEnvelope, 'fromGain' | 'toGain' | 'direction'>,
+  progress01: number
+): number {
+  const p = Math.min(1, Math.max(0, Number.isFinite(progress01) ? progress01 : 1));
+  if (p <= 0) return Number(envelope.fromGain.toFixed(4));
+  if (p >= 1) return Number(envelope.toGain.toFixed(4));
+
+  const angle = p * (Math.PI / 2);
+  const fadeOutWeight = Math.cos(angle);
+  const fadeInWeight = Math.sin(angle);
+
+  if (envelope.direction === 'fade_in') {
+    return Number((envelope.toGain * fadeInWeight).toFixed(4));
+  }
+  if (envelope.direction === 'fade_out') {
+    return Number((envelope.fromGain * fadeOutWeight).toFixed(4));
+  }
+  if (envelope.direction === 'cross_adjust') {
+    // Smooth cosine S-curve between two active non-zero gains
+    const cosineBlend = (1 - Math.cos(p * Math.PI)) / 2;
+    const interpolated =
+      envelope.fromGain + (envelope.toGain - envelope.fromGain) * cosineBlend;
+    return Number(interpolated.toFixed(4));
+  }
+  return Number(envelope.toGain.toFixed(4));
+}
+
+export function buildAmbientPresetCrossfadePlan(params: {
+  previousMix: AmbientMultiLayerMixState;
+  nextMix: AmbientMultiLayerMixState;
+  durationMs?: number;
+}): AmbientPresetCrossfadePlan {
+  const prevState = params.previousMix || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE;
+  const nextState = params.nextMix || DEFAULT_AMBIENT_MULTI_LAYER_MIX_STATE;
+  const durationMs = clampAmbientCrossfadeDurationMs(
+    params.durationMs ?? DEFAULT_AMBIENT_CROSSFADE_DURATION_MS
+  );
+  const durationSeconds = Number((durationMs / 1000).toFixed(2));
+
+  const prevPresetSummary = resolveActiveStudyRoomSoundscapePreset(prevState);
+  const nextPresetSummary = resolveActiveStudyRoomSoundscapePreset(nextState);
+
+  const prevGains = getEffectiveAmbientMixMap(prevState);
+  const nextGains = getEffectiveAmbientMixMap(nextState);
+
+  const fadingInTracks: AmbientTrackId[] = [];
+  const fadingOutTracks: AmbientTrackId[] = [];
+  const crossAdjustingTracks: AmbientTrackId[] = [];
+  const trackEnvelopes = {} as Record<AmbientTrackId, AmbientLayerCrossfadeEnvelope>;
+
+  for (const trackId of AMBIENT_TRACK_IDS) {
+    const fromGain = Number((prevGains[trackId] ?? 0).toFixed(4));
+    const toGain = Number((nextGains[trackId] ?? 0).toFixed(4));
+    const prevLayer = prevState.layers[trackId];
+    const nextLayer = nextState.layers[trackId];
+    const fromVolumePercent =
+      prevLayer?.enabled && !prevState.isMasterMuted ? prevLayer.volumePercent : 0;
+    const toVolumePercent =
+      nextLayer?.enabled && !nextState.isMasterMuted ? nextLayer.volumePercent : 0;
+
+    let direction: AmbientTrackCrossfadeDirection = 'steady';
+    if (fromGain <= 0.0001 && toGain > 0.0001) {
+      direction = 'fade_in';
+      fadingInTracks.push(trackId);
+    } else if (fromGain > 0.0001 && toGain <= 0.0001) {
+      direction = 'fade_out';
+      fadingOutTracks.push(trackId);
+    } else if (Math.abs(fromGain - toGain) > 0.0005) {
+      direction = 'cross_adjust';
+      crossAdjustingTracks.push(trackId);
+    }
+
+    const meta = AMBIENT_SOUNDSCAPES.find((s) => s.id === trackId);
+    const midpointGain = interpolateAmbientCrossfadeGainAtProgress(
+      { fromGain, toGain, direction },
+      0.5
+    );
+
+    trackEnvelopes[trackId] = {
+      trackId,
+      label: meta?.shortLabel || trackId,
+      fromGain,
+      toGain,
+      fromVolumePercent,
+      toVolumePercent,
+      direction,
+      equalPowerMidpointGain: midpointGain,
+    };
+  }
+
+  const hasAudioShift =
+    fadingInTracks.length > 0 ||
+    fadingOutTracks.length > 0 ||
+    crossAdjustingTracks.length > 0;
+
+  const activeTransitionBadgeLabel = `Cross-fading ${prevPresetSummary.shortLabel} → ${nextPresetSummary.shortLabel} (${durationSeconds}s equal-power transition)`;
+  const settledBadgeLabel =
+    prevPresetSummary.shortLabel !== nextPresetSummary.shortLabel
+      ? `Cross-Fade Complete (${durationSeconds}s) · ${prevPresetSummary.shortLabel} → ${nextPresetSummary.shortLabel}`
+      : `Equal-Power Cross-Fade Ready (${durationSeconds}s) · ${nextPresetSummary.shortLabel}`;
+
+  return {
+    fromPresetId: prevPresetSummary.activePresetId,
+    toPresetId: nextPresetSummary.activePresetId,
+    fromShortLabel: prevPresetSummary.shortLabel,
+    toShortLabel: nextPresetSummary.shortLabel,
+    durationMs,
+    durationSeconds,
+    curveType: 'equal_power_cosine',
+    hasAudioShift,
+    fadingInTracks,
+    fadingOutTracks,
+    crossAdjustingTracks,
+    trackEnvelopes,
+    activeTransitionBadgeLabel,
+    settledBadgeLabel,
+  };
+}
+
+export function interpolateAmbientCrossfadeMixAtProgress(
+  plan: AmbientPresetCrossfadePlan,
+  progress01: number
+): Record<AmbientTrackId, number> {
+  return {
+    rainfall: interpolateAmbientCrossfadeGainAtProgress(
+      plan.trackEnvelopes.rainfall,
+      progress01
+    ),
+    coffeeshop: interpolateAmbientCrossfadeGainAtProgress(
+      plan.trackEnvelopes.coffeeshop,
+      progress01
+    ),
+    whitenoise: interpolateAmbientCrossfadeGainAtProgress(
+      plan.trackEnvelopes.whitenoise,
+      progress01
+    ),
+    binaural: interpolateAmbientCrossfadeGainAtProgress(
+      plan.trackEnvelopes.binaural,
+      progress01
+    ),
+    lofi: interpolateAmbientCrossfadeGainAtProgress(
+      plan.trackEnvelopes.lofi,
+      progress01
+    ),
+  };
+}
+
+

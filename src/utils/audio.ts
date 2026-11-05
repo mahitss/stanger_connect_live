@@ -18,6 +18,7 @@ interface ActiveLayerChannel {
   channelGain: GainNode;
   baseScale: number;
   intervalId: number | null;
+  fadeOutTimerId: number | null;
 }
 
 class SoundscapeEngine {
@@ -73,6 +74,10 @@ class SoundscapeEngine {
   public stopLayer(trackId: Exclude<AmbientSoundscapeId, 'off'>): void {
     const channel = this.layerChannels.get(trackId);
     if (!channel) return;
+    if (channel.fadeOutTimerId !== null) {
+      window.clearTimeout(channel.fadeOutTimerId);
+      channel.fadeOutTimerId = null;
+    }
     if (channel.intervalId !== null) {
       window.clearInterval(channel.intervalId);
     }
@@ -89,6 +94,39 @@ class SoundscapeEngine {
       // ignore
     }
     this.layerChannels.delete(trackId);
+  }
+
+  public fadeOutAndStopLayer(
+    trackId: Exclude<AmbientSoundscapeId, 'off'>,
+    crossfadeDurationMs = 1400
+  ): void {
+    const channel = this.layerChannels.get(trackId);
+    if (!channel) return;
+    const durationSec = Math.max(0, crossfadeDurationMs) / 1000;
+    if (!this.ctx || durationSec <= 0.05) {
+      this.stopLayer(trackId);
+      return;
+    }
+
+    if (channel.fadeOutTimerId !== null) {
+      window.clearTimeout(channel.fadeOutTimerId);
+      channel.fadeOutTimerId = null;
+    }
+
+    try {
+      const now = this.ctx.currentTime;
+      const currentVal = Math.max(0.0001, channel.channelGain.gain.value);
+      channel.channelGain.gain.cancelScheduledValues(now);
+      channel.channelGain.gain.setValueAtTime(currentVal, now);
+      channel.channelGain.gain.linearRampToValueAtTime(0.0001, now + durationSec);
+    } catch {
+      this.stopLayer(trackId);
+      return;
+    }
+
+    channel.fadeOutTimerId = window.setTimeout(() => {
+      this.stopLayer(trackId);
+    }, Math.round(crossfadeDurationMs) + 30);
   }
 
   public stopAllLayers(): void {
@@ -124,16 +162,33 @@ class SoundscapeEngine {
 
   private startLayerChannel(
     trackId: Exclude<AmbientSoundscapeId, 'off'>,
-    effectiveGain: number
+    effectiveGain: number,
+    crossfadeDurationMs = 1400
   ): void {
     const ctx = this.ensureContext();
     if (!ctx || !this.masterGain) return;
     this.masterGain.gain.setValueAtTime(1.0, ctx.currentTime);
+    const durationSec = Math.max(0.05, crossfadeDurationMs / 1000);
 
     const existing = this.layerChannels.get(trackId);
     if (existing) {
+      if (existing.fadeOutTimerId !== null) {
+        window.clearTimeout(existing.fadeOutTimerId);
+        existing.fadeOutTimerId = null;
+      }
       const targetGain = Math.max(0, Math.min(1, effectiveGain)) * existing.baseScale;
-      existing.channelGain.gain.setTargetAtTime(targetGain, ctx.currentTime, 0.05);
+      const now = ctx.currentTime;
+      const currentVal = Math.max(0.0001, existing.channelGain.gain.value);
+      existing.channelGain.gain.cancelScheduledValues(now);
+      existing.channelGain.gain.setValueAtTime(currentVal, now);
+      if (crossfadeDurationMs >= 200) {
+        existing.channelGain.gain.linearRampToValueAtTime(
+          Math.max(0.0001, targetGain),
+          now + durationSec
+        );
+      } else {
+        existing.channelGain.gain.setTargetAtTime(targetGain, now, 0.05);
+      }
       return;
     }
 
@@ -317,21 +372,42 @@ class SoundscapeEngine {
       intervalId = window.setInterval(playWarmPad, 3000);
     }
 
+    const targetGain = Math.max(0, Math.min(1, effectiveGain)) * baseScale;
+    const now = ctx.currentTime;
+    if (crossfadeDurationMs >= 200) {
+      channelGain.gain.cancelScheduledValues(now);
+      channelGain.gain.setValueAtTime(0.0001, now);
+      channelGain.gain.linearRampToValueAtTime(
+        Math.max(0.0001, targetGain),
+        now + durationSec
+      );
+    } else {
+      channelGain.gain.setValueAtTime(targetGain, now);
+    }
+
     this.layerChannels.set(trackId, {
       trackId,
       nodes,
       channelGain,
       baseScale,
       intervalId,
+      fadeOutTimerId: null,
     });
   }
 
   /**
-   * Synchronizes multiple simultaneous ambient soundscape layers with independent gains.
+   * Synchronizes multiple simultaneous ambient soundscape layers with independent gains
+   * and optional cross-fade transition duration (in milliseconds).
    */
   public syncMultiLayerMix(
-    layerGains: Record<Exclude<AmbientSoundscapeId, 'off'>, number>
+    layerGains: Record<Exclude<AmbientSoundscapeId, 'off'>, number>,
+    options?: { crossfadeDurationMs?: number }
   ): void {
+    const crossfadeDurationMs =
+      typeof options?.crossfadeDurationMs === 'number' &&
+      Number.isFinite(options.crossfadeDurationMs)
+        ? Math.max(0, options.crossfadeDurationMs)
+        : 1400;
     const trackIds: Exclude<AmbientSoundscapeId, 'off'>[] = [
       'rainfall',
       'coffeeshop',
@@ -345,9 +421,9 @@ class SoundscapeEngine {
       const gain = Number(layerGains[id] ?? 0);
       if (gain > 0) {
         if (firstActive === 'off') firstActive = id;
-        this.startLayerChannel(id, gain);
+        this.startLayerChannel(id, gain, crossfadeDurationMs);
       } else if (this.layerChannels.has(id)) {
-        this.stopLayer(id);
+        this.fadeOutAndStopLayer(id, crossfadeDurationMs);
       }
     }
 

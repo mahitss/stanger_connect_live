@@ -73,6 +73,12 @@ import {
   StudyRoomSoundscapePresetId,
   resolveActiveStudyRoomSoundscapePreset,
   applyStudyRoomSoundscapePreset,
+  DEFAULT_AMBIENT_CROSSFADE_DURATION_MS,
+  AMBIENT_CROSSFADE_DURATION_OPTIONS,
+  clampAmbientCrossfadeDurationMs,
+  AmbientPresetCrossfadePlan,
+  buildAmbientPresetCrossfadePlan,
+  interpolateAmbientCrossfadeMixAtProgress,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
@@ -915,7 +921,120 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setVerificationFeedback(check);
   };
 
-  const syncAndPersistAmbientMix = (nextMix: AmbientMultiLayerMixState) => {
+  const [crossfadeDurationMs, setCrossfadeDurationMs] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem('mr_stranger_ambient_crossfade_ms_v1');
+      if (saved) return clampAmbientCrossfadeDurationMs(Number(saved));
+    } catch {
+      // ignore
+    }
+    return DEFAULT_AMBIENT_CROSSFADE_DURATION_MS;
+  });
+  const [activeCrossfadePlan, setActiveCrossfadePlan] =
+    useState<AmbientPresetCrossfadePlan | null>(null);
+  const [isCrossfading, setIsCrossfading] = useState<boolean>(false);
+  const [crossfadeProgressPercent, setCrossfadeProgressPercent] =
+    useState<number>(100);
+  const [crossfadeInterpolatedGains, setCrossfadeInterpolatedGains] = useState<
+    Record<AmbientTrackId, number> | null
+  >(null);
+  const crossfadeIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (crossfadeIntervalRef.current !== null) {
+        window.clearInterval(crossfadeIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const handleChangeCrossfadeDurationMs = (nextDurationMs: number) => {
+    const clamped = clampAmbientCrossfadeDurationMs(nextDurationMs);
+    setCrossfadeDurationMs(clamped);
+    try {
+      localStorage.setItem(
+        'mr_stranger_ambient_crossfade_ms_v1',
+        String(clamped)
+      );
+    } catch {
+      // ignore
+    }
+  };
+
+  const triggerCrossfadeTransitionVisualAndAudio = (
+    previousMix: AmbientMultiLayerMixState,
+    nextMix: AmbientMultiLayerMixState,
+    durationOverrideMs?: number
+  ) => {
+    const effectiveDurationMs = clampAmbientCrossfadeDurationMs(
+      durationOverrideMs ?? crossfadeDurationMs
+    );
+    const plan = buildAmbientPresetCrossfadePlan({
+      previousMix,
+      nextMix,
+      durationMs: effectiveDurationMs,
+    });
+    setActiveCrossfadePlan(plan);
+
+    if (crossfadeIntervalRef.current !== null) {
+      window.clearInterval(crossfadeIntervalRef.current);
+      crossfadeIntervalRef.current = null;
+    }
+
+    if (!plan.hasAudioShift) {
+      setIsCrossfading(false);
+      setCrossfadeProgressPercent(100);
+      setCrossfadeInterpolatedGains(null);
+      return;
+    }
+
+    setIsCrossfading(true);
+    setCrossfadeProgressPercent(8);
+    setCrossfadeInterpolatedGains(
+      interpolateAmbientCrossfadeMixAtProgress(plan, 0.08)
+    );
+
+    const startedAt = Date.now();
+    crossfadeIntervalRef.current = window.setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const progress01 = Math.min(1, elapsed / Math.max(200, plan.durationMs));
+      setCrossfadeProgressPercent(Math.round(progress01 * 100));
+      setCrossfadeInterpolatedGains(
+        interpolateAmbientCrossfadeMixAtProgress(plan, progress01)
+      );
+
+      if (progress01 >= 1) {
+        if (crossfadeIntervalRef.current !== null) {
+          window.clearInterval(crossfadeIntervalRef.current);
+          crossfadeIntervalRef.current = null;
+        }
+        setIsCrossfading(false);
+        setCrossfadeProgressPercent(100);
+        setCrossfadeInterpolatedGains(null);
+      }
+    }, 60);
+  };
+
+  const syncAndPersistAmbientMix = (
+    nextMix: AmbientMultiLayerMixState,
+    options?: { crossfadeDurationMs?: number; triggerCrossfadePlan?: boolean }
+  ) => {
+    const shouldCrossfade = Boolean(options?.triggerCrossfadePlan);
+    const effectiveDuration =
+      typeof options?.crossfadeDurationMs === 'number'
+        ? options.crossfadeDurationMs
+        : shouldCrossfade
+        ? crossfadeDurationMs
+        : 80;
+
+    if (shouldCrossfade) {
+      triggerCrossfadeTransitionVisualAndAudio(
+        ambientMixState,
+        nextMix,
+        effectiveDuration
+      );
+    }
+
     setAmbientMixState(nextMix);
     try {
       localStorage.setItem(
@@ -925,37 +1044,39 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     } catch {
       // ignore storage errors
     }
-    soundEngine.syncMultiLayerMix(getEffectiveAmbientMixMap(nextMix));
+    soundEngine.syncMultiLayerMix(getEffectiveAmbientMixMap(nextMix), {
+      crossfadeDurationMs: effectiveDuration,
+    });
   };
 
   const handleToggleSoundscapeLayer = (clickedId: AmbientPresetId) => {
     if (clickedId === 'off') {
       const stopped = stopAllAmbientLayers(ambientMixState);
-      syncAndPersistAmbientMix(stopped);
+      syncAndPersistAmbientMix(stopped, { triggerCrossfadePlan: true });
       return;
     }
     const nextMix = toggleAmbientLayer(ambientMixState, clickedId);
-    syncAndPersistAmbientMix(nextMix);
+    syncAndPersistAmbientMix(nextMix, { triggerCrossfadePlan: true });
   };
 
   const handleLayerVolumeChange = (trackId: AmbientTrackId, nextPercent: number) => {
     const nextMix = updateAmbientLayerVolume(ambientMixState, trackId, nextPercent);
-    syncAndPersistAmbientMix(nextMix);
+    syncAndPersistAmbientMix(nextMix, { crossfadeDurationMs: 80 });
   };
 
   const handleMasterVolumeChange = (nextPercent: number) => {
     const nextMix = updateAmbientMasterVolume(ambientMixState, nextPercent);
-    syncAndPersistAmbientMix(nextMix);
+    syncAndPersistAmbientMix(nextMix, { crossfadeDurationMs: 80 });
   };
 
   const handleToggleMuteWorkspaceAudio = () => {
     const nextMix = toggleAmbientMasterMute(ambientMixState);
-    syncAndPersistAmbientMix(nextMix);
+    syncAndPersistAmbientMix(nextMix, { triggerCrossfadePlan: true });
   };
 
   const handleApplyMixPreset = (presetId: string) => {
     const nextMix = applyAmbientMixPreset(ambientMixState, presetId);
-    syncAndPersistAmbientMix(nextMix);
+    syncAndPersistAmbientMix(nextMix, { triggerCrossfadePlan: true });
   };
 
   const handleToggleAllStudyRoomSounds = () => {
@@ -1283,7 +1404,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       ambientMixState,
       presetInput
     );
-    syncAndPersistAmbientMix(nextMix);
+    syncAndPersistAmbientMix(nextMix, { triggerCrossfadePlan: true });
   };
 
   const renderPresetSwitcherIcon = (presetId: StudyRoomSoundscapePresetId) => {
@@ -2393,6 +2514,133 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                   </button>
                 );
               })}
+            </div>
+
+            {/* Equal-Power Cross-Fade Transition Status Bar & Duration Selector */}
+            <div
+              data-testid="study-room-crossfade-status-bar"
+              data-crossfade-active={isCrossfading ? 'true' : 'false'}
+              className="pt-2 border-t border-zinc-800/80 space-y-2"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] font-mono">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    data-testid="study-room-crossfade-status-badge"
+                    className={
+                      isCrossfading
+                        ? 'text-emerald-300 font-semibold'
+                        : 'text-zinc-300'
+                    }
+                  >
+                    {isCrossfading && activeCrossfadePlan
+                      ? `${activeCrossfadePlan.activeTransitionBadgeLabel} · ${crossfadeProgressPercent}%`
+                      : activeCrossfadePlan
+                      ? activeCrossfadePlan.settledBadgeLabel
+                      : `Equal-Power Cross-Fade Ready (${(crossfadeDurationMs / 1000).toFixed(1)}s) · Smooth Preset Transitions`}
+                  </span>
+
+                  {activeCrossfadePlan && activeCrossfadePlan.hasAudioShift && (
+                    <span
+                      data-testid="study-room-crossfade-envelope-summary"
+                      className="text-zinc-400"
+                    >
+                      {activeCrossfadePlan.fadingOutTracks.length > 0 && (
+                        <span>
+                          Fade Out:{' '}
+                          <strong className="text-amber-300">
+                            {activeCrossfadePlan.fadingOutTracks
+                              .map(
+                                (t) =>
+                                  activeCrossfadePlan.trackEnvelopes[t]?.label ||
+                                  t
+                              )
+                              .join(', ')}
+                          </strong>{' '}
+                        </span>
+                      )}
+                      {activeCrossfadePlan.fadingInTracks.length > 0 && (
+                        <span>
+                          · Fade In:{' '}
+                          <strong className="text-emerald-400">
+                            {activeCrossfadePlan.fadingInTracks
+                              .map(
+                                (t) =>
+                                  activeCrossfadePlan.trackEnvelopes[t]?.label ||
+                                  t
+                              )
+                              .join(', ')}
+                          </strong>
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                {/* Cross-Fade Duration Selector */}
+                <div
+                  className="flex items-center gap-1.5"
+                  role="group"
+                  aria-label="Cross-fade transition duration options"
+                >
+                  <label
+                    htmlFor="study-room-crossfade-duration-select"
+                    className="text-zinc-400 whitespace-nowrap"
+                  >
+                    Cross-Fade:
+                  </label>
+                  <select
+                    id="study-room-crossfade-duration-select"
+                    aria-label="Ambient Cross-Fade Duration"
+                    data-testid="study-room-crossfade-duration-select"
+                    value={crossfadeDurationMs}
+                    onChange={(e) =>
+                      handleChangeCrossfadeDurationMs(Number(e.target.value))
+                    }
+                    className="px-2 py-0.5 text-[11px] font-mono bg-[#050505] text-zinc-200 border border-zinc-800 rounded cursor-pointer"
+                  >
+                    {AMBIENT_CROSSFADE_DURATION_OPTIONS.map((opt) => (
+                      <option key={opt.durationMs} value={opt.durationMs}>
+                        {opt.shortLabel}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Smooth Equal-Power Cross-Fade Progress Indicator */}
+              <div className="w-full h-1.5 rounded-full bg-[#050505] border border-zinc-800/90 overflow-hidden">
+                <div
+                  data-testid="study-room-crossfade-progress-bar"
+                  data-progress={crossfadeProgressPercent}
+                  className={`h-full transition-all duration-75 ${
+                    isCrossfading ? 'bg-emerald-400' : 'bg-emerald-500/50'
+                  }`}
+                  style={{ width: `${crossfadeProgressPercent}%` }}
+                />
+              </div>
+
+              {isCrossfading && crossfadeInterpolatedGains && (
+                <div
+                  data-testid="study-room-crossfade-live-gains"
+                  className="flex flex-wrap items-center gap-3 text-[10px] font-mono text-zinc-400 tabular-nums"
+                >
+                  <span className="text-emerald-400">
+                    Live Equal-Power Gain Envelope:
+                  </span>
+                  {AMBIENT_SOUNDSCAPES.map((s) => {
+                    const gainPct = Math.round(
+                      (crossfadeInterpolatedGains[s.id as AmbientTrackId] ?? 0) *
+                        100
+                    );
+                    if (gainPct <= 0) return null;
+                    return (
+                      <span key={s.id} className="text-zinc-200">
+                        {s.shortLabel}: <strong>{gainPct}%</strong>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
