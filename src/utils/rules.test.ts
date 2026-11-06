@@ -405,6 +405,9 @@ import {
   UNIFIED_DIRECTORY_REQUESTS_PANEL_ID,
   normalizeUnifiedDirectoryRequestsSectionView,
   buildUnifiedDirectoryAndRequestsVerticalPanelSpec,
+  MOMENT_COMMENTS_LIST_TRANSITION_DURATION_MS,
+  MOMENT_COMMENTS_LIST_TRANSITION_EASING,
+  resolveMomentCommentsListTransitionSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9627,4 +9630,95 @@ test('Unified vertical panel layout spec consolidates Online Directory and Conne
   assert.equal(reqOnlySpec.showDirectorySection, false);
   assert.equal(reqOnlySpec.showRequestsSection, true);
 });
+
+test('resolveMomentCommentsListTransitionSpec and getNestedThreadAnimationState compute subtle transition animation states when expanding or collapsing nested comment threads', () => {
+  const comments = [
+    {
+      id: 'c_root_1',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_maya',
+      authorName: 'Maya Lin',
+      text: 'Silent study block complete.',
+      visibility: 'public' as const,
+      createdAtMs: 1_000,
+    },
+    {
+      id: 'c_reply_1',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_alex',
+      authorName: 'Alex Rivera',
+      text: 'Locked in for another 45m.',
+      visibility: 'public' as const,
+      createdAtMs: 2_000,
+      parentCommentId: 'c_root_1',
+    },
+    {
+      id: 'c_reply_2',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_maya',
+      authorName: 'Maya Lin',
+      text: 'See you in STUDY-204.',
+      visibility: 'public' as const,
+      createdAtMs: 3_000,
+      parentCommentId: 'c_root_1',
+    },
+  ];
+
+  const expandedGroups = buildMomentCommentThreadGroups(comments, []);
+  const idleSpec = resolveMomentCommentsListTransitionSpec({
+    threadGroups: expandedGroups,
+    isTransitioning: false,
+  });
+  assert.equal(idleSpec.transitionState, 'idle');
+  assert.equal(
+    idleSpec.listTransitionClassName,
+    'moment-comments-list-flow-transition moment-comments-list-idle'
+  );
+  assert.equal(idleSpec.expandedThreadsCount, 1);
+  assert.equal(idleSpec.collapsedThreadsCount, 0);
+  assert.equal(idleSpec.visibleNestedRepliesCount, 2);
+  assert.equal(idleSpec.hiddenNestedRepliesCount, 0);
+  assert.equal(idleSpec.transitionDurationMs, MOMENT_COMMENTS_LIST_TRANSITION_DURATION_MS);
+  assert.equal(idleSpec.transitionEasing, MOMENT_COMMENTS_LIST_TRANSITION_EASING);
+
+  const collapsedGroups = buildMomentCommentThreadGroups(comments, ['c_root_1']);
+  const collapsingSpec = resolveMomentCommentsListTransitionSpec({
+    threadGroups: collapsedGroups,
+    lastToggledThreadId: 'c_root_1',
+    lastToggleAction: 'collapse',
+    isTransitioning: true,
+  });
+  assert.equal(collapsingSpec.transitionState, 'collapsing');
+  assert.equal(
+    collapsingSpec.listTransitionClassName,
+    'moment-comments-list-flow-transition moment-comments-list-collapsing'
+  );
+  assert.equal(collapsingSpec.activeTransitionThreadId, 'c_root_1');
+  assert.equal(collapsingSpec.expandedThreadsCount, 0);
+  assert.equal(collapsingSpec.collapsedThreadsCount, 1);
+  assert.equal(collapsingSpec.visibleNestedRepliesCount, 0);
+  assert.equal(collapsingSpec.hiddenNestedRepliesCount, 2);
+
+  const expandingSpec = resolveMomentCommentsListTransitionSpec({
+    threadGroups: expandedGroups,
+    lastToggledThreadId: 'c_root_1',
+    lastToggleAction: 'expand',
+    isTransitioning: true,
+  });
+  assert.equal(expandingSpec.transitionState, 'expanding');
+  assert.equal(
+    expandingSpec.listTransitionClassName,
+    'moment-comments-list-flow-transition moment-comments-list-expanding'
+  );
+  assert.equal(expandingSpec.activeTransitionThreadId, 'c_root_1');
+
+  const animExpanded = getNestedThreadAnimationState(false, 1);
+  assert.equal(animExpanded.innerContainerClassName, 'moment-thread-collapse-inner');
+  assert.equal(animExpanded.transitionDurationMs, 260);
+  assert.equal(animExpanded.transitionTimingFunction, 'cubic-bezier(0.22, 1, 0.36, 1)');
+});
+
 

@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Home,
   Hash,
@@ -52,6 +52,9 @@ import {
   extractTweetHashtags,
   computeTrendingTwitterTopics,
   filterTwitterFeedMoments,
+  MOMENT_COMMENTS_LIST_TRANSITION_DURATION_MS,
+  MomentCommentsListTransitionAction,
+  resolveMomentCommentsListTransitionSpec,
 } from '../utils/rules';
 import type { OnlinePeer } from '../../server';
 
@@ -198,6 +201,35 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
 
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const chatInputRef = useRef<HTMLInputElement | null>(null);
+  const threadListTransitionTimerRef = useRef<number | null>(null);
+  const [threadListTransitionState, setThreadListTransitionState] = useState<{
+    momentId: string;
+    threadId: string | null;
+    action: MomentCommentsListTransitionAction;
+  } | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (threadListTransitionTimerRef.current !== null) {
+        window.clearTimeout(threadListTransitionTimerRef.current);
+      }
+    };
+  }, []);
+
+  const triggerMomentCommentsListTransition = (
+    momentId: string,
+    threadId: string | null,
+    action: MomentCommentsListTransitionAction
+  ) => {
+    if (threadListTransitionTimerRef.current !== null) {
+      window.clearTimeout(threadListTransitionTimerRef.current);
+    }
+    setThreadListTransitionState({ momentId, threadId, action });
+    threadListTransitionTimerRef.current = window.setTimeout(() => {
+      setThreadListTransitionState(null);
+      threadListTransitionTimerRef.current = null;
+    }, MOMENT_COMMENTS_LIST_TRANSITION_DURATION_MS);
+  };
 
   const myHandle = deriveTwitterHandle(currentIdentity.displayName, currentIdentity.uid);
   const trendingTopics = computeTrendingTwitterTopics(moments, momentComments);
@@ -1528,7 +1560,10 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                               }
                               style={
                                 replyAnim && replyAnim.staggerDelayMs > 0
-                                  ? { animationDelay: `${replyAnim.staggerDelayMs}ms` }
+                                  ? {
+                                      animationDelay: `${replyAnim.staggerDelayMs}ms`,
+                                      transitionDelay: `${replyAnim.staggerDelayMs}ms`,
+                                    }
                                   : undefined
                               }
                               className={`space-y-2 ${indentClass} ${
@@ -1603,11 +1638,18 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                                     {rootThreadAnim && threadGroup && (
                                       <button
                                         type="button"
-                                        onClick={() =>
+                                        onClick={() => {
+                                          const nextAction: MomentCommentsListTransitionAction =
+                                            threadGroup.isCollapsed ? 'expand' : 'collapse';
+                                          triggerMomentCommentsListTransition(
+                                            item.id,
+                                            cmt.id,
+                                            nextAction
+                                          );
                                           setCollapsedCommentThreadIds((prev) =>
                                             toggleCollapsedCommentThread(prev, cmt.id)
-                                          )
-                                        }
+                                          );
+                                        }}
                                         aria-expanded={rootThreadAnim.ariaExpanded}
                                         aria-controls={`moment-comment-thread-replies-${cmt.id}`}
                                         data-testid={`toggle-comment-thread-${cmt.id}`}
@@ -1680,7 +1722,10 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                                     )}
                                   </div>
                                 </div>
-                                <p className="text-xs text-zinc-200 leading-relaxed break-words">
+                                <p
+                                  data-testid="moment-comment-text"
+                                  className="text-xs text-zinc-200 leading-relaxed break-words"
+                                >
                                   {cmt.text}
                                 </p>
                               </div>
@@ -1761,100 +1806,138 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                               </span>
                               <div className="flex items-center gap-3">
                                 {threadsWithReplies.length > 0 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => {
-                                      const replyRootIds = threadsWithReplies.map(
-                                        (g) => g.rootItem.comment.id
-                                      );
-                                      setCollapsedCommentThreadIds((prev) => {
-                                        if (allThreadsCollapsed) {
-                                          return prev.filter(
-                                            (id) => !replyRootIds.includes(id)
-                                          );
-                                        }
-                                        return Array.from(
-                                          new Set([...prev, ...replyRootIds])
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const replyRootIds = threadsWithReplies.map(
+                                          (g) => g.rootItem.comment.id
                                         );
-                                      });
-                                    }}
-                                    data-testid={`toggle-all-comment-threads-${item.id}`}
-                                    className="inline-flex items-center gap-1 text-[11px] font-mono text-sky-400 hover:text-sky-300 transition-colors whitespace-nowrap"
-                                  >
-                                    {allThreadsCollapsed ? (
-                                      <ChevronDown
-                                        aria-hidden="true"
-                                        className="w-3 h-3 shrink-0"
-                                      />
-                                    ) : (
-                                      <ChevronUp
-                                        aria-hidden="true"
-                                        className="w-3 h-3 shrink-0"
-                                      />
-                                    )}
-                                    <span>
-                                      {allThreadsCollapsed
-                                        ? 'Expand all threads'
-                                        : 'Collapse all threads'}
-                                    </span>
-                                  </button>
-                                )}
+                                        triggerMomentCommentsListTransition(
+                                          item.id,
+                                          null,
+                                          allThreadsCollapsed ? 'expand_all' : 'collapse_all'
+                                        );
+                                        setCollapsedCommentThreadIds((prev) => {
+                                          if (allThreadsCollapsed) {
+                                            return prev.filter(
+                                              (id) => !replyRootIds.includes(id)
+                                            );
+                                          }
+                                          return Array.from(
+                                            new Set([...prev, ...replyRootIds])
+                                          );
+                                        });
+                                      }}
+                                      data-testid={`toggle-all-comment-threads-${item.id}`}
+                                      className="inline-flex items-center gap-1 text-[11px] font-mono text-sky-400 hover:text-sky-300 transition-colors whitespace-nowrap"
+                                    >
+                                      {allThreadsCollapsed ? (
+                                        <ChevronDown
+                                          aria-hidden="true"
+                                          className="w-3 h-3 shrink-0"
+                                        />
+                                      ) : (
+                                        <ChevronUp
+                                          aria-hidden="true"
+                                          className="w-3 h-3 shrink-0"
+                                        />
+                                      )}
+                                      <span>
+                                        {allThreadsCollapsed
+                                          ? 'Expand all threads'
+                                          : 'Collapse all threads'}
+                                      </span>
+                                    </button>
+                                  )}
+                                </div>
                               </div>
-                            </div>
 
-                            {threadGroups.length > 0 && (
-                              <div
-                                className="space-y-2.5"
-                                data-testid={`moment-comments-list-${item.id}`}
-                              >
-                                {threadGroups.map((group) => {
-                                  const rootCmt = group.rootItem.comment;
-                                  const threadAnim = getNestedThreadAnimationState(
-                                    group.isCollapsed,
-                                    0
-                                  );
+                              {threadGroups.length > 0 &&
+                                (() => {
+                                  const isListTransitioningForMoment =
+                                    threadListTransitionState?.momentId === item.id;
+                                  const listTransitionSpec =
+                                    resolveMomentCommentsListTransitionSpec({
+                                      threadGroups,
+                                      lastToggledThreadId: isListTransitioningForMoment
+                                        ? threadListTransitionState?.threadId
+                                        : null,
+                                      lastToggleAction: isListTransitioningForMoment
+                                        ? threadListTransitionState?.action
+                                        : null,
+                                      isTransitioning: isListTransitioningForMoment,
+                                    });
                                   return (
                                     <div
-                                      key={rootCmt.id}
-                                      data-testid={`moment-comment-thread-${rootCmt.id}`}
-                                      className="space-y-2"
+                                      className={`space-y-2.5 ${listTransitionSpec.listTransitionClassName}`}
+                                      data-testid={`moment-comments-list-${item.id}`}
+                                      data-list-transition-state={
+                                        listTransitionSpec.transitionState
+                                      }
+                                      data-active-transition-thread-id={
+                                        listTransitionSpec.activeTransitionThreadId || ''
+                                      }
+                                      data-expanded-threads-count={
+                                        listTransitionSpec.expandedThreadsCount
+                                      }
+                                      data-collapsed-threads-count={
+                                        listTransitionSpec.collapsedThreadsCount
+                                      }
+                                      data-visible-replies-count={
+                                        listTransitionSpec.visibleNestedRepliesCount
+                                      }
                                     >
-                                      {renderThreadedCommentNode(
-                                        group.rootItem,
-                                        undefined,
-                                        group
-                                      )}
+                                      {threadGroups.map((group) => {
+                                        const rootCmt = group.rootItem.comment;
+                                        const threadAnim = getNestedThreadAnimationState(
+                                          group.isCollapsed,
+                                          0
+                                        );
+                                        return (
+                                          <div
+                                            key={rootCmt.id}
+                                            data-testid={`moment-comment-thread-${rootCmt.id}`}
+                                            className="space-y-2"
+                                          >
+                                            {renderThreadedCommentNode(
+                                              group.rootItem,
+                                              undefined,
+                                              group
+                                            )}
 
-                                      {group.totalRepliesCount > 0 && (
-                                        <div
-                                          id={`moment-comment-thread-replies-${rootCmt.id}`}
-                                          data-testid={`moment-comment-thread-replies-${rootCmt.id}`}
-                                          data-thread-state={threadAnim.state}
-                                          aria-hidden={group.isCollapsed}
-                                          className={threadAnim.wrapperClassName}
-                                        >
-                                          <div className="overflow-hidden space-y-2 pt-0.5">
-                                            {group.nestedReplies.map(
-                                              (replyItem, replyIdx) => {
-                                                const replyAnim =
-                                                  getNestedThreadAnimationState(
-                                                    group.isCollapsed,
-                                                    replyIdx
-                                                  );
-                                                return renderThreadedCommentNode(
-                                                  replyItem,
-                                                  replyAnim
-                                                );
-                                              }
+                                            {group.totalRepliesCount > 0 && (
+                                              <div
+                                                id={`moment-comment-thread-replies-${rootCmt.id}`}
+                                                data-testid={`moment-comment-thread-replies-${rootCmt.id}`}
+                                                data-thread-state={threadAnim.state}
+                                                aria-hidden={group.isCollapsed}
+                                                className={threadAnim.wrapperClassName}
+                                              >
+                                                <div
+                                                  className={`${threadAnim.innerContainerClassName} min-h-0 overflow-hidden space-y-2 pt-0.5`}
+                                                >
+                                                  {group.nestedReplies.map(
+                                                    (replyItem, replyIdx) => {
+                                                      const replyAnim =
+                                                        getNestedThreadAnimationState(
+                                                          group.isCollapsed,
+                                                          replyIdx
+                                                        );
+                                                      return renderThreadedCommentNode(
+                                                        replyItem,
+                                                        replyAnim
+                                                      );
+                                                    }
+                                                  )}
+                                                </div>
+                                              </div>
                                             )}
                                           </div>
-                                        </div>
-                                      )}
+                                        );
+                                      })}
                                     </div>
                                   );
-                                })}
-                              </div>
-                            )}
+                                })()}
                           </>
                         );
                       })()}

@@ -458,3 +458,79 @@ main h3 {
   font-style: italic;
 }
 
+/* ==========================================================================
+   MOMENT COMMENTS LIST & NESTED THREAD EXPAND/COLLAPSE SUBTLE TRANSITION
+   - Smooth CSS Grid row interpolation (1fr <-> 0fr) + opacity/vertical glide
+   - Subtle list flow transition when expanding or collapsing nested replies
+   ========================================================================== */
+div.moment-comments-list-flow-transition {
+  transition-property: opacity, transform, border-color, background-color !important;
+  transition-duration: 260ms !important;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
+  will-change: opacity, transform;
+}
+
+div.moment-comments-list-flow-transition.moment-comments-list-expanding {
+  opacity: 1;
+  transform: translateY(0px);
+}
+
+div.moment-comments-list-flow-transition.moment-comments-list-collapsing {
+  opacity: 0.96;
+  transform: translateY(-1px);
+}
+
+div.moment-thread-collapse-grid {
+  display: grid;
+  grid-template-rows: 1fr;
+  opacity: 1;
+  transform: translateY(0px);
+  transition-property: grid-template-rows, opacity, transform, margin-top, padding-top !important;
+  transition-duration: 260ms !important;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+div.moment-thread-collapse-grid[data-thread-state="collapsed"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transform: translateY(-6px);
+  margin-top: 0px !important;
+  padding-top: 0px !important;
+  pointer-events: none;
+}
+
+div.moment-thread-collapse-inner {
+  min-height: 0;
+  overflow: hidden;
+  transition-property: opacity, transform !important;
+  transition-duration: 240ms !important;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+div.moment-thread-slide-in {
+  opacity: 1;
+  transform: translateY(0px);
+  transition-property: opacity, transform !important;
+  transition-duration: 240ms !important;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+div.moment-thread-slide-out {
+  opacity: 0;
+  transform: translateY(-5px);
+  transition-property: opacity, transform !important;
+  transition-duration: 200ms !important;
+  transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  div.moment-comments-list-flow-transition,
+  div.moment-thread-collapse-grid,
+  div.moment-thread-collapse-inner,
+  div.moment-thread-slide-in,
+  div.moment-thread-slide-out {
+    transition-duration: 1ms !important;
+  }
+}
+
+

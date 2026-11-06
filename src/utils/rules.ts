@@ -2517,8 +2517,11 @@ export interface MomentCommentThreadGroup {
 export interface NestedThreadAnimationState {
   state: 'expanded' | 'collapsed';
   wrapperClassName: string;
+  innerContainerClassName: string;
   itemAnimationClassName: string;
   staggerDelayMs: number;
+  transitionDurationMs: number;
+  transitionTimingFunction: string;
   ariaExpanded: boolean;
   formatToggleLabel: (replyCount: number) => string;
 }
@@ -2603,10 +2606,13 @@ export function getNestedThreadAnimationState(
   return {
     state: isCollapsed ? 'collapsed' : 'expanded',
     wrapperClassName: 'moment-thread-collapse-grid',
+    innerContainerClassName: 'moment-thread-collapse-inner',
     itemAnimationClassName: isCollapsed
       ? 'moment-thread-slide-out'
       : 'moment-thread-slide-in',
     staggerDelayMs: isCollapsed ? 0 : Math.min(150, safeIndex * 25),
+    transitionDurationMs: 260,
+    transitionTimingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
     ariaExpanded: !isCollapsed,
     formatToggleLabel: (replyCount: number) => {
       const safeCount = Math.max(0, Math.round(Number(replyCount) || 0));
@@ -24029,4 +24035,95 @@ export function buildUnifiedDirectoryAndRequestsVerticalPanelSpec(params?: {
     ],
   };
 }
+
+// ============================================================================
+// MOMENT COMMENTS LIST & NESTED THREAD EXPAND/COLLAPSE SUBTLE TRANSITION SPEC
+// ============================================================================
+
+export const MOMENT_COMMENTS_LIST_TRANSITION_DURATION_MS = 260;
+export const MOMENT_COMMENTS_LIST_TRANSITION_EASING =
+  'cubic-bezier(0.22, 1, 0.36, 1)';
+
+export type MomentCommentsListTransitionAction =
+  | 'expand'
+  | 'collapse'
+  | 'expand_all'
+  | 'collapse_all';
+
+export interface MomentCommentsListTransitionSpec {
+  listTransitionClassName: string;
+  transitionState: 'expanding' | 'collapsing' | 'idle';
+  activeTransitionThreadId: string | null;
+  lastAction: MomentCommentsListTransitionAction | null;
+  isTransitioning: boolean;
+  totalThreadsCount: number;
+  totalThreadsWithRepliesCount: number;
+  expandedThreadsCount: number;
+  collapsedThreadsCount: number;
+  visibleNestedRepliesCount: number;
+  hiddenNestedRepliesCount: number;
+  transitionDurationMs: number;
+  transitionEasing: string;
+}
+
+export function resolveMomentCommentsListTransitionSpec(params: {
+  threadGroups?: ReadonlyArray<MomentCommentThreadGroup>;
+  lastToggledThreadId?: string | null;
+  lastToggleAction?: MomentCommentsListTransitionAction | null;
+  isTransitioning?: boolean;
+}): MomentCommentsListTransitionSpec {
+  const groups = Array.isArray(params?.threadGroups) ? params.threadGroups : [];
+  const threadsWithReplies = groups.filter((g) => (g?.totalRepliesCount || 0) > 0);
+  const expandedThreadsCount = threadsWithReplies.filter((g) => !g.isCollapsed).length;
+  const collapsedThreadsCount = threadsWithReplies.filter((g) => g.isCollapsed).length;
+
+  let visibleNestedRepliesCount = 0;
+  let hiddenNestedRepliesCount = 0;
+  for (const g of threadsWithReplies) {
+    const count = Math.max(0, Number(g.totalRepliesCount) || 0);
+    if (g.isCollapsed) {
+      hiddenNestedRepliesCount += count;
+    } else {
+      visibleNestedRepliesCount += count;
+    }
+  }
+
+  const isTransitioning = Boolean(params?.isTransitioning);
+  const lastAction = params?.lastToggleAction || null;
+  const transitionState: 'expanding' | 'collapsing' | 'idle' = !isTransitioning
+    ? 'idle'
+    : lastAction === 'collapse' || lastAction === 'collapse_all'
+    ? 'collapsing'
+    : 'expanding';
+
+  const activeTransitionThreadId =
+    isTransitioning && params?.lastToggledThreadId
+      ? String(params.lastToggledThreadId).trim() || null
+      : null;
+
+  const baseClass = 'moment-comments-list-flow-transition';
+  const stateClass =
+    transitionState === 'expanding'
+      ? 'moment-comments-list-expanding'
+      : transitionState === 'collapsing'
+      ? 'moment-comments-list-collapsing'
+      : 'moment-comments-list-idle';
+
+  return {
+    listTransitionClassName: `${baseClass} ${stateClass}`,
+    transitionState,
+    activeTransitionThreadId,
+    lastAction,
+    isTransitioning,
+    totalThreadsCount: groups.length,
+    totalThreadsWithRepliesCount: threadsWithReplies.length,
+    expandedThreadsCount,
+    collapsedThreadsCount,
+    visibleNestedRepliesCount,
+    hiddenNestedRepliesCount,
+    transitionDurationMs: MOMENT_COMMENTS_LIST_TRANSITION_DURATION_MS,
+    transitionEasing: MOMENT_COMMENTS_LIST_TRANSITION_EASING,
+  };
+}
+
 
