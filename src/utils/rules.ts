@@ -23889,3 +23889,144 @@ export function buildCurvedTextLayoutSpec(params?: {
     isMinimalDeBulkedMode: true,
   };
 }
+
+// ============================================================================
+// UNIFIED VERTICAL PANEL FOR ONLINE DIRECTORY & CONNECTION REQUESTS
+// ============================================================================
+
+export const UNIFIED_DIRECTORY_REQUESTS_PANEL_ID =
+  'unified-directory-requests-vertical-panel';
+
+export type UnifiedDirectoryRequestsSectionView = 'all' | 'directory' | 'requests';
+
+export function normalizeUnifiedDirectoryRequestsSectionView(
+  raw?: string | null
+): UnifiedDirectoryRequestsSectionView {
+  const cleaned = String(raw || '')
+    .trim()
+    .toLowerCase();
+  if (cleaned === 'directory' || cleaned === 'requests') {
+    return cleaned;
+  }
+  return 'all';
+}
+
+export interface UnifiedDirectoryRequestItemLike {
+  id?: string;
+  fromUid?: string;
+  toUid?: string;
+  status?: string;
+}
+
+export interface UnifiedDirectoryAndRequestsVerticalPanelSpec {
+  panelId: string;
+  panelTestId: string;
+  headerTestId: string;
+  directorySectionTestId: string;
+  requestsSectionTestId: string;
+  layoutDirection: 'vertical';
+  isSingleVerticalColumnLayout: boolean;
+  activeSectionView: UnifiedDirectoryRequestsSectionView;
+  showDirectorySection: boolean;
+  showRequestsSection: boolean;
+  onlineCount: number;
+  inFocusCount: number;
+  sharingMoodCount: number;
+  totalRequestsCount: number;
+  pendingIncomingCount: number;
+  acceptedConnectionsCount: number;
+  headerTitle: string;
+  headerMetaSummary: string;
+  containerClassName: string;
+  directorySectionClassName: string;
+  requestsSectionClassName: string;
+  sectionTabs: ReadonlyArray<{
+    id: UnifiedDirectoryRequestsSectionView;
+    label: string;
+    count: number;
+    isActive: boolean;
+    testId: string;
+  }>;
+}
+
+export function buildUnifiedDirectoryAndRequestsVerticalPanelSpec(params?: {
+  onlinePeersCount?: number;
+  inFocusCount?: number;
+  sharingMoodCount?: number;
+  requests?: readonly UnifiedDirectoryRequestItemLike[];
+  currentUid?: string;
+  activeSectionView?: string | null;
+}): UnifiedDirectoryAndRequestsVerticalPanelSpec {
+  const onlineCount = Math.max(0, Math.floor(Number(params?.onlinePeersCount) || 0));
+  const inFocusCount = Math.max(0, Math.floor(Number(params?.inFocusCount) || 0));
+  const sharingMoodCount = Math.max(0, Math.floor(Number(params?.sharingMoodCount) || 0));
+  const reqList = Array.isArray(params?.requests) ? params.requests : [];
+  const currentUid = String(params?.currentUid || '').trim();
+
+  const totalRequestsCount = reqList.length;
+  const pendingIncomingCount = reqList.filter(
+    (r) =>
+      String(r?.status || '').toLowerCase() === 'pending' &&
+      (!currentUid || String(r?.toUid || '') === currentUid)
+  ).length;
+  const acceptedConnectionsCount = reqList.filter(
+    (r) => String(r?.status || '').toLowerCase() === 'accepted'
+  ).length;
+
+  const activeSectionView = normalizeUnifiedDirectoryRequestsSectionView(
+    params?.activeSectionView
+  );
+  const showDirectorySection =
+    activeSectionView === 'all' || activeSectionView === 'directory';
+  const showRequestsSection =
+    activeSectionView === 'all' || activeSectionView === 'requests';
+
+  return {
+    panelId: UNIFIED_DIRECTORY_REQUESTS_PANEL_ID,
+    panelTestId: UNIFIED_DIRECTORY_REQUESTS_PANEL_ID,
+    headerTestId: 'unified-vertical-panel-header',
+    directorySectionTestId: 'hub-online-directory',
+    requestsSectionTestId: 'hub-connection-requests',
+    layoutDirection: 'vertical',
+    isSingleVerticalColumnLayout: true,
+    activeSectionView,
+    showDirectorySection,
+    showRequestsSection,
+    onlineCount,
+    inFocusCount,
+    sharingMoodCount,
+    totalRequestsCount,
+    pendingIncomingCount,
+    acceptedConnectionsCount,
+    headerTitle: 'DIRECTORY & REQUESTS',
+    headerMetaSummary: `${onlineCount} ONLINE / ${totalRequestsCount} REQ`,
+    containerClassName:
+      'tactile-editorial-surface flex flex-col divide-y divide-zinc-800 border border-zinc-800 bg-[#0A0A0C] w-full',
+    directorySectionClassName: 'w-full p-5 space-y-3.5',
+    requestsSectionClassName: 'w-full p-5 space-y-3.5 bg-[#0C0C0E]',
+    sectionTabs: [
+      {
+        id: 'all',
+        label: 'All Stacked',
+        count: onlineCount + totalRequestsCount,
+        isActive: activeSectionView === 'all',
+        testId: 'unified-panel-view-all',
+      },
+      {
+        id: 'directory',
+        label: 'Online Directory',
+        count: onlineCount,
+        isActive: activeSectionView === 'directory',
+        testId: 'unified-panel-view-directory',
+      },
+      {
+        id: 'requests',
+        label: 'Requests',
+        count: totalRequestsCount,
+        isActive: activeSectionView === 'requests',
+        testId: 'unified-panel-view-requests',
+      },
+    ],
+  };
+}
+

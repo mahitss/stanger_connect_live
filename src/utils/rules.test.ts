@@ -402,6 +402,9 @@ import {
   evaluateAntiAiSlopAuditSpec,
   compactMinimalUiText,
   buildCurvedTextLayoutSpec,
+  UNIFIED_DIRECTORY_REQUESTS_PANEL_ID,
+  normalizeUnifiedDirectoryRequestsSectionView,
+  buildUnifiedDirectoryAndRequestsVerticalPanelSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9575,3 +9578,53 @@ test('Curved text SVG layout and minimalist text de-bulking engine compacts verb
   assert.equal(spec.primaryText, 'MR. STRANGER SILENT STUDY SANCTUARY');
   assert.equal(spec.isMinimalDeBulkedMode, true);
 });
+
+test('Unified vertical panel layout spec consolidates Online Directory and Connection Requests into a single cohesive vertical stack with section view filters', () => {
+  assert.equal(normalizeUnifiedDirectoryRequestsSectionView('directory'), 'directory');
+  assert.equal(normalizeUnifiedDirectoryRequestsSectionView('REQUESTS'), 'requests');
+  assert.equal(normalizeUnifiedDirectoryRequestsSectionView('invalid'), 'all');
+
+  const requests = [
+    { id: 'r1', fromUid: 'usr_a', toUid: 'usr_me', status: 'pending' },
+    { id: 'r2', fromUid: 'usr_me', toUid: 'usr_b', status: 'accepted' },
+  ];
+
+  const allSpec = buildUnifiedDirectoryAndRequestsVerticalPanelSpec({
+    onlinePeersCount: 4,
+    inFocusCount: 2,
+    sharingMoodCount: 3,
+    requests,
+    currentUid: 'usr_me',
+    activeSectionView: 'all',
+  });
+  assert.equal(allSpec.panelId, UNIFIED_DIRECTORY_REQUESTS_PANEL_ID);
+  assert.equal(allSpec.layoutDirection, 'vertical');
+  assert.equal(allSpec.isSingleVerticalColumnLayout, true);
+  assert.equal(allSpec.showDirectorySection, true);
+  assert.equal(allSpec.showRequestsSection, true);
+  assert.equal(allSpec.onlineCount, 4);
+  assert.equal(allSpec.totalRequestsCount, 2);
+  assert.equal(allSpec.pendingIncomingCount, 1);
+  assert.equal(allSpec.acceptedConnectionsCount, 1);
+  assert.equal(allSpec.containerClassName.includes('flex-col'), true);
+  assert.equal(allSpec.sectionTabs.length, 3);
+
+  const dirOnlySpec = buildUnifiedDirectoryAndRequestsVerticalPanelSpec({
+    onlinePeersCount: 4,
+    requests,
+    currentUid: 'usr_me',
+    activeSectionView: 'directory',
+  });
+  assert.equal(dirOnlySpec.showDirectorySection, true);
+  assert.equal(dirOnlySpec.showRequestsSection, false);
+
+  const reqOnlySpec = buildUnifiedDirectoryAndRequestsVerticalPanelSpec({
+    onlinePeersCount: 4,
+    requests,
+    currentUid: 'usr_me',
+    activeSectionView: 'requests',
+  });
+  assert.equal(reqOnlySpec.showDirectorySection, false);
+  assert.equal(reqOnlySpec.showRequestsSection, true);
+});
+

@@ -286,6 +286,9 @@ import {
   buildWorkspaceSkeletonLoaderSpec,
   buildLiveInteractiveProductDemoSpec,
   evaluateAntiAiSlopAuditSpec,
+  UnifiedDirectoryRequestsSectionView,
+  normalizeUnifiedDirectoryRequestsSectionView,
+  buildUnifiedDirectoryAndRequestsVerticalPanelSpec,
 } from './utils/rules';
 import {
   CurvedTextArc,
@@ -4068,6 +4071,16 @@ export default function App() {
 
   const directoryFocusSummary = summarizeOnlineDirectoryFocus(onlinePeers, studyDesks);
   const directoryMoodSummary = summarizeOnlineDirectoryMoods(onlinePeers);
+  const [unifiedPanelSectionView, setUnifiedPanelSectionView] =
+    useState<UnifiedDirectoryRequestsSectionView>('all');
+  const unifiedVerticalPanelSpec = buildUnifiedDirectoryAndRequestsVerticalPanelSpec({
+    onlinePeersCount: onlinePeers.length,
+    inFocusCount: directoryFocusSummary.inFocusCount,
+    sharingMoodCount: directoryMoodSummary.activeMoodCount,
+    requests,
+    currentUid: currentIdentity.uid,
+    activeSectionView: unifiedPanelSectionView,
+  });
   const moodPresetSearchResult = filterMoodCategoryGroupsBySearchQuery({
     groupedPresets: directoryMoodSummary.groupedPresets,
     searchQuery: moodPresetSearchQuery,
@@ -10343,49 +10356,98 @@ export default function App() {
                 }}
               />
 
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                {/* Live Online Users Directory (7 cols) */}
+              <div
+                id={unifiedVerticalPanelSpec.panelId}
+                data-testid={unifiedVerticalPanelSpec.panelTestId}
+                data-layout-direction={unifiedVerticalPanelSpec.layoutDirection}
+                data-active-section-view={unifiedVerticalPanelSpec.activeSectionView}
+                className={unifiedVerticalPanelSpec.containerClassName}
+              >
+                {/* Unified Cohesive Vertical Panel Header + Section Switcher */}
                 <div
-                  className="lg:col-span-7 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4"
+                  className="px-5 py-4 bg-[#0D0D0B] flex flex-wrap items-center justify-between gap-4"
+                  data-testid={unifiedVerticalPanelSpec.headerTestId}
+                >
+                  <div className="min-w-0 flex-1">
+                    <CurvedSectionHeading
+                      id="unified-dir-req"
+                      title={unifiedVerticalPanelSpec.headerTitle}
+                      meta={unifiedVerticalPanelSpec.headerMetaSummary}
+                    />
+                  </div>
+                  <div
+                    className="flex flex-wrap items-center gap-1.5"
+                    role="tablist"
+                    aria-label="Directory and Requests Vertical Panel View"
+                    data-testid="unified-vertical-panel-tabs"
+                  >
+                    {unifiedVerticalPanelSpec.sectionTabs.map((tab) => {
+                      const isSelected =
+                        unifiedVerticalPanelSpec.activeSectionView === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          role="tab"
+                          aria-selected={isSelected}
+                          data-testid={tab.testId}
+                          onClick={() =>
+                            setUnifiedPanelSectionView(
+                              normalizeUnifiedDirectoryRequestsSectionView(tab.id)
+                            )
+                          }
+                          className={`px-2.5 py-1 border text-[11px] font-mono uppercase tracking-wider transition-none whitespace-nowrap ${
+                            isSelected
+                              ? 'bg-[#D97706] text-black border-[#F59E0B] font-semibold'
+                              : 'bg-[#08080A] text-zinc-400 border-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          {tab.label} ({tab.count})
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Section 1: Live Online Users Directory (Stacked Full-Width) */}
+                <div
+                  className={`p-5 bg-[#0A0A0C] space-y-4 w-full ${
+                    unifiedVerticalPanelSpec.showDirectorySection ? '' : 'hidden'
+                  }`}
                   data-testid="hub-online-directory"
                 >
-                  <div className="border-b border-zinc-800/80 pb-4 space-y-3.5">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h1 className="text-lg font-bold text-white">
-                            Real People Online Now ({onlinePeers.length})
-                          </h1>
-                          <span aria-hidden="true" className="text-zinc-600">·</span>
+                  <div className="border-b border-zinc-800/80 pb-3.5 space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h1 className="text-sm font-bold uppercase tracking-wider text-white">
+                          Online Directory ({onlinePeers.length})
+                        </h1>
+                        <span aria-hidden="true" className="text-zinc-600">·</span>
+                        <span
+                          className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-emerald-400 tabular-nums"
+                          data-testid="online-directory-in-focus-count"
+                        >
                           <span
-                            className="inline-flex items-center gap-1.5 text-xs font-mono font-semibold text-emerald-400 tabular-nums"
-                            data-testid="online-directory-in-focus-count"
-                          >
-                            <span
-                              aria-hidden="true"
-                              className={`w-2 h-2 rounded-full ${
-                                directoryFocusSummary.inFocusCount > 0
-                                  ? 'bg-emerald-400 animate-pulse'
-                                  : 'bg-zinc-600'
-                              }`}
-                            />
-                            <span>{directoryFocusSummary.inFocusCount} In Focus</span>
-                          </span>
-                          <span aria-hidden="true" className="text-zinc-600">·</span>
-                          <span
-                            className="text-xs font-mono text-sky-400 tabular-nums"
-                            data-testid="online-directory-mood-count"
-                          >
-                            {directoryMoodSummary.activeMoodCount} Sharing Mood
-                          </span>
-                        </div>
-                        <span className="text-xs font-mono text-emerald-400 shrink-0">
-                          {wsConnected ? 'Live Sync' : 'Reconnecting'}
+                            aria-hidden="true"
+                            className={`w-2 h-2 ${
+                              directoryFocusSummary.inFocusCount > 0
+                                ? 'bg-emerald-400 animate-pulse'
+                                : 'bg-zinc-600'
+                            }`}
+                          />
+                          <span>{directoryFocusSummary.inFocusCount} In Focus</span>
+                        </span>
+                        <span aria-hidden="true" className="text-zinc-600">·</span>
+                        <span
+                          className="text-xs font-mono text-sky-400 tabular-nums"
+                          data-testid="online-directory-mood-count"
+                        >
+                          {directoryMoodSummary.activeMoodCount} Sharing Mood
                         </span>
                       </div>
-                      <p className="text-xs text-zinc-400">
-                        Set your live Mood indicator (e.g., Deep Work, Brainstorming, Quick Questions) and see who is currently productive in a Study Room.
-                      </p>
+                      <span className="text-xs font-mono text-emerald-400 shrink-0">
+                        {wsConnected ? 'Live Sync' : 'Reconnecting'}
+                      </span>
                     </div>
 
                     {/* Interactive Mood Indicator Setter Bar */}
@@ -14539,57 +14601,64 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Connection Requests Box (5 cols) */}
-                <div className="lg:col-span-5 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
-                  <div className="border-b border-zinc-800/80 pb-3 space-y-3">
-                    <div className="space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <h2 className="text-lg font-bold text-white">
+                {/* Section 2: Connection Requests (Stacked Full-Width Inside Unified Vertical Panel) */}
+                <div
+                  className={`p-5 bg-[#0A0A0C] space-y-3.5 w-full ${
+                    unifiedVerticalPanelSpec.showRequestsSection ? '' : 'hidden'
+                  }`}
+                  data-testid="hub-connection-requests"
+                >
+                  <div className="border-b border-zinc-800/80 pb-3 space-y-2.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <h2 className="text-sm font-bold uppercase tracking-wider text-white">
                           Connection Requests ({requests.length})
                         </h2>
-                        <button
-                          type="button"
-                          onClick={handleToggleUiSoundEffects}
-                          aria-pressed={uiSoundPrefs.enabled}
-                          data-testid="hub-ui-sound-toggle"
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                            uiSoundPrefs.enabled
-                              ? 'bg-[#050505] border-zinc-700 text-emerald-400 hover:border-zinc-500'
-                              : 'bg-[#050505] border-zinc-800 text-zinc-500 hover:text-zinc-300'
-                          }`}
-                        >
-                          {uiSoundPrefs.enabled ? (
-                            <Volume2 className="w-3.5 h-3.5 shrink-0" />
-                          ) : (
-                            <VolumeX className="w-3.5 h-3.5 shrink-0" />
-                          )}
-                          <span>{uiSoundPrefs.enabled ? 'Chime: On' : 'Chime: Muted'}</span>
-                        </button>
-                      </div>
-                      <p className="text-xs text-zinc-400">
-                        Accept incoming requests to unlock Chat Mode and Talking Mode.
-                      </p>
-                    </div>
-
-                    {/* Subtle UI Sound Effect Bar for Background & Live Feedback */}
-                    <div
-                      className="p-2.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2 text-[11px]"
-                      data-testid="hub-sound-feedback-panel"
-                    >
-                      <div className="flex items-center justify-between gap-2">
                         <span
-                          className="text-zinc-300 font-mono"
-                          data-testid="ui-sound-feedback-status"
+                          className="text-[11px] font-mono text-zinc-400 tabular-nums"
+                          data-testid="connection-requests-summary-counts"
                         >
-                          {lastSoundFeedback}
+                          {unifiedVerticalPanelSpec.pendingIncomingCount} Pending ·{' '}
+                          {unifiedVerticalPanelSpec.acceptedConnectionsCount} Connected
                         </span>
                       </div>
+                      <button
+                        type="button"
+                        onClick={handleToggleUiSoundEffects}
+                        aria-pressed={uiSoundPrefs.enabled}
+                        data-testid="hub-ui-sound-toggle"
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 border text-xs font-semibold whitespace-nowrap shrink-0 ${
+                          uiSoundPrefs.enabled
+                            ? 'bg-[#050505] border-zinc-700 text-emerald-400 hover:border-zinc-500'
+                            : 'bg-[#050505] border-zinc-800 text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {uiSoundPrefs.enabled ? (
+                          <Volume2 className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <VolumeX className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        <span>{uiSoundPrefs.enabled ? 'Chime: On' : 'Chime: Muted'}</span>
+                      </button>
+                    </div>
+
+                    {/* Compact UI Sound Effect Bar */}
+                    <div
+                      className="p-2 bg-[#050505] border border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                      data-testid="hub-sound-feedback-panel"
+                    >
+                      <span
+                        className="text-zinc-300 font-mono"
+                        data-testid="ui-sound-feedback-status"
+                      >
+                        {lastSoundFeedback}
+                      </span>
                       <div className="flex flex-wrap items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => handlePreviewUiChime('incoming_message')}
                           data-testid="preview-message-chime-btn"
-                          className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-medium whitespace-nowrap"
+                          className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-medium whitespace-nowrap"
                         >
                           Test Message Chime
                         </button>
@@ -14597,7 +14666,7 @@ export default function App() {
                           type="button"
                           onClick={() => handlePreviewUiChime('connection_request')}
                           data-testid="preview-request-chime-btn"
-                          className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-medium whitespace-nowrap"
+                          className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-medium whitespace-nowrap"
                         >
                           Test Request Chime
                         </button>
@@ -14606,17 +14675,20 @@ export default function App() {
                   </div>
 
                   {requests.length === 0 ? (
-                    <p className="text-xs text-zinc-400 py-6">
-                      No pending or accepted requests yet. Send a request to any online user on the left.
+                    <p
+                      className="text-xs font-mono text-zinc-400 py-3"
+                      data-testid="connection-requests-empty-state"
+                    >
+                      No pending requests.
                     </p>
                   ) : (
-                    <div className="space-y-3">
+                    <div className="space-y-2.5">
                       {requests.map((req) => {
                         const isIncoming = req.toUid === currentIdentity.uid;
                         return (
                           <div
                             key={req.id}
-                            className="p-3.5 rounded-md bg-[#050505] border border-zinc-800/80 space-y-2"
+                            className="p-3 bg-[#050505] border border-zinc-800/80 space-y-2"
                           >
                             <div className="flex items-center justify-between text-xs">
                               <span className="font-semibold text-white">
@@ -14634,14 +14706,14 @@ export default function App() {
                                 <button
                                   type="button"
                                   onClick={() => handleRespondRequest(req, 'accepted')}
-                                  className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
+                                  className="px-3 py-1 text-xs font-semibold bg-white hover:bg-zinc-200 text-black whitespace-nowrap shrink-0"
                                 >
                                   Accept Request
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleRespondRequest(req, 'declined')}
-                                  className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded whitespace-nowrap shrink-0"
+                                  className="px-3 py-1 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 whitespace-nowrap shrink-0"
                                 >
                                   Decline
                                 </button>
