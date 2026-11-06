@@ -24259,5 +24259,133 @@ export function filterMomentCommentThreadGroupsByKeyword(params: {
   };
 }
 
+// ============================================================================
+// COZY STUDY SANCTUARY HUB LAYOUT & PROGRESSIVE DISCLOSURE SPEC
+// ============================================================================
 
+export type CozySanctuaryHubTab = 'sanctuary' | 'insights' | 'milestones';
 
+export interface CozySanctuaryHubTabItem {
+  id: CozySanctuaryHubTab;
+  label: string;
+  subtitle: string;
+  badgeText: string;
+  isActive: boolean;
+}
+
+export interface CozySanctuaryHubLayoutSpec {
+  activeTab: CozySanctuaryHubTab;
+  tabs: CozySanctuaryHubTabItem[];
+  showSanctuaryCore: boolean;
+  showActivityInsights: boolean;
+  showMilestonesAndRanks: boolean;
+  showAdvancedDirectoryTools: boolean;
+  showGoalSettingsDrawer: boolean;
+  showWorkspaceFooterDetails: boolean;
+  showSidebarQuickJump: boolean;
+  greetingHeadline: string;
+  cozySubtitle: string;
+  activeRoomBadge: string;
+  streakSummaryBadge: string;
+  goalProgressBadge: string;
+}
+
+export function normalizeCozySanctuaryHubTab(
+  rawTab?: string | null
+): CozySanctuaryHubTab {
+  const cleaned = String(rawTab || '')
+    .trim()
+    .toLowerCase();
+  if (cleaned === 'insights' || cleaned === 'analytics' || cleaned === 'charts') {
+    return 'insights';
+  }
+  if (cleaned === 'milestones' || cleaned === 'badges' || cleaned === 'ranks') {
+    return 'milestones';
+  }
+  return 'sanctuary';
+}
+
+export function buildCozySanctuaryHubLayoutSpec(params?: {
+  activeTab?: string | null;
+  userName?: string | null;
+  activeRoomCode?: string | null;
+  streakCount?: number;
+  completedFocusMinutes?: number;
+  dailyTargetMinutes?: number;
+  onlinePeersCount?: number;
+  unlockedBadgesCount?: number;
+  totalBadgesCount?: number;
+  showAdvancedDirectoryTools?: boolean;
+  showGoalSettingsDrawer?: boolean;
+  showWorkspaceFooterDetails?: boolean;
+  showSidebarQuickJump?: boolean;
+}): CozySanctuaryHubLayoutSpec {
+  const activeTab = normalizeCozySanctuaryHubTab(params?.activeTab);
+  const rawName = String(params?.userName || 'Scholar').trim() || 'Scholar';
+  const firstName = rawName.split(/\s+/)[0] || 'Scholar';
+  const activeRoomCode =
+    String(params?.activeRoomCode || 'STUDY-204').trim() || 'STUDY-204';
+  const streakCount = Math.max(1, Math.round(Number(params?.streakCount) || 1));
+  const completedFocusMinutes = Math.max(
+    0,
+    Math.round(Number(params?.completedFocusMinutes) || 0)
+  );
+  const dailyTargetMinutes = Math.max(
+    15,
+    Math.round(Number(params?.dailyTargetMinutes) || 120)
+  );
+  const onlinePeersCount = Math.max(
+    0,
+    Math.round(Number(params?.onlinePeersCount) || 0)
+  );
+  const unlockedBadgesCount = Math.max(
+    0,
+    Math.round(Number(params?.unlockedBadgesCount) || 0)
+  );
+  const totalBadgesCount = Math.max(
+    1,
+    Math.round(Number(params?.totalBadgesCount) || 3)
+  );
+
+  const tabs: CozySanctuaryHubTabItem[] = [
+    {
+      id: 'sanctuary',
+      label: 'Study Nook',
+      subtitle: 'Daily focus & live peers',
+      badgeText: `${onlinePeersCount} online`,
+      isActive: activeTab === 'sanctuary',
+    },
+    {
+      id: 'insights',
+      label: 'Weekly Insights',
+      subtitle: '7-day trends & topics',
+      badgeText: `${completedFocusMinutes}/${dailyTargetMinutes}m`,
+      isActive: activeTab === 'insights',
+    },
+    {
+      id: 'milestones',
+      label: 'Badges & Ranks',
+      subtitle: 'Streaks & community board',
+      badgeText: `${unlockedBadgesCount}/${totalBadgesCount} badges`,
+      isActive: activeTab === 'milestones',
+    },
+  ];
+
+  return {
+    activeTab,
+    tabs,
+    showSanctuaryCore: activeTab === 'sanctuary',
+    showActivityInsights: activeTab === 'insights',
+    showMilestonesAndRanks: activeTab === 'milestones',
+    showAdvancedDirectoryTools: Boolean(params?.showAdvancedDirectoryTools),
+    showGoalSettingsDrawer: Boolean(params?.showGoalSettingsDrawer),
+    showWorkspaceFooterDetails: Boolean(params?.showWorkspaceFooterDetails),
+    showSidebarQuickJump: Boolean(params?.showSidebarQuickJump),
+    greetingHeadline: `Welcome back, ${firstName}`,
+    cozySubtitle:
+      'Your quiet study sanctuary for calm focus sessions and friendly peer connections.',
+    activeRoomBadge: `Room ${activeRoomCode}`,
+    streakSummaryBadge: `${streakCount}d streak`,
+    goalProgressBadge: `${completedFocusMinutes} / ${dailyTargetMinutes} min today`,
+  };
+}

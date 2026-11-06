@@ -13,87 +13,85 @@
   }
 
   body {
-    font-family: 'Cormorant Garamond', Georgia, serif;
-    font-size: 16px;
-    background-color: #0C0C0E;
-    color: #F4F2ED;
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.55;
+    background-color: #121110;
+    color: #F5F2EB;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: 0.02em;
+    letter-spacing: -0.005em;
   }
 
-  /* Tactile Architectural Paper & Matte Film Grain Overlay (Zero Dot Grids / Zero Gradients) */
+  /* Subtle Warm Paper Grain Overlay */
   body::after {
     content: "";
     position: fixed;
     inset: 0;
     z-index: 9998;
     pointer-events: none;
-    opacity: 0.036;
+    opacity: 0.025;
     background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='editorialGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23editorialGrain)'/%3E%3C/svg%3E");
     background-repeat: repeat;
     background-size: 180px 180px;
   }
 
   html.light body {
-    background-color: #F6F4EF;
-    color: #161615;
+    background-color: #F7F4EE;
+    color: #1F1D1A;
   }
 
   html.light body::after {
-    opacity: 0.028;
+    opacity: 0.02;
   }
 
   h1, h2, h3, h4, .font-display {
-    font-family: 'Syne', 'Cormorant Garamond', serif;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.02em;
+    font-weight: 700;
     text-wrap: balance;
   }
 
   button, nav a, label {
-    font-family: 'Syne', 'Cormorant Garamond', serif;
-    letter-spacing: 0.04em;
+    font-family: 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    letter-spacing: -0.005em;
   }
 
   .font-mono, .tabular-nums {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
     font-variant-numeric: tabular-nums;
   }
 }
 
 /* ==========================================================================
-   ZERO-SLOP ARCHITECTURAL STUDIO DISCIPLINE
-   - Zero drop shadows
-   - Zero liquid glass (backdrop-blur)
-   - Zero soft corner radius (0px crisp architectural geometry)
-   - Zero harsh gradients or dot grids
-   - Zero hover scale/translate/pulse animations
-   - Zero pure white (#FFFFFF) backgrounds
-   - Zero neon, basic pastel, or purple-and-black colors
-   - Zero rainbow color rings
+   WARM COZY STUDY SANCTUARY DESIGN SYSTEM
+   - Gentle tactile proportions (soft rounded cards & controls)
+   - Zero drop shadows, zero harsh gradients, zero pure white (#FFFFFF)
+   - Warm Matcha-Sage, Honey-Amber, and Cocoa/Oat surfaces
    ========================================================================== */
 *,
 *::before,
 *::after {
-  border-radius: 0px !important;
   box-shadow: none !important;
   text-shadow: none !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
+section,
+article,
+aside .tactile-editorial-surface {
+  border-radius: 14px !important;
+}
+
 button,
-a,
 input,
 select,
 textarea,
 [role="button"],
-section,
-article,
-div {
-  transition-property: none !important;
-  animation: none !important;
+[role="tab"] {
+  border-radius: 10px !important;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease, opacity 160ms ease !important;
 }
 
 button:hover,
@@ -116,52 +114,78 @@ a:hover,
 }
 
 .tactile-editorial-shell {
-  background-color: #0C0C0E;
+  background-color: #121110;
 }
 
 html.light .tactile-editorial-shell,
 .theme-light.tactile-editorial-shell {
-  background-color: #F6F4EF !important;
+  background-color: #F7F4EE !important;
   background-image: none !important;
 }
 
 .tactile-editorial-surface {
-  background-color: #121215;
-  border-color: rgba(244, 242, 237, 0.09);
+  background-color: #191715;
+  border-color: rgba(245, 242, 235, 0.09);
 }
 
 html.light .tactile-editorial-surface {
-  background-color: #FDFCFA !important;
-  border-color: #E5E1D8 !important;
+  background-color: #FDFBF7 !important;
+  border-color: #E6E1D6 !important;
 }
 
-/* Eliminate pure white (#FFFFFF) backgrounds -> Warm Gallery Alabaster (#E6E2D8 / #F4F2ED) */
+/* Eliminate pure white (#FFFFFF) backgrounds -> Warm Cream Alabaster (#EFECE4 / #F5F2EB) */
 button.bg-white,
 a.bg-white,
 span.bg-white,
 label.bg-white,
 html.light .bg-white {
-  background-color: #E6E2D8 !important;
-  color: #141413 !important;
+  background-color: #EFECE4 !important;
+  color: #1F1D1A !important;
 }
 
 .hover\:bg-white:hover {
-  background-color: #DBD6CA !important;
-  color: #141413 !important;
+  background-color: #E5E0D5 !important;
+  color: #1F1D1A !important;
 }
 
 html.dark .bg-\[\#050505\] {
-  background-color: #0C0C0E !important;
+  background-color: #121110 !important;
 }
 
 html.dark .bg-\[\#0A0A0C\],
 html.dark .bg-\[\#08080A\],
 html.dark .bg-\[\#0D0D10\],
 html.dark .bg-\[\#0c0c0e\] {
-  background-color: #121215 !important;
+  background-color: #191715 !important;
 }
 
-/* Eliminate 3-feature-cards-in-a-row -> 2-column architectural split ledger */
+html.dark .bg-zinc-950,
+html.dark .bg-zinc-950\/90,
+html.dark .bg-zinc-950\/80,
+html.dark .bg-zinc-950\/70,
+html.dark .bg-zinc-950\/60 {
+  background-color: #161412 !important;
+}
+
+html.dark .bg-zinc-900,
+html.dark .bg-zinc-900\/90,
+html.dark .bg-zinc-900\/80,
+html.dark .bg-zinc-900\/70,
+html.dark .bg-zinc-900\/60,
+html.dark .bg-zinc-900\/50,
+html.dark .bg-zinc-900\/40 {
+  background-color: #211E1B !important;
+}
+
+html.dark .border-zinc-800,
+html.dark .border-zinc-800\/80,
+html.dark .border-zinc-800\/70,
+html.dark .border-zinc-800\/60,
+html.dark .border-zinc-900 {
+  border-color: #2D2925 !important;
+}
+
+/* Eliminate 3-feature-cards-in-a-row -> 2-column cozy sanctuary split */
 .grid-cols-3,
 .sm\:grid-cols-3,
 .md\:grid-cols-3,
@@ -180,7 +204,7 @@ html.dark .bg-\[\#0c0c0e\] {
   }
 }
 
-/* Eliminate neon colors, basic pastel colors, and purple-and-black -> Muted Mineral Studio Palette */
+/* Warm Matcha-Sage, Honey-Amber, Terracotta & Slate-Tea Accents */
 .text-emerald-400,
 .text-emerald-300,
 .text-emerald-200,
@@ -189,7 +213,7 @@ html.dark .bg-\[\#0c0c0e\] {
 .text-teal-400,
 .text-cyan-400,
 .text-cyan-300 {
-  color: #A3B0A8 !important;
+  color: #84C5A8 !important;
 }
 
 .text-amber-400,
@@ -198,7 +222,7 @@ html.dark .bg-\[\#0c0c0e\] {
 .text-amber-500,
 .text-yellow-400,
 .text-orange-400 {
-  color: #B8A688 !important;
+  color: #E5B567 !important;
 }
 
 .text-rose-400,
@@ -209,7 +233,7 @@ html.dark .bg-\[\#0c0c0e\] {
 .text-pink-400,
 .text-fuchsia-400,
 .text-fuchsia-300 {
-  color: #B58D86 !important;
+  color: #D98E82 !important;
 }
 
 .text-sky-400,
@@ -224,15 +248,25 @@ html.dark .bg-\[\#0c0c0e\] {
 .text-purple-300,
 .text-violet-400,
 .text-violet-300 {
-  color: #9BA5AE !important;
+  color: #96B5C6 !important;
 }
 
-/* Muted mineral backgrounds instead of neon/pastel/purple fills */
+/* Warm Matcha & Honey fills instead of harsh neon or purple fills */
 .bg-emerald-500,
 .bg-emerald-600,
-.bg-emerald-400,
+.bg-emerald-400 {
+  background-color: #3D6B58 !important;
+  color: #F5F2EB !important;
+  border-color: #528770 !important;
+}
+
 .bg-amber-500,
-.bg-amber-400,
+.bg-amber-400 {
+  background-color: #7C5E2E !important;
+  color: #F5F2EB !important;
+  border-color: #9C783E !important;
+}
+
 .bg-rose-600,
 .bg-rose-500,
 .bg-sky-500,
@@ -245,9 +279,9 @@ html.dark .bg-\[\#0c0c0e\] {
 .bg-violet-500,
 .bg-fuchsia-600,
 .bg-fuchsia-500 {
-  background-color: #27272A !important;
-  color: #F4F2ED !important;
-  border-color: #3F3F46 !important;
+  background-color: #2D2925 !important;
+  color: #F5F2EB !important;
+  border-color: #423C36 !important;
 }
 
 .bg-emerald-500\/20,
@@ -257,13 +291,19 @@ html.dark .bg-\[\#0c0c0e\] {
 .bg-emerald-950\/40,
 .bg-emerald-950\/30,
 .bg-emerald-950\/25,
-.bg-emerald-950\/20,
+.bg-emerald-950\/20 {
+  background-color: rgba(61, 107, 88, 0.22) !important;
+}
+
 .bg-amber-500\/20,
 .bg-amber-500\/15,
 .bg-amber-500\/10,
 .bg-amber-950\/40,
 .bg-amber-950\/30,
-.bg-amber-950\/20,
+.bg-amber-950\/20 {
+  background-color: rgba(124, 94, 46, 0.22) !important;
+}
+
 .bg-rose-500\/20,
 .bg-rose-500\/15,
 .bg-rose-500\/10,
@@ -284,22 +324,28 @@ html.dark .bg-\[\#0c0c0e\] {
 .bg-violet-500\/10,
 .bg-fuchsia-500\/20,
 .bg-fuchsia-500\/10 {
-  background-color: #18181B !important;
+  background-color: #211E1B !important;
 }
 
-/* Eliminate rainbow color rings & neon borders */
+/* Soft Warm Borders */
 .border-emerald-500\/60,
 .border-emerald-500\/50,
 .border-emerald-500\/40,
 .border-emerald-500\/30,
 .border-emerald-500\/20,
-.border-emerald-400,
+.border-emerald-400 {
+  border-color: rgba(132, 197, 168, 0.32) !important;
+}
+
 .border-amber-500\/60,
 .border-amber-500\/50,
 .border-amber-500\/40,
 .border-amber-500\/30,
 .border-amber-500\/20,
-.border-amber-400\/40,
+.border-amber-400\/40 {
+  border-color: rgba(229, 181, 103, 0.32) !important;
+}
+
 .border-rose-500\/50,
 .border-rose-500\/40,
 .border-rose-500\/30,
@@ -312,22 +358,23 @@ html.dark .bg-\[\#0c0c0e\] {
 .border-purple-500\/40,
 .border-violet-500\/40,
 .border-fuchsia-500\/40 {
-  border-color: #27272A !important;
+  border-color: #332E2A !important;
 }
 
 [class*="ring-"] {
-  --tw-ring-color: rgba(244, 242, 237, 0.12) !important;
+  --tw-ring-color: rgba(245, 242, 235, 0.12) !important;
 }
 
 /* ==========================================================================
-   GLOBAL LIGHT THEME ADAPTATION (WARM GALLERY ALABASTER)
+   GLOBAL LIGHT THEME ADAPTATION (WARM OAT & CREAM SANCTUARY)
    ========================================================================== */
 html.light .bg-\[\#050505\],
 .theme-light .bg-\[\#050505\],
 html.light.bg-\[\#050505\],
 .theme-light.bg-\[\#050505\],
-html.light .bg-\[\#0C0C0E\] {
-  background-color: #F6F4EF !important;
+html.light .bg-\[\#0C0C0E\],
+html.light .bg-\[\#121110\] {
+  background-color: #F7F4EE !important;
 }
 
 html.light .bg-\[\#0A0A0C\],
@@ -335,10 +382,11 @@ html.light .bg-\[\#08080A\],
 html.light .bg-\[\#0D0D10\],
 html.light .bg-\[\#0c0c0e\],
 html.light .bg-\[\#121215\],
+html.light .bg-\[\#191715\],
 .theme-light .bg-\[\#0A0A0C\],
 .theme-light .bg-\[\#08080A\],
 .theme-light .bg-\[\#0D0D10\] {
-  background-color: #FDFCFA !important;
+  background-color: #FDFBF7 !important;
 }
 
 html.light .bg-\[\#111318\],
@@ -353,46 +401,46 @@ html.light .bg-zinc-900\/30,
 html.light .bg-zinc-800\/60,
 html.light .bg-zinc-800\/50,
 html.light .bg-zinc-800\/40 {
-  background-color: #EFECE4 !important;
+  background-color: #F0ECE3 !important;
 }
 
 html.light .bg-zinc-900:not(.text-white) {
-  background-color: #EFECE4 !important;
+  background-color: #F0ECE3 !important;
 }
 
 html.light .hover\:bg-zinc-900:hover,
 html.light .hover\:bg-zinc-800:hover {
-  background-color: #E5E1D8 !important;
+  background-color: #E6E1D6 !important;
 }
 
 html.light button.bg-white.text-black,
 html.light a.bg-white.text-black,
 html.light label.bg-white.text-black {
-  background-color: #161615 !important;
-  color: #F6F4EF !important;
-  border-color: #161615 !important;
+  background-color: #2A2623 !important;
+  color: #F7F4EE !important;
+  border-color: #2A2623 !important;
 }
 
 html.light .text-white:not(button.bg-white.text-black) {
-  color: #161615 !important;
+  color: #1F1D1A !important;
 }
 
 html.light .text-zinc-100,
 html.light .text-zinc-200 {
-  color: #1C1C1A !important;
+  color: #24211E !important;
 }
 
 html.light .text-zinc-300 {
-  color: #383734 !important;
+  color: #3D3934 !important;
 }
 
 html.light .text-zinc-400 {
-  color: #57554F !important;
+  color: #5C574F !important;
 }
 
 html.light .text-zinc-500,
 html.light .text-zinc-600 {
-  color: #706E67 !important;
+  color: #756F65 !important;
 }
 
 html.light .border-zinc-800\/80,
@@ -401,15 +449,15 @@ html.light .border-zinc-800,
 html.light .border-zinc-900,
 html.light .border-zinc-700\/80,
 html.light .border-zinc-700 {
-  border-color: #DFDBD0 !important;
+  border-color: #E2DDD2 !important;
 }
 
 html.light input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
 html.light textarea,
 html.light select {
-  background-color: #FDFCFA !important;
-  border-color: #CFCBC0 !important;
-  color: #161615 !important;
+  background-color: #FDFBF7 !important;
+  border-color: #D5CFC3 !important;
+  color: #1F1D1A !important;
 }
 
 /* ==========================================================================
@@ -439,23 +487,6 @@ html.light select {
   overscroll-behavior: contain;
   overflow-x: hidden;
   scroll-behavior: auto;
-}
-
-/* ==========================================================================
-   MINIMALIST DE-BULKED TEXT & SCULPTURAL CURVED TYPOGRAPHY
-   - Removes unnecessary explanatory <p> bulk across workspace cards
-   - Gives headings & labels a sculptural curved/italic editorial layout
-   ========================================================================== */
-main section p:not([data-testid]):not([role]):not([id]) {
-  display: none !important;
-}
-
-main h1,
-main h2,
-main h3 {
-  font-family: 'Syne', 'Cormorant Garamond', serif !important;
-  letter-spacing: 0.08em !important;
-  font-style: italic;
 }
 
 /* ==========================================================================

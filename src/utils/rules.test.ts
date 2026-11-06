@@ -411,6 +411,8 @@ import {
   normalizeMomentCommentSearchQuery,
   matchesMomentCommentSearchQuery,
   filterMomentCommentThreadGroupsByKeyword,
+  normalizeCozySanctuaryHubTab,
+  buildCozySanctuaryHubLayoutSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9812,5 +9814,45 @@ test('filterMomentCommentThreadGroupsByKeyword filters moment comments by keywor
   assert.equal(matchesMomentCommentSearchQuery(comments[0], 'STUDY-204'), true);
 });
 
+test('normalizeCozySanctuaryHubTab and buildCozySanctuaryHubLayoutSpec organize the Hub into calm progressive-disclosure views and collapsible toolbars', () => {
+  assert.equal(normalizeCozySanctuaryHubTab(undefined), 'sanctuary');
+  assert.equal(normalizeCozySanctuaryHubTab('INSIGHTS'), 'insights');
+  assert.equal(normalizeCozySanctuaryHubTab('milestones'), 'milestones');
 
+  const defaultSpec = buildCozySanctuaryHubLayoutSpec({
+    userName: 'Mahit Saxena',
+    activeRoomCode: 'STUDY-204',
+    streakCount: 5,
+    completedFocusMinutes: 45,
+    dailyTargetMinutes: 120,
+    onlinePeersCount: 4,
+    unlockedBadgesCount: 2,
+    totalBadgesCount: 3,
+  });
 
+  assert.equal(defaultSpec.activeTab, 'sanctuary');
+  assert.equal(defaultSpec.showSanctuaryCore, true);
+  assert.equal(defaultSpec.showActivityInsights, false);
+  assert.equal(defaultSpec.showMilestonesAndRanks, false);
+  assert.equal(defaultSpec.showAdvancedDirectoryTools, false);
+  assert.equal(defaultSpec.showGoalSettingsDrawer, false);
+  assert.equal(defaultSpec.showWorkspaceFooterDetails, false);
+  assert.equal(defaultSpec.showSidebarQuickJump, false);
+  assert.equal(defaultSpec.greetingHeadline, 'Welcome back, Mahit');
+  assert.equal(defaultSpec.activeRoomBadge, 'Room STUDY-204');
+  assert.equal(defaultSpec.streakSummaryBadge, '5d streak');
+  assert.equal(defaultSpec.goalProgressBadge, '45 / 120 min today');
+  assert.equal(defaultSpec.tabs.length, 3);
+  assert.equal(defaultSpec.tabs[0].isActive, true);
+
+  const insightsSpec = buildCozySanctuaryHubLayoutSpec({
+    activeTab: 'insights',
+    showAdvancedDirectoryTools: true,
+    showGoalSettingsDrawer: true,
+  });
+  assert.equal(insightsSpec.activeTab, 'insights');
+  assert.equal(insightsSpec.showSanctuaryCore, false);
+  assert.equal(insightsSpec.showActivityInsights, true);
+  assert.equal(insightsSpec.showAdvancedDirectoryTools, true);
+  assert.equal(insightsSpec.showGoalSettingsDrawer, true);
+});

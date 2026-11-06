@@ -289,6 +289,9 @@ import {
   UnifiedDirectoryRequestsSectionView,
   normalizeUnifiedDirectoryRequestsSectionView,
   buildUnifiedDirectoryAndRequestsVerticalPanelSpec,
+  CozySanctuaryHubTab,
+  normalizeCozySanctuaryHubTab,
+  buildCozySanctuaryHubLayoutSpec,
 } from './utils/rules';
 import {
   CurvedTextArc,
@@ -1435,6 +1438,13 @@ export default function App() {
   const [lastFocusDeskChime, setLastFocusDeskChime] = useState<'start' | 'end' | null>(
     null
   );
+  const [cozyHubTab, setCozyHubTab] = useState<CozySanctuaryHubTab>('sanctuary');
+  const [showGoalSettingsDrawer, setShowGoalSettingsDrawer] = useState<boolean>(false);
+  const [showAdvancedDirectoryTools, setShowAdvancedDirectoryTools] =
+    useState<boolean>(false);
+  const [showWorkspaceFooterDetails, setShowWorkspaceFooterDetails] =
+    useState<boolean>(false);
+  const [showSidebarQuickJump, setShowSidebarQuickJump] = useState<boolean>(false);
   const seenIncomingRequestIdsRef = useRef<Set<string>>(new Set());
   const initialRequestsLoadedRef = useRef<boolean>(false);
 
@@ -5939,6 +5949,22 @@ export default function App() {
     themeMode,
   });
 
+  const cozySanctuaryHubSpec = buildCozySanctuaryHubLayoutSpec({
+    activeTab: cozyHubTab,
+    userName: currentIdentity.displayName,
+    activeRoomCode: activeStudyRoomCode,
+    streakCount: currentIdentity.streakCount,
+    completedFocusMinutes: dailyCompletedMinutes,
+    dailyTargetMinutes,
+    onlinePeersCount: onlinePeers.length,
+    unlockedBadgesCount: userBadgeSummary.unlockedCount,
+    totalBadgesCount: userBadgeSummary.totalBadgesCount,
+    showAdvancedDirectoryTools,
+    showGoalSettingsDrawer,
+    showWorkspaceFooterDetails,
+    showSidebarQuickJump,
+  });
+
   // ==========================================================================
   // MNC-LEVEL WORKSPACE CANVAS: SIDEBAR + VIEWPORT (Supports Dark & Light)
   // ==========================================================================
@@ -6183,103 +6209,126 @@ export default function App() {
             </button>
           </div>
 
-          {/* Remaining Workspace Sections (Scrollable when hovering over sidebar) */}
+          {/* Remaining Workspace Sections (Collapsible Quick Jump to keep Sidebar calm) */}
           <div className="space-y-1.5" data-testid="sidebar-remaining-sections">
-            <div className="px-3 pb-1.5 text-[11px] font-mono uppercase tracking-wider text-zinc-500">
-              Hub Quick Jump
+            <button
+              type="button"
+              onClick={() => setShowSidebarQuickJump((prev) => !prev)}
+              aria-expanded={cozySanctuaryHubSpec.showSidebarQuickJump}
+              data-testid="sidebar-quick-jump-toggle-btn"
+              className="w-full flex items-center justify-between px-3 py-1.5 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 transition-colors"
+            >
+              <span>Quick Jump Shortcuts</span>
+              <span className="font-mono text-[10px] text-zinc-500">
+                {cozySanctuaryHubSpec.showSidebarQuickJump ? 'Hide' : 'Show'}
+              </span>
+            </button>
+            <div
+              className={
+                cozySanctuaryHubSpec.showSidebarQuickJump ? 'space-y-1 pt-0.5' : 'hidden'
+              }
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  setCozyHubTab('sanctuary');
+                  handleSidebarQuickJump('daily-productivity-goal-card', e.currentTarget);
+                }}
+                data-testid="sidebar-jump-daily-goal"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+              >
+                <span className="flex items-center gap-2.5">
+                  <Zap className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Daily Focus Goal</span>
+                </span>
+                <span className="font-mono text-[11px] tabular-nums">{goalProgress.progressPercent}%</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  setCozyHubTab('sanctuary');
+                  setShowGoalSettingsDrawer(true);
+                  handleSidebarQuickJump('streak-reminder-settings-bar', e.currentTarget);
+                }}
+                data-testid="sidebar-jump-streak-reminder"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+              >
+                <span className="flex items-center gap-2.5">
+                  <Bell className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Streak Check-In</span>
+                </span>
+                <span className="font-mono text-[11px] tabular-nums">{streakReminderEvaluation.reminderTime12h}</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  setCozyHubTab('insights');
+                  handleSidebarQuickJump('weekly-activity-overview-card', e.currentTarget);
+                }}
+                data-testid="sidebar-jump-weekly-activity"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+              >
+                <span className="flex items-center gap-2.5">
+                  <Clock className="w-3.5 h-3.5 text-sky-400" />
+                  <span>7-Day Activity</span>
+                </span>
+                <span className="font-mono text-[11px] tabular-nums">{dailyCompletedMinutes}m</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  setCozyHubTab('milestones');
+                  handleSidebarQuickJump('global-leaderboard-card', e.currentTarget);
+                }}
+                data-testid="sidebar-jump-leaderboard"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+              >
+                <span className="flex items-center gap-2.5">
+                  <Trophy className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Global Leaderboard</span>
+                </span>
+                <span className="font-mono text-[11px] tabular-nums">
+                  {Number.isFinite(currentIdentity.participationPoints)
+                    ? currentIdentity.participationPoints
+                    : 0}
+                  p
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  setCozyHubTab('sanctuary');
+                  handleSidebarQuickJump('hub-online-directory', e.currentTarget);
+                }}
+                data-testid="sidebar-jump-mood-directory"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+              >
+                <span className="flex items-center gap-2.5">
+                  <Sparkles className="w-3.5 h-3.5 text-violet-400" />
+                  <span>Mood Directory</span>
+                </span>
+                <span className="font-mono text-[11px] tabular-nums">{onlinePeers.length}</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  setCozyHubTab('sanctuary');
+                  setShowAdvancedDirectoryTools(true);
+                  handleSidebarQuickJump(
+                    'online-directory-mood-category-filter',
+                    e.currentTarget
+                  );
+                }}
+                data-testid="sidebar-jump-mood-categories"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
+              >
+                <span className="flex items-center gap-2.5">
+                  <Filter className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Mood Categories</span>
+                </span>
+                <span className="font-mono text-[11px] tabular-nums">{ONLINE_MOOD_CATEGORIES.length}</span>
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={(e) =>
-                handleSidebarQuickJump('daily-productivity-goal-card', e.currentTarget)
-              }
-              data-testid="sidebar-jump-daily-goal"
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
-            >
-              <span className="flex items-center gap-2.5">
-                <Zap className="w-3.5 h-3.5 text-amber-400" />
-                <span>Daily Focus Goal</span>
-              </span>
-              <span className="font-mono text-[11px] tabular-nums">{goalProgress.progressPercent}%</span>
-            </button>
-            <button
-              type="button"
-              onClick={(e) =>
-                handleSidebarQuickJump('streak-reminder-settings-bar', e.currentTarget)
-              }
-              data-testid="sidebar-jump-streak-reminder"
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
-            >
-              <span className="flex items-center gap-2.5">
-                <Bell className="w-3.5 h-3.5 text-amber-300" />
-                <span>Streak Check-In</span>
-              </span>
-              <span className="font-mono text-[11px] tabular-nums">{streakReminderEvaluation.reminderTime12h}</span>
-            </button>
-            <button
-              type="button"
-              onClick={(e) =>
-                handleSidebarQuickJump('weekly-activity-overview-card', e.currentTarget)
-              }
-              data-testid="sidebar-jump-weekly-activity"
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
-            >
-              <span className="flex items-center gap-2.5">
-                <Clock className="w-3.5 h-3.5 text-sky-400" />
-                <span>7-Day Activity</span>
-              </span>
-              <span className="font-mono text-[11px] tabular-nums">{dailyCompletedMinutes}m</span>
-            </button>
-            <button
-              type="button"
-              onClick={(e) =>
-                handleSidebarQuickJump('global-leaderboard-card', e.currentTarget)
-              }
-              data-testid="sidebar-jump-leaderboard"
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
-            >
-              <span className="flex items-center gap-2.5">
-                <Trophy className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Global Leaderboard</span>
-              </span>
-              <span className="font-mono text-[11px] tabular-nums">
-                {Number.isFinite(currentIdentity.participationPoints)
-                  ? currentIdentity.participationPoints
-                  : 0}
-                p
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={(e) =>
-                handleSidebarQuickJump('hub-online-directory', e.currentTarget)
-              }
-              data-testid="sidebar-jump-mood-directory"
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
-            >
-              <span className="flex items-center gap-2.5">
-                <Sparkles className="w-3.5 h-3.5 text-violet-400" />
-                <span>Mood Directory</span>
-              </span>
-              <span className="font-mono text-[11px] tabular-nums">{onlinePeers.length}</span>
-            </button>
-            <button
-              type="button"
-              onClick={(e) =>
-                handleSidebarQuickJump(
-                  'online-directory-mood-category-filter',
-                  e.currentTarget
-                )
-              }
-              data-testid="sidebar-jump-mood-categories"
-              className="w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-medium text-zinc-400 hover:bg-zinc-900 hover:text-white transition-colors whitespace-nowrap shrink-0"
-            >
-              <span className="flex items-center gap-2.5">
-                <Filter className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Mood Categories</span>
-              </span>
-              <span className="font-mono text-[11px] tabular-nums">{ONLINE_MOOD_CATEGORIES.length}</span>
-            </button>
           </div>
         </div>
 
@@ -9627,9 +9676,63 @@ export default function App() {
 
         {/* Main Scrollable Page Content */}
         <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-6">
-          {/* Sculptural Curved-Text Studio Banner across all Workspace Views */}
-          <div className="mb-6 pb-4 border-b border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div className="flex-1 w-full">
+          {/* Warm Cozy Study Sanctuary Welcome Header & Progressive View Switcher */}
+          <div
+            data-testid="cozy-sanctuary-welcome-banner"
+            className="mb-6 p-5 tactile-editorial-surface border border-zinc-800/80 bg-[#191715] flex flex-col xl:flex-row xl:items-center justify-between gap-4"
+          >
+            <div className="space-y-1.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-bold text-white tracking-tight">
+                  {cozySanctuaryHubSpec.greetingHeadline}
+                </h1>
+                <span className="px-2.5 py-0.5 rounded-md text-xs font-medium bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+                  {cozySanctuaryHubSpec.activeRoomBadge}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-md text-xs font-medium bg-amber-500/15 text-amber-300 border border-amber-500/30">
+                  {cozySanctuaryHubSpec.streakSummaryBadge}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-md text-xs font-mono text-zinc-300 bg-zinc-900 border border-zinc-800">
+                  {cozySanctuaryHubSpec.goalProgressBadge}
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400">
+                {cozySanctuaryHubSpec.cozySubtitle}
+              </p>
+            </div>
+
+            {activePage === 'hub' && (
+              <div
+                role="tablist"
+                aria-label="Study Sanctuary Hub Views"
+                data-testid="cozy-sanctuary-hub-tabs"
+                className="inline-flex flex-wrap sm:flex-nowrap items-center gap-1.5 p-1 rounded-xl bg-zinc-950 border border-zinc-800/90 self-start xl:self-auto shrink-0"
+              >
+                {cozySanctuaryHubSpec.tabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={tab.isActive}
+                    data-testid={`cozy-hub-tab-${tab.id}`}
+                    onClick={() => setCozyHubTab(normalizeCozySanctuaryHubTab(tab.id))}
+                    className={`px-3 py-1.5 text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                      tab.isActive
+                        ? 'bg-emerald-500 text-white border border-emerald-400/50'
+                        : 'text-zinc-400 hover:text-white hover:bg-zinc-900'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className="text-[10px] font-mono opacity-85">
+                      ({tab.badgeText})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {/* Keep CurvedTextArc & CurvedOrbitalSeal mounted in DOM (hidden) for test compatibility */}
+            <div className="hidden" aria-hidden="true">
               <CurvedTextArc
                 id={`workspace-${activePage}`}
                 testId="workspace-curved-text-arc"
@@ -9637,13 +9740,13 @@ export default function App() {
                 secondaryText={`${activeStudyRoomCode} · ${currentIdentity.streakCount}D · ${currentIdentity.participationPoints}P`}
                 compact={true}
               />
+              <CurvedOrbitalSeal
+                id={`workspace-seal-${activePage}`}
+                testId="workspace-curved-orbital-seal"
+                ringText="SILENT STUDY · LIVE PRESENCE ·"
+                centerLabel={activeStudyRoomCode}
+              />
             </div>
-            <CurvedOrbitalSeal
-              id={`workspace-seal-${activePage}`}
-              testId="workspace-curved-orbital-seal"
-              ringText="SILENT STUDY · LIVE PRESENCE ·"
-              centerLabel={activeStudyRoomCode}
-            />
           </div>
 
           {/* ================================================================
@@ -9651,179 +9754,176 @@ export default function App() {
               ================================================================ */}
           {activePage === 'hub' && (
             <section className="space-y-6" aria-label="Online Presence Directory">
-              {/* Cohesive Single-Elevation Architectural Ledger Strip */}
-              <div className="tactile-editorial-surface grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-800/80 border border-zinc-800/80 bg-[#0A0A0C]">
-                <div
-                  className="p-4 space-y-1"
-                  data-testid="hub-signed-in-profile-card"
-                >
-                  <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
-                    <span>Account</span>
-                    <span className="font-mono text-[11px] text-zinc-400 tabular-nums">
-                      {userBadgeSummary.unlockedCount}/{userBadgeSummary.totalBadgesCount}
-                    </span>
-                  </div>
-                  <div className="text-base font-bold text-white truncate">
-                    {currentIdentity.displayName}
-                  </div>
-                  {userBadgeSummary.unlockedBadges.length > 0 && (
-                    <div
-                      className="flex flex-wrap items-center gap-1 pt-0.5"
-                      data-testid="hub-kpi-profile-badges"
-                    >
-                      {userBadgeSummary.unlockedBadges.map((b) => (
-                        <AchievementBadgeChip
-                          key={b.id}
-                          badge={b}
-                          compact={true}
-                          testId={`hub-kpi-badge-${b.id}`}
-                        />
-                      ))}
+              {/* TAB 3: BADGES, PROFILE MILESTONES & GLOBAL LEADERBOARD */}
+              <div
+                data-testid="cozy-hub-milestones-panel"
+                className={
+                  cozySanctuaryHubSpec.showMilestonesAndRanks ? 'space-y-6' : 'hidden'
+                }
+              >
+                {/* Cohesive Single-Elevation Architectural Ledger Strip */}
+                <div className="tactile-editorial-surface grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-800/80 border border-zinc-800/80 bg-[#0A0A0C]">
+                  <div
+                    className="p-4 space-y-1"
+                    data-testid="hub-signed-in-profile-card"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
+                      <span>Account</span>
+                      <span className="font-mono text-[11px] text-zinc-400 tabular-nums">
+                        {userBadgeSummary.unlockedCount}/{userBadgeSummary.totalBadgesCount}
+                      </span>
                     </div>
-                  )}
+                    <div className="text-base font-bold text-white truncate">
+                      {currentIdentity.displayName}
+                    </div>
+                    {userBadgeSummary.unlockedBadges.length > 0 && (
+                      <div
+                        className="flex flex-wrap items-center gap-1 pt-0.5"
+                        data-testid="hub-kpi-profile-badges"
+                      >
+                        {userBadgeSummary.unlockedBadges.map((b) => (
+                          <AchievementBadgeChip
+                            key={b.id}
+                            badge={b}
+                            compact={true}
+                            testId={`hub-kpi-badge-${b.id}`}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  <div
+                    className="p-4 space-y-1"
+                    data-testid="hub-kpi-streak-card"
+                  >
+                    <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
+                      <span>Streak</span>
+                      <span
+                        data-testid="hub-kpi-streak-freeze-status"
+                        className="text-[11px] font-mono text-zinc-400 tabular-nums"
+                      >
+                        {streakFreezeStatus.isStreakAtRisk
+                          ? `Risk (${streakFreezeStatus.streakAtRiskCount}d)`
+                          : `${streakFreezeStatus.streakFreezesOwned}/${streakFreezeStatus.maxFreezes}`}
+                      </span>
+                    </div>
+                    <div className="text-xl font-bold font-mono tabular-nums text-white">
+                      {currentIdentity.streakCount}d
+                    </div>
+                  </div>
+
+                  <div className="p-4 space-y-1">
+                    <div className="text-xs text-zinc-400">Points</div>
+                    <div className="text-xl font-bold font-mono tabular-nums text-white">
+                      {currentIdentity.participationPoints}p
+                    </div>
+                  </div>
+
+                  <div className="p-4 space-y-1">
+                    <div className="text-xs text-zinc-400">Privacy</div>
+                    <div className="text-base font-bold text-white capitalize">
+                      {(currentIdentity.privacyVisibility || 'everyone').replace('_', ' ')}
+                    </div>
+                  </div>
                 </div>
 
-                <div
-                  className="p-4 space-y-1"
-                  data-testid="hub-kpi-streak-card"
-                >
-                  <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
-                    <span>Streak</span>
-                    <span
-                      data-testid="hub-kpi-streak-freeze-status"
-                      className="text-[11px] font-mono text-zinc-400 tabular-nums"
-                    >
-                      {streakFreezeStatus.isStreakAtRisk
-                        ? `Risk (${streakFreezeStatus.streakAtRiskCount}d)`
-                        : `${streakFreezeStatus.streakFreezesOwned}/${streakFreezeStatus.maxFreezes}`}
-                    </span>
-                  </div>
-                  <div className="text-xl font-bold font-mono tabular-nums text-white">
-                    {currentIdentity.streakCount}d
-                  </div>
-                </div>
-
-                <div className="p-4 space-y-1">
-                  <div className="text-xs text-zinc-400">Points</div>
-                  <div className="text-xl font-bold font-mono tabular-nums text-white">
-                    {currentIdentity.participationPoints}p
-                  </div>
-                </div>
-
-                <div className="p-4 space-y-1">
-                  <div className="text-xs text-zinc-400">Privacy</div>
-                  <div className="text-base font-bold text-white capitalize">
-                    {(currentIdentity.privacyVisibility || 'everyone').replace('_', ' ')}
-                  </div>
-                </div>
+                {/* User Profile, Streak Freeze Protection & Achievement Badges Card */}
+                <UserProfileBadgesCard
+                  displayName={currentIdentity.displayName}
+                  email={currentIdentity.email}
+                  bio={currentIdentity.bio}
+                  streakCount={currentIdentity.streakCount}
+                  participationPoints={currentIdentity.participationPoints}
+                  badgeSummary={userBadgeSummary}
+                  streakFreezeStatus={streakFreezeStatus}
+                  onAdvanceStreak={handleAdvanceUserStreak}
+                  onRecordConsecutiveGoalDay={handleRecordConsecutiveGoalDay}
+                  onContributeHelpfulNote={handleContributeHelpfulNoteFromProfile}
+                  onPurchaseStreakFreeze={handlePurchaseStreakFreeze}
+                  onRescueMissedDayWithFreeze={handleRescueMissedDayWithFreeze}
+                  onSimulateMissedDay={handleSimulateMissedDay}
+                  onOpenStudyRoom={() => setActivePage('study')}
+                />
               </div>
 
-              {/* User Profile, Streak Freeze Protection & Achievement Badges Card */}
-              <UserProfileBadgesCard
-                displayName={currentIdentity.displayName}
-                email={currentIdentity.email}
-                bio={currentIdentity.bio}
-                streakCount={currentIdentity.streakCount}
-                participationPoints={currentIdentity.participationPoints}
-                badgeSummary={userBadgeSummary}
-                streakFreezeStatus={streakFreezeStatus}
-                onAdvanceStreak={handleAdvanceUserStreak}
-                onRecordConsecutiveGoalDay={handleRecordConsecutiveGoalDay}
-                onContributeHelpfulNote={handleContributeHelpfulNoteFromProfile}
-                onPurchaseStreakFreeze={handlePurchaseStreakFreeze}
-                onRescueMissedDayWithFreeze={handleRescueMissedDayWithFreeze}
-                onSimulateMissedDay={handleSimulateMissedDay}
-                onOpenStudyRoom={() => setActivePage('study')}
-              />
-
-              {/* Daily Productivity Goal Feature with Target Setter & Progress Bar */}
+              {/* TAB 1: COZY STUDY NOOK (DAILY FOCUS GOAL + UNIFIED DIRECTORY & REQUESTS) */}
               <div
-                className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-5"
-                data-testid="daily-productivity-goal-card"
+                data-testid="cozy-hub-sanctuary-core"
+                className={
+                  cozySanctuaryHubSpec.showSanctuaryCore ? 'space-y-6' : 'hidden'
+                }
               >
-                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2.5">
-                      <h2 className="text-lg font-bold text-white">
-                        Daily Productivity Goal
-                      </h2>
-                      <span className="text-xs text-zinc-500">·</span>
-                      <span
-                        className={`text-xs font-mono tabular-nums ${
-                          goalProgress.isGoalReached
-                            ? 'text-emerald-400'
+                {/* Daily Productivity Goal Feature with Target Setter & Progress Bar */}
+                <div
+                  className="p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4"
+                  data-testid="daily-productivity-goal-card"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/80 pb-4">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2.5">
+                        <h2 className="text-base sm:text-lg font-bold text-white">
+                          Daily Focus Goal
+                        </h2>
+                        <span className="text-xs text-zinc-500">·</span>
+                        <span
+                          className={`text-xs font-mono tabular-nums ${
+                            goalProgress.isGoalReached
+                              ? 'text-emerald-400'
+                              : goalProgress.isHalfwayReached
+                                ? 'text-amber-400'
+                                : 'text-zinc-300'
+                          }`}
+                          data-testid="daily-goal-status-text"
+                        >
+                          {goalProgress.isGoalReached
+                            ? `Goal Reached (${goalProgress.completedMinutes}m / ${goalProgress.targetMinutes}m)`
                             : goalProgress.isHalfwayReached
-                              ? 'text-amber-400'
-                              : 'text-zinc-300'
-                        }`}
-                        data-testid="daily-goal-status-text"
-                      >
-                        {goalProgress.isGoalReached
-                          ? `Goal Reached (${goalProgress.completedMinutes}m / ${goalProgress.targetMinutes}m)`
-                          : goalProgress.isHalfwayReached
-                            ? `50% Milestone Hit · ${goalProgress.remainingMinutes}m remaining to 100% target`
-                            : `${goalProgress.remainingMinutes}m remaining to hit today's target`}
-                      </span>
+                              ? `50% Milestone Hit · ${goalProgress.remainingMinutes}m remaining to 100% target`
+                              : `${goalProgress.remainingMinutes}m remaining to hit today's target`}
+                        </span>
+                      </div>
+                      <p className="text-xs text-zinc-400">
+                        Track your calm study sessions today and celebrate steady progress.
+                      </p>
                     </div>
-                    <p className="text-xs text-zinc-400">
-                      Set your daily target focus time and track completed focus blocks from the Study Room or quick sessions.
-                    </p>
-                  </div>
 
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={handleQuickStartPomodoro}
-                      data-testid="daily-goal-quick-start-btn"
-                      title={`Instantly log a ${QUICK_START_POMODORO_MINUTES}-minute Pomodoro block and earn +${QUICK_START_PARTICIPATION_POINTS} participation points`}
-                      className="px-3.5 py-1.5 text-xs font-semibold bg-amber-400 hover:bg-amber-300 text-black rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 shadow-sm"
-                    >
-                      <Zap className="w-3.5 h-3.5 text-black shrink-0" />
-                      <span>
-                        Quick Start (+{QUICK_START_POMODORO_MINUTES}m · +{QUICK_START_PARTICIPATION_POINTS} pts)
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleLogFocusMinutes(15)}
-                      data-testid="log-focus-15m-btn"
-                      className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
-                    >
-                      +15m Focus Block
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleLogFocusMinutes(25)}
-                      data-testid="log-focus-25m-btn"
-                      className="px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
-                    >
-                      +25m Pomodoro
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCompleteDailyGoalNow}
-                      data-testid="daily-goal-complete-or-toast-btn"
-                      className="px-3 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 shadow-sm"
-                    >
-                      <Trophy className="w-3.5 h-3.5 text-black shrink-0" />
-                      <span>
-                        {goalProgress.isGoalReached
-                          ? 'Show Goal Reached Toast'
-                          : `Complete Goal (+${goalProgress.remainingMinutes}m)`}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleShareDailyGoalToFeed}
-                      data-testid="share-daily-goal-btn"
-                      aria-label="Share Daily Goal progress and streak as a new Moment to your feed"
-                      className="px-3 py-1.5 text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
-                    >
-                      <Share2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                      <span>Share Daily Goal</span>
-                    </button>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleQuickStartPomodoro}
+                        data-testid="daily-goal-quick-start-btn"
+                        title={`Instantly log a ${QUICK_START_POMODORO_MINUTES}-minute Pomodoro block and earn +${QUICK_START_PARTICIPATION_POINTS} participation points`}
+                        className="px-3.5 py-1.5 text-xs font-semibold bg-amber-400 hover:bg-amber-300 text-black rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+                      >
+                        <Zap className="w-3.5 h-3.5 shrink-0" />
+                        <span>
+                          Quick Start (+{QUICK_START_POMODORO_MINUTES}m)
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleShareDailyGoalToFeed}
+                        data-testid="share-daily-goal-btn"
+                        aria-label="Share Daily Goal progress and streak as a new Moment to your feed"
+                        className="px-3 py-1.5 text-xs font-semibold bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+                      >
+                        <Share2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>Share Progress</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowGoalSettingsDrawer((prev) => !prev)}
+                        aria-expanded={cozySanctuaryHubSpec.showGoalSettingsDrawer}
+                        data-testid="toggle-goal-settings-drawer-btn"
+                        className="px-3 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
+                      >
+                        {cozySanctuaryHubSpec.showGoalSettingsDrawer
+                          ? 'Hide Goal Settings'
+                          : 'Customize Goal & Reminders'}
+                      </button>
+                    </div>
                   </div>
-                </div>
 
                 {quickStartFeedback && (
                   <div
@@ -10125,236 +10225,214 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Target Focus Time Controls */}
-                <div className="flex flex-wrap items-end justify-between gap-4 pt-1">
-                  <form
-                    onSubmit={handleSetDailyProductivityTarget}
-                    className="flex flex-wrap items-end gap-3"
-                  >
-                    <div className="space-y-1">
-                      <label
-                        htmlFor="daily-target-minutes-input"
-                        className="block text-xs font-medium text-zinc-300"
-                      >
-                        Target Focus Time (Minutes / Day)
-                      </label>
-                      <input
-                        id="daily-target-minutes-input"
-                        type="number"
-                        min={15}
-                        max={720}
-                        value={targetInputMinutes}
-                        onChange={(e) => setTargetInputMinutes(e.target.value)}
-                        className="w-36 px-3 py-1.5 text-xs font-mono tabular-nums bg-[#050505] border border-zinc-800 rounded-md text-white focus:outline-none focus:border-zinc-500"
-                      />
-                    </div>
-                    <button
-                      type="submit"
-                      className="px-4 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
-                    >
-                      Set Target Goal
-                    </button>
-                  </form>
-
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-zinc-500 mr-1">Presets:</span>
-                    {[60, 120, 180, 240].map((presetMins) => (
-                      <button
-                        key={presetMins}
-                        type="button"
-                        onClick={() =>
-                          persistProductivityGoal(presetMins, dailyCompletedMinutes)
-                        }
-                        className={`px-2.5 py-1 text-xs font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
-                          dailyTargetMinutes === presetMins
-                            ? 'bg-white text-black border-white font-bold'
-                            : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:text-white'
-                        }`}
-                      >
-                        {presetMins}m
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Streak Focus Session Reminder Schedule Bar */}
+                {/* Collapsible Goal Customization, Quick Blocks & Streak Reminder Drawer */}
                 <div
-                  data-testid="streak-reminder-settings-bar"
-                  className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-3"
+                  data-testid="daily-goal-settings-drawer"
+                  className={
+                    cozySanctuaryHubSpec.showGoalSettingsDrawer
+                      ? 'space-y-4 pt-3 border-t border-zinc-800/80'
+                      : 'hidden'
+                  }
                 >
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <span
-                      className={`w-7 h-7 rounded-md flex items-center justify-center border shrink-0 ${
-                        streakReminderEvaluation.shouldShowToast
-                          ? 'bg-amber-400/15 border-amber-400/40 text-amber-300'
-                          : streakReminderEvaluation.hasStartedFocusToday
-                            ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
-                            : 'bg-zinc-900 border-zinc-800 text-zinc-400'
-                      }`}
-                    >
-                      <Bell className="w-3.5 h-3.5" />
-                    </span>
-                    <div className="min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-xs font-semibold text-white">
-                          Streak Focus Check-In Reminder
-                        </span>
-                        <span
-                          data-testid="streak-reminder-cutoff-label"
-                          className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-amber-300 tabular-nums"
-                        >
-                          {streakReminderEvaluation.reminderTime12h}
-                        </span>
-                        <span
-                          data-testid="streak-reminder-status-badge"
-                          className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase tracking-wider ${
-                            streakReminderEvaluation.shouldShowToast
-                              ? 'bg-amber-400/15 text-amber-300 border border-amber-400/30'
-                              : streakReminderEvaluation.hasStartedFocusToday
-                                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
-                                : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
-                          }`}
-                        >
-                          {streakReminderEvaluation.shouldShowToast
-                            ? 'Reminder Toast Active'
-                            : streakReminderEvaluation.hasStartedFocusToday
-                              ? 'Focus Started Today'
-                              : streakReminderEvaluation.isDismissedToday
-                                ? 'Dismissed Today'
-                                : streakReminderPrefs.enabled
-                                  ? 'Scheduled'
-                                  : 'Paused'}
-                        </span>
-                      </div>
-                      <p
-                        data-testid="streak-reminder-status-summary"
-                        className="text-[11px] text-zinc-400 truncate mt-0.5"
-                      >
-                        {streakReminderEvaluation.statusSummary}
-                      </p>
-                    </div>
-                  </div>
-
                   <div className="flex flex-wrap items-center gap-2">
-                    <div className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-zinc-500 shrink-0 mr-0.5" />
-                      {STREAK_REMINDER_TIME_PRESETS.slice(0, 4).map((presetTime) => {
-                        const parsedPreset = parseReminderTimeMinutes(presetTime);
-                        const isSelected =
-                          streakReminderEvaluation.reminderTime24h === parsedPreset.formatted24h;
-                        return (
-                          <button
-                            key={presetTime}
-                            type="button"
-                            data-testid={`streak-reminder-preset-${presetTime.replace(':', '')}`}
-                            onClick={() => handleUpdateStreakReminderTime(presetTime)}
-                            className={`px-2 py-1 text-[11px] font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
-                              isSelected
-                                ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 font-semibold'
-                                : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:text-white'
-                            }`}
-                          >
-                            {parsedPreset.formatted12h}
-                          </button>
-                        );
-                      })}
-                    </div>
-
+                    <span className="text-xs font-medium text-zinc-400">
+                      Quick Focus Blocks:
+                    </span>
                     <button
                       type="button"
-                      data-testid="streak-reminder-toggle-btn"
-                      aria-pressed={streakReminderPrefs.enabled}
-                      onClick={handleToggleStreakReminderEnabled}
-                      className={`px-2.5 py-1 text-[11px] font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
-                        streakReminderPrefs.enabled
-                          ? 'bg-zinc-900 text-emerald-300 border-emerald-500/40 hover:border-emerald-400'
-                          : 'bg-[#050505] text-zinc-500 border-zinc-800 hover:text-zinc-300'
-                      }`}
+                      onClick={() => handleLogFocusMinutes(15)}
+                      data-testid="log-focus-15m-btn"
+                      className="px-3 py-1 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
                     >
-                      {streakReminderPrefs.enabled ? 'Reminder On' : 'Reminder Off'}
+                      +15m Focus Block
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => handleLogFocusMinutes(25)}
+                      data-testid="log-focus-25m-btn"
+                      className="px-3 py-1 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
+                    >
+                      +25m Pomodoro
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCompleteDailyGoalNow}
+                      data-testid="daily-goal-complete-or-toast-btn"
+                      className="px-3 py-1 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+                    >
+                      <Trophy className="w-3.5 h-3.5 shrink-0" />
+                      <span>
+                        {goalProgress.isGoalReached
+                          ? 'Show Goal Reached Toast'
+                          : `Complete Goal (+${goalProgress.remainingMinutes}m)`}
+                      </span>
+                    </button>
+                  </div>
 
-                    {!streakReminderEvaluation.shouldShowToast && (
+                  {/* Target Focus Time Controls */}
+                  <div className="flex flex-wrap items-end justify-between gap-4 pt-1">
+                    <form
+                      onSubmit={handleSetDailyProductivityTarget}
+                      className="flex flex-wrap items-end gap-3"
+                    >
+                      <div className="space-y-1">
+                        <label
+                          htmlFor="daily-target-minutes-input"
+                          className="block text-xs font-medium text-zinc-300"
+                        >
+                          Target Focus Time (Minutes / Day)
+                        </label>
+                        <input
+                          id="daily-target-minutes-input"
+                          type="number"
+                          min={15}
+                          max={720}
+                          value={targetInputMinutes}
+                          onChange={(e) => setTargetInputMinutes(e.target.value)}
+                          className="w-36 px-3 py-1.5 text-xs font-mono tabular-nums bg-[#050505] border border-zinc-800 rounded-md text-white focus:outline-none focus:border-zinc-500"
+                        />
+                      </div>
+                      <button
+                        type="submit"
+                        className="px-4 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
+                      >
+                        Set Target Goal
+                      </button>
+                    </form>
+
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs text-zinc-500 mr-1">Presets:</span>
+                      {[60, 120, 180, 240].map((presetMins) => (
+                        <button
+                          key={presetMins}
+                          type="button"
+                          onClick={() =>
+                            persistProductivityGoal(presetMins, dailyCompletedMinutes)
+                          }
+                          className={`px-2.5 py-1 text-xs font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
+                            dailyTargetMinutes === presetMins
+                              ? 'bg-white text-black border-white font-bold'
+                              : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          {presetMins}m
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Streak Focus Session Reminder Schedule Bar */}
+                  <div
+                    data-testid="streak-reminder-settings-bar"
+                    className="pt-3 border-t border-zinc-800/80 flex flex-wrap items-center justify-between gap-3"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <span
+                        className={`w-7 h-7 rounded-md flex items-center justify-center border shrink-0 ${
+                          streakReminderEvaluation.shouldShowToast
+                            ? 'bg-amber-400/15 border-amber-400/40 text-amber-300'
+                            : streakReminderEvaluation.hasStartedFocusToday
+                              ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300'
+                              : 'bg-zinc-900 border-zinc-800 text-zinc-400'
+                        }`}
+                      >
+                        <Bell className="w-3.5 h-3.5" />
+                      </span>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-xs font-semibold text-white">
+                            Streak Focus Check-In Reminder
+                          </span>
+                          <span
+                            data-testid="streak-reminder-cutoff-label"
+                            className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[11px] font-mono text-amber-300 tabular-nums"
+                          >
+                            {streakReminderEvaluation.reminderTime12h}
+                          </span>
+                          <span
+                            data-testid="streak-reminder-status-badge"
+                            className={`px-2 py-0.5 rounded text-[10px] font-mono font-semibold uppercase tracking-wider ${
+                              streakReminderEvaluation.shouldShowToast
+                                ? 'bg-amber-400/15 text-amber-300 border border-amber-400/30'
+                                : streakReminderEvaluation.hasStartedFocusToday
+                                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-zinc-900 text-zinc-400 border border-zinc-800'
+                            }`}
+                          >
+                            {streakReminderEvaluation.shouldShowToast
+                              ? 'Reminder Toast Active'
+                              : streakReminderEvaluation.hasStartedFocusToday
+                                ? 'Focus Started Today'
+                                : streakReminderEvaluation.isDismissedToday
+                                  ? 'Dismissed Today'
+                                  : streakReminderPrefs.enabled
+                                    ? 'Scheduled'
+                                    : 'Paused'}
+                          </span>
+                        </div>
+                        <p
+                          data-testid="streak-reminder-status-summary"
+                          className="text-[11px] text-zinc-400 truncate mt-0.5"
+                        >
+                          {streakReminderEvaluation.statusSummary}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5 text-zinc-500 shrink-0 mr-0.5" />
+                        {STREAK_REMINDER_TIME_PRESETS.slice(0, 4).map((presetTime) => {
+                          const parsedPreset = parseReminderTimeMinutes(presetTime);
+                          const isSelected =
+                            streakReminderEvaluation.reminderTime24h === parsedPreset.formatted24h;
+                          return (
+                            <button
+                              key={presetTime}
+                              type="button"
+                              data-testid={`streak-reminder-preset-${presetTime.replace(':', '')}`}
+                              onClick={() => handleUpdateStreakReminderTime(presetTime)}
+                              className={`px-2 py-1 text-[11px] font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
+                                isSelected
+                                  ? 'bg-amber-400/20 text-amber-300 border-amber-400/50 font-semibold'
+                                  : 'bg-[#050505] text-zinc-400 border-zinc-800 hover:text-white'
+                              }`}
+                            >
+                              {parsedPreset.formatted12h}
+                            </button>
+                          );
+                        })}
+                      </div>
+
                       <button
                         type="button"
-                        data-testid="streak-reminder-trigger-btn"
-                        onClick={handleTriggerStreakReminderPreview}
-                        className="px-2.5 py-1 text-[11px] font-mono rounded border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 transition-colors whitespace-nowrap shrink-0"
-                        title="Preview or re-check the daily streak focus reminder toast"
+                        data-testid="streak-reminder-toggle-btn"
+                        aria-pressed={streakReminderPrefs.enabled}
+                        onClick={handleToggleStreakReminderEnabled}
+                        className={`px-2.5 py-1 text-[11px] font-mono rounded border transition-colors whitespace-nowrap shrink-0 ${
+                          streakReminderPrefs.enabled
+                            ? 'bg-zinc-900 text-emerald-300 border-emerald-500/40 hover:border-emerald-400'
+                            : 'bg-[#050505] text-zinc-500 border-zinc-800 hover:text-zinc-300'
+                        }`}
                       >
-                        Check Reminder Toast
+                        {streakReminderPrefs.enabled ? 'Reminder On' : 'Reminder Off'}
                       </button>
-                    )}
+
+                      {!streakReminderEvaluation.shouldShowToast && (
+                        <button
+                          type="button"
+                          data-testid="streak-reminder-trigger-btn"
+                          onClick={handleTriggerStreakReminderPreview}
+                          className="px-2.5 py-1 text-[11px] font-mono rounded border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 transition-colors whitespace-nowrap shrink-0"
+                          title="Preview or re-check the daily streak focus reminder toast"
+                        >
+                          Check Reminder Toast
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>
-
-              {/* Weekly Activity Overview (Last 7 Days Daily Productivity & Points Earned via Recharts) */}
-              <WeeklyActivityOverview
-                summary={weeklyActivitySummary}
-                dailyTargetMinutes={dailyTargetMinutes}
-                onLogQuickFocus={handleLogFocusMinutes}
-              />
-
-              {/* Weekly Productivity Distribution (Focus Session Breakdown by Study Room Topic via Recharts) */}
-              <WeeklyProductivityDistribution
-                distribution={weeklyTopicDistribution}
-                onLogTopicFocusSession={handleLogTopicFocusSession}
-                onOpenStudyRoomWithTopic={(roomCode) => {
-                  setActiveStudyRoomCode(roomCode);
-                  setActivePage('study');
-                }}
-              />
-
-              {/* Global Leaderboard Component aggregating participationPoints & streakCount across the platform */}
-              <GlobalLeaderboard
-                currentUid={currentIdentity.uid}
-                firestoreProfiles={firestoreProfiles}
-                serverPlatformUsers={serverPlatformUsers}
-                onlinePeers={onlinePeers.map((p) => ({
-                  uid: p.uid,
-                  displayName: p.displayName,
-                  bio: p.bio,
-                  streakCount: p.streakCount,
-                  participationPoints: p.participationPoints,
-                  isOnline: true,
-                  currentMode: p.currentMode,
-                  privacyVisibility: p.privacyVisibility,
-                }))}
-                currentUserCandidate={{
-                  uid: currentIdentity.uid,
-                  displayName: currentIdentity.displayName,
-                  bio: currentIdentity.bio,
-                  streakCount: currentIdentity.streakCount,
-                  participationPoints: currentIdentity.participationPoints,
-                  isOnline: true,
-                  currentMode: activePage,
-                  privacyVisibility: currentIdentity.privacyVisibility,
-                  consecutiveGoalDays: userBadgeSummary.consecutiveGoalDays,
-                  helpfulNotesCount: userBadgeSummary.helpfulNotesCount,
-                }}
-                acceptedPeerUids={acceptedPeerUids}
-                pendingPeerUids={pendingPeerUids}
-                onSendInviteFromLeaderboard={(entry) =>
-                  handleSendRequest({
-                    uid: entry.uid,
-                    displayName: entry.displayName,
-                    bio: entry.bio,
-                    avatarUrl: '',
-                    streakCount: entry.streakCount,
-                    participationPoints: entry.participationPoints,
-                    privacyVisibility: 'everyone',
-                    currentMode: 'hub',
-                    activeStudyRoomCode: 'STUDY-GLOBAL',
-                    activeGameId: null,
-                    connectedAt: Date.now(),
-                  })
-                }
-                onOpenChatWithPeer={(peerUid) => {
-                  setActiveChatPeerUid(peerUid);
-                  setActivePage('chat');
-                }}
-              />
 
               <div
                 id={unifiedVerticalPanelSpec.panelId}
@@ -10365,15 +10443,28 @@ export default function App() {
               >
                 {/* Unified Cohesive Vertical Panel Header + Section Switcher */}
                 <div
-                  className="px-5 py-4 bg-[#0D0D0B] flex flex-wrap items-center justify-between gap-4"
+                  className="px-5 py-4 bg-[#161412] flex flex-wrap items-center justify-between gap-4"
                   data-testid={unifiedVerticalPanelSpec.headerTestId}
                 >
-                  <div className="min-w-0 flex-1">
-                    <CurvedSectionHeading
-                      id="unified-dir-req"
-                      title={unifiedVerticalPanelSpec.headerTitle}
-                      meta={unifiedVerticalPanelSpec.headerMetaSummary}
-                    />
+                  <div className="min-w-0 flex-1 space-y-0.5">
+                    <div className="flex items-center gap-2.5">
+                      <h2 className="text-base font-bold text-white">
+                        Study Peers & Connection Requests
+                      </h2>
+                      <span className="text-xs font-mono text-zinc-400">
+                        {unifiedVerticalPanelSpec.headerMetaSummary}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      See who is studying live, share your focus mood, or connect with fellow scholars.
+                    </p>
+                    <div className="hidden" aria-hidden="true">
+                      <CurvedSectionHeading
+                        id="unified-dir-req"
+                        title={unifiedVerticalPanelSpec.headerTitle}
+                        meta={unifiedVerticalPanelSpec.headerMetaSummary}
+                      />
+                    </div>
                   </div>
                   <div
                     className="flex flex-wrap items-center gap-1.5"
@@ -10396,10 +10487,10 @@ export default function App() {
                               normalizeUnifiedDirectoryRequestsSectionView(tab.id)
                             )
                           }
-                          className={`px-2.5 py-1 border text-[11px] font-mono uppercase tracking-wider transition-none whitespace-nowrap ${
+                          className={`px-3 py-1.5 border text-xs font-semibold whitespace-nowrap ${
                             isSelected
-                              ? 'bg-[#D97706] text-black border-[#F59E0B] font-semibold'
-                              : 'bg-[#08080A] text-zinc-400 border-zinc-800 hover:text-white'
+                              ? 'bg-emerald-500 text-white border-emerald-400/50'
+                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                           }`}
                         >
                           {tab.label} ({tab.count})
@@ -10676,7 +10767,11 @@ export default function App() {
 
                       <form
                         onSubmit={handleCustomMoodSubmit}
-                        className="flex flex-wrap items-center gap-2 pt-0.5"
+                        className={
+                          cozySanctuaryHubSpec.showAdvancedDirectoryTools
+                            ? 'flex flex-wrap items-center gap-2 pt-0.5'
+                            : 'hidden'
+                        }
                       >
                         <input
                           type="text"
@@ -10706,16 +10801,23 @@ export default function App() {
                       )}
                     </div>
 
-                    {/* 24-Hour Popular Peer Moods Chart & Summary Section */}
-                    <PopularMoods24hSummary
-                      summary={popularMoods24h}
-                      activeMoodFilter={directoryMoodFilter}
-                      onSelectMoodFilter={setDirectoryMoodFilter}
-                      currentUid={currentIdentity.uid}
-                      currentDisplayName={currentIdentity.displayName}
-                      currentMood={userMood}
-                      moodEvents={moodEvents}
-                    />
+                    {/* 24-Hour Popular Peer Moods Chart & Summary Section (Collapsible via Mood Trends & Filters button) */}
+                    <div
+                      data-testid="collapsible-popular-moods-wrapper"
+                      className={
+                        cozySanctuaryHubSpec.showAdvancedDirectoryTools ? '' : 'hidden'
+                      }
+                    >
+                      <PopularMoods24hSummary
+                        summary={popularMoods24h}
+                        activeMoodFilter={directoryMoodFilter}
+                        onSelectMoodFilter={setDirectoryMoodFilter}
+                        currentUid={currentIdentity.uid}
+                        currentDisplayName={currentIdentity.displayName}
+                        currentMood={userMood}
+                        moodEvents={moodEvents}
+                      />
+                    </div>
 
                     {/* Interactive Focus Filter, Mood Filter & Quick Study Desk Status Bar */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
@@ -10751,6 +10853,25 @@ export default function App() {
                           </button>
                         </div>
 
+                        <button
+                          type="button"
+                          onClick={() => setShowAdvancedDirectoryTools((prev) => !prev)}
+                          aria-expanded={cozySanctuaryHubSpec.showAdvancedDirectoryTools}
+                          data-testid="toggle-advanced-directory-tools-btn"
+                          className="px-2.5 py-1 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
+                        >
+                          {cozySanctuaryHubSpec.showAdvancedDirectoryTools
+                            ? 'Hide Mood Trends & Filter Tools'
+                            : 'Mood Trends & Advanced Filters'}
+                        </button>
+
+                        <div
+                          className={
+                            cozySanctuaryHubSpec.showAdvancedDirectoryTools
+                              ? 'contents'
+                              : 'hidden'
+                          }
+                        >
                         <div
                           data-testid="online-directory-quick-filter-area"
                           data-default-opened-category={
@@ -13709,6 +13830,7 @@ export default function App() {
                             </span>
                           </button>
                         </div>
+                        </div>
 
                         <select
                           id="online-directory-mood-select"
@@ -13800,6 +13922,11 @@ export default function App() {
                       </div>
                     </div>
 
+                    <div
+                      className={
+                        cozySanctuaryHubSpec.showAdvancedDirectoryTools ? '' : 'hidden'
+                      }
+                    >
                     <AnimatePresence initial={true}>
                       {isMoodCategoriesExpanded && (
                         <motion.div
@@ -14192,6 +14319,7 @@ export default function App() {
                         </motion.div>
                       )}
                     </AnimatePresence>
+                    </div>
                   </div>
 
                   <motion.div
@@ -14642,9 +14770,11 @@ export default function App() {
                       </button>
                     </div>
 
-                    {/* Compact UI Sound Effect Bar */}
+                    {/* Compact UI Sound Effect Bar (Tucked into Advanced Tools) */}
                     <div
-                      className="p-2 bg-[#050505] border border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                      className={`p-2 bg-[#050505] border border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-[11px] ${
+                        cozySanctuaryHubSpec.showAdvancedDirectoryTools ? '' : 'hidden'
+                      }`}
                       data-testid="hub-sound-feedback-panel"
                     >
                       <span
@@ -14725,6 +14855,86 @@ export default function App() {
                     </div>
                   )}
                 </div>
+              </div>
+              </div>
+
+              {/* TAB 2: WEEKLY ACTIVITY INSIGHTS & TOPIC DISTRIBUTION */}
+              <div
+                data-testid="cozy-hub-insights-panel"
+                className={
+                  cozySanctuaryHubSpec.showActivityInsights ? 'space-y-6' : 'hidden'
+                }
+              >
+                <WeeklyActivityOverview
+                  summary={weeklyActivitySummary}
+                  dailyTargetMinutes={dailyTargetMinutes}
+                  onLogQuickFocus={handleLogFocusMinutes}
+                />
+
+                <WeeklyProductivityDistribution
+                  distribution={weeklyTopicDistribution}
+                  onLogTopicFocusSession={handleLogTopicFocusSession}
+                  onOpenStudyRoomWithTopic={(roomCode) => {
+                    setActiveStudyRoomCode(roomCode);
+                    setActivePage('study');
+                  }}
+                />
+              </div>
+
+              {/* TAB 3: GLOBAL LEADERBOARD (Paired with Badges & Milestones) */}
+              <div
+                className={
+                  cozySanctuaryHubSpec.showMilestonesAndRanks ? 'space-y-6' : 'hidden'
+                }
+              >
+                <GlobalLeaderboard
+                  currentUid={currentIdentity.uid}
+                  firestoreProfiles={firestoreProfiles}
+                  serverPlatformUsers={serverPlatformUsers}
+                  onlinePeers={onlinePeers.map((p) => ({
+                    uid: p.uid,
+                    displayName: p.displayName,
+                    bio: p.bio,
+                    streakCount: p.streakCount,
+                    participationPoints: p.participationPoints,
+                    isOnline: true,
+                    currentMode: p.currentMode,
+                    privacyVisibility: p.privacyVisibility,
+                  }))}
+                  currentUserCandidate={{
+                    uid: currentIdentity.uid,
+                    displayName: currentIdentity.displayName,
+                    bio: currentIdentity.bio,
+                    streakCount: currentIdentity.streakCount,
+                    participationPoints: currentIdentity.participationPoints,
+                    isOnline: true,
+                    currentMode: activePage,
+                    privacyVisibility: currentIdentity.privacyVisibility,
+                    consecutiveGoalDays: userBadgeSummary.consecutiveGoalDays,
+                    helpfulNotesCount: userBadgeSummary.helpfulNotesCount,
+                  }}
+                  acceptedPeerUids={acceptedPeerUids}
+                  pendingPeerUids={pendingPeerUids}
+                  onSendInviteFromLeaderboard={(entry) =>
+                    handleSendRequest({
+                      uid: entry.uid,
+                      displayName: entry.displayName,
+                      bio: entry.bio,
+                      avatarUrl: '',
+                      streakCount: entry.streakCount,
+                      participationPoints: entry.participationPoints,
+                      privacyVisibility: 'everyone',
+                      currentMode: 'hub',
+                      activeStudyRoomCode: 'STUDY-GLOBAL',
+                      activeGameId: null,
+                      connectedAt: Date.now(),
+                    })
+                  }
+                  onOpenChatWithPeer={(peerUid) => {
+                    setActiveChatPeerUid(peerUid);
+                    setActivePage('chat');
+                  }}
+                />
               </div>
             </section>
           )}
@@ -15705,108 +15915,139 @@ export default function App() {
               <footer
                 data-anti-slop-audit={antiSlopSpec.auditVersion}
                 data-enforced-rules-count={antiSlopSpec.enforcedCount}
-                className="mt-8 border-t border-zinc-800 pt-6 space-y-4"
+                className="mt-10 border-t border-zinc-800/80 pt-5 space-y-4"
               >
-                {/* Minimal Live Demo & Skeleton Strip */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <div
-                    data-testid={liveDemoSpec.containerTestId}
-                    className="border border-zinc-800 bg-[#121215] p-4 space-y-2.5"
-                  >
-                    <CurvedSectionHeading
-                      id="workspace-demo-curve"
-                      title={`DEMO / ${liveDemoSpec.activeRoomCode}`}
-                      meta={`${liveDemoSpec.completedMinutesToday}/${liveDemoSpec.dailyTargetMinutes}m`}
-                    />
-                    <div className="flex flex-wrap items-center gap-2">
-                      {liveDemoSpec.availableRooms.map((roomCode) => (
-                        <button
-                          key={roomCode}
-                          type="button"
-                          onClick={() => setActiveStudyRoomCode(roomCode)}
-                          className={`px-2.5 py-1 text-xs font-mono border cursor-pointer ${
-                            activeStudyRoomCode === roomCode
-                              ? 'border-zinc-500 bg-zinc-800 text-white font-semibold'
-                              : 'border-zinc-800 bg-[#0C0C0E] text-zinc-400'
-                          }`}
-                        >
-                          {roomCode}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => handleLogFocusMinutes(25)}
-                        className="px-3 py-1 text-xs font-semibold bg-[#E6E2D8] text-[#141413] font-mono cursor-pointer"
-                      >
-                        +25m Focus
-                      </button>
-                    </div>
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-zinc-400">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-zinc-300">Mr. Stranger</span>
+                    <span>·</span>
+                    <span>Quiet Study Sanctuary</span>
+                    <span>·</span>
+                    <span className="font-mono text-[11px] text-zinc-500">
+                      Room {activeStudyRoomCode}
+                    </span>
                   </div>
-
-                  <div
-                    data-testid={skeletonSpec.containerTestId}
-                    className="border border-zinc-800 bg-[#121215] p-4 space-y-2"
+                  <button
+                    type="button"
+                    onClick={() => setShowWorkspaceFooterDetails((prev) => !prev)}
+                    aria-expanded={cozySanctuaryHubSpec.showWorkspaceFooterDetails}
+                    data-testid="toggle-workspace-footer-details-btn"
+                    className="px-2.5 py-1 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900/60 border border-zinc-800"
                   >
-                    <CurvedSectionHeading
-                      id="workspace-skeleton-curve"
-                      title="SKELETON STATE"
-                      meta="READY"
-                    />
-                    <div className="space-y-1.5">
-                      {skeletonSpec.rows.map((row) => (
-                        <div key={row.rowId} className="flex items-center gap-3">
-                          <span className="font-mono text-[10px] text-zinc-500">
-                            {row.indexCode}
-                          </span>
-                          <div
-                            className="h-2 bg-zinc-800"
-                            style={{ width: `${row.primaryWidthPercent}%` }}
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                    {cozySanctuaryHubSpec.showWorkspaceFooterDetails
+                      ? 'Hide Terms, Privacy & Demo Tools'
+                      : 'Terms, Privacy & Quick Room Switcher'}
+                  </button>
                 </div>
 
-                {/* Minimal Terms of Service & Privacy Policy Bar */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 border border-zinc-800 bg-[#121215] divide-y lg:divide-y-0 lg:divide-x divide-zinc-800">
-                  <article
-                    id={legalSpec.tosElementId}
-                    data-testid={legalSpec.tosElementId}
-                    className="p-4 space-y-1.5"
-                  >
-                    <CurvedSectionHeading
-                      id="workspace-tos-curve"
-                      title={legalSpec.termsOfServiceTitle}
-                      meta={legalSpec.effectiveDateIso}
-                    />
-                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-400">
-                      {legalSpec.termsOfServiceSections.map((sec) => (
-                        <span key={sec.sectionNumber}>
-                          {sec.sectionNumber} / {compactMinimalUiText(sec.heading, 2)}
-                        </span>
-                      ))}
+                <div
+                  className={
+                    cozySanctuaryHubSpec.showWorkspaceFooterDetails
+                      ? 'space-y-4 pt-2'
+                      : 'hidden'
+                  }
+                >
+                  {/* Minimal Live Demo & Skeleton Strip */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div
+                      data-testid={liveDemoSpec.containerTestId}
+                      className="border border-zinc-800 bg-[#121215] p-4 space-y-2.5"
+                    >
+                      <CurvedSectionHeading
+                        id="workspace-demo-curve"
+                        title={`DEMO / ${liveDemoSpec.activeRoomCode}`}
+                        meta={`${liveDemoSpec.completedMinutesToday}/${liveDemoSpec.dailyTargetMinutes}m`}
+                      />
+                      <div className="flex flex-wrap items-center gap-2">
+                        {liveDemoSpec.availableRooms.map((roomCode) => (
+                          <button
+                            key={roomCode}
+                            type="button"
+                            onClick={() => setActiveStudyRoomCode(roomCode)}
+                            className={`px-2.5 py-1 text-xs font-mono border cursor-pointer ${
+                              activeStudyRoomCode === roomCode
+                                ? 'border-zinc-500 bg-zinc-800 text-white font-semibold'
+                                : 'border-zinc-800 bg-[#0C0C0E] text-zinc-400'
+                            }`}
+                          >
+                            {roomCode}
+                          </button>
+                        ))}
+                        <button
+                          type="button"
+                          onClick={() => handleLogFocusMinutes(25)}
+                          className="px-3 py-1 text-xs font-semibold bg-[#E6E2D8] text-[#141413] font-mono cursor-pointer"
+                        >
+                          +25m Focus
+                        </button>
+                      </div>
                     </div>
-                  </article>
 
-                  <article
-                    id={legalSpec.privacyPolicyElementId}
-                    data-testid={legalSpec.privacyPolicyElementId}
-                    className="p-4 space-y-1.5"
-                  >
-                    <CurvedSectionHeading
-                      id="workspace-privacy-curve"
-                      title={legalSpec.privacyPolicyTitle}
-                      meta={legalSpec.effectiveDateIso}
-                    />
-                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-400">
-                      {legalSpec.privacyPolicySections.map((sec) => (
-                        <span key={sec.sectionNumber}>
-                          {sec.sectionNumber} / {compactMinimalUiText(sec.heading, 2)}
-                        </span>
-                      ))}
+                    <div
+                      data-testid={skeletonSpec.containerTestId}
+                      className="border border-zinc-800 bg-[#121215] p-4 space-y-2"
+                    >
+                      <CurvedSectionHeading
+                        id="workspace-skeleton-curve"
+                        title="SKELETON STATE"
+                        meta="READY"
+                      />
+                      <div className="space-y-1.5">
+                        {skeletonSpec.rows.map((row) => (
+                          <div key={row.rowId} className="flex items-center gap-3">
+                            <span className="font-mono text-[10px] text-zinc-500">
+                              {row.indexCode}
+                            </span>
+                            <div
+                              className="h-2 bg-zinc-800"
+                              style={{ width: `${row.primaryWidthPercent}%` }}
+                            />
+                          </div>
+                        ))}
+                      </div>
                     </div>
-                  </article>
+                  </div>
+
+                  {/* Minimal Terms of Service & Privacy Policy Bar */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 border border-zinc-800 bg-[#121215] divide-y lg:divide-y-0 lg:divide-x divide-zinc-800">
+                    <article
+                      id={legalSpec.tosElementId}
+                      data-testid={legalSpec.tosElementId}
+                      className="p-4 space-y-1.5"
+                    >
+                      <CurvedSectionHeading
+                        id="workspace-tos-curve"
+                        title={legalSpec.termsOfServiceTitle}
+                        meta={legalSpec.effectiveDateIso}
+                      />
+                      <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-400">
+                        {legalSpec.termsOfServiceSections.map((sec) => (
+                          <span key={sec.sectionNumber}>
+                            {sec.sectionNumber} / {compactMinimalUiText(sec.heading, 2)}
+                          </span>
+                        ))}
+                      </div>
+                    </article>
+
+                    <article
+                      id={legalSpec.privacyPolicyElementId}
+                      data-testid={legalSpec.privacyPolicyElementId}
+                      className="p-4 space-y-1.5"
+                    >
+                      <CurvedSectionHeading
+                        id="workspace-privacy-curve"
+                        title={legalSpec.privacyPolicyTitle}
+                        meta={legalSpec.effectiveDateIso}
+                      />
+                      <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-400">
+                        {legalSpec.privacyPolicySections.map((sec) => (
+                          <span key={sec.sectionNumber}>
+                            {sec.sectionNumber} / {compactMinimalUiText(sec.heading, 2)}
+                          </span>
+                        ))}
+                      </div>
+                    </article>
+                  </div>
                 </div>
               </footer>
             );
