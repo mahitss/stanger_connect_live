@@ -400,6 +400,8 @@ import {
   buildWorkspaceSkeletonLoaderSpec,
   buildLiveInteractiveProductDemoSpec,
   evaluateAntiAiSlopAuditSpec,
+  compactMinimalUiText,
+  buildCurvedTextLayoutSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9551,5 +9553,25 @@ test('Anti-AI-Slop audit enforces all 32 banned pattern removals, copy sanitizat
   assert.equal(BANNED_AI_SLOP_PATTERNS.includes('lucide_icons'), true);
 });
 
+test('Curved text SVG layout and minimalist text de-bulking engine compacts verbose copy and generates quadratic Bézier & orbital SVG paths', () => {
+  const verbose = 'Complete a 5-day consecutive active login & focus streak to earn bonus points in the workspace.';
+  const compacted = compactMinimalUiText(verbose, 3);
+  assert.equal(compacted, 'Complete a 5-day');
 
-
+  const spec = buildCurvedTextLayoutSpec({
+    id: 'hero-arc',
+    primaryText: 'Mr. Stranger Silent Study Sanctuary',
+    secondaryText: 'Focus · Voice · Arcade',
+    orbitalText: 'Live Presence · Study ·',
+    width: 760,
+    height: 124,
+    arcHeight: 68,
+  });
+  assert.equal(spec.id, 'hero-arc');
+  assert.equal(spec.viewBox, '0 0 760 124');
+  assert.equal(spec.primaryPathD.startsWith('M 24,'), true);
+  assert.equal(spec.primaryPathD.includes(' Q 380,'), true);
+  assert.equal(spec.orbitalPathD.includes('a 44,44 0 1,1'), true);
+  assert.equal(spec.primaryText, 'MR. STRANGER SILENT STUDY SANCTUARY');
+  assert.equal(spec.isMinimalDeBulkedMode, true);
+});

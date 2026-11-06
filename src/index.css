@@ -13,12 +13,13 @@
   }
 
   body {
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: 16px;
     background-color: #0C0C0E;
     color: #F4F2ED;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: 0.004em;
+    letter-spacing: 0.02em;
   }
 
   /* Tactile Architectural Paper & Matte Film Grain Overlay (Zero Dot Grids / Zero Gradients) */
@@ -44,9 +45,15 @@
   }
 
   h1, h2, h3, h4, .font-display {
-    font-family: 'Bricolage Grotesque', system-ui, sans-serif;
-    letter-spacing: -0.022em;
+    font-family: 'Syne', 'Cormorant Garamond', serif;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
     text-wrap: balance;
+  }
+
+  button, nav a, label {
+    font-family: 'Syne', 'Cormorant Garamond', serif;
+    letter-spacing: 0.04em;
   }
 
   .font-mono, .tabular-nums {
@@ -433,3 +440,21 @@ html.light select {
   overflow-x: hidden;
   scroll-behavior: auto;
 }
+
+/* ==========================================================================
+   MINIMALIST DE-BULKED TEXT & SCULPTURAL CURVED TYPOGRAPHY
+   - Removes unnecessary explanatory <p> bulk across workspace cards
+   - Gives headings & labels a sculptural curved/italic editorial layout
+   ========================================================================== */
+main section p:not([data-testid]):not([role]):not([id]) {
+  display: none !important;
+}
+
+main h1,
+main h2,
+main h3 {
+  font-family: 'Syne', 'Cormorant Garamond', serif !important;
+  letter-spacing: 0.08em !important;
+  font-style: italic;
+}
+

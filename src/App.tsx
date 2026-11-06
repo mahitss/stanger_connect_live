@@ -281,11 +281,17 @@ import {
   resolveWorkspaceQrDetectionFlashSequence,
   evaluateEditorialTactileSurfaceSpec,
   sanitizeEditorialUiCopy,
+  compactMinimalUiText,
   buildLegalComplianceDocumentsSpec,
   buildWorkspaceSkeletonLoaderSpec,
   buildLiveInteractiveProductDemoSpec,
   evaluateAntiAiSlopAuditSpec,
 } from './utils/rules';
+import {
+  CurvedTextArc,
+  CurvedOrbitalSeal,
+  CurvedSectionHeading,
+} from './components/CurvedTextHeader';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
 import {
@@ -9607,33 +9613,49 @@ export default function App() {
         </header>
 
         {/* Main Scrollable Page Content */}
-        <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-8">
+        <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-6">
+          {/* Sculptural Curved-Text Studio Banner across all Workspace Views */}
+          <div className="mb-6 pb-4 border-b border-zinc-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex-1 w-full">
+              <CurvedTextArc
+                id={`workspace-${activePage}`}
+                testId="workspace-curved-text-arc"
+                primaryText={`MR. STRANGER / ${activePage.toUpperCase()}`}
+                secondaryText={`${activeStudyRoomCode} · ${currentIdentity.streakCount}D · ${currentIdentity.participationPoints}P`}
+                compact={true}
+              />
+            </div>
+            <CurvedOrbitalSeal
+              id={`workspace-seal-${activePage}`}
+              testId="workspace-curved-orbital-seal"
+              ringText="SILENT STUDY · LIVE PRESENCE ·"
+              centerLabel={activeStudyRoomCode}
+            />
+          </div>
+
           {/* ================================================================
               PAGE 1: ONLINE DIRECTORY, DAILY PRODUCTIVITY GOAL & STREAK HUB
               ================================================================ */}
           {activePage === 'hub' && (
-            <section className="space-y-8" aria-label="Online Presence Directory">
+            <section className="space-y-6" aria-label="Online Presence Directory">
               {/* Cohesive Single-Elevation Architectural Ledger Strip */}
-              <div className="tactile-editorial-surface grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-800/80 rounded-md border border-zinc-800/80 bg-[#0A0A0C]">
+              <div className="tactile-editorial-surface grid grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-800/80 border border-zinc-800/80 bg-[#0A0A0C]">
                 <div
-                  className="p-5 space-y-1.5"
+                  className="p-4 space-y-1"
                   data-testid="hub-signed-in-profile-card"
                 >
                   <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
-                    <span>Signed-In Account</span>
+                    <span>Account</span>
                     <span className="font-mono text-[11px] text-zinc-400 tabular-nums">
-                      {userBadgeSummary.unlockedCount}/{userBadgeSummary.totalBadgesCount} Badges
+                      {userBadgeSummary.unlockedCount}/{userBadgeSummary.totalBadgesCount}
                     </span>
                   </div>
                   <div className="text-base font-bold text-white truncate">
                     {currentIdentity.displayName}
                   </div>
-                  <div className="text-xs text-zinc-500 font-mono truncate">
-                    {currentIdentity.email}
-                  </div>
                   {userBadgeSummary.unlockedBadges.length > 0 && (
                     <div
-                      className="flex flex-wrap items-center gap-1 pt-1"
+                      className="flex flex-wrap items-center gap-1 pt-0.5"
                       data-testid="hub-kpi-profile-badges"
                     >
                       {userBadgeSummary.unlockedBadges.map((b) => (
@@ -9649,45 +9671,36 @@ export default function App() {
                 </div>
 
                 <div
-                  className="p-5 space-y-1"
+                  className="p-4 space-y-1"
                   data-testid="hub-kpi-streak-card"
                 >
                   <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
-                    <span>Active Login Streak</span>
+                    <span>Streak</span>
                     <span
                       data-testid="hub-kpi-streak-freeze-status"
                       className="text-[11px] font-mono text-zinc-400 tabular-nums"
                     >
                       {streakFreezeStatus.isStreakAtRisk
-                        ? `At Risk (${streakFreezeStatus.streakAtRiskCount}d)`
-                        : `${streakFreezeStatus.streakFreezesOwned}/${streakFreezeStatus.maxFreezes} Freezes`}
+                        ? `Risk (${streakFreezeStatus.streakAtRiskCount}d)`
+                        : `${streakFreezeStatus.streakFreezesOwned}/${streakFreezeStatus.maxFreezes}`}
                     </span>
                   </div>
-                  <div className="text-2xl font-bold font-mono tabular-nums text-white">
-                    {currentIdentity.streakCount} {currentIdentity.streakCount === 1 ? 'Day' : 'Days'}
-                  </div>
-                  <div className="text-xs text-zinc-500 font-mono tabular-nums">
-                    Checked in: {currentIdentity.lastLoginDate}
+                  <div className="text-xl font-bold font-mono tabular-nums text-white">
+                    {currentIdentity.streakCount}d
                   </div>
                 </div>
 
-                <div className="p-5 space-y-1">
-                  <div className="text-xs text-zinc-400">Participation Points</div>
-                  <div className="text-2xl font-bold font-mono tabular-nums text-white">
-                    {currentIdentity.participationPoints} pts
-                  </div>
-                  <div className="text-xs text-zinc-500">
-                    Study, Chat, Moments &amp; Games
+                <div className="p-4 space-y-1">
+                  <div className="text-xs text-zinc-400">Points</div>
+                  <div className="text-xl font-bold font-mono tabular-nums text-white">
+                    {currentIdentity.participationPoints}p
                   </div>
                 </div>
 
-                <div className="p-5 space-y-1">
-                  <div className="text-xs text-zinc-400">Privacy Shield</div>
+                <div className="p-4 space-y-1">
+                  <div className="text-xs text-zinc-400">Privacy</div>
                   <div className="text-base font-bold text-white capitalize">
                     {(currentIdentity.privacyVisibility || 'everyone').replace('_', ' ')}
-                  </div>
-                  <div className="text-xs text-zinc-500 font-mono truncate">
-                    Key: {e2eeFingerprint.slice(0, 9)}
                   </div>
                 </div>
               </div>
@@ -14451,8 +14464,8 @@ export default function App() {
                       )}
 
                     {otherOnlinePeers.length === 0 && (
-                      <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 text-xs text-zinc-400">
-                        Open this app link in another browser window or share your Study Room invite link with friends to see live multi-user presence and exchange real-time requests.
+                      <div className="px-3 py-2 bg-[#050505] border border-zinc-800/80 text-xs font-mono text-zinc-400">
+                        Standby · {activeStudyRoomCode}
                       </div>
                     )}
                   </motion.div>
@@ -15620,26 +15633,20 @@ export default function App() {
               <footer
                 data-anti-slop-audit={antiSlopSpec.auditVersion}
                 data-enforced-rules-count={antiSlopSpec.enforcedCount}
-                className="mt-10 border-t border-zinc-800 pt-8 space-y-6"
+                className="mt-8 border-t border-zinc-800 pt-6 space-y-4"
               >
-                {/* Live Interactive Product Demo & Skeleton Loader Strip */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Minimal Live Demo & Skeleton Strip */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                   <div
                     data-testid={liveDemoSpec.containerTestId}
-                    className="border border-zinc-800 bg-[#121215] p-5 space-y-3"
+                    className="border border-zinc-800 bg-[#121215] p-4 space-y-2.5"
                   >
-                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5 text-xs font-mono">
-                      <span className="font-semibold text-[#F4F2ED] uppercase">
-                        Live Interactive Product Demo / {liveDemoSpec.activeRoomCode}
-                      </span>
-                      <span className="text-zinc-400 tabular-nums">
-                        {liveDemoSpec.completedMinutesToday}/{liveDemoSpec.dailyTargetMinutes}m ({liveDemoSpec.progressPercent}%)
-                      </span>
-                    </div>
-                    <p className="text-xs text-zinc-400">
-                      Test a live 25-minute focus sprint, switch active study room codes, or jump directly into the Study Room sanctuary.
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <CurvedSectionHeading
+                      id="workspace-demo-curve"
+                      title={`DEMO / ${liveDemoSpec.activeRoomCode}`}
+                      meta={`${liveDemoSpec.completedMinutesToday}/${liveDemoSpec.dailyTargetMinutes}m`}
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
                       {liveDemoSpec.availableRooms.map((roomCode) => (
                         <button
                           key={roomCode}
@@ -15659,68 +15666,53 @@ export default function App() {
                         onClick={() => handleLogFocusMinutes(25)}
                         className="px-3 py-1 text-xs font-semibold bg-[#E6E2D8] text-[#141413] font-mono cursor-pointer"
                       >
-                        +25m Demo Focus
+                        +25m Focus
                       </button>
                     </div>
                   </div>
 
                   <div
                     data-testid={skeletonSpec.containerTestId}
-                    className="border border-zinc-800 bg-[#121215] p-5 space-y-3"
+                    className="border border-zinc-800 bg-[#121215] p-4 space-y-2"
                   >
-                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5 text-xs font-mono">
-                      <span className="font-semibold text-[#F4F2ED] uppercase">
-                        Workspace Skeleton Loader State
-                      </span>
-                      <span className="text-zinc-400">{skeletonSpec.statusLabel}</span>
-                    </div>
-                    <div className="divide-y divide-zinc-800">
+                    <CurvedSectionHeading
+                      id="workspace-skeleton-curve"
+                      title="SKELETON STATE"
+                      meta="READY"
+                    />
+                    <div className="space-y-1.5">
                       {skeletonSpec.rows.map((row) => (
-                        <div key={row.rowId} className="py-2 flex items-center gap-3">
-                          <span className="font-mono text-[11px] text-zinc-500">
+                        <div key={row.rowId} className="flex items-center gap-3">
+                          <span className="font-mono text-[10px] text-zinc-500">
                             {row.indexCode}
                           </span>
-                          <div className="flex-1 space-y-1">
-                            <div
-                              className="h-2 bg-zinc-800"
-                              style={{ width: `${row.primaryWidthPercent}%` }}
-                            />
-                            <div
-                              className="h-1.5 bg-zinc-900"
-                              style={{ width: `${row.secondaryWidthPercent}%` }}
-                            />
-                          </div>
+                          <div
+                            className="h-2 bg-zinc-800"
+                            style={{ width: `${row.primaryWidthPercent}%` }}
+                          />
                         </div>
                       ))}
                     </div>
                   </div>
                 </div>
 
-                {/* Terms of Service & Privacy Policy Ledger */}
+                {/* Minimal Terms of Service & Privacy Policy Bar */}
                 <div className="grid grid-cols-1 lg:grid-cols-2 border border-zinc-800 bg-[#121215] divide-y lg:divide-y-0 lg:divide-x divide-zinc-800">
                   <article
                     id={legalSpec.tosElementId}
                     data-testid={legalSpec.tosElementId}
-                    className="p-5 space-y-3"
+                    className="p-4 space-y-1.5"
                   >
-                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
-                      <h2 className="text-sm font-bold text-[#F4F2ED]">
-                        {legalSpec.termsOfServiceTitle}
-                      </h2>
-                      <span className="font-mono text-[11px] text-zinc-400">
-                        Effective {legalSpec.effectiveDateIso}
-                      </span>
-                    </div>
-                    <div className="divide-y divide-zinc-800">
+                    <CurvedSectionHeading
+                      id="workspace-tos-curve"
+                      title={legalSpec.termsOfServiceTitle}
+                      meta={legalSpec.effectiveDateIso}
+                    />
+                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-400">
                       {legalSpec.termsOfServiceSections.map((sec) => (
-                        <div key={sec.sectionNumber} className="py-2.5 space-y-0.5">
-                          <div className="text-xs font-mono font-semibold text-zinc-200">
-                            {sec.sectionNumber} / {sec.heading}
-                          </div>
-                          <p className="text-xs text-zinc-400 leading-relaxed">
-                            {sec.clauseText}
-                          </p>
-                        </div>
+                        <span key={sec.sectionNumber}>
+                          {sec.sectionNumber} / {compactMinimalUiText(sec.heading, 2)}
+                        </span>
                       ))}
                     </div>
                   </article>
@@ -15728,26 +15720,18 @@ export default function App() {
                   <article
                     id={legalSpec.privacyPolicyElementId}
                     data-testid={legalSpec.privacyPolicyElementId}
-                    className="p-5 space-y-3"
+                    className="p-4 space-y-1.5"
                   >
-                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
-                      <h2 className="text-sm font-bold text-[#F4F2ED]">
-                        {legalSpec.privacyPolicyTitle}
-                      </h2>
-                      <span className="font-mono text-[11px] text-zinc-400">
-                        Effective {legalSpec.effectiveDateIso}
-                      </span>
-                    </div>
-                    <div className="divide-y divide-zinc-800">
+                    <CurvedSectionHeading
+                      id="workspace-privacy-curve"
+                      title={legalSpec.privacyPolicyTitle}
+                      meta={legalSpec.effectiveDateIso}
+                    />
+                    <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-400">
                       {legalSpec.privacyPolicySections.map((sec) => (
-                        <div key={sec.sectionNumber} className="py-2.5 space-y-0.5">
-                          <div className="text-xs font-mono font-semibold text-zinc-200">
-                            {sec.sectionNumber} / {sec.heading}
-                          </div>
-                          <p className="text-xs text-zinc-400 leading-relaxed">
-                            {sec.clauseText}
-                          </p>
-                        </div>
+                        <span key={sec.sectionNumber}>
+                          {sec.sectionNumber} / {compactMinimalUiText(sec.heading, 2)}
+                        </span>
                       ))}
                     </div>
                   </article>

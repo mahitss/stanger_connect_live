@@ -12,7 +12,9 @@ import {
   detectNewlyUnlockedBadgeIds,
   getBadgeEntranceMotionSpec,
   sanitizeEditorialUiCopy,
+  compactMinimalUiText,
 } from '../utils/rules';
+import { CurvedSectionHeading } from './CurvedTextHeader';
 
 export interface AchievementBadgeChipProps {
   badge: EvaluatedUserBadge;
@@ -225,25 +227,18 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
       data-testid="user-profile-badges-card"
     >
       {/* Top Profile Identity & Earned Milestones Row */}
-      <div className="p-5 flex flex-wrap items-start justify-between gap-4">
-        <div className="space-y-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="text-base font-bold text-white tracking-tight">
-              Profile &amp; Achievement Milestones
-            </h2>
-            <span
-              className="text-xs font-mono font-medium text-zinc-300 tabular-nums"
-              data-testid="profile-badges-unlocked-count"
-            >
-              {badgeSummary.unlockedCount} / {badgeSummary.totalBadgesCount} Badges Unlocked (
-              {badgeSummary.completionPercent}%)
-            </span>
-          </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-400">
-            <span className="font-semibold text-white">{displayName}</span>
-            <span className="font-mono text-zinc-400">{email}</span>
-            <span className="truncate max-w-md">{sanitizeEditorialUiCopy(bio)}</span>
-          </div>
+      <div className="p-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex-1 min-w-[220px]">
+          <CurvedSectionHeading
+            id="profile-milestones"
+            title={`${displayName} / MILESTONES`}
+          />
+          <span
+            className="text-xs font-mono font-medium text-zinc-400 tabular-nums"
+            data-testid="profile-badges-unlocked-count"
+          >
+            {badgeSummary.unlockedCount}/{badgeSummary.totalBadgesCount} ({badgeSummary.completionPercent}%)
+          </span>
         </div>
 
         <div
@@ -270,9 +265,9 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
         <div
           role="status"
           data-testid="profile-badge-feedback-banner"
-          className="px-5 py-3 text-xs flex items-center justify-between gap-3 bg-[#18181B] text-zinc-200"
+          className="px-4 py-2 text-xs flex items-center justify-between gap-3 bg-[#18181B] text-zinc-200"
         >
-          <span>{noteFeedback.message}</span>
+          <span>{compactMinimalUiText(noteFeedback.message, 5)}</span>
           <button
             type="button"
             onClick={() => setNoteFeedback(null)}
@@ -286,52 +281,34 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
       {/* Streak Freeze Protection Ledger Row */}
       <div
         data-testid="streak-freeze-panel"
-        className="p-5 flex flex-wrap items-center justify-between gap-4"
+        className="p-4 flex flex-wrap items-center justify-between gap-4"
       >
-        <div className="space-y-1 min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-3">
-            <h3 className="text-xs font-semibold text-white">
-              Streak Freeze Protection
-            </h3>
-            <span
-              data-testid="streak-freeze-headline"
-              className="text-xs font-mono text-zinc-300 tabular-nums"
-            >
-              {sanitizeEditorialUiCopy(streakFreezeStatus.protectionHeadline)}
-            </span>
-          </div>
-
-          <p
-            data-testid="streak-freeze-subtext"
-            className="text-xs text-zinc-400 leading-relaxed"
+        <div className="flex flex-wrap items-center gap-4 text-xs font-mono text-zinc-400 tabular-nums">
+          <span
+            data-testid="streak-freeze-headline"
+            className="font-semibold text-white"
           >
-            {sanitizeEditorialUiCopy(streakFreezeStatus.protectionSubtext)}
-          </p>
-
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 pt-0.5 text-[11px] font-mono text-zinc-400 tabular-nums">
-            <span data-testid="streak-freeze-owned-count">
-              Equipped Freezes:{' '}
-              <strong className="text-white">
-                {streakFreezeStatus.streakFreezesOwned}/{streakFreezeStatus.maxFreezes}
+            {compactMinimalUiText(streakFreezeStatus.protectionHeadline, 3)}
+          </span>
+          <span data-testid="streak-freeze-subtext" className="sr-only">
+            {compactMinimalUiText(streakFreezeStatus.protectionSubtext, 3)}
+          </span>
+          <span data-testid="streak-freeze-owned-count">
+            Freezes:{' '}
+            <strong className="text-white">
+              {streakFreezeStatus.streakFreezesOwned}/{streakFreezeStatus.maxFreezes}
+            </strong>
+          </span>
+          <span data-testid="streak-freeze-available-points">
+            Pts: <strong className="text-white">{participationPoints}</strong>
+          </span>
+          {streakFreezeStatus.frozenDates.length > 0 && (
+            <span data-testid="streak-freeze-frozen-dates">
+              <strong className="text-zinc-200">
+                {streakFreezeStatus.frozenDates.join(', ')}
               </strong>
             </span>
-            <span>
-              Freeze Cost:{' '}
-              <strong className="text-white">{streakFreezeStatus.costPoints} pts</strong>
-            </span>
-            <span data-testid="streak-freeze-available-points">
-              Available Balance:{' '}
-              <strong className="text-white">{participationPoints} pts</strong>
-            </span>
-            {streakFreezeStatus.frozenDates.length > 0 && (
-              <span data-testid="streak-freeze-frozen-dates">
-                Preserved Days:{' '}
-                <strong className="text-zinc-200">
-                  {streakFreezeStatus.frozenDates.join(', ')}
-                </strong>
-              </span>
-            )}
-          </div>
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -396,38 +373,32 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
               data-unlocked={isUnlocked ? 'true' : 'false'}
               data-motion-mode={cardMotionSpec.animationMode}
               data-motion-key={cardMotionSpec.motionKey}
-              className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
+              className="px-4 py-3 flex flex-col lg:flex-row lg:items-center justify-between gap-3"
             >
-              <div className="space-y-1.5 min-w-0 flex-1">
-                <div className="flex flex-wrap items-center gap-3">
-                  <span
-                    data-testid={`profile-badge-icon-box-${badge.id}`}
-                    className="font-mono text-xs text-zinc-400"
-                  >
-                    0{index + 1}
-                  </span>
-                  <h3 className="text-sm font-semibold text-white">
-                    {badge.title}
-                  </h3>
-                  <span className="text-[11px] font-mono text-zinc-400 tabular-nums">
-                    +{badge.pointsReward} pts reward
-                  </span>
-                  <span
-                    data-testid={`profile-badge-status-${badge.id}`}
-                    className={`inline-flex items-center gap-1 text-[11px] font-mono font-medium whitespace-nowrap ${
-                      isUnlocked ? 'text-zinc-200' : 'text-zinc-500'
-                    }`}
-                  >
-                    <span>{isUnlocked ? (isNewlyUnlocked ? 'Newly Unlocked' : 'Unlocked') : 'Locked'}</span>
-                  </span>
-                </div>
-
-                <p className="text-xs text-zinc-400 leading-relaxed">
-                  {sanitizeEditorialUiCopy(badge.description)}
-                </p>
+              <div className="flex flex-wrap items-center gap-3 min-w-0 flex-1">
+                <span
+                  data-testid={`profile-badge-icon-box-${badge.id}`}
+                  className="font-mono text-xs text-zinc-400"
+                >
+                  0{index + 1}
+                </span>
+                <h3 className="text-sm font-semibold text-white">
+                  {badge.title}
+                </h3>
+                <span className="text-[11px] font-mono text-zinc-400 tabular-nums">
+                  +{badge.pointsReward}p
+                </span>
+                <span
+                  data-testid={`profile-badge-status-${badge.id}`}
+                  className={`inline-flex items-center gap-1 text-[11px] font-mono font-medium whitespace-nowrap ${
+                    isUnlocked ? 'text-zinc-200' : 'text-zinc-500'
+                  }`}
+                >
+                  <span>{isUnlocked ? 'Unlocked' : 'Locked'}</span>
+                </span>
               </div>
 
-              <div className="lg:w-[380px] shrink-0 space-y-2">
+              <div className="lg:w-[340px] shrink-0 space-y-1.5">
                 <div className="flex items-center justify-between text-[11px] font-mono tabular-nums">
                   <span
                     className="text-zinc-300"
@@ -597,33 +568,12 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
         </form>
       )}
 
-      {/* Footer Summary of Current Metrics */}
-      <div className="px-5 py-3 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-zinc-400 tabular-nums">
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span>
-            Active Streak: <strong className="text-white">{streakCount}d</strong>
-          </span>
-          <span>
-            Streak Freezes:{' '}
-            <strong className="text-white">
-              {streakFreezeStatus.streakFreezesOwned}/{streakFreezeStatus.maxFreezes}
-            </strong>
-          </span>
-          <span>
-            Consecutive Goal Days:{' '}
-            <strong className="text-white">
-              {badgeSummary.consecutiveGoalDays}d in a row
-            </strong>
-          </span>
-          <span>
-            Helpful Notes:{' '}
-            <strong className="text-white">{badgeSummary.helpfulNotesCount}</strong>
-          </span>
-        </div>
-        <div>
-          Total Participation:{' '}
-          <strong className="text-white">{participationPoints} pts</strong>
-        </div>
+      {/* Minimal Footer Summary */}
+      <div className="px-4 py-2 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-zinc-400 tabular-nums">
+        <span>{streakCount}d Streak</span>
+        <span>{streakFreezeStatus.streakFreezesOwned}/{streakFreezeStatus.maxFreezes} Freezes</span>
+        <span>{badgeSummary.consecutiveGoalDays}d Goal</span>
+        <span>{participationPoints} pts</span>
       </div>
     </section>
   );

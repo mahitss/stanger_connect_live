@@ -5,12 +5,18 @@ import {
   Send,
 } from './ArchitecturalGlyphs';
 import {
+  CurvedTextArc,
+  CurvedOrbitalSeal,
+  CurvedSectionHeading,
+} from './CurvedTextHeader';
+import {
   GLASS_ARCHITECTURAL_FLOORS,
   evaluateRollingBookKinematics,
   evaluateVerticalArchitectureScrollState,
   buildInitialCharacterMessengerBubbles,
   appendCharacterMessengerPing,
   sanitizeEditorialUiCopy,
+  compactMinimalUiText,
   buildLegalComplianceDocumentsSpec,
   buildWorkspaceSkeletonLoaderSpec,
   buildLiveInteractiveProductDemoSpec,
@@ -800,11 +806,11 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
         data-testid="glass-3d-architecture-canvas"
         data-book-roll-percent={currentKinematics.rollProgressPercent}
         data-active-floor={currentKinematics.activeFloorIndex}
-        className="fixed inset-0 z-0 pointer-events-none opacity-35"
+        className="fixed inset-0 z-0 pointer-events-none opacity-45"
       />
 
-      {/* Strict 3-Zone Single-Row Top Bar Contract */}
-      <header className="sticky top-0 z-30 border-b border-zinc-800 bg-[#0C0C0E] px-6 py-3.5">
+      {/* Minimal 3-Zone Top Bar */}
+      <header className="sticky top-0 z-30 border-b border-zinc-800 bg-[#0C0C0E] px-6 py-3">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-8">
           <a
             href="#top"
@@ -812,9 +818,9 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
               e.preventDefault();
               window.scrollTo({ top: 0, behavior: 'auto' });
             }}
-            className="font-display text-lg font-bold tracking-tight text-[#F4F2ED] whitespace-nowrap shrink-0"
+            className="font-display text-base font-bold tracking-widest text-[#F4F2ED] whitespace-nowrap shrink-0"
           >
-            Mr. Stranger
+            MR. STRANGER
           </a>
 
           <nav
@@ -822,11 +828,11 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
             className="hidden md:flex items-center gap-6 text-xs font-medium text-[#9E9B93] shrink-0"
           >
             {[
-              { floorIndex: 1, shortLabel: '01. Study Room' },
-              { floorIndex: 2, shortLabel: '02. Chat & Calls' },
-              { floorIndex: 3, shortLabel: '03. Moments Feed' },
-              { floorIndex: 4, shortLabel: '04. QR Scanner' },
-              { floorIndex: 5, shortLabel: '05. Break Arcade' },
+              { floorIndex: 1, shortLabel: '01 Study' },
+              { floorIndex: 2, shortLabel: '02 Chat' },
+              { floorIndex: 3, shortLabel: '03 Moments' },
+              { floorIndex: 4, shortLabel: '04 QR' },
+              { floorIndex: 5, shortLabel: '05 Arcade' },
             ].map((navItem) => {
               const floor =
                 GLASS_ARCHITECTURAL_FLOORS.find(
@@ -851,25 +857,21 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
             })}
           </nav>
 
-          <div className="flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
             <button
               type="button"
               data-testid="toggle-book-roll-btn"
               onClick={handleToggleBookRoll}
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-[#9E9B93] hover:text-[#F4F2ED] whitespace-nowrap shrink-0 cursor-pointer"
+              className="hidden sm:inline-flex items-center px-2.5 py-1.5 text-xs font-mono text-[#9E9B93] hover:text-[#F4F2ED] whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <span>
-                {bookRollPercent >= 75
-                  ? 'Roll Guidebook Up'
-                  : 'Roll Guidebook Down'}
-              </span>
+              <span>{bookRollPercent >= 75 ? 'Roll Up' : 'Roll Down'}</span>
             </button>
 
             <button
               type="button"
               data-testid="switch-to-workspace-studio-btn"
               onClick={() => onEnterWorkspacePage('hub', false)}
-              className="inline-flex items-center gap-2 border border-zinc-700 bg-[#E6E2D8] px-4 py-2 text-xs font-semibold text-[#141413] whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center border border-zinc-700 bg-[#E6E2D8] px-4 py-1.5 text-xs font-semibold text-[#141413] whitespace-nowrap shrink-0 cursor-pointer"
             >
               <span>Enter Mr. Stranger Workspace</span>
             </button>
@@ -877,55 +879,52 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
         </div>
       </header>
 
-      {/* Main Editorial Studio Content */}
-      <main className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 pt-10 pb-24">
-        {/* SECTION 1: EDITORIAL BROADSHEET HERO STAGE + LIVE INTERACTIVE PRODUCT DEMO */}
+      {/* Main Sculptural Curved-Text Studio Content (De-Bulked & Minimal) */}
+      <main className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 pt-6 pb-16 space-y-8">
+        {/* SECTION 1: CURVED-TEXT HERO ARC + ORBITAL SEAL + COMPACT LIVE DEMO */}
         <section
           data-testid="front-glass-base-hero"
-          className="mb-14 border-b border-zinc-800 pb-12"
+          className="border-b border-zinc-800 pb-8"
         >
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-            {/* Left Column: Editorial Value Proposition */}
-            <div className="lg:col-span-7 space-y-5">
-              <div className="flex flex-wrap items-center gap-3 text-xs text-[#9E9B93] font-mono">
-                <span>01 / Live Presence Directory</span>
-                <span>02 / Invite-First Messenger</span>
-                <span>03 / Silent Study Sanctuary</span>
-                <span className="text-zinc-300">
-                  {currentDisplayName} ({currentEmail})
-                </span>
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+            {/* Left Column: Curved SVG Headline Arc + Orbital Seal + Minimal Actions */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="flex flex-col sm:flex-row items-center gap-4">
+                <div className="flex-1 w-full">
+                  <CurvedTextArc
+                    id="studio-hero"
+                    testId="curved-text-hero-arc"
+                    primaryText="MR. STRANGER / SILENT STUDY"
+                    secondaryText="FOCUS · VOICE · ARCADE"
+                  />
+                </div>
+                <CurvedOrbitalSeal
+                  id="studio-orbital"
+                  testId="curved-text-orbital-seal"
+                  ringText="LIVE PRESENCE · SILENT STUDY ·"
+                  centerLabel={activeStudyRoomCode}
+                />
               </div>
 
-              <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-[#F4F2ED] leading-tight">
-                Meet focused minds. Co-study in silence. Connect with mutual consent.
-              </h1>
-
-              <p className="max-w-2xl text-sm sm:text-base text-[#9E9B93] leading-relaxed">
-                <strong className="text-[#F4F2ED] font-semibold">Mr. Stranger</strong>{' '}
-                combines an invite-first presence directory and peer-to-peer WebRTC voice
-                and video calling with 25-minute Pomodoro study sanctuaries, ambient
-                soundscapes, optical QR room handoff, and multiplayer break games.
-              </p>
-
-              <div className="pt-1 flex flex-wrap items-center gap-4 text-xs text-[#9E9B93] font-mono tabular-nums">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-b border-zinc-800 py-2.5 text-xs font-mono tabular-nums text-[#9E9B93]">
                 <span className="text-[#F4F2ED] font-semibold">
-                  Room {activeStudyRoomCode}
+                  {currentDisplayName}
                 </span>
                 <span>
-                  {dailyCompletedMinutes}/{dailyTargetMinutes}m Focus Logged
+                  {dailyCompletedMinutes}/{dailyTargetMinutes}m
                 </span>
-                <span>{streakCount}-Day Streak</span>
+                <span>{streakCount}d Streak</span>
                 <span>{participationPoints} pts</span>
                 <span data-testid="rolling-book-state-badge">
-                  {sanitizeEditorialUiCopy(currentKinematics.bookStateLabel)}
+                  Roll {currentKinematics.rollProgressPercent}%
                 </span>
               </div>
 
-              <div className="pt-2 flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() => onEnterWorkspacePage('hub', false)}
-                  className="px-4 py-2.5 border border-zinc-700 bg-[#E6E2D8] text-xs font-semibold text-[#141413] whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-4 py-2 border border-zinc-700 bg-[#E6E2D8] text-xs font-semibold text-[#141413] whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   Open Live Workspace
                 </button>
@@ -933,7 +932,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                   type="button"
                   data-testid="glass-hero-log-pomodoro-btn"
                   onClick={onQuickLogFocusSprint}
-                  className="px-4 py-2.5 border border-zinc-700 bg-[#121215] text-xs font-medium text-[#F4F2ED] font-mono tabular-nums whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-4 py-2 border border-zinc-700 bg-[#121215] text-xs font-mono tabular-nums text-[#F4F2ED] whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   +25m Focus ({dailyCompletedMinutes}/{dailyTargetMinutes}m)
                 </button>
@@ -941,127 +940,85 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                   type="button"
                   data-testid="glass-hero-open-qr-btn"
                   onClick={() => onEnterWorkspacePage('hub', true)}
-                  className="px-4 py-2.5 border border-zinc-800 bg-[#0C0C0E] text-xs font-medium text-[#9E9B93] hover:text-[#F4F2ED] font-mono tabular-nums whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-4 py-2 border border-zinc-800 bg-[#0C0C0E] text-xs font-mono tabular-nums text-[#9E9B93] hover:text-[#F4F2ED] whitespace-nowrap shrink-0 cursor-pointer"
                 >
-                  Scan Room QR ({recentQrScansCount})
+                  Scan QR ({recentQrScansCount})
                 </button>
               </div>
             </div>
 
-            {/* Right Column: LIVE INTERACTIVE PRODUCT DEMO CONSOLE */}
+            {/* Right Column: Minimal Live Interactive Product Demo */}
             <div
               data-testid={liveDemoSpec.containerTestId}
-              className="lg:col-span-5 border border-zinc-800 bg-[#121215] p-5 space-y-4"
+              className="lg:col-span-5 border border-zinc-800 bg-[#121215] p-4 space-y-3"
             >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3 text-xs">
-                <span className="font-semibold text-[#F4F2ED] uppercase tracking-wider font-mono">
-                  Live Product Demo / {liveDemoSpec.activeRoomCode}
-                </span>
-                <span className="font-mono tabular-nums text-[#9E9B93]">
-                  {liveDemoSpec.isRunning ? 'Timer Active' : 'Timer Paused'} ({liveDemoSpec.timerMinutes}:00)
-                </span>
+              <CurvedSectionHeading
+                id="live-demo-curve"
+                title={`DEMO / ${liveDemoSpec.activeRoomCode}`}
+                meta={`${liveDemoSpec.timerMinutes}:00 · ${liveDemoSpec.progressPercent}%`}
+              />
+
+              <div className="grid grid-cols-2 gap-2">
+                {liveDemoSpec.availableRooms.slice(0, 2).map((room) => (
+                  <button
+                    key={room}
+                    type="button"
+                    onClick={() => setDemoRoomCode(room)}
+                    className={`px-3 py-1.5 text-xs font-mono border text-center cursor-pointer ${
+                      demoRoomCode === room
+                        ? 'border-zinc-500 bg-[#1C1C21] text-[#F4F2ED] font-semibold'
+                        : 'border-zinc-800 bg-[#0C0C0E] text-[#9E9B93]'
+                    }`}
+                  >
+                    {room}
+                  </button>
+                ))}
               </div>
 
-              {/* Interactive Study Room Switcher */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-mono text-[#9E9B93]">
-                  <span>Select Active Study Room</span>
-                  <span>{liveDemoSpec.progressPercent}% of Daily Goal</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  {liveDemoSpec.availableRooms.slice(0, 2).map((room) => (
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800">
+                <div className="flex items-center gap-1">
+                  {[15, 25, 50].map((mins) => (
                     <button
-                      key={room}
+                      key={mins}
                       type="button"
-                      onClick={() => setDemoRoomCode(room)}
-                      className={`px-3 py-1.5 text-xs font-mono border text-left cursor-pointer ${
-                        demoRoomCode === room
-                          ? 'border-zinc-500 bg-[#1C1C21] text-[#F4F2ED] font-semibold'
+                      onClick={() => setDemoTimerMinutes(mins)}
+                      className={`flex-1 py-1 text-[11px] font-mono border cursor-pointer ${
+                        demoTimerMinutes === mins
+                          ? 'border-zinc-500 bg-[#1C1C21] text-[#F4F2ED]'
                           : 'border-zinc-800 bg-[#0C0C0E] text-[#9E9B93]'
                       }`}
                     >
-                      {room}
+                      {mins}m
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {['Rain', 'Cafe', 'Forest'].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setDemoSoundscape(preset)}
+                      className={`flex-1 py-1 text-[11px] font-mono border cursor-pointer ${
+                        demoSoundscape === preset
+                          ? 'border-zinc-500 bg-[#1C1C21] text-[#F4F2ED]'
+                          : 'border-zinc-800 bg-[#0C0C0E] text-[#9E9B93]'
+                      }`}
+                    >
+                      {preset}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {/* Interactive Pomodoro Duration & Soundscape Controls */}
-              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800">
-                <div className="space-y-1">
-                  <span className="block text-[11px] font-mono text-[#9E9B93]">
-                    Sprint Duration
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {[15, 25, 50].map((mins) => (
-                      <button
-                        key={mins}
-                        type="button"
-                        onClick={() => setDemoTimerMinutes(mins)}
-                        className={`px-2 py-1 text-[11px] font-mono border cursor-pointer ${
-                          demoTimerMinutes === mins
-                            ? 'border-zinc-500 bg-[#1C1C21] text-[#F4F2ED]'
-                            : 'border-zinc-800 bg-[#0C0C0E] text-[#9E9B93]'
-                        }`}
-                      >
-                        {mins}m
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <span className="block text-[11px] font-mono text-[#9E9B93]">
-                    Ambient Soundscape
-                  </span>
-                  <div className="flex items-center gap-1">
-                    {['Rain', 'Cafe', 'Forest'].map((preset) => (
-                      <button
-                        key={preset}
-                        type="button"
-                        onClick={() => setDemoSoundscape(preset)}
-                        className={`px-2 py-1 text-[11px] font-mono border cursor-pointer ${
-                          demoSoundscape === preset
-                            ? 'border-zinc-500 bg-[#1C1C21] text-[#F4F2ED]'
-                            : 'border-zinc-800 bg-[#0C0C0E] text-[#9E9B93]'
-                        }`}
-                      >
-                        {preset}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Interactive Demo Actions & Guidebook Slider */}
               <div className="pt-2 border-t border-zinc-800 flex items-center justify-between gap-2">
                 <button
                   type="button"
                   onClick={() => setDemoIsRunning((prev) => !prev)}
-                  className="px-3 py-1.5 border border-zinc-700 bg-[#0C0C0E] text-xs font-mono text-[#F4F2ED] cursor-pointer"
+                  className="px-3 py-1 border border-zinc-700 bg-[#0C0C0E] text-xs font-mono text-[#F4F2ED] cursor-pointer"
                 >
-                  {demoIsRunning ? 'Pause Demo Timer' : 'Start Demo Timer'}
+                  {demoIsRunning ? 'Pause' : 'Start'}
                 </button>
-                <button
-                  type="button"
-                  onClick={onQuickLogFocusSprint}
-                  className="px-3 py-1.5 border border-zinc-700 bg-[#E6E2D8] text-xs font-semibold text-[#141413] font-mono cursor-pointer"
-                >
-                  Log +{demoTimerMinutes}m to Workspace
-                </button>
-              </div>
-
-              <div className="pt-2 border-t border-zinc-800 space-y-1.5">
-                <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-[#9E9B93]">
-                  <span>Guidebook Chapter Scroll ({currentKinematics.rollProgressPercent}%)</span>
-                  <button
-                    type="button"
-                    onClick={() => setIsAutoRollingBook((prev) => !prev)}
-                    className="text-[#F4F2ED] underline cursor-pointer"
-                  >
-                    {isAutoRollingBook ? 'Pause Auto-Scroll' : 'Resume Auto-Scroll'}
-                  </button>
-                </div>
                 <input
                   type="range"
                   min={0}
@@ -1070,27 +1027,26 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                   onChange={handleSliderRollChange}
                   aria-label="Roll Mr. Stranger Feature Guidebook Up and Down"
                   data-testid="book-roll-slider"
-                  className="h-1.5 w-full cursor-pointer appearance-none bg-zinc-800 accent-[#F4F2ED]"
+                  className="h-1.5 flex-1 cursor-pointer appearance-none bg-zinc-800 accent-[#F4F2ED]"
                 />
+                <button
+                  type="button"
+                  onClick={onQuickLogFocusSprint}
+                  className="px-3 py-1 border border-zinc-700 bg-[#E6E2D8] text-xs font-semibold text-[#141413] font-mono cursor-pointer"
+                >
+                  +{demoTimerMinutes}m
+                </button>
               </div>
             </div>
           </div>
         </section>
 
-        {/* SECTION 2: ARCHITECTURAL LEDGER CHAPTERS (Hairline-Divided Editorial Rows) */}
-        <div className="divide-y divide-zinc-800">
-          {GLASS_ARCHITECTURAL_FLOORS.map((floor, idx) => {
-            const floorBubbles = messengerBubbles
+        {/* SECTION 2: COMPACT CURVED-HEADER STUDIO INDEX (5 Stages, Zero Prose Bulk) */}
+        <div className="divide-y divide-zinc-800 border-b border-zinc-800">
+          {GLASS_ARCHITECTURAL_FLOORS.map((floor) => {
+            const latestBubble = messengerBubbles
               .filter((b) => b.floorIndex === floor.floorIndex)
-              .slice(-2);
-            const isEven = idx % 2 === 1;
-            const featureActionLabels: Record<number, string> = {
-              1: `Enter Study Room (${activeStudyRoomCode})`,
-              2: 'Open Invite-First Messenger & Calls',
-              3: 'Explore Moments & Townsquare Feed',
-              4: 'Launch QR Room Scanner & Analytics',
-              5: 'Open Privacy Vault & Break Arcade',
-            };
+              .slice(-1)[0];
 
             return (
               <section
@@ -1101,156 +1057,76 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                 data-testid={`glass-architecture-floor-${floor.floorIndex}`}
                 onPointerMove={(e) => handleCardPointerMove(floor.floorIndex, e)}
                 onPointerLeave={() => handleCardPointerLeave(floor.floorIndex)}
-                className="py-10 first:pt-2"
+                className="py-4"
               >
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-                  <div
-                    className={`lg:col-span-7 space-y-4 ${
-                      isEven ? 'lg:order-2' : 'lg:order-1'
-                    }`}
-                  >
-                    <div className="flex flex-wrap items-center gap-3 text-xs text-[#9E9B93] font-mono">
-                      <span className="font-semibold text-[#F4F2ED]">
-                        0{floor.floorIndex}
-                      </span>
-                      <span>{sanitizeEditorialUiCopy(floor.bookChapterTitle)}</span>
-                      <span>/</span>
-                      <span>{sanitizeEditorialUiCopy(floor.tierLabel)}</span>
-                    </div>
-
-                    <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-[#F4F2ED]">
-                      {sanitizeEditorialUiCopy(floor.title)}
-                    </h2>
-
-                    <p className="text-sm text-[#9E9B93] leading-relaxed max-w-2xl">
-                      {sanitizeEditorialUiCopy(floor.whatTheAppDoes)}
-                    </p>
-
-                    <div className="divide-y divide-zinc-800 border-t border-b border-zinc-800">
-                      {floor.featureHighlights.map((feat, fIdx) => (
-                        <div
-                          key={fIdx}
-                          className="flex items-baseline gap-3 text-xs sm:text-sm text-zinc-200 py-2"
-                        >
-                          <span className="font-mono text-xs text-[#9E9B93] shrink-0">
-                            0{fIdx + 1}
-                          </span>
-                          <span>{sanitizeEditorialUiCopy(feat)}</span>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="pt-2 flex flex-wrap items-center gap-3">
-                      <button
-                        type="button"
-                        data-testid={`launch-floor-workspace-btn-${floor.floorIndex}`}
-                        onClick={() =>
-                          onEnterWorkspacePage(
-                            floor.targetWorkspacePage,
-                            floor.floorIndex === 4
-                          )
-                        }
-                        className="inline-flex items-center gap-2 border border-zinc-700 bg-[#E6E2D8] px-4 py-2 text-xs font-semibold text-[#141413] whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        <span>
-                          {featureActionLabels[floor.floorIndex] ||
-                            'Open in Mr. Stranger'}
-                        </span>
-                      </button>
-
-                      <button
-                        type="button"
-                        data-testid={`trigger-messenger-ping-btn-${floor.floorIndex}`}
-                        onClick={() => handleSendCharacterPing(floor.floorIndex)}
-                        className="inline-flex items-center gap-2 border border-zinc-800 bg-[#121215] px-3.5 py-2 text-xs font-medium text-[#F4F2ED] whitespace-nowrap shrink-0 cursor-pointer"
-                      >
-                        <span>
-                          Send Quick Ping to {floor.character.name.split(' ')[0]}
-                        </span>
-                      </button>
-                    </div>
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-center">
+                  {/* Curved SVG Stage Title */}
+                  <div className="lg:col-span-5">
+                    <CurvedSectionHeading
+                      id={`floor-${floor.floorIndex}`}
+                      title={`0${floor.floorIndex} / ${compactMinimalUiText(floor.tierLabel, 3)}`}
+                      meta={floor.character.handle}
+                    />
                   </div>
 
-                  {/* Right Column: Live Room Telemetry & Message Dispatch Ledger */}
+                  {/* Minimal 1-Line Ping Strip */}
                   <div
                     data-testid={`phone-character-card-${floor.floorIndex}`}
-                    className={`lg:col-span-5 ${
-                      isEven ? 'lg:order-1' : 'lg:order-2'
-                    }`}
+                    className="lg:col-span-4"
                   >
-                    <div className="border border-zinc-800 bg-[#121215] p-5 space-y-4">
-                      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-zinc-700 bg-[#18181C] text-xs font-mono font-semibold text-[#F4F2ED]">
-                            {floor.character.name
-                              .split(' ')
-                              .map((n) => n[0])
-                              .join('')}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="text-xs font-semibold text-[#F4F2ED] truncate">
-                              {floor.character.name}{' '}
-                              <span className="font-mono font-normal text-[#9E9B93]">
-                                / {floor.character.handle}
-                              </span>
-                            </div>
-                            <div className="text-[11px] text-[#9E9B93] truncate">
-                              {sanitizeEditorialUiCopy(floor.character.role)} / {sanitizeEditorialUiCopy(floor.character.messengerApp)}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        {floorBubbles.map((bubble) => (
-                          <div
-                            key={bubble.id}
-                            className="border border-zinc-800 bg-[#0C0C0E] p-3 text-xs"
-                          >
-                            <div className="flex items-center justify-between text-[11px] text-[#9E9B93] mb-1">
-                              <span className="font-medium text-[#F4F2ED]">
-                                {bubble.characterName}
-                              </span>
-                              <span className="font-mono tabular-nums">
-                                {bubble.timestampLabel}
-                              </span>
-                            </div>
-                            <p className="leading-relaxed text-zinc-300">
-                              {sanitizeEditorialUiCopy(bubble.text)}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-
-                      <form
-                        onSubmit={(e) => {
-                          e.preventDefault();
-                          handleSendCharacterPing(floor.floorIndex);
-                        }}
-                        className="flex items-center gap-2 pt-2 border-t border-zinc-800"
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleSendCharacterPing(floor.floorIndex);
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <span className="font-mono text-xs text-[#9E9B93] shrink-0">
+                        {floor.character.name.split(' ')[0]}:
+                      </span>
+                      <input
+                        type="text"
+                        value={customInputByFloor[floor.floorIndex] || ''}
+                        onChange={(e) =>
+                          setCustomInputByFloor((prev) => ({
+                            ...prev,
+                            [floor.floorIndex]: e.target.value,
+                          }))
+                        }
+                        placeholder={
+                          latestBubble
+                            ? compactMinimalUiText(latestBubble.text, 4)
+                            : 'Ping...'
+                        }
+                        aria-label={`Send message to ${floor.character.name}`}
+                        className="flex-1 border border-zinc-800 bg-[#0C0C0E] px-2.5 py-1 text-xs text-[#F4F2ED] placeholder-[#9E9B93] focus:border-zinc-500 focus:outline-none"
+                      />
+                      <button
+                        type="submit"
+                        data-testid={`trigger-messenger-ping-btn-${floor.floorIndex}`}
+                        aria-label={`Send to ${floor.character.name}`}
+                        className="inline-flex h-7 px-2.5 items-center justify-center border border-zinc-700 bg-[#121215] text-xs font-mono text-[#F4F2ED] shrink-0 cursor-pointer"
                       >
-                        <input
-                          type="text"
-                          value={customInputByFloor[floor.floorIndex] || ''}
-                          onChange={(e) =>
-                            setCustomInputByFloor((prev) => ({
-                              ...prev,
-                              [floor.floorIndex]: e.target.value,
-                            }))
-                          }
-                          placeholder={`Message ${floor.character.name.split(' ')[0]}...`}
-                          aria-label={`Send message to ${floor.character.name}`}
-                          className="flex-1 border border-zinc-800 bg-[#0C0C0E] px-3 py-1.5 text-xs text-[#F4F2ED] placeholder-[#9E9B93] focus:border-zinc-500 focus:outline-none"
-                        />
-                        <button
-                          type="submit"
-                          aria-label={`Send to ${floor.character.name}`}
-                          className="inline-flex h-8 px-3 items-center justify-center border border-zinc-700 bg-[#E6E2D8] text-xs font-semibold text-[#141413] shrink-0 cursor-pointer"
-                        >
-                          <Send className="h-3.5 w-3.5" />
-                        </button>
-                      </form>
-                    </div>
+                        <Send className="h-3 w-3" />
+                      </button>
+                    </form>
+                  </div>
+
+                  {/* Single Launch Action */}
+                  <div className="lg:col-span-3 flex justify-end">
+                    <button
+                      type="button"
+                      data-testid={`launch-floor-workspace-btn-${floor.floorIndex}`}
+                      onClick={() =>
+                        onEnterWorkspacePage(
+                          floor.targetWorkspacePage,
+                          floor.floorIndex === 4
+                        )
+                      }
+                      className="border border-zinc-700 bg-[#E6E2D8] px-3.5 py-1.5 text-xs font-semibold text-[#141413] whitespace-nowrap shrink-0 cursor-pointer"
+                    >
+                      Open 0{floor.floorIndex}
+                    </button>
                   </div>
                 </div>
               </section>
@@ -1258,73 +1134,55 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
           })}
         </div>
 
-        {/* SECTION 3: ARCHITECTURAL SKELETON LOADER & LEGAL GOVERNANCE LEDGER (TOS + PRIVACY POLICY) */}
-        <section className="mt-12 border-t border-zinc-800 pt-10 space-y-10">
-          {/* Skeleton Loader Synchronization Ledger */}
+        {/* SECTION 3: MINIMAL SKELETON & LEGAL BAR (TOS + PRIVACY POLICY) */}
+        <section className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div
             data-testid={skeletonSpec.containerTestId}
-            className="border border-zinc-800 bg-[#121215] p-5 space-y-3"
+            className="border border-zinc-800 bg-[#121215] p-4 space-y-2"
           >
-            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-3">
-              <div>
-                <h2 className="text-xs font-mono uppercase tracking-wider text-[#F4F2ED] font-semibold">
-                  Directory &amp; Telemetry Skeleton Loader State
-                </h2>
-                <p className="text-xs text-[#9E9B93]">
-                  {skeletonSpec.statusLabel}
-                </p>
-              </div>
+            <div className="flex items-center justify-between">
+              <CurvedSectionHeading
+                id="skeleton-curve"
+                title="SKELETON STATE"
+                meta={isSkeletonPreviewActive ? 'SYNCING' : 'READY'}
+              />
               <button
                 type="button"
                 onClick={() => setIsSkeletonPreviewActive((prev) => !prev)}
-                className="px-3 py-1.5 border border-zinc-700 bg-[#0C0C0E] text-xs font-mono text-[#F4F2ED] cursor-pointer"
+                className="px-2.5 py-1 border border-zinc-700 bg-[#0C0C0E] text-[11px] font-mono text-[#F4F2ED] cursor-pointer"
               >
-                {isSkeletonPreviewActive ? 'Show Loaded State' : 'Preview Skeleton Loader'}
+                Toggle
               </button>
             </div>
-            <div className="divide-y divide-zinc-800">
+            <div className="space-y-1.5">
               {skeletonSpec.rows.map((row) => (
-                <div key={row.rowId} className="py-2.5 flex items-center gap-4">
-                  <span className="font-mono text-xs text-[#9E9B93]">{row.indexCode}</span>
-                  <div className="flex-1 space-y-1.5">
-                    <div
-                      className="h-2.5 bg-zinc-800"
-                      style={{ width: `${row.primaryWidthPercent}%` }}
-                    />
-                    <div
-                      className="h-2 bg-zinc-900"
-                      style={{ width: `${row.secondaryWidthPercent}%` }}
-                    />
-                  </div>
+                <div key={row.rowId} className="flex items-center gap-3">
+                  <span className="font-mono text-[10px] text-[#9E9B93]">
+                    {row.indexCode}
+                  </span>
+                  <div
+                    className="h-2 bg-zinc-800"
+                    style={{ width: `${row.primaryWidthPercent}%` }}
+                  />
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Terms of Service & Privacy Policy Ledger */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border border-zinc-800 bg-[#121215] divide-y lg:divide-y-0 lg:divide-x divide-zinc-800">
+          <div className="grid grid-cols-2 gap-4 border border-zinc-800 bg-[#121215] p-4">
             <article
               id={legalSpec.tosElementId}
               data-testid={legalSpec.tosElementId}
-              className="p-6 space-y-4"
+              className="space-y-1.5"
             >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <h2 className="font-display text-base font-bold text-[#F4F2ED]">
-                  {legalSpec.termsOfServiceTitle}
-                </h2>
-                <span className="font-mono text-xs text-[#9E9B93]">
-                  Effective {legalSpec.effectiveDateIso}
-                </span>
-              </div>
-              <div className="divide-y divide-zinc-800">
+              <CurvedSectionHeading
+                id="tos-curve"
+                title={legalSpec.termsOfServiceTitle}
+              />
+              <div className="text-xs font-mono text-[#9E9B93] space-y-1">
                 {legalSpec.termsOfServiceSections.map((sec) => (
-                  <div key={sec.sectionNumber} className="py-3 space-y-1">
-                    <div className="text-xs font-semibold text-[#F4F2ED] font-mono">
-                      {sec.sectionNumber} / {sec.heading}
-                    </div>
-                    <p className="text-xs text-[#9E9B93] leading-relaxed">
-                      {sec.clauseText}
-                    </p>
+                  <div key={sec.sectionNumber}>
+                    {sec.sectionNumber} / {compactMinimalUiText(sec.heading, 3)}
                   </div>
                 ))}
               </div>
@@ -1333,25 +1191,16 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
             <article
               id={legalSpec.privacyPolicyElementId}
               data-testid={legalSpec.privacyPolicyElementId}
-              className="p-6 space-y-4"
+              className="space-y-1.5 border-l border-zinc-800 pl-4"
             >
-              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-                <h2 className="font-display text-base font-bold text-[#F4F2ED]">
-                  {legalSpec.privacyPolicyTitle}
-                </h2>
-                <span className="font-mono text-xs text-[#9E9B93]">
-                  Effective {legalSpec.effectiveDateIso}
-                </span>
-              </div>
-              <div className="divide-y divide-zinc-800">
+              <CurvedSectionHeading
+                id="privacy-curve"
+                title={legalSpec.privacyPolicyTitle}
+              />
+              <div className="text-xs font-mono text-[#9E9B93] space-y-1">
                 {legalSpec.privacyPolicySections.map((sec) => (
-                  <div key={sec.sectionNumber} className="py-3 space-y-1">
-                    <div className="text-xs font-semibold text-[#F4F2ED] font-mono">
-                      {sec.sectionNumber} / {sec.heading}
-                    </div>
-                    <p className="text-xs text-[#9E9B93] leading-relaxed">
-                      {sec.clauseText}
-                    </p>
+                  <div key={sec.sectionNumber}>
+                    {sec.sectionNumber} / {compactMinimalUiText(sec.heading, 3)}
                   </div>
                 ))}
               </div>

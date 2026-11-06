@@ -23811,5 +23811,81 @@ export function evaluateAntiAiSlopAuditSpec(): AntiAiSlopAuditSpec {
   };
 }
 
+// ============================================================================
+// CURVED TEXT SVG LAYOUT & MINIMALIST DE-BULKED TYPOGRAPHY ENGINE
+// ============================================================================
 
+export interface CurvedTextArcSpec {
+  id: string;
+  viewBox: string;
+  primaryPathD: string;
+  secondaryPathD: string;
+  orbitalPathD: string;
+  primaryText: string;
+  secondaryText: string;
+  orbitalText: string;
+  fontFamilyDisplay: string;
+  fontFamilyEditorial: string;
+  isMinimalDeBulkedMode: boolean;
+}
 
+export function compactMinimalUiText(rawText: string, maxWords = 4): string {
+  const cleaned = sanitizeEditorialUiCopy(String(rawText || '')).trim();
+  if (!cleaned) return '';
+  const words = cleaned.split(/\s+/).filter(Boolean);
+  const limit = Math.max(1, Math.min(12, Math.floor(Number(maxWords) || 4)));
+  const sliced = words.length <= limit ? words.join(' ') : words.slice(0, limit).join(' ');
+  return sliced.replace(/[\s&/:,.-]+$/, '').trim();
+}
+
+export function buildCurvedTextLayoutSpec(params?: {
+  id?: string;
+  primaryText?: string;
+  secondaryText?: string;
+  orbitalText?: string;
+  width?: number;
+  height?: number;
+  arcHeight?: number;
+}): CurvedTextArcSpec {
+  const width = Math.max(320, Math.floor(Number(params?.width) || 760));
+  const height = Math.max(80, Math.floor(Number(params?.height) || 124));
+  const arcLift = Math.max(12, Math.min(height - 20, Math.floor(Number(params?.arcHeight) || 68)));
+  const startX = 24;
+  const endX = width - 24;
+  const midX = Math.round(width / 2);
+  const baseY = height - 22;
+  const controlY = Math.max(10, baseY - arcLift);
+
+  const primaryPathD = `M ${startX},${baseY} Q ${midX},${controlY} ${endX},${baseY}`;
+  const secondaryBaseY = Math.min(height - 6, baseY + 18);
+  const secondaryControlY = Math.max(24, controlY + 24);
+  const secondaryPathD = `M ${startX + 48},${secondaryBaseY} Q ${midX},${secondaryControlY} ${endX - 48},${secondaryBaseY}`;
+  const orbitalPathD = 'M 60,60 m -44,0 a 44,44 0 1,1 88,0 a 44,44 0 1,1 -88,0';
+
+  const primaryText = compactMinimalUiText(
+    params?.primaryText || 'MR. STRANGER / SILENT STUDY',
+    6
+  ).toUpperCase();
+  const secondaryText = compactMinimalUiText(
+    params?.secondaryText || 'FOCUS · VOICE · ARCADE',
+    5
+  ).toUpperCase();
+  const orbitalText = compactMinimalUiText(
+    params?.orbitalText || 'LIVE PRESENCE · SILENT STUDY ·',
+    6
+  ).toUpperCase();
+
+  return {
+    id: String(params?.id || 'curved-studio-arc').trim() || 'curved-studio-arc',
+    viewBox: `0 0 ${width} ${height}`,
+    primaryPathD,
+    secondaryPathD,
+    orbitalPathD,
+    primaryText,
+    secondaryText,
+    orbitalText,
+    fontFamilyDisplay: "'Syne', 'Cormorant Garamond', serif",
+    fontFamilyEditorial: "'Cormorant Garamond', Georgia, serif",
+    isMinimalDeBulkedMode: true,
+  };
+}
