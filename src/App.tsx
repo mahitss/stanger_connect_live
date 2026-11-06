@@ -279,6 +279,7 @@ import {
   resolveDailyGoalReachedTransition,
   evaluateDailyFocusGoalReachedToast,
   resolveWorkspaceQrDetectionFlashSequence,
+  evaluateEditorialTactileSurfaceSpec,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -389,15 +390,7 @@ export default function App() {
 
   const [isGlass3dLandingMode, setIsGlass3dLandingMode] = useState<boolean>(() => {
     const params = new URLSearchParams(window.location.search);
-    if (
-      params.get('room') ||
-      params.get('moment') ||
-      params.get('autostart') === '1' ||
-      params.get('view') === 'workspace'
-    ) {
-      return false;
-    }
-    return true;
+    return params.get('view') === 'guidebook' || params.get('view') === '3d';
   });
 
   // Persistent Authenticated Account State (Auto-Set by default unless explicitly signed out)
@@ -5918,6 +5911,10 @@ export default function App() {
     );
   }
 
+  const tactileSurfaceSpec = evaluateEditorialTactileSurfaceSpec({
+    themeMode,
+  });
+
   // ==========================================================================
   // MNC-LEVEL WORKSPACE CANVAS: SIDEBAR + VIEWPORT (Supports Dark & Light)
   // ==========================================================================
@@ -5926,8 +5923,10 @@ export default function App() {
       id="workspace-shell"
       data-testid="workspace-shell"
       data-theme={themeMode}
+      data-surface-texture={tactileSurfaceSpec.surfaceTextureId}
+      data-design-aesthetic={tactileSurfaceSpec.aestheticId}
       data-layout-mode={sidebarScrollSpec.layoutMode}
-      className={`${sidebarScrollSpec.shellClassName} transition-colors ${themeMeta.rootClassName} bg-slate-50 text-slate-900 dark:bg-[#050505] dark:text-zinc-100`}
+      className={`${sidebarScrollSpec.shellClassName} ${tactileSurfaceSpec.shellClassName} transition-colors ${themeMeta.rootClassName} bg-[#F6F4EF] text-[#161615] dark:bg-[#0C0C0E] dark:text-[#F4F2ED]`}
     >
       {/* Persistent Left Sidebar Navigation (Stuck in place; scrolls remaining items only when hovered, focused, or programmatically scrolled) */}
       <aside
@@ -6312,32 +6311,36 @@ export default function App() {
         data-independent-scroll="true"
         className={sidebarScrollSpec.mainViewportClass}
       >
-        {/* Top Workspace Header (Follows SaaS Top Bar Contract: Breadcrumb left, Theme Switcher, Share, Streak & Primary Action right) */}
+        {/* Top Workspace Header (Single-Row Studio Bar: Breadcrumb & Live Telemetry Left, Compact Studio Actions Right) */}
         <header
           id={workspaceHeaderShareMeta.headerElementId}
           data-testid={workspaceHeaderShareMeta.headerElementId}
-          className="flex flex-wrap items-center justify-between gap-3 px-4 sm:px-6 py-4 border-b border-slate-200 dark:border-zinc-800/80 bg-white dark:bg-[#050505]"
+          className="flex items-center justify-between gap-4 px-5 py-3 border-b border-slate-200 dark:border-zinc-800/80 bg-[#FDFCFA]/95 dark:bg-[#0C0C0E]/95 backdrop-blur-sm"
         >
-          <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400 truncate">
+          <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400 min-w-0 truncate">
             <img
               src={APP_LOGO_URL}
               alt="Mr. Stranger"
               data-testid="workspace-topbar-logo"
-              className="w-5 h-5 rounded object-cover border border-slate-300 dark:border-zinc-800 shrink-0"
+              className="w-4 h-4 rounded-sm object-cover border border-slate-300 dark:border-zinc-800 shrink-0"
             />
-            <span className="font-semibold text-slate-700 dark:text-zinc-300">Workspace</span>
-            <span aria-hidden="true">/</span>
-            <span className="text-slate-900 dark:text-white font-semibold capitalize">
+            <span className="font-semibold text-slate-900 dark:text-[#F4F2ED] capitalize truncate">
               {activePage.replace('_', ' ')}
             </span>
             <span aria-hidden="true">·</span>
             <span className="font-mono tabular-nums text-slate-500 dark:text-zinc-400">
-              Room: {activeStudyRoomCode}
+              {activeStudyRoomCode}
+            </span>
+            <span aria-hidden="true" className="hidden xl:inline">
+              ·
+            </span>
+            <span className="hidden xl:inline font-mono tabular-nums text-slate-500 dark:text-zinc-400">
+              {currentIdentity.streakCount}d streak · {currentIdentity.participationPoints} pts
             </span>
           </div>
 
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs font-mono tabular-nums">
-            <div className="inline-flex items-center gap-2">
+          <div className="flex items-center gap-1.5 text-xs font-mono tabular-nums shrink-0">
+            <div className="inline-flex items-center gap-1.5">
               <button
                 type="button"
                 data-testid="switch-to-3d-glass-landing-btn"
@@ -6345,10 +6348,10 @@ export default function App() {
                   setIsGlass3dLandingMode(true);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border border-zinc-400/45 bg-zinc-900 text-zinc-100 hover:bg-zinc-800 dark:border-zinc-500/50 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-slate-300 dark:border-zinc-800 bg-transparent hover:bg-slate-100 dark:hover:bg-zinc-900 text-slate-700 dark:text-zinc-300 text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0"
               >
-                <BookOpen className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
-                <span>3D Glass Codex</span>
+                <BookOpen className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+                <span>Guidebook</span>
               </button>
               <button
                 type="button"
@@ -6360,10 +6363,10 @@ export default function App() {
                 onClick={handleCopyWorkspaceHeaderShareLink}
                 aria-label={workspaceHeaderShareMeta.ariaLabel}
                 title={workspaceHeaderShareMeta.title}
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 ${
                   workspaceHeaderShareMeta.isCopied
-                    ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
-                    : 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500'
+                    ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/40 dark:border-emerald-500/60 dark:text-emerald-300'
+                    : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900'
                 }`}
               >
                 {workspaceHeaderShareMeta.isCopied ? (
@@ -6373,7 +6376,7 @@ export default function App() {
                   />
                 ) : (
                   <Share2
-                    className="w-3.5 h-3.5 text-slate-600 dark:text-zinc-300 shrink-0"
+                    className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-400 shrink-0"
                     data-testid="workspace-header-share-icon"
                   />
                 )}
@@ -9520,11 +9523,11 @@ export default function App() {
               aria-expanded={isCommandPaletteOpen}
               aria-controls="workspace-command-palette"
               title="Open Universal Command Palette & Quick Action Launcher (Cmd/Ctrl + K)"
-              className="inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-emerald-500/60"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
-              <Search className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>Quick Command</span>
-              <kbd className="px-1.5 py-0.5 rounded bg-slate-200/80 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-700 text-[10px] font-mono text-slate-600 dark:text-zinc-300 tabular-nums">
+              <Search className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
+              <span className="hidden lg:inline">Command</span>
+              <kbd className="px-1 py-0.2 rounded bg-slate-200/70 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-800 text-[10px] font-mono text-slate-600 dark:text-zinc-400 tabular-nums">
                 ⌘K
               </kbd>
             </button>
@@ -9537,13 +9540,12 @@ export default function App() {
               data-status-label={autoConfigureStatusLabel}
               onClick={handleApplyAutoConfiguredWorkspacePreset}
               title={autoConfigureStatusLabel}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 bg-emerald-500/15 border-emerald-500/40 text-emerald-700 hover:bg-emerald-500/25 dark:bg-emerald-500/15 dark:border-emerald-500/40 dark:text-emerald-300 dark:hover:bg-emerald-500/25"
+              className="hidden 2xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
-              <Sparkles className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-              <span>Auto-Set Workspace</span>
+              <span>Preset</span>
               <span
                 data-testid="workspace-auto-configure-status"
-                className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-[10px] font-mono font-bold text-emerald-800 dark:text-emerald-200 tabular-nums"
+                className="text-[10px] font-mono text-zinc-400 tabular-nums"
               >
                 120m · {activeStudyRoomCode}
               </span>
@@ -9556,14 +9558,14 @@ export default function App() {
               aria-label={themeMeta.ariaLabel}
               data-testid="theme-toggle-btn"
               title={`Current theme: ${themeMeta.currentTheme}. Click to switch to ${themeMeta.nextTheme} mode.`}
-              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500"
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
               {themeMeta.isDark ? (
-                <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <Sun className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
               ) : (
                 <Moon className="w-3.5 h-3.5 text-slate-700 shrink-0" />
               )}
-              <span>{themeMeta.buttonLabel}</span>
+              <span className="hidden sm:inline">{themeMeta.buttonLabel}</span>
             </button>
 
             <button
@@ -9577,29 +9579,22 @@ export default function App() {
               }
               data-testid="header-ui-sound-toggle"
               title="Toggle subtle UI sound effects for incoming messages and connection requests (including when app is in background)"
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 ${
-                uiSoundPrefs.enabled
-                  ? 'bg-slate-100 border-slate-300 text-slate-800 hover:border-slate-400 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500'
-                  : 'bg-white border-slate-200 text-slate-500 hover:text-slate-800 dark:bg-[#050505] dark:border-zinc-800/80 dark:text-zinc-500 dark:hover:text-zinc-300'
-              }`}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
             >
               {uiSoundPrefs.enabled ? (
-                <Volume2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                <Volume2 className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
               ) : (
-                <VolumeX className="w-3.5 h-3.5 text-slate-500 dark:text-zinc-500 shrink-0" />
+                <VolumeX className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
               )}
-              <span>{uiSoundPrefs.enabled ? 'Sound Alerts: On' : 'Sound Alerts: Muted'}</span>
+              <span className="hidden lg:inline">
+                {uiSoundPrefs.enabled ? 'Sound: On' : 'Sound: Off'}
+              </span>
             </button>
-            <span className="text-slate-700 dark:text-zinc-300 whitespace-nowrap">
-              Streak: <strong className="text-amber-600 dark:text-amber-400">{currentIdentity.streakCount} Days</strong>
-            </span>
-            <span className="text-slate-700 dark:text-zinc-300 whitespace-nowrap">
-              Score: <strong className="text-emerald-600 dark:text-emerald-400">{currentIdentity.participationPoints} pts</strong>
-            </span>
+
             <button
               type="button"
               onClick={() => setActivePage('study')}
-              className="px-3.5 py-1.5 text-xs font-sans font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
+              className="px-3.5 py-1.5 text-xs font-sans font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
             >
               Invite to Study Room
             </button>
@@ -9613,14 +9608,15 @@ export default function App() {
               ================================================================ */}
           {activePage === 'hub' && (
             <section className="space-y-8" aria-label="Online Presence Directory">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Cohesive Single-Elevation Architectural Ledger Strip */}
+              <div className="tactile-editorial-surface grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-zinc-800/80 rounded-md border border-zinc-800/80 bg-[#0A0A0C]">
                 <div
-                  className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1.5"
+                  className="p-5 space-y-1.5"
                   data-testid="hub-signed-in-profile-card"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-zinc-400">Signed-In Account</div>
-                    <span className="text-[11px] font-mono text-emerald-400">
+                  <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
+                    <span>Signed-In Account</span>
+                    <span className="font-mono text-[11px] text-zinc-400 tabular-nums">
                       {userBadgeSummary.unlockedCount}/{userBadgeSummary.totalBadgesCount} Badges
                     </span>
                   </div>
@@ -9648,45 +9644,39 @@ export default function App() {
                 </div>
 
                 <div
-                  className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1"
+                  className="p-5 space-y-1"
                   data-testid="hub-kpi-streak-card"
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs text-zinc-400">Active Login Streak</div>
+                  <div className="flex items-center justify-between gap-2 text-xs text-zinc-400">
+                    <span>Active Login Streak</span>
                     <span
                       data-testid="hub-kpi-streak-freeze-status"
-                      className={`text-[11px] font-mono font-semibold tabular-nums ${
-                        streakFreezeStatus.isStreakAtRisk
-                          ? 'text-amber-400'
-                          : streakFreezeStatus.isProtected
-                          ? 'text-sky-400'
-                          : 'text-zinc-500'
-                      }`}
+                      className="text-[11px] font-mono text-zinc-400 tabular-nums"
                     >
                       {streakFreezeStatus.isStreakAtRisk
                         ? `At Risk (${streakFreezeStatus.streakAtRiskCount}d)`
                         : `${streakFreezeStatus.streakFreezesOwned}/${streakFreezeStatus.maxFreezes} Freezes`}
                     </span>
                   </div>
-                  <div className="text-2xl font-bold font-mono tabular-nums text-amber-400">
+                  <div className="text-2xl font-bold font-mono tabular-nums text-white">
                     {currentIdentity.streakCount} {currentIdentity.streakCount === 1 ? 'Day' : 'Days'}
                   </div>
-                  <div className="text-xs text-zinc-500 font-mono">
+                  <div className="text-xs text-zinc-500 font-mono tabular-nums">
                     Checked in: {currentIdentity.lastLoginDate}
                   </div>
                 </div>
 
-                <div className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1">
+                <div className="p-5 space-y-1">
                   <div className="text-xs text-zinc-400">Participation Points</div>
-                  <div className="text-2xl font-bold font-mono tabular-nums text-emerald-400">
+                  <div className="text-2xl font-bold font-mono tabular-nums text-white">
                     {currentIdentity.participationPoints} pts
                   </div>
                   <div className="text-xs text-zinc-500">
-                    Study, Chat, Moments & Games
+                    Study, Chat, Moments &amp; Games
                   </div>
                 </div>
 
-                <div className="p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-1">
+                <div className="p-5 space-y-1">
                   <div className="text-xs text-zinc-400">Privacy Shield</div>
                   <div className="text-base font-bold text-white capitalize">
                     {(currentIdentity.privacyVisibility || 'everyone').replace('_', ' ')}

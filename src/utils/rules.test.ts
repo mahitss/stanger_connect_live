@@ -393,6 +393,7 @@ import {
   WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_TOGGLE_ID,
   WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_STATUS_BADGE_ID,
   buildWorkspaceQrSuccessfulScanChimeToggleSpec,
+  evaluateEditorialTactileSurfaceSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9443,4 +9444,27 @@ test('QR scanner popover successful scan audio chime toggle enables/disables the
   );
   assert.equal(qrMetaDisabled.scanConfirmationChime.shouldPlay, false);
 });
+
+test('Editorial tactile surface specification enforces architectural paper grain texture, warm obsidian/alabaster palette, single-row top bar, and anti-slop discipline', () => {
+  const darkSpec = evaluateEditorialTactileSurfaceSpec({ themeMode: 'dark' });
+  assert.equal(darkSpec.aestheticId, 'human-editorial-studio');
+  assert.equal(darkSpec.surfaceTextureId, 'architectural-paper-grain');
+  assert.equal(darkSpec.themeMode, 'dark');
+  assert.equal(darkSpec.canvasBackgroundHex, '#0C0C0E');
+  assert.equal(darkSpec.elevatedSurfaceHex, '#121215');
+  assert.equal(darkSpec.primaryInkHex, '#F4F2ED');
+  assert.equal(darkSpec.grainOverlayOpacity, 0.036);
+  assert.equal(darkSpec.usesSingleRowTopBar, true);
+  assert.equal(darkSpec.usesUnboxedMetadataSeparators, true);
+  assert.equal(darkSpec.zeroNeonPillBoxes, true);
+  assert.equal(darkSpec.singleElevationDepth, true);
+
+  const lightSpec = evaluateEditorialTactileSurfaceSpec({ themeMode: 'light' });
+  assert.equal(lightSpec.themeMode, 'light');
+  assert.equal(lightSpec.canvasBackgroundHex, '#F6F4EF');
+  assert.equal(lightSpec.elevatedSurfaceHex, '#FDFCFA');
+  assert.equal(lightSpec.primaryInkHex, '#161615');
+  assert.equal(lightSpec.grainOverlayOpacity, 0.028);
+});
+
 

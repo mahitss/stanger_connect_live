@@ -23480,3 +23480,59 @@ export function resolveWorkspaceQrDetectionFlashSequence(params: {
   };
 }
 
+export interface EditorialTactileSurfaceSpec {
+  aestheticId: 'human-editorial-studio';
+  surfaceTextureId: 'architectural-paper-grain';
+  themeMode: 'dark' | 'light';
+  grainOverlayOpacity: number;
+  grainBaseFrequency: number;
+  grainNumOctaves: number;
+  canvasBackgroundHex: string;
+  elevatedSurfaceHex: string;
+  interactiveSurfaceHex: string;
+  primaryInkHex: string;
+  secondaryInkHex: string;
+  hairlineBorderCss: string;
+  accentHex: string;
+  usesSingleRowTopBar: true;
+  usesUnboxedMetadataSeparators: true;
+  zeroNeonPillBoxes: true;
+  singleElevationDepth: true;
+  shellClassName: string;
+  cardSurfaceClassName: string;
+}
+
+export function evaluateEditorialTactileSurfaceSpec(params?: {
+  themeMode?: 'dark' | 'light' | string | null;
+}): EditorialTactileSurfaceSpec {
+  const isLight =
+    String(params?.themeMode || '')
+      .trim()
+      .toLowerCase() === 'light';
+
+  return {
+    aestheticId: 'human-editorial-studio',
+    surfaceTextureId: 'architectural-paper-grain',
+    themeMode: isLight ? 'light' : 'dark',
+    grainOverlayOpacity: isLight ? 0.028 : 0.036,
+    grainBaseFrequency: 0.8,
+    grainNumOctaves: 4,
+    canvasBackgroundHex: isLight ? '#F6F4EF' : '#0C0C0E',
+    elevatedSurfaceHex: isLight ? '#FDFCFA' : '#121215',
+    interactiveSurfaceHex: isLight ? '#EFECE4' : '#18181C',
+    primaryInkHex: isLight ? '#161615' : '#F4F2ED',
+    secondaryInkHex: isLight ? '#65635D' : '#9E9B93',
+    hairlineBorderCss: isLight
+      ? '1px solid rgba(22, 22, 21, 0.1)'
+      : '1px solid rgba(244, 242, 237, 0.08)',
+    accentHex: isLight ? '#0F766E' : '#34D399',
+    usesSingleRowTopBar: true,
+    usesUnboxedMetadataSeparators: true,
+    zeroNeonPillBoxes: true,
+    singleElevationDepth: true,
+    shellClassName: 'tactile-editorial-shell',
+    cardSurfaceClassName: 'tactile-editorial-surface',
+  };
+}
+
+

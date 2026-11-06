@@ -47,50 +47,57 @@ function createProceduralCodexPageTexture(renderer: THREE.WebGLRenderer): THREE.
   canvas.height = 1024;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    // High-contrast Brushed Titanium & Smoked Silver Gradient
-    const grad = ctx.createLinearGradient(0, 0, 512, 1024);
-    grad.addColorStop(0, '#18181b');
-    grad.addColorStop(0.5, '#27272a');
-    grad.addColorStop(1, '#141418');
-    ctx.fillStyle = grad;
+    // Tactile Warm Architectural Graphite & Linen Paper Base
+    ctx.fillStyle = '#141417';
     ctx.fillRect(0, 0, 512, 1024);
 
-    // Bright Platinum & Sterling Silver Codex Borders
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(18, 18, 476, 988);
+    // Fine Architectural Grid & Paper Grain Dots
+    ctx.strokeStyle = 'rgba(244, 242, 237, 0.06)';
+    ctx.lineWidth = 1;
+    for (let x = 24; x < 512; x += 24) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, 1024);
+      ctx.stroke();
+    }
+    for (let y = 24; y < 1024; y += 24) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(512, y);
+      ctx.stroke();
+    }
 
-    ctx.strokeStyle = '#d4d4d8';
-    ctx.lineWidth = 5;
-    ctx.strokeRect(34, 34, 444, 956);
+    // Subtle Editorial Margin Hairlines
+    ctx.strokeStyle = 'rgba(244, 242, 237, 0.22)';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(28, 28, 456, 968);
 
-    const chapterColors = ['#ffffff', '#e4e4e7', '#f4f4f5', '#d4d4d8', '#ffffff'];
     const chapterLabels = [
-      '01 · STUDY ROOM & POMODORO',
-      '02 · INVITE-FIRST CHAT & CALLS',
-      '03 · PHOTO MOMENTS & FEED',
-      '04 · QR SCANNER & ANALYTICS',
-      '05 · BREAK ARCADE & PRIVACY',
+      '01. Study Room & Pomodoro',
+      '02. Invite-First Chat & Calls',
+      '03. Photo Moments & Feed',
+      '04. QR Scanner & Analytics',
+      '05. Break Arcade & Privacy',
     ];
 
     for (let i = 0; i < 5; i++) {
-      const yBase = 68 + i * 182;
-      ctx.fillStyle = 'rgba(24, 24, 29, 0.95)';
-      ctx.fillRect(50, yBase, 412, 152);
+      const yBase = 64 + i * 184;
+      ctx.fillStyle = 'rgba(24, 24, 28, 0.92)';
+      ctx.fillRect(48, yBase, 416, 152);
 
-      ctx.strokeStyle = chapterColors[i];
-      ctx.lineWidth = 4;
-      ctx.strokeRect(50, yBase, 412, 152);
+      ctx.strokeStyle = 'rgba(244, 242, 237, 0.18)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(48, yBase, 416, 152);
 
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 21px sans-serif';
+      ctx.fillStyle = '#F4F2ED';
+      ctx.font = '600 19px sans-serif';
       ctx.fillText(chapterLabels[i], 68, yBase + 38);
 
-      ctx.fillStyle = 'rgba(244, 244, 245, 0.9)';
+      ctx.fillStyle = 'rgba(161, 158, 150, 0.55)';
       for (let line = 0; line < 3; line++) {
-        const lineY = yBase + 64 + line * 24;
-        const lineW = line === 2 ? 250 : 356;
-        ctx.fillRect(68, lineY, lineW, 10);
+        const lineY = yBase + 66 + line * 24;
+        const lineW = line === 2 ? 236 : 348;
+        ctx.fillRect(68, lineY, lineW, 6);
       }
     }
   }
@@ -110,30 +117,34 @@ function createPhoneScreenTexture(
   canvas.height = 512;
   const ctx = canvas.getContext('2d');
   if (ctx) {
-    ctx.fillStyle = '#18181b';
+    ctx.fillStyle = '#121215';
     ctx.fillRect(0, 0, 256, 512);
 
-    ctx.strokeStyle = '#ffffff';
-    ctx.lineWidth = 10;
-    ctx.strokeRect(8, 8, 240, 496);
+    ctx.strokeStyle = 'rgba(244, 242, 237, 0.24)';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(10, 10, 236, 492);
 
-    // Top Silver Status Bar
-    ctx.fillStyle = accentHex;
-    ctx.fillRect(24, 28, 208, 42);
+    // Subtle Editorial Header Bar
+    ctx.fillStyle = '#1C1C21';
+    ctx.fillRect(20, 24, 216, 40);
 
-    ctx.fillStyle = '#09090b';
-    ctx.font = 'bold 18px sans-serif';
-    ctx.fillText(handleText.slice(0, 14), 34, 55);
+    ctx.fillStyle = accentHex || '#F4F2ED';
+    ctx.font = '600 15px monospace';
+    ctx.fillText(handleText.slice(0, 16), 30, 49);
 
-    // Monochrome Silver & Charcoal Chat Bubbles on Phone Screen
+    // Clean Editorial Message Rows on Phone Screen
     for (let i = 0; i < 4; i++) {
-      const y = 96 + i * 94;
+      const y = 88 + i * 96;
       const isRight = i % 2 === 1;
-      ctx.fillStyle = isRight ? '#ffffff' : '#52525b';
-      ctx.fillRect(isRight ? 54 : 24, y, 178, 68);
-      ctx.fillStyle = isRight ? '#09090b' : '#ffffff';
-      ctx.fillRect((isRight ? 54 : 24) + 14, y + 18, 130, 10);
-      ctx.fillRect((isRight ? 54 : 24) + 14, y + 38, 96, 10);
+      ctx.fillStyle = isRight ? '#27272D' : '#18181C';
+      ctx.fillRect(isRight ? 48 : 20, y, 188, 72);
+      ctx.strokeStyle = 'rgba(244, 242, 237, 0.12)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(isRight ? 48 : 20, y, 188, 72);
+      ctx.fillStyle = '#F4F2ED';
+      ctx.fillRect((isRight ? 48 : 20) + 14, y + 20, 132, 6);
+      ctx.fillStyle = '#9E9B93';
+      ctx.fillRect((isRight ? 48 : 20) + 14, y + 38, 96, 6);
     }
   }
   const tex = new THREE.CanvasTexture(canvas);
@@ -766,67 +777,37 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
     <div
       data-testid="glass-3d-architecture-showcase"
       data-palette-theme="obsidian-silver"
-      className="relative min-h-screen w-full text-zinc-100 selection:bg-zinc-400/30"
-      style={{
-        background:
-          'radial-gradient(circle at 20% 15%, rgba(244, 244, 245, 0.09), transparent 42%), radial-gradient(circle at 80% 25%, rgba(161, 161, 170, 0.08), transparent 46%), linear-gradient(180deg, #020203 0%, #08080b 50%, #020203 100%)',
-      }}
+      data-surface-texture="architectural-paper-grain"
+      className="tactile-editorial-shell relative min-h-screen w-full text-[#F4F2ED] selection:bg-zinc-500/30"
     >
-      {/* Fixed Full-Viewport Three.js 3D Obsidian & Silver Glassy Architecture Canvas */}
+      {/* Fixed Full-Viewport Three.js 3D Architectural Canvas (Subtle Atmospheric Backdrop) */}
       <div
         ref={canvasMountRef}
         data-testid="glass-3d-architecture-canvas"
         data-book-roll-percent={currentKinematics.rollProgressPercent}
         data-active-floor={currentKinematics.activeFloorIndex}
-        className="fixed inset-0 z-0 pointer-events-none"
+        className="fixed inset-0 z-0 pointer-events-none opacity-45"
       />
 
-      {/* Single-Line Top Smoked Obsidian & Brushed Silver Navigation Header */}
-      <header
-        className="sticky top-0 z-30 border-b border-zinc-300/20 px-4 sm:px-6 py-3"
-        style={{
-          background:
-            'linear-gradient(135deg, rgba(5, 5, 7, 0.88) 0%, rgba(18, 18, 22, 0.82) 100%)',
-          boxShadow:
-            'inset 0 1px 0 0 rgba(255, 255, 255, 0.25), 0 14px 36px -12px rgba(0, 0, 0, 0.9)',
-        }}
-      >
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-zinc-300/35 text-zinc-100"
-              style={{
-                background:
-                  'linear-gradient(145deg, rgba(228, 228, 231, 0.22), rgba(63, 63, 70, 0.18))',
-                boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.4)',
-              }}
-            >
-              <BookOpen className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-2 text-sm font-semibold tracking-tight text-white truncate">
-                <span>Mr. Stranger · Live Presence &amp; Study Sanctuary</span>
-                <span aria-hidden="true" className="text-zinc-500">
-                  ·
-                </span>
-                <span className="text-xs font-normal text-zinc-300 truncate">
-                  {currentDisplayName} ({currentEmail})
-                </span>
-              </div>
-              <p
-                data-testid="rolling-book-state-badge"
-                className="text-[11px] text-zinc-400 truncate"
-              >
-                {currentKinematics.bookStateLabel} · Room {activeStudyRoomCode} ·{' '}
-                {dailyCompletedMinutes}/{dailyTargetMinutes}m Focus
-              </p>
-            </div>
-          </div>
+      {/* Strict 3-Zone Single-Row Top Bar Contract: [1-Line Brand] — [5 Clean Nav Links] — [Primary Action] */}
+      <header className="sticky top-0 z-30 border-b border-zinc-800/85 bg-[#0C0C0E]/92 backdrop-blur-md px-6 py-3.5">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-8">
+          {/* Zone 1: Single 1-Line Brand Wordmark */}
+          <a
+            href="#top"
+            onClick={(e) => {
+              e.preventDefault();
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
+            className="font-display text-lg font-bold tracking-tight text-[#F4F2ED] whitespace-nowrap shrink-0"
+          >
+            Mr. Stranger
+          </a>
 
-          {/* Feature Quick-Jump Nav Links (Brushed Silver Typography) */}
+          {/* Zone 2: 5 Concise Single-Line Navigation Links */}
           <nav
             aria-label="Mr. Stranger Features"
-            className="hidden xl:flex items-center gap-4 text-xs font-medium text-zinc-400 shrink-0"
+            className="hidden md:flex items-center gap-6 text-xs font-medium text-[#9E9B93] shrink-0"
           >
             {[
               { floorIndex: 1, shortLabel: '01. Study Room' },
@@ -846,10 +827,10 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                   key={floor.floorIndex}
                   type="button"
                   onClick={() => handleJumpToFloor(floor)}
-                  className={`py-1 transition-colors border-b-2 whitespace-nowrap ${
+                  className={`py-1 transition-colors border-b whitespace-nowrap shrink-0 cursor-pointer ${
                     isActive
-                      ? 'border-zinc-100 text-white font-semibold'
-                      : 'border-transparent text-zinc-400 hover:text-zinc-100'
+                      ? 'border-[#F4F2ED] text-[#F4F2ED] font-semibold'
+                      : 'border-transparent text-[#9E9B93] hover:text-[#F4F2ED]'
                   }`}
                 >
                   {navItem.shortLabel}
@@ -858,302 +839,178 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
             })}
           </nav>
 
-          {/* Single-Row Silver & Obsidian Action Controls */}
-          <div className="flex items-center gap-2 shrink-0">
+          {/* Zone 3: Primary Workspace Entry Action */}
+          <div className="flex items-center gap-4 shrink-0">
             <button
               type="button"
               data-testid="toggle-book-roll-btn"
               onClick={handleToggleBookRoll}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-300/35 px-3 py-2 text-xs font-semibold text-zinc-100 transition hover:border-zinc-100/70 whitespace-nowrap"
-              style={{
-                background:
-                  'linear-gradient(135deg, rgba(212, 212, 216, 0.2), rgba(39, 39, 42, 0.65))',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.32)',
-              }}
+              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-[#9E9B93] hover:text-[#F4F2ED] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              {bookRollPercent >= 75 ? (
-                <>
-                  <ArrowUpCircle className="h-4 w-4 text-zinc-200" />
-                  <span>Roll Guidebook Up</span>
-                </>
-              ) : (
-                <>
-                  <ArrowDownCircle className="h-4 w-4 text-zinc-200" />
-                  <span>Roll Guidebook Down</span>
-                </>
-              )}
+              <span>
+                {bookRollPercent >= 75
+                  ? 'Roll Guidebook Up'
+                  : 'Roll Guidebook Down'}
+              </span>
             </button>
 
             <button
               type="button"
               data-testid="switch-to-workspace-studio-btn"
               onClick={() => onEnterWorkspacePage('hub', false)}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200/50 px-3.5 py-2 text-xs font-semibold text-zinc-950 transition hover:border-white whitespace-nowrap"
-              style={{
-                background:
-                  'linear-gradient(135deg, #f4f4f5 0%, #a1a1aa 100%)',
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
-              }}
+              className="inline-flex items-center gap-2 rounded-md bg-[#F4F2ED] hover:bg-white px-4 py-2 text-xs font-semibold text-[#0C0C0E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
             >
-              <Layers className="h-4 w-4 text-zinc-950" />
               <span>Enter Mr. Stranger Workspace</span>
             </button>
           </div>
         </div>
       </header>
 
-      {/* Main Scrollable 3D Obsidian & Silver Glass Architectural Content */}
-      <main className="relative z-10 mx-auto max-w-7xl px-4 sm:px-8 pt-6 pb-32">
-        {/* SECTION 1: MR. STRANGER HERO LANDING STAGE */}
+      {/* Main Editorial Studio Content */}
+      <main className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 pt-10 pb-28">
+        {/* SECTION 1: EDITORIAL BROADSHEET HERO STAGE */}
         <section
           data-testid="front-glass-base-hero"
-          className="relative mb-16 flex flex-col justify-between min-h-[540px] rounded-3xl border border-zinc-300/25 p-6 sm:p-8"
-          style={{
-            background:
-              'linear-gradient(180deg, rgba(6, 6, 8, 0.56) 0%, rgba(12, 12, 16, 0.14) 48%, rgba(6, 6, 8, 0.68) 100%)',
-            boxShadow:
-              'inset 0 1px 1px 0 rgba(255, 255, 255, 0.38), inset 0 -1px 1px 0 rgba(161, 161, 170, 0.22), 0 28px 64px -15px rgba(0, 0, 0, 0.92)',
-          }}
+          className="mb-16 border-b border-zinc-800/85 pb-12"
         >
-          {/* Top Stage Hero Copy */}
-          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-            <div className="max-w-xl space-y-2.5">
-              <div className="flex flex-wrap items-center gap-2 text-xs font-medium text-zinc-300">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+            {/* Left Column: Editorial Value Proposition */}
+            <div className="lg:col-span-8 space-y-5">
+              {/* Unboxed Metadata Line with · Separators */}
+              <div className="flex flex-wrap items-center gap-2 text-xs text-[#9E9B93]">
                 <span>Live Presence Directory</span>
                 <span aria-hidden="true">·</span>
                 <span>Invite-First Messenger &amp; Calls</span>
                 <span aria-hidden="true">·</span>
-                <span>Silent Study Room &amp; Break Arcade</span>
+                <span>Silent Study Sanctuary</span>
+                <span aria-hidden="true">·</span>
+                <span className="font-mono tabular-nums text-zinc-300">
+                  {currentDisplayName} ({currentEmail})
+                </span>
               </div>
-              <h1 className="text-2xl sm:text-4xl font-bold tracking-tight text-white leading-tight">
-                Meet Focused Minds. Co-Study in Silence. Connect Without Cold DMs.
+
+              <h1
+                className="font-display font-bold tracking-tight text-[#F4F2ED] leading-[1.08]"
+                style={{ fontSize: 'clamp(2.25rem, 3.8vw, 3.5rem)' }}
+              >
+                Meet focused minds. Co-study in silence. Connect without cold DMs.
               </h1>
-              <p className="text-xs sm:text-sm text-zinc-300 leading-relaxed">
-                <strong className="text-white">Mr. Stranger</strong> combines a live mood
-                directory and invite-first direct messaging with{' '}
-                <strong className="text-white">
-                  WebRTC voice &amp; video calling, 25-minute Pomodoro study sanctuaries,
-                  photo Moments, QR room handoff, and multiplayer break games
-                </strong>
-                . Scroll down to explore how every feature works in real time.
+
+              <p className="max-w-2xl text-base text-[#9E9B93] leading-relaxed">
+                <strong className="text-[#F4F2ED] font-semibold">Mr. Stranger</strong>{' '}
+                pairs an invite-first presence directory and peer-to-peer WebRTC voice
+                and video calling with 25-minute Pomodoro study sanctuaries, ambient
+                soundscapes, optical QR room handoff, and multiplayer break games.
               </p>
+
+              {/* Unboxed Live Studio Telemetry Line */}
+              <div className="pt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#9E9B93] font-mono tabular-nums">
+                <span className="text-[#F4F2ED] font-semibold">
+                  Room {activeStudyRoomCode}
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>
+                  {dailyCompletedMinutes}/{dailyTargetMinutes}m Focus Logged
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>{streakCount}-Day Streak</span>
+                <span aria-hidden="true">·</span>
+                <span>{participationPoints} pts</span>
+                <span aria-hidden="true">·</span>
+                <span data-testid="rolling-book-state-badge">
+                  {currentKinematics.bookStateLabel}
+                </span>
+              </div>
+
+              {/* Primary Hero Actions */}
+              <div className="pt-2 flex flex-wrap items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => onEnterWorkspacePage('hub', false)}
+                  className="px-4 py-2.5 rounded-md bg-[#F4F2ED] hover:bg-white text-xs font-semibold text-[#0C0C0E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  Open Live Workspace
+                </button>
+                <button
+                  type="button"
+                  data-testid="glass-hero-log-pomodoro-btn"
+                  onClick={onQuickLogFocusSprint}
+                  className="px-4 py-2.5 rounded-md border border-zinc-700/80 bg-[#121215] hover:bg-[#18181C] text-xs font-medium text-[#F4F2ED] font-mono tabular-nums transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  +25m Focus ({dailyCompletedMinutes}/{dailyTargetMinutes}m)
+                </button>
+                <button
+                  type="button"
+                  data-testid="glass-hero-open-qr-btn"
+                  onClick={() => onEnterWorkspacePage('hub', true)}
+                  className="px-4 py-2.5 rounded-md border border-zinc-800 bg-transparent hover:bg-[#121215] text-xs font-medium text-[#9E9B93] hover:text-[#F4F2ED] font-mono tabular-nums transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  Scan Room QR ({recentQrScansCount})
+                </button>
+              </div>
             </div>
 
-            {/* Compact Brushed Platinum Product Guidebook Readout */}
-            <div
-              className="w-full lg:w-80 shrink-0 rounded-2xl border border-zinc-300/30 p-4"
-              style={{
-                background:
-                  'linear-gradient(160deg, rgba(12, 12, 15, 0.82) 0%, rgba(39, 39, 42, 0.52) 100%)',
-                boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.35)',
-              }}
-            >
-              <div className="flex items-center justify-between text-[11px] text-zinc-200 mb-2">
-                <span className="font-semibold uppercase tracking-wider">
-                  Mr. Stranger · Feature Guide
+            {/* Right Column: Clean Editorial Index Sheet (Single-Elevation Matte Surface) */}
+            <div className="lg:col-span-4 rounded-md border border-zinc-800/90 bg-[#121215]/95 p-5 space-y-4">
+              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 text-xs">
+                <span className="font-semibold text-[#F4F2ED]">
+                  Architecture Index
                 </span>
-                <span className="font-mono text-white">
+                <span className="font-mono tabular-nums text-[#9E9B93]">
                   {currentKinematics.rollProgressPercent}% Explored
                 </span>
               </div>
-              {/* Top Brushed Platinum Roller Bar */}
-              <div
-                className="h-2.5 w-full rounded-full border border-zinc-200/50"
-                style={{
-                  background:
-                    'linear-gradient(90deg, #52525b 0%, #f4f4f5 50%, #52525b 100%)',
-                }}
-              />
-              <div
-                className="mx-1.5 border-x border-zinc-400/30 px-3 py-2.5 text-xs"
-                style={{ background: 'rgba(9, 9, 11, 0.86)' }}
-              >
-                <p className="font-semibold text-white truncate">
+
+              <div className="space-y-1.5">
+                <p className="text-sm font-semibold text-[#F4F2ED]">
                   {currentKinematics.activeChapterTitle}
                 </p>
-                <p className="mt-1 text-[11px] text-zinc-300 line-clamp-2">
+                <p className="text-xs text-[#9E9B93] leading-relaxed">
                   {verticalState.activeFloor.whatTheAppDoes}
                 </p>
               </div>
-              {/* Bottom Brushed Platinum Roller Bar */}
-              <div
-                className="h-2.5 w-full rounded-full border border-zinc-200/50"
-                style={{
-                  background:
-                    'linear-gradient(90deg, #3f3f46 0%, #e4e4e7 50%, #3f3f46 100%)',
-                }}
-              />
-            </div>
-          </div>
 
-          {/* Center Stage Live App Activity Callouts */}
-          <div className="my-auto py-12 grid grid-cols-1 sm:grid-cols-2 gap-6 pointer-events-none">
-            <div className="flex flex-col items-start justify-end">
-              <div
-                className="rounded-xl border border-zinc-300/30 px-3.5 py-2 text-xs text-zinc-200"
-                style={{ background: 'rgba(9, 9, 11, 0.78)' }}
-              >
-                <span className="font-semibold text-white">
-                  Active Study Sanctuary ({activeStudyRoomCode}):
-                </span>{' '}
-                {dailyCompletedMinutes}/{dailyTargetMinutes}m Focus Logged ·{' '}
-                {streakCount}-Day Streak ({participationPoints} pts)
-              </div>
-            </div>
-            <div className="flex flex-col items-end justify-end">
-              <div
-                className="rounded-xl border border-zinc-300/30 px-3.5 py-2 text-xs text-zinc-200"
-                style={{ background: 'rgba(9, 9, 11, 0.78)' }}
-              >
-                <span className="font-semibold text-white">
-                  Live Member Activity:
-                </span>{' '}
-                {verticalState.activeFloor.character.name} ·{' '}
-                {verticalState.activeFloor.character.statusBadge}
-              </div>
-            </div>
-          </div>
-
-          {/* Unified Collapsible Bottom Smoked Glass Control Dock */}
-          <div className="mx-auto w-full max-w-4xl">
-            <div className="flex justify-center mb-1.5">
-              <button
-                type="button"
-                onClick={() => setIsBottomDockCollapsed((prev) => !prev)}
-                className="inline-flex items-center gap-1.5 rounded-t-xl border border-b-0 border-zinc-300/25 px-4 py-1 text-[11px] font-medium text-zinc-300 hover:text-white"
-                style={{ background: 'rgba(9, 9, 11, 0.88)' }}
-              >
-                {isBottomDockCollapsed ? (
-                  <>
-                    <ChevronUp className="h-3.5 w-3.5 text-zinc-200" />
-                    <span>Show Feature Guide &amp; Quick Actions</span>
-                  </>
-                ) : (
-                  <>
-                    <ChevronDown className="h-3.5 w-3.5 text-zinc-200" />
-                    <span>Hide Dock (Full 3D View)</span>
-                  </>
-                )}
-              </button>
-            </div>
-
-            {!isBottomDockCollapsed && (
-              <div
-                className="rounded-2xl border border-zinc-300/25 p-4 space-y-3"
-                style={{
-                  background:
-                    'linear-gradient(145deg, rgba(9, 9, 11, 0.88), rgba(24, 24, 27, 0.82))',
-                  boxShadow: 'inset 0 1px 1px rgba(255, 255, 255, 0.3)',
-                }}
-              >
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex items-center gap-3 flex-1 min-w-[240px]">
-                    <span className="text-xs font-medium text-zinc-300 whitespace-nowrap">
-                      Chapter I
-                    </span>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={bookRollPercent}
-                      onChange={handleSliderRollChange}
-                      aria-label="Roll Mr. Stranger Feature Guidebook Up and Down"
-                      data-testid="book-roll-slider"
-                      className="h-2 flex-1 cursor-pointer appearance-none rounded-lg bg-zinc-800 accent-zinc-200"
-                    />
-                    <span className="text-xs font-medium text-zinc-300 whitespace-nowrap">
-                      Chapter V ({currentKinematics.rollProgressPercent}%)
-                    </span>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setIsAutoRollingBook((prev) => !prev)}
-                      className="rounded-lg border border-zinc-400/30 px-3 py-1.5 text-xs font-medium text-zinc-200 hover:border-zinc-200/70"
-                      style={{ background: 'rgba(39, 39, 42, 0.78)' }}
-                    >
-                      {isAutoRollingBook ? 'Pause Auto-Tour' : 'Resume Auto-Tour'}
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="glass-hero-log-pomodoro-btn"
-                      onClick={onQuickLogFocusSprint}
-                      className="rounded-lg border border-zinc-300/40 px-3 py-1.5 text-xs font-semibold text-white hover:border-white"
-                      style={{
-                        background:
-                          'linear-gradient(135deg, rgba(212, 212, 216, 0.24), rgba(63, 63, 70, 0.55))',
-                      }}
-                    >
-                      +25m Focus ({dailyCompletedMinutes}/{dailyTargetMinutes}m)
-                    </button>
-                    <button
-                      type="button"
-                      data-testid="glass-hero-open-qr-btn"
-                      onClick={() => onEnterWorkspacePage('hub', true)}
-                      className="rounded-lg border border-zinc-300/40 px-3 py-1.5 text-xs font-semibold text-zinc-100 hover:border-white"
-                      style={{
-                        background:
-                          'linear-gradient(135deg, rgba(161, 161, 170, 0.28), rgba(39, 39, 42, 0.68))',
-                      }}
-                    >
-                      Scan Room QR ({recentQrScansCount})
-                    </button>
-                  </div>
+              <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-[#9E9B93]">
+                  <span>Chapter I</span>
+                  <button
+                    type="button"
+                    onClick={() => setIsAutoRollingBook((prev) => !prev)}
+                    className="text-[#F4F2ED] hover:underline cursor-pointer"
+                  >
+                    {isAutoRollingBook ? 'Pause Auto-Tour' : 'Resume Auto-Tour'}
+                  </button>
+                  <span>Chapter V ({currentKinematics.rollProgressPercent}%)</span>
                 </div>
-
-                {/* 5 App Feature Quick-Jump Buttons */}
-                <div className="grid grid-cols-5 gap-2 pt-1 border-t border-zinc-300/15">
-                  {[
-                    { floorIndex: 1, label: '01. Study Room' },
-                    { floorIndex: 2, label: '02. Chat & Calls' },
-                    { floorIndex: 3, label: '03. Moments Feed' },
-                    { floorIndex: 4, label: '04. QR Scanner' },
-                    { floorIndex: 5, label: '05. Break Arcade' },
-                  ].map((item) => {
-                    const floor =
-                      GLASS_ARCHITECTURAL_FLOORS.find(
-                        (f) => f.floorIndex === item.floorIndex
-                      ) || GLASS_ARCHITECTURAL_FLOORS[0];
-                    const isSelected =
-                      floor.floorIndex === currentKinematics.activeFloorIndex;
-                    return (
-                      <button
-                        key={floor.floorIndex}
-                        type="button"
-                        onClick={() => handleJumpToFloor(floor)}
-                        className={`flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-2 text-xs transition-transform duration-200 ${
-                          isSelected
-                            ? 'border-zinc-100/80 -translate-y-0.5 text-white font-semibold'
-                            : 'border-zinc-400/15 text-zinc-300 hover:border-zinc-300/40'
-                        }`}
-                        style={{
-                          background: isSelected
-                            ? 'linear-gradient(135deg, rgba(228, 228, 231, 0.22), rgba(39, 39, 42, 0.78))'
-                            : 'rgba(15, 15, 19, 0.72)',
-                        }}
-                      >
-                        <Smartphone className="h-3.5 w-3.5 shrink-0 text-zinc-200" />
-                        <span className="truncate">{item.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  value={bookRollPercent}
+                  onChange={handleSliderRollChange}
+                  aria-label="Roll Mr. Stranger Feature Guidebook Up and Down"
+                  data-testid="book-roll-slider"
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded bg-zinc-800 accent-[#F4F2ED]"
+                />
               </div>
-            )}
+
+              <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-xs text-[#9E9B93]">
+                <span>Active Member</span>
+                <span className="text-[#F4F2ED] font-medium truncate max-w-[200px]">
+                  {verticalState.activeFloor.character.name} ·{' '}
+                  {verticalState.activeFloor.character.role}
+                </span>
+              </div>
+            </div>
           </div>
         </section>
 
-        {/* SECTION 2: TOP-TO-BOTTOM MR. STRANGER FEATURE SHOWCASE */}
-        <div className="relative space-y-14">
+        {/* SECTION 2: ARCHITECTURAL LEDGER CHAPTERS (Hairline-Divided Editorial Rows) */}
+        <div className="divide-y divide-zinc-800/85">
           {GLASS_ARCHITECTURAL_FLOORS.map((floor, idx) => {
             const floorBubbles = messengerBubbles
               .filter((b) => b.floorIndex === floor.floorIndex)
               .slice(-3);
-            const tilt = cardTiltByFloor[floor.floorIndex] || {
-              rotateX: 0,
-              rotateY: 0,
-            };
             const isEven = idx % 2 === 1;
             const featureActionLabels: Record<number, string> = {
               1: `Enter Study Room (${activeStudyRoomCode})`,
@@ -1172,48 +1029,44 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                 data-testid={`glass-architecture-floor-${floor.floorIndex}`}
                 onPointerMove={(e) => handleCardPointerMove(floor.floorIndex, e)}
                 onPointerLeave={() => handleCardPointerLeave(floor.floorIndex)}
-                className="relative rounded-3xl border border-zinc-300/25 p-6 sm:p-9 transition-transform duration-200"
-                style={{
-                  background: `linear-gradient(135deg, rgba(8, 8, 11, 0.76) 0%, ${floor.glassTintRgba} 52%, rgba(9, 9, 12, 0.82) 100%)`,
-                  boxShadow:
-                    'inset 0 1px 1px 0 rgba(255, 255, 255, 0.36), 0 24px 54px -15px rgba(0, 0, 0, 0.92)',
-                  transform: `perspective(1200px) rotateX(${tilt.rotateX}deg) rotateY(${tilt.rotateY}deg)`,
-                }}
+                className="py-12 first:pt-2"
               >
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
-                  {/* Feature Explanation & Live Workspace Launch Controls */}
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
+                  {/* Left/Alternating Column: Editorial Prose & Capabilities */}
                   <div
                     className={`lg:col-span-7 space-y-4 ${
                       isEven ? 'lg:order-2' : 'lg:order-1'
                     }`}
                   >
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-300">
-                      <span className="font-semibold tracking-wider uppercase text-zinc-100">
-                        {floor.floorCode}
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-[#9E9B93]">
+                      <span className="font-mono font-semibold text-[#F4F2ED]">
+                        0{floor.floorIndex}.
                       </span>
+                      <span>{floor.bookChapterTitle}</span>
                       <span aria-hidden="true">·</span>
                       <span>{floor.tierLabel}</span>
                     </div>
 
-                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-white">
+                    <h2 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-[#F4F2ED]">
                       {floor.title}
                     </h2>
 
-                    <p className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
-                      Guidebook Section: {floor.bookChapterTitle}
-                    </p>
-
-                    <p className="text-sm sm:text-base text-zinc-200 leading-relaxed">
+                    <p className="text-sm sm:text-base text-[#9E9B93] leading-relaxed max-w-2xl">
                       {floor.whatTheAppDoes}
                     </p>
 
-                    <ul className="space-y-2 pt-1">
+                    <ul className="space-y-2 pt-1 border-t border-zinc-800/70">
                       {floor.featureHighlights.map((feat, fIdx) => (
                         <li
                           key={fIdx}
-                          className="flex items-center gap-2.5 text-sm text-zinc-100"
+                          className="flex items-baseline gap-2.5 text-sm text-zinc-200 pt-1.5"
                         >
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-zinc-200" />
+                          <span
+                            aria-hidden="true"
+                            className="font-mono text-xs text-[#9E9B93]"
+                          >
+                            0{fIdx + 1}
+                          </span>
                           <span>{feat}</span>
                         </li>
                       ))}
@@ -1229,14 +1082,8 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                             floor.floorIndex === 4
                           )
                         }
-                        className="inline-flex items-center gap-2 rounded-xl border border-zinc-200/45 px-4 py-2.5 text-xs font-semibold text-zinc-950 transition hover:border-white"
-                        style={{
-                          background:
-                            'linear-gradient(135deg, #f4f4f5 0%, #a1a1aa 100%)',
-                          boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.85)',
-                        }}
+                        className="inline-flex items-center gap-2 rounded-md bg-[#F4F2ED] hover:bg-white px-4 py-2 text-xs font-semibold text-[#0C0C0E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                       >
-                        <ExternalLink className="h-4 w-4 text-zinc-950" />
                         <span>
                           {featureActionLabels[floor.floorIndex] ||
                             'Open in Mr. Stranger'}
@@ -1247,10 +1094,8 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                         type="button"
                         data-testid={`trigger-messenger-ping-btn-${floor.floorIndex}`}
                         onClick={() => handleSendCharacterPing(floor.floorIndex)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-zinc-300/25 px-3.5 py-2.5 text-xs font-medium text-zinc-100 hover:border-zinc-200/60 hover:text-white"
-                        style={{ background: 'rgba(18, 18, 22, 0.78)' }}
+                        className="inline-flex items-center gap-2 rounded-md border border-zinc-800 bg-[#121215] hover:bg-[#18181C] px-3.5 py-2 text-xs font-medium text-[#F4F2ED] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
                       >
-                        <MessageSquare className="h-4 w-4 text-zinc-300" />
                         <span>
                           Send Quick Ping to {floor.character.name.split(' ')[0]}
                         </span>
@@ -1258,89 +1103,65 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                     </div>
                   </div>
 
-                  {/* Animated 3D Character Using Phone & Social Media Messenger Mockup */}
+                  {/* Right/Alternating Column: Clean Matte Peer Conversation Sheet */}
                   <div
                     data-testid={`phone-character-card-${floor.floorIndex}`}
                     className={`lg:col-span-5 ${
                       isEven ? 'lg:order-1' : 'lg:order-2'
                     }`}
                   >
-                    <div
-                      className="relative mx-auto max-w-sm rounded-3xl border border-zinc-300/30 p-5"
-                      style={{
-                        background:
-                          'linear-gradient(165deg, rgba(14, 14, 18, 0.88) 0%, rgba(5, 5, 7, 0.94) 100%)',
-                        boxShadow:
-                          'inset 0 1px 1px rgba(255, 255, 255, 0.35), 0 24px 48px -12px rgba(0, 0, 0, 0.95)',
-                      }}
-                    >
-                      <div className="mb-3.5 flex items-center justify-between border-b border-zinc-300/15 pb-3">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="flex h-9 w-9 items-center justify-center rounded-xl border border-zinc-200/40 text-xs font-bold text-zinc-950"
-                            style={{
-                              background:
-                                'linear-gradient(135deg, #f4f4f5, #71717a)',
-                            }}
-                          >
+                    <div className="rounded-md border border-zinc-800/90 bg-[#121215]/95 p-5 space-y-4">
+                      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-zinc-700/80 bg-[#18181C] text-xs font-mono font-semibold text-[#F4F2ED]">
                             {floor.character.name
                               .split(' ')
                               .map((n) => n[0])
                               .join('')}
                           </div>
-                          <div>
-                            <div className="text-xs font-semibold text-white">
-                              {floor.character.name} ·{' '}
-                              <span className="text-zinc-400 font-normal">
-                                {floor.character.handle}
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-[#F4F2ED] truncate">
+                              {floor.character.name}{' '}
+                              <span className="font-mono font-normal text-[#9E9B93]">
+                                · {floor.character.handle}
                               </span>
                             </div>
-                            <div className="text-[11px] text-zinc-300">
-                              {floor.character.messengerApp}
+                            <div className="text-[11px] text-[#9E9B93] truncate">
+                              {floor.character.role} · {floor.character.messengerApp}
                             </div>
                           </div>
                         </div>
-                        <Smartphone className="h-4 w-4 text-zinc-200" />
                       </div>
 
-                      <div className="mb-3 flex items-center justify-between text-[11px] text-zinc-400">
-                        <span>{floor.character.role}</span>
-                        <span className="text-zinc-200 font-medium">
-                          {floor.character.statusBadge}
-                        </span>
-                      </div>
-
-                      {/* Live Social Media Messenger Bubbles Inside the Character's Phone */}
-                      <div className="space-y-2.5 my-3">
+                      {/* Peer Messages */}
+                      <div className="space-y-2.5">
                         {floorBubbles.map((bubble) => (
                           <div
                             key={bubble.id}
-                            className="rounded-2xl border border-zinc-300/20 p-3 text-xs text-zinc-100"
-                            style={{
-                              background:
-                                'linear-gradient(135deg, rgba(39, 39, 42, 0.78), rgba(15, 15, 19, 0.9))',
-                            }}
+                            className="rounded border border-zinc-800/80 bg-[#0C0C0E]/80 p-3 text-xs"
                           >
-                            <div className="flex items-center justify-between text-[10px] text-zinc-400 mb-1">
-                              <span className="font-semibold text-white">
-                                {bubble.characterName} ({bubble.characterHandle})
+                            <div className="flex items-center justify-between text-[11px] text-[#9E9B93] mb-1">
+                              <span className="font-medium text-[#F4F2ED]">
+                                {bubble.characterName}
                               </span>
-                              <span>{bubble.timestampLabel}</span>
+                              <span className="font-mono tabular-nums">
+                                {bubble.timestampLabel}
+                              </span>
                             </div>
-                            <p className="leading-relaxed text-zinc-100">
+                            <p className="leading-relaxed text-zinc-300">
                               {bubble.text}
                             </p>
                           </div>
                         ))}
                       </div>
 
-                      {/* Interactive Phone Messenger Input Form */}
+                      {/* Reply Input */}
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
                           handleSendCharacterPing(floor.floorIndex);
                         }}
-                        className="mt-3 flex items-center gap-2 pt-2 border-t border-zinc-300/15"
+                        className="flex items-center gap-2 pt-2 border-t border-zinc-800/80"
                       >
                         <input
                           type="text"
@@ -1351,20 +1172,16 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                               [floor.floorIndex]: e.target.value,
                             }))
                           }
-                          placeholder={`Message ${floor.character.name.split(' ')[0]} on ${floor.character.messengerApp}...`}
+                          placeholder={`Reply to ${floor.character.name.split(' ')[0]}...`}
                           aria-label={`Send message to ${floor.character.name}`}
-                          className="flex-1 rounded-xl border border-zinc-300/25 bg-zinc-950/90 px-3 py-2 text-xs text-white placeholder-zinc-500 focus:border-zinc-200 focus:outline-none"
+                          className="flex-1 rounded border border-zinc-800 bg-[#0C0C0E] px-3 py-1.5 text-xs text-[#F4F2ED] placeholder-[#9E9B93] focus:border-zinc-500 focus:outline-none"
                         />
                         <button
                           type="submit"
                           aria-label={`Send to ${floor.character.name}`}
-                          className="inline-flex h-8 w-8 items-center justify-center rounded-xl border border-zinc-200/40 text-zinc-950 transition hover:border-white"
-                          style={{
-                            background:
-                              'linear-gradient(135deg, #f4f4f5 0%, #a1a1aa 100%)',
-                          }}
+                          className="inline-flex h-8 px-3 items-center justify-center rounded bg-[#F4F2ED] hover:bg-white text-xs font-semibold text-[#0C0C0E] transition-colors shrink-0 cursor-pointer"
                         >
-                          <Send className="h-3.5 w-3.5 text-zinc-950" />
+                          <Send className="h-3.5 w-3.5" />
                         </button>
                       </form>
                     </div>

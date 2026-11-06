@@ -14,28 +14,91 @@
 
   body {
     font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    background-color: #050505;
-    color: #fafafa;
+    background-color: #0C0C0E;
+    color: #F4F2ED;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    letter-spacing: 0.005em;
+    letter-spacing: 0.004em;
     transition: background-color 160ms cubic-bezier(0.16, 1, 0.3, 1), color 160ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /* Tactile Architectural Paper & Matte Film Grain Overlay */
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 9998;
+    pointer-events: none;
+    opacity: 0.036;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 240 240' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='editorialGrain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23editorialGrain)'/%3E%3C/svg%3E");
+    background-repeat: repeat;
+    background-size: 180px 180px;
+  }
+
   html.light body {
-    background-color: #f8fafc;
-    color: #0f172a;
+    background-color: #F6F4EF;
+    color: #161615;
+  }
+
+  html.light body::after {
+    opacity: 0.028;
   }
 
   h1, h2, h3, h4, .font-display {
     font-family: 'Bricolage Grotesque', system-ui, sans-serif;
-    letter-spacing: -0.02em;
+    letter-spacing: -0.022em;
+    text-wrap: balance;
   }
 
   .font-mono, .tabular-nums {
     font-family: 'JetBrains Mono', monospace;
     font-variant-numeric: tabular-nums;
   }
+}
+
+/* ==========================================================================
+   TACTILE EDITORIAL STUDIO SURFACES (WARM OBSIDIAN & GALLERY ALABASTER)
+   Replaces harsh pitch-black #050505 with tactile matte graphite & warm paper
+   ========================================================================== */
+.tactile-editorial-shell {
+  background-color: #0C0C0E;
+  background-image:
+    radial-gradient(circle at 18% 0%, rgba(244, 242, 237, 0.035), transparent 45%),
+    radial-gradient(circle at 85% 12%, rgba(214, 211, 202, 0.025), transparent 50%),
+    linear-gradient(to right, rgba(244, 242, 237, 0.018) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(244, 242, 237, 0.018) 1px, transparent 1px);
+  background-size: 100% 100%, 100% 100%, 48px 48px, 48px 48px;
+}
+
+html.light .tactile-editorial-shell,
+.theme-light.tactile-editorial-shell {
+  background-color: #F6F4EF !important;
+  background-image:
+    radial-gradient(circle at 18% 0%, rgba(22, 22, 21, 0.025), transparent 45%),
+    linear-gradient(to right, rgba(22, 22, 21, 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(22, 22, 21, 0.028) 1px, transparent 1px) !important;
+  background-size: 100% 100%, 48px 48px, 48px 48px !important;
+}
+
+.tactile-editorial-surface {
+  background-color: #121215;
+  border-color: rgba(244, 242, 237, 0.085);
+}
+
+html.light .tactile-editorial-surface {
+  background-color: #FDFCFA !important;
+  border-color: #E5E1D8 !important;
+}
+
+html.dark .bg-\[\#050505\] {
+  background-color: #0C0C0E;
+}
+
+html.dark .bg-\[\#0A0A0C\],
+html.dark .bg-\[\#08080A\],
+html.dark .bg-\[\#0D0D10\],
+html.dark .bg-\[\#0c0c0e\] {
+  background-color: #121215;
 }
 
 /* ==========================================================================
@@ -47,7 +110,7 @@ html.light .bg-\[\#050505\],
 .theme-light .bg-\[\#050505\],
 html.light.bg-\[\#050505\],
 .theme-light.bg-\[\#050505\] {
-  background-color: #f8fafc !important;
+  background-color: #F6F4EF !important;
 }
 
 html.light .bg-\[\#0A0A0C\],
@@ -57,8 +120,8 @@ html.light .bg-\[\#0c0c0e\],
 .theme-light .bg-\[\#0A0A0C\],
 .theme-light .bg-\[\#08080A\],
 .theme-light .bg-\[\#0D0D10\] {
-  background-color: #ffffff !important;
-  box-shadow: 0 1px 2px 0 rgba(15, 23, 42, 0.04);
+  background-color: #FDFCFA !important;
+  box-shadow: 0 1px 2px 0 rgba(22, 22, 21, 0.03);
 }
 
 html.light .bg-\[\#111318\],
@@ -73,16 +136,16 @@ html.light .bg-zinc-900\/30,
 html.light .bg-zinc-800\/60,
 html.light .bg-zinc-800\/50,
 html.light .bg-zinc-800\/40 {
-  background-color: #f1f5f9 !important;
+  background-color: #EFECE4 !important;
 }
 
 html.light .bg-zinc-900:not(.text-white) {
-  background-color: #f1f5f9 !important;
+  background-color: #EFECE4 !important;
 }
 
 html.light .hover\:bg-zinc-900:hover,
 html.light .hover\:bg-zinc-800:hover {
-  background-color: #e2e8f0 !important;
+  background-color: #E5E1D8 !important;
 }
 
 /* Primary inverted buttons & active navigation tabs in Light Mode */
