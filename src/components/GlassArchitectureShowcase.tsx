@@ -2,24 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 import {
-  BookOpen,
-  Layers,
-  MessageSquare,
   Send,
-  Smartphone,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  CheckCircle2,
-  ExternalLink,
-  ChevronDown,
-  ChevronUp,
-} from 'lucide-react';
+} from './ArchitecturalGlyphs';
 import {
   GLASS_ARCHITECTURAL_FLOORS,
   evaluateRollingBookKinematics,
   evaluateVerticalArchitectureScrollState,
   buildInitialCharacterMessengerBubbles,
   appendCharacterMessengerPing,
+  sanitizeEditorialUiCopy,
+  buildLegalComplianceDocumentsSpec,
+  buildWorkspaceSkeletonLoaderSpec,
+  buildLiveInteractiveProductDemoSpec,
   type CharacterMessengerBubble,
   type GlassArchitecturalFloorSpec,
   type RollingBookDirection,
@@ -773,38 +767,56 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
     }));
   };
 
+  const [demoRoomCode, setDemoRoomCode] = useState<string>(activeStudyRoomCode || 'STUDY-204');
+  const [demoTimerMinutes, setDemoTimerMinutes] = useState<number>(25);
+  const [demoIsRunning, setDemoIsRunning] = useState<boolean>(true);
+  const [demoSoundscape, setDemoSoundscape] = useState<string>('Rain');
+  const [isSkeletonPreviewActive, setIsSkeletonPreviewActive] = useState<boolean>(false);
+
+  const liveDemoSpec = buildLiveInteractiveProductDemoSpec({
+    activeRoomCode: demoRoomCode,
+    timerMinutes: demoTimerMinutes,
+    isRunning: demoIsRunning,
+    completedMinutesToday: dailyCompletedMinutes,
+    dailyTargetMinutes: dailyTargetMinutes,
+    soundscapePreset: demoSoundscape,
+  });
+  const legalSpec = buildLegalComplianceDocumentsSpec();
+  const skeletonSpec = buildWorkspaceSkeletonLoaderSpec({
+    isLoading: isSkeletonPreviewActive,
+    rowCount: 3,
+  });
+
   return (
     <div
       data-testid="glass-3d-architecture-showcase"
       data-palette-theme="obsidian-silver"
       data-surface-texture="architectural-paper-grain"
-      className="tactile-editorial-shell relative min-h-screen w-full text-[#F4F2ED] selection:bg-zinc-500/30"
+      className="tactile-editorial-shell relative min-h-screen w-full text-[#F4F2ED] selection:bg-zinc-700"
     >
-      {/* Fixed Full-Viewport Three.js 3D Architectural Canvas (Subtle Atmospheric Backdrop) */}
+      {/* Fixed Full-Viewport Three.js 3D Architectural Canvas */}
       <div
         ref={canvasMountRef}
         data-testid="glass-3d-architecture-canvas"
         data-book-roll-percent={currentKinematics.rollProgressPercent}
         data-active-floor={currentKinematics.activeFloorIndex}
-        className="fixed inset-0 z-0 pointer-events-none opacity-45"
+        className="fixed inset-0 z-0 pointer-events-none opacity-35"
       />
 
-      {/* Strict 3-Zone Single-Row Top Bar Contract: [1-Line Brand] — [5 Clean Nav Links] — [Primary Action] */}
-      <header className="sticky top-0 z-30 border-b border-zinc-800/85 bg-[#0C0C0E]/92 backdrop-blur-md px-6 py-3.5">
+      {/* Strict 3-Zone Single-Row Top Bar Contract */}
+      <header className="sticky top-0 z-30 border-b border-zinc-800 bg-[#0C0C0E] px-6 py-3.5">
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-8">
-          {/* Zone 1: Single 1-Line Brand Wordmark */}
           <a
             href="#top"
             onClick={(e) => {
               e.preventDefault();
-              window.scrollTo({ top: 0, behavior: 'smooth' });
+              window.scrollTo({ top: 0, behavior: 'auto' });
             }}
             className="font-display text-lg font-bold tracking-tight text-[#F4F2ED] whitespace-nowrap shrink-0"
           >
             Mr. Stranger
           </a>
 
-          {/* Zone 2: 5 Concise Single-Line Navigation Links */}
           <nav
             aria-label="Mr. Stranger Features"
             className="hidden md:flex items-center gap-6 text-xs font-medium text-[#9E9B93] shrink-0"
@@ -827,7 +839,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                   key={floor.floorIndex}
                   type="button"
                   onClick={() => handleJumpToFloor(floor)}
-                  className={`py-1 transition-colors border-b whitespace-nowrap shrink-0 cursor-pointer ${
+                  className={`py-1 border-b whitespace-nowrap shrink-0 cursor-pointer ${
                     isActive
                       ? 'border-[#F4F2ED] text-[#F4F2ED] font-semibold'
                       : 'border-transparent text-[#9E9B93] hover:text-[#F4F2ED]'
@@ -839,13 +851,12 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
             })}
           </nav>
 
-          {/* Zone 3: Primary Workspace Entry Action */}
           <div className="flex items-center gap-4 shrink-0">
             <button
               type="button"
               data-testid="toggle-book-roll-btn"
               onClick={handleToggleBookRoll}
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-[#9E9B93] hover:text-[#F4F2ED] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-medium text-[#9E9B93] hover:text-[#F4F2ED] whitespace-nowrap shrink-0 cursor-pointer"
             >
               <span>
                 {bookRollPercent >= 75
@@ -858,7 +869,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
               type="button"
               data-testid="switch-to-workspace-studio-btn"
               onClick={() => onEnterWorkspacePage('hub', false)}
-              className="inline-flex items-center gap-2 rounded-md bg-[#F4F2ED] hover:bg-white px-4 py-2 text-xs font-semibold text-[#0C0C0E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+              className="inline-flex items-center gap-2 border border-zinc-700 bg-[#E6E2D8] px-4 py-2 text-xs font-semibold text-[#141413] whitespace-nowrap shrink-0 cursor-pointer"
             >
               <span>Enter Mr. Stranger Workspace</span>
             </button>
@@ -867,67 +878,54 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
       </header>
 
       {/* Main Editorial Studio Content */}
-      <main className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 pt-10 pb-28">
-        {/* SECTION 1: EDITORIAL BROADSHEET HERO STAGE */}
+      <main className="relative z-10 mx-auto max-w-7xl px-6 sm:px-8 pt-10 pb-24">
+        {/* SECTION 1: EDITORIAL BROADSHEET HERO STAGE + LIVE INTERACTIVE PRODUCT DEMO */}
         <section
           data-testid="front-glass-base-hero"
-          className="mb-16 border-b border-zinc-800/85 pb-12"
+          className="mb-14 border-b border-zinc-800 pb-12"
         >
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
             {/* Left Column: Editorial Value Proposition */}
-            <div className="lg:col-span-8 space-y-5">
-              {/* Unboxed Metadata Line with · Separators */}
-              <div className="flex flex-wrap items-center gap-2 text-xs text-[#9E9B93]">
-                <span>Live Presence Directory</span>
-                <span aria-hidden="true">·</span>
-                <span>Invite-First Messenger &amp; Calls</span>
-                <span aria-hidden="true">·</span>
-                <span>Silent Study Sanctuary</span>
-                <span aria-hidden="true">·</span>
-                <span className="font-mono tabular-nums text-zinc-300">
+            <div className="lg:col-span-7 space-y-5">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-[#9E9B93] font-mono">
+                <span>01 / Live Presence Directory</span>
+                <span>02 / Invite-First Messenger</span>
+                <span>03 / Silent Study Sanctuary</span>
+                <span className="text-zinc-300">
                   {currentDisplayName} ({currentEmail})
                 </span>
               </div>
 
-              <h1
-                className="font-display font-bold tracking-tight text-[#F4F2ED] leading-[1.08]"
-                style={{ fontSize: 'clamp(2.25rem, 3.8vw, 3.5rem)' }}
-              >
-                Meet focused minds. Co-study in silence. Connect without cold DMs.
+              <h1 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-[#F4F2ED] leading-tight">
+                Meet focused minds. Co-study in silence. Connect with mutual consent.
               </h1>
 
-              <p className="max-w-2xl text-base text-[#9E9B93] leading-relaxed">
+              <p className="max-w-2xl text-sm sm:text-base text-[#9E9B93] leading-relaxed">
                 <strong className="text-[#F4F2ED] font-semibold">Mr. Stranger</strong>{' '}
-                pairs an invite-first presence directory and peer-to-peer WebRTC voice
+                combines an invite-first presence directory and peer-to-peer WebRTC voice
                 and video calling with 25-minute Pomodoro study sanctuaries, ambient
                 soundscapes, optical QR room handoff, and multiplayer break games.
               </p>
 
-              {/* Unboxed Live Studio Telemetry Line */}
-              <div className="pt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#9E9B93] font-mono tabular-nums">
+              <div className="pt-1 flex flex-wrap items-center gap-4 text-xs text-[#9E9B93] font-mono tabular-nums">
                 <span className="text-[#F4F2ED] font-semibold">
                   Room {activeStudyRoomCode}
                 </span>
-                <span aria-hidden="true">·</span>
                 <span>
                   {dailyCompletedMinutes}/{dailyTargetMinutes}m Focus Logged
                 </span>
-                <span aria-hidden="true">·</span>
                 <span>{streakCount}-Day Streak</span>
-                <span aria-hidden="true">·</span>
                 <span>{participationPoints} pts</span>
-                <span aria-hidden="true">·</span>
                 <span data-testid="rolling-book-state-badge">
-                  {currentKinematics.bookStateLabel}
+                  {sanitizeEditorialUiCopy(currentKinematics.bookStateLabel)}
                 </span>
               </div>
 
-              {/* Primary Hero Actions */}
               <div className="pt-2 flex flex-wrap items-center gap-3">
                 <button
                   type="button"
                   onClick={() => onEnterWorkspacePage('hub', false)}
-                  className="px-4 py-2.5 rounded-md bg-[#F4F2ED] hover:bg-white text-xs font-semibold text-[#0C0C0E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-4 py-2.5 border border-zinc-700 bg-[#E6E2D8] text-xs font-semibold text-[#141413] whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   Open Live Workspace
                 </button>
@@ -935,7 +933,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                   type="button"
                   data-testid="glass-hero-log-pomodoro-btn"
                   onClick={onQuickLogFocusSprint}
-                  className="px-4 py-2.5 rounded-md border border-zinc-700/80 bg-[#121215] hover:bg-[#18181C] text-xs font-medium text-[#F4F2ED] font-mono tabular-nums transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-4 py-2.5 border border-zinc-700 bg-[#121215] text-xs font-medium text-[#F4F2ED] font-mono tabular-nums whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   +25m Focus ({dailyCompletedMinutes}/{dailyTargetMinutes}m)
                 </button>
@@ -943,44 +941,126 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                   type="button"
                   data-testid="glass-hero-open-qr-btn"
                   onClick={() => onEnterWorkspacePage('hub', true)}
-                  className="px-4 py-2.5 rounded-md border border-zinc-800 bg-transparent hover:bg-[#121215] text-xs font-medium text-[#9E9B93] hover:text-[#F4F2ED] font-mono tabular-nums transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                  className="px-4 py-2.5 border border-zinc-800 bg-[#0C0C0E] text-xs font-medium text-[#9E9B93] hover:text-[#F4F2ED] font-mono tabular-nums whitespace-nowrap shrink-0 cursor-pointer"
                 >
                   Scan Room QR ({recentQrScansCount})
                 </button>
               </div>
             </div>
 
-            {/* Right Column: Clean Editorial Index Sheet (Single-Elevation Matte Surface) */}
-            <div className="lg:col-span-4 rounded-md border border-zinc-800/90 bg-[#121215]/95 p-5 space-y-4">
-              <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3 text-xs">
-                <span className="font-semibold text-[#F4F2ED]">
-                  Architecture Index
+            {/* Right Column: LIVE INTERACTIVE PRODUCT DEMO CONSOLE */}
+            <div
+              data-testid={liveDemoSpec.containerTestId}
+              className="lg:col-span-5 border border-zinc-800 bg-[#121215] p-5 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3 text-xs">
+                <span className="font-semibold text-[#F4F2ED] uppercase tracking-wider font-mono">
+                  Live Product Demo / {liveDemoSpec.activeRoomCode}
                 </span>
                 <span className="font-mono tabular-nums text-[#9E9B93]">
-                  {currentKinematics.rollProgressPercent}% Explored
+                  {liveDemoSpec.isRunning ? 'Timer Active' : 'Timer Paused'} ({liveDemoSpec.timerMinutes}:00)
                 </span>
               </div>
 
+              {/* Interactive Study Room Switcher */}
               <div className="space-y-1.5">
-                <p className="text-sm font-semibold text-[#F4F2ED]">
-                  {currentKinematics.activeChapterTitle}
-                </p>
-                <p className="text-xs text-[#9E9B93] leading-relaxed">
-                  {verticalState.activeFloor.whatTheAppDoes}
-                </p>
+                <div className="flex items-center justify-between text-[11px] font-mono text-[#9E9B93]">
+                  <span>Select Active Study Room</span>
+                  <span>{liveDemoSpec.progressPercent}% of Daily Goal</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {liveDemoSpec.availableRooms.slice(0, 2).map((room) => (
+                    <button
+                      key={room}
+                      type="button"
+                      onClick={() => setDemoRoomCode(room)}
+                      className={`px-3 py-1.5 text-xs font-mono border text-left cursor-pointer ${
+                        demoRoomCode === room
+                          ? 'border-zinc-500 bg-[#1C1C21] text-[#F4F2ED] font-semibold'
+                          : 'border-zinc-800 bg-[#0C0C0E] text-[#9E9B93]'
+                      }`}
+                    >
+                      {room}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="pt-2 border-t border-zinc-800/80 space-y-2">
+              {/* Interactive Pomodoro Duration & Soundscape Controls */}
+              <div className="grid grid-cols-2 gap-2 pt-2 border-t border-zinc-800">
+                <div className="space-y-1">
+                  <span className="block text-[11px] font-mono text-[#9E9B93]">
+                    Sprint Duration
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {[15, 25, 50].map((mins) => (
+                      <button
+                        key={mins}
+                        type="button"
+                        onClick={() => setDemoTimerMinutes(mins)}
+                        className={`px-2 py-1 text-[11px] font-mono border cursor-pointer ${
+                          demoTimerMinutes === mins
+                            ? 'border-zinc-500 bg-[#1C1C21] text-[#F4F2ED]'
+                            : 'border-zinc-800 bg-[#0C0C0E] text-[#9E9B93]'
+                        }`}
+                      >
+                        {mins}m
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <span className="block text-[11px] font-mono text-[#9E9B93]">
+                    Ambient Soundscape
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {['Rain', 'Cafe', 'Forest'].map((preset) => (
+                      <button
+                        key={preset}
+                        type="button"
+                        onClick={() => setDemoSoundscape(preset)}
+                        className={`px-2 py-1 text-[11px] font-mono border cursor-pointer ${
+                          demoSoundscape === preset
+                            ? 'border-zinc-500 bg-[#1C1C21] text-[#F4F2ED]'
+                            : 'border-zinc-800 bg-[#0C0C0E] text-[#9E9B93]'
+                        }`}
+                      >
+                        {preset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Interactive Demo Actions & Guidebook Slider */}
+              <div className="pt-2 border-t border-zinc-800 flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setDemoIsRunning((prev) => !prev)}
+                  className="px-3 py-1.5 border border-zinc-700 bg-[#0C0C0E] text-xs font-mono text-[#F4F2ED] cursor-pointer"
+                >
+                  {demoIsRunning ? 'Pause Demo Timer' : 'Start Demo Timer'}
+                </button>
+                <button
+                  type="button"
+                  onClick={onQuickLogFocusSprint}
+                  className="px-3 py-1.5 border border-zinc-700 bg-[#E6E2D8] text-xs font-semibold text-[#141413] font-mono cursor-pointer"
+                >
+                  Log +{demoTimerMinutes}m to Workspace
+                </button>
+              </div>
+
+              <div className="pt-2 border-t border-zinc-800 space-y-1.5">
                 <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-[#9E9B93]">
-                  <span>Chapter I</span>
+                  <span>Guidebook Chapter Scroll ({currentKinematics.rollProgressPercent}%)</span>
                   <button
                     type="button"
                     onClick={() => setIsAutoRollingBook((prev) => !prev)}
-                    className="text-[#F4F2ED] hover:underline cursor-pointer"
+                    className="text-[#F4F2ED] underline cursor-pointer"
                   >
-                    {isAutoRollingBook ? 'Pause Auto-Tour' : 'Resume Auto-Tour'}
+                    {isAutoRollingBook ? 'Pause Auto-Scroll' : 'Resume Auto-Scroll'}
                   </button>
-                  <span>Chapter V ({currentKinematics.rollProgressPercent}%)</span>
                 </div>
                 <input
                   type="range"
@@ -990,27 +1070,19 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                   onChange={handleSliderRollChange}
                   aria-label="Roll Mr. Stranger Feature Guidebook Up and Down"
                   data-testid="book-roll-slider"
-                  className="h-1.5 w-full cursor-pointer appearance-none rounded bg-zinc-800 accent-[#F4F2ED]"
+                  className="h-1.5 w-full cursor-pointer appearance-none bg-zinc-800 accent-[#F4F2ED]"
                 />
-              </div>
-
-              <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between text-xs text-[#9E9B93]">
-                <span>Active Member</span>
-                <span className="text-[#F4F2ED] font-medium truncate max-w-[200px]">
-                  {verticalState.activeFloor.character.name} ·{' '}
-                  {verticalState.activeFloor.character.role}
-                </span>
               </div>
             </div>
           </div>
         </section>
 
         {/* SECTION 2: ARCHITECTURAL LEDGER CHAPTERS (Hairline-Divided Editorial Rows) */}
-        <div className="divide-y divide-zinc-800/85">
+        <div className="divide-y divide-zinc-800">
           {GLASS_ARCHITECTURAL_FLOORS.map((floor, idx) => {
             const floorBubbles = messengerBubbles
               .filter((b) => b.floorIndex === floor.floorIndex)
-              .slice(-3);
+              .slice(-2);
             const isEven = idx % 2 === 1;
             const featureActionLabels: Record<number, string> = {
               1: `Enter Study Room (${activeStudyRoomCode})`,
@@ -1029,50 +1101,46 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                 data-testid={`glass-architecture-floor-${floor.floorIndex}`}
                 onPointerMove={(e) => handleCardPointerMove(floor.floorIndex, e)}
                 onPointerLeave={() => handleCardPointerLeave(floor.floorIndex)}
-                className="py-12 first:pt-2"
+                className="py-10 first:pt-2"
               >
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 items-start">
-                  {/* Left/Alternating Column: Editorial Prose & Capabilities */}
                   <div
                     className={`lg:col-span-7 space-y-4 ${
                       isEven ? 'lg:order-2' : 'lg:order-1'
                     }`}
                   >
-                    <div className="flex flex-wrap items-center gap-2 text-xs text-[#9E9B93]">
-                      <span className="font-mono font-semibold text-[#F4F2ED]">
-                        0{floor.floorIndex}.
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-[#9E9B93] font-mono">
+                      <span className="font-semibold text-[#F4F2ED]">
+                        0{floor.floorIndex}
                       </span>
-                      <span>{floor.bookChapterTitle}</span>
-                      <span aria-hidden="true">·</span>
-                      <span>{floor.tierLabel}</span>
+                      <span>{sanitizeEditorialUiCopy(floor.bookChapterTitle)}</span>
+                      <span>/</span>
+                      <span>{sanitizeEditorialUiCopy(floor.tierLabel)}</span>
                     </div>
 
-                    <h2 className="font-display text-2xl sm:text-3xl font-bold tracking-tight text-[#F4F2ED]">
-                      {floor.title}
+                    <h2 className="font-display text-xl sm:text-2xl font-bold tracking-tight text-[#F4F2ED]">
+                      {sanitizeEditorialUiCopy(floor.title)}
                     </h2>
 
-                    <p className="text-sm sm:text-base text-[#9E9B93] leading-relaxed max-w-2xl">
-                      {floor.whatTheAppDoes}
+                    <p className="text-sm text-[#9E9B93] leading-relaxed max-w-2xl">
+                      {sanitizeEditorialUiCopy(floor.whatTheAppDoes)}
                     </p>
 
-                    <ul className="space-y-2 pt-1 border-t border-zinc-800/70">
+                    <div className="divide-y divide-zinc-800 border-t border-b border-zinc-800">
                       {floor.featureHighlights.map((feat, fIdx) => (
-                        <li
+                        <div
                           key={fIdx}
-                          className="flex items-baseline gap-2.5 text-sm text-zinc-200 pt-1.5"
+                          className="flex items-baseline gap-3 text-xs sm:text-sm text-zinc-200 py-2"
                         >
-                          <span
-                            aria-hidden="true"
-                            className="font-mono text-xs text-[#9E9B93]"
-                          >
+                          <span className="font-mono text-xs text-[#9E9B93] shrink-0">
                             0{fIdx + 1}
                           </span>
-                          <span>{feat}</span>
-                        </li>
+                          <span>{sanitizeEditorialUiCopy(feat)}</span>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
 
-                    <div className="pt-3 flex flex-wrap items-center gap-3">
+                    <div className="pt-2 flex flex-wrap items-center gap-3">
                       <button
                         type="button"
                         data-testid={`launch-floor-workspace-btn-${floor.floorIndex}`}
@@ -1082,7 +1150,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                             floor.floorIndex === 4
                           )
                         }
-                        className="inline-flex items-center gap-2 rounded-md bg-[#F4F2ED] hover:bg-white px-4 py-2 text-xs font-semibold text-[#0C0C0E] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        className="inline-flex items-center gap-2 border border-zinc-700 bg-[#E6E2D8] px-4 py-2 text-xs font-semibold text-[#141413] whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         <span>
                           {featureActionLabels[floor.floorIndex] ||
@@ -1094,7 +1162,7 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                         type="button"
                         data-testid={`trigger-messenger-ping-btn-${floor.floorIndex}`}
                         onClick={() => handleSendCharacterPing(floor.floorIndex)}
-                        className="inline-flex items-center gap-2 rounded-md border border-zinc-800 bg-[#121215] hover:bg-[#18181C] px-3.5 py-2 text-xs font-medium text-[#F4F2ED] transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                        className="inline-flex items-center gap-2 border border-zinc-800 bg-[#121215] px-3.5 py-2 text-xs font-medium text-[#F4F2ED] whitespace-nowrap shrink-0 cursor-pointer"
                       >
                         <span>
                           Send Quick Ping to {floor.character.name.split(' ')[0]}
@@ -1103,17 +1171,17 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                     </div>
                   </div>
 
-                  {/* Right/Alternating Column: Clean Matte Peer Conversation Sheet */}
+                  {/* Right Column: Live Room Telemetry & Message Dispatch Ledger */}
                   <div
                     data-testid={`phone-character-card-${floor.floorIndex}`}
                     className={`lg:col-span-5 ${
                       isEven ? 'lg:order-1' : 'lg:order-2'
                     }`}
                   >
-                    <div className="rounded-md border border-zinc-800/90 bg-[#121215]/95 p-5 space-y-4">
-                      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-3">
+                    <div className="border border-zinc-800 bg-[#121215] p-5 space-y-4">
+                      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded border border-zinc-700/80 bg-[#18181C] text-xs font-mono font-semibold text-[#F4F2ED]">
+                          <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-zinc-700 bg-[#18181C] text-xs font-mono font-semibold text-[#F4F2ED]">
                             {floor.character.name
                               .split(' ')
                               .map((n) => n[0])
@@ -1123,22 +1191,21 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                             <div className="text-xs font-semibold text-[#F4F2ED] truncate">
                               {floor.character.name}{' '}
                               <span className="font-mono font-normal text-[#9E9B93]">
-                                · {floor.character.handle}
+                                / {floor.character.handle}
                               </span>
                             </div>
                             <div className="text-[11px] text-[#9E9B93] truncate">
-                              {floor.character.role} · {floor.character.messengerApp}
+                              {sanitizeEditorialUiCopy(floor.character.role)} / {sanitizeEditorialUiCopy(floor.character.messengerApp)}
                             </div>
                           </div>
                         </div>
                       </div>
 
-                      {/* Peer Messages */}
-                      <div className="space-y-2.5">
+                      <div className="space-y-2">
                         {floorBubbles.map((bubble) => (
                           <div
                             key={bubble.id}
-                            className="rounded border border-zinc-800/80 bg-[#0C0C0E]/80 p-3 text-xs"
+                            className="border border-zinc-800 bg-[#0C0C0E] p-3 text-xs"
                           >
                             <div className="flex items-center justify-between text-[11px] text-[#9E9B93] mb-1">
                               <span className="font-medium text-[#F4F2ED]">
@@ -1149,19 +1216,18 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                               </span>
                             </div>
                             <p className="leading-relaxed text-zinc-300">
-                              {bubble.text}
+                              {sanitizeEditorialUiCopy(bubble.text)}
                             </p>
                           </div>
                         ))}
                       </div>
 
-                      {/* Reply Input */}
                       <form
                         onSubmit={(e) => {
                           e.preventDefault();
                           handleSendCharacterPing(floor.floorIndex);
                         }}
-                        className="flex items-center gap-2 pt-2 border-t border-zinc-800/80"
+                        className="flex items-center gap-2 pt-2 border-t border-zinc-800"
                       >
                         <input
                           type="text"
@@ -1172,14 +1238,14 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
                               [floor.floorIndex]: e.target.value,
                             }))
                           }
-                          placeholder={`Reply to ${floor.character.name.split(' ')[0]}...`}
+                          placeholder={`Message ${floor.character.name.split(' ')[0]}...`}
                           aria-label={`Send message to ${floor.character.name}`}
-                          className="flex-1 rounded border border-zinc-800 bg-[#0C0C0E] px-3 py-1.5 text-xs text-[#F4F2ED] placeholder-[#9E9B93] focus:border-zinc-500 focus:outline-none"
+                          className="flex-1 border border-zinc-800 bg-[#0C0C0E] px-3 py-1.5 text-xs text-[#F4F2ED] placeholder-[#9E9B93] focus:border-zinc-500 focus:outline-none"
                         />
                         <button
                           type="submit"
                           aria-label={`Send to ${floor.character.name}`}
-                          className="inline-flex h-8 px-3 items-center justify-center rounded bg-[#F4F2ED] hover:bg-white text-xs font-semibold text-[#0C0C0E] transition-colors shrink-0 cursor-pointer"
+                          className="inline-flex h-8 px-3 items-center justify-center border border-zinc-700 bg-[#E6E2D8] text-xs font-semibold text-[#141413] shrink-0 cursor-pointer"
                         >
                           <Send className="h-3.5 w-3.5" />
                         </button>
@@ -1191,6 +1257,107 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
             );
           })}
         </div>
+
+        {/* SECTION 3: ARCHITECTURAL SKELETON LOADER & LEGAL GOVERNANCE LEDGER (TOS + PRIVACY POLICY) */}
+        <section className="mt-12 border-t border-zinc-800 pt-10 space-y-10">
+          {/* Skeleton Loader Synchronization Ledger */}
+          <div
+            data-testid={skeletonSpec.containerTestId}
+            className="border border-zinc-800 bg-[#121215] p-5 space-y-3"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800 pb-3">
+              <div>
+                <h2 className="text-xs font-mono uppercase tracking-wider text-[#F4F2ED] font-semibold">
+                  Directory &amp; Telemetry Skeleton Loader State
+                </h2>
+                <p className="text-xs text-[#9E9B93]">
+                  {skeletonSpec.statusLabel}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSkeletonPreviewActive((prev) => !prev)}
+                className="px-3 py-1.5 border border-zinc-700 bg-[#0C0C0E] text-xs font-mono text-[#F4F2ED] cursor-pointer"
+              >
+                {isSkeletonPreviewActive ? 'Show Loaded State' : 'Preview Skeleton Loader'}
+              </button>
+            </div>
+            <div className="divide-y divide-zinc-800">
+              {skeletonSpec.rows.map((row) => (
+                <div key={row.rowId} className="py-2.5 flex items-center gap-4">
+                  <span className="font-mono text-xs text-[#9E9B93]">{row.indexCode}</span>
+                  <div className="flex-1 space-y-1.5">
+                    <div
+                      className="h-2.5 bg-zinc-800"
+                      style={{ width: `${row.primaryWidthPercent}%` }}
+                    />
+                    <div
+                      className="h-2 bg-zinc-900"
+                      style={{ width: `${row.secondaryWidthPercent}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Terms of Service & Privacy Policy Ledger */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 border border-zinc-800 bg-[#121215] divide-y lg:divide-y-0 lg:divide-x divide-zinc-800">
+            <article
+              id={legalSpec.tosElementId}
+              data-testid={legalSpec.tosElementId}
+              className="p-6 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <h2 className="font-display text-base font-bold text-[#F4F2ED]">
+                  {legalSpec.termsOfServiceTitle}
+                </h2>
+                <span className="font-mono text-xs text-[#9E9B93]">
+                  Effective {legalSpec.effectiveDateIso}
+                </span>
+              </div>
+              <div className="divide-y divide-zinc-800">
+                {legalSpec.termsOfServiceSections.map((sec) => (
+                  <div key={sec.sectionNumber} className="py-3 space-y-1">
+                    <div className="text-xs font-semibold text-[#F4F2ED] font-mono">
+                      {sec.sectionNumber} / {sec.heading}
+                    </div>
+                    <p className="text-xs text-[#9E9B93] leading-relaxed">
+                      {sec.clauseText}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </article>
+
+            <article
+              id={legalSpec.privacyPolicyElementId}
+              data-testid={legalSpec.privacyPolicyElementId}
+              className="p-6 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                <h2 className="font-display text-base font-bold text-[#F4F2ED]">
+                  {legalSpec.privacyPolicyTitle}
+                </h2>
+                <span className="font-mono text-xs text-[#9E9B93]">
+                  Effective {legalSpec.effectiveDateIso}
+                </span>
+              </div>
+              <div className="divide-y divide-zinc-800">
+                {legalSpec.privacyPolicySections.map((sec) => (
+                  <div key={sec.sectionNumber} className="py-3 space-y-1">
+                    <div className="text-xs font-semibold text-[#F4F2ED] font-mono">
+                      {sec.sectionNumber} / {sec.heading}
+                    </div>
+                    <p className="text-xs text-[#9E9B93] leading-relaxed">
+                      {sec.clauseText}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </article>
+          </div>
+        </section>
       </main>
     </div>
   );

@@ -18,7 +18,7 @@ import {
   normalizeStudyRoomCode,
   sanitizeSafeText,
 } from '../utils/rules';
-import { Activity, Clock, Coffee, Plus, CheckCircle2 } from 'lucide-react';
+import { Activity, Clock, Coffee, Plus, CheckCircle2 } from './ArchitecturalGlyphs';
 
 interface StudyRoomCurrentDayFocusBreakRechartsCardProps {
   summary: CurrentDayFocusBreakSummary;
@@ -405,7 +405,6 @@ export const StudyRoomCurrentDayFocusBreakRechartsCard: React.FC<
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
             <span className="text-emerald-400 font-semibold">
-              —{' '}
               {chartMode === 'cumulative_minutes'
                 ? 'Cumulative Focus Minutes (m)'
                 : 'Focus Session Minutes (m)'}

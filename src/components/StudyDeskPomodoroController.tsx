@@ -7,7 +7,7 @@ import {
   Plus,
   CheckCircle2,
   Sliders,
-} from 'lucide-react';
+} from './ArchitecturalGlyphs';
 import {
   IndividualStudyDeskPomodoroState,
   INDIVIDUAL_DESK_POMODORO_PRESETS,

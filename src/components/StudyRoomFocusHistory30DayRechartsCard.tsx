@@ -16,7 +16,7 @@ import {
   normalizeStudyRoomCode,
   sanitizeSafeText,
 } from '../utils/rules';
-import { TrendingUp, Calendar, Plus, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, Calendar, Plus, CheckCircle2 } from './ArchitecturalGlyphs';
 
 interface StudyRoomFocusHistory30DayRechartsCardProps {
   summary: FocusHistory30DaySummary;
@@ -349,7 +349,7 @@ export const StudyRoomFocusHistory30DayRechartsCard: React.FC<
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex flex-wrap items-center gap-3 font-mono text-[11px]">
             <span className="text-emerald-400 font-semibold">
-              — Daily Focus Minutes (m)
+              Daily Focus Minutes (m)
             </span>
             {showRollingAverage && (
               <>

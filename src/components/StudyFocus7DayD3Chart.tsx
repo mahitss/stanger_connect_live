@@ -5,7 +5,7 @@ import {
   StudyFocus7DayDayBucket,
   StudyFocusSessionEntry,
 } from '../utils/rules';
-import { TrendingUp, Clock, Layers, Sparkles, CheckCircle2 } from 'lucide-react';
+import { TrendingUp, Clock, Layers, Sparkles, CheckCircle2 } from './ArchitecturalGlyphs';
 
 interface StudyFocus7DayD3ChartProps {
   trendSummary: StudyFocus7DayTrendSummary;
@@ -381,7 +381,7 @@ export const StudyFocus7DayD3Chart: React.FC<StudyFocus7DayD3ChartProps> = ({
 
           <span className="font-mono tabular-nums text-zinc-500">
             {hoveredSession
-              ? `Session #${hoveredSession.globalSessionNumber} (${hoveredSession.dayName} · S${hoveredSession.sessionIndex}): ${hoveredSession.minutes}m — ${hoveredSession.topic}`
+              ? `Session #${hoveredSession.globalSessionNumber} (${hoveredSession.dayName} / S${hoveredSession.sessionIndex}): ${hoveredSession.minutes}m / ${hoveredSession.topic}`
               : viewMode === 'stacked_trend'
               ? `Daily Goal Line: ${stackedChartGeometry.targetMinutes} mins · Click any day to inspect sessions`
               : `Mean Session Duration: ${sessionGrowthGeometry.meanMinutes} mins across ${allSessions.length} sessions`}

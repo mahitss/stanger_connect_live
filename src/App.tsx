@@ -66,7 +66,7 @@ import {
   Pin,
   Tag,
   BarChart3,
-} from 'lucide-react';
+} from './components/ArchitecturalGlyphs';
 import {
   auth,
   db,
@@ -280,6 +280,11 @@ import {
   evaluateDailyFocusGoalReachedToast,
   resolveWorkspaceQrDetectionFlashSequence,
   evaluateEditorialTactileSurfaceSpec,
+  sanitizeEditorialUiCopy,
+  buildLegalComplianceDocumentsSpec,
+  buildWorkspaceSkeletonLoaderSpec,
+  buildLiveInteractiveProductDemoSpec,
+  evaluateAntiAiSlopAuditSpec,
 } from './utils/rules';
 import { playSubtleUiChime, previewUiSoundEffect } from './utils/soundEffects';
 import { GameArcadeView, MultiplayerScore } from './components/GameArcadeView';
@@ -5775,7 +5780,7 @@ export default function App() {
         roomCode: activeStudyRoomCode,
         roomName: `Study Room ${activeStudyRoomCode}`,
         subject: 'Deep Work & Problem Solving',
-        positiveNote: 'Focused in Study Room — join me for a Pomodoro block!',
+        positiveNote: 'Focused in Study Room: join me for a Pomodoro block!',
         timerMinutes: 25,
         startedAt: Date.now(),
       };
@@ -5791,7 +5796,7 @@ export default function App() {
             roomName: `Study Room ${activeStudyRoomCode}`,
             displayName: currentIdentity.displayName,
             subject: 'Deep Work & Problem Solving',
-            positiveNote: 'Focused in Study Room — join me for a Pomodoro block!',
+            positiveNote: 'Focused in Study Room: join me for a Pomodoro block!',
             timerMinutes: 25,
           })
         );
@@ -7700,7 +7705,7 @@ export default function App() {
                                               )}
                                               title={
                                                 bucket.count > 0
-                                                  ? `${bucket.dayShortLabel} (${bucket.dateShortLabel}): ${bucket.count} scan(s) — ${bucket.roomCodes.join(', ')}`
+                                                  ? `${bucket.dayShortLabel} (${bucket.dateShortLabel}): ${bucket.count} scan(s) / ${bucket.roomCodes.join(', ')}`
                                                   : `${bucket.dayShortLabel} (${bucket.dateShortLabel}): 0 scans`
                                               }
                                               className="flex flex-col items-center gap-1"
@@ -10411,7 +10416,7 @@ export default function App() {
                         </div>
                         {myMoodMeta.hasMood && (
                           <p className="text-[11px] text-zinc-400">
-                            {myMoodMeta.description}
+                            {sanitizeEditorialUiCopy(myMoodMeta.description)}
                           </p>
                         )}
                       </div>
@@ -10577,7 +10582,7 @@ export default function App() {
                                         </span>
                                       </div>
                                       <p className="text-[11px] text-zinc-300 leading-snug">
-                                        {setterTooltipMeta.definition}
+                                        {sanitizeEditorialUiCopy(setterTooltipMeta.definition)}
                                       </p>
                                       <div
                                         data-testid={`mood-setter-preset-tooltip-usage-${preset.id}`}
@@ -11372,9 +11377,9 @@ export default function App() {
                                   role="img"
                                   aria-label={
                                     directoryQuickFilterMeta.shareLinkMeta.isCopied
-                                      ? `Copied! — ${directoryQuickFilterMeta.stateIconLabel}`
+                                      ? `Copied: ${directoryQuickFilterMeta.stateIconLabel}`
                                       : directoryQuickFilterMeta.iconPulseSpec.isPulseActive
-                                        ? `${directoryQuickFilterMeta.stateIconLabel} (${directoryQuickFilterMeta.iconPulseSpec.constraintStatusLabel} · ${directoryQuickFilterMeta.iconActiveBadgeSpec.summaryLabel})`
+                                        ? `${directoryQuickFilterMeta.stateIconLabel} (${directoryQuickFilterMeta.iconPulseSpec.constraintStatusLabel} / ${directoryQuickFilterMeta.iconActiveBadgeSpec.summaryLabel})`
                                         : directoryQuickFilterMeta.stateIconLabel
                                   }
                                   className={`relative overflow-hidden inline-flex items-center justify-center gap-1 px-1.5 py-0.5 rounded border quick-filter-icon-crossfade ${
@@ -13560,7 +13565,7 @@ export default function App() {
                                 aria-pressed={isCatActive}
                                 title={`${group.label}: ${group.presets
                                   .map((p) => p.label)
-                                  .join(', ')} — ${group.description}${
+                                  .join(', ')} / ${sanitizeEditorialUiCopy(group.description)}${
                                   categoryRecentMeta.isRecentlyApplied
                                     ? ` (${categoryRecentMeta.badgeLabel} #${categoryRecentMeta.matchedRank})`
                                     : ''
@@ -14090,7 +14095,7 @@ export default function App() {
                                                 data-testid={`mood-category-preset-tooltip-definition-${preset.id}`}
                                                 className="text-[11px] text-zinc-300 leading-snug"
                                               >
-                                                {tooltipMeta.definition}
+                                                {sanitizeEditorialUiCopy(tooltipMeta.definition)}
                                               </p>
                                               <div
                                                 data-testid={`mood-category-preset-tooltip-usage-${preset.id}`}
@@ -14237,7 +14242,7 @@ export default function App() {
                             <div className="space-y-1 min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
                                 <span className="text-sm font-bold text-white truncate">
-                                  {peer.displayName} {isMe ? '(You — Online)' : ''}
+                                  {peer.displayName} {isMe ? '(You : Online)' : ''}
                                 </span>
 
                                 {isFirstMatchingPeer && autoScrollTriggerCount > 0 && (
@@ -14452,7 +14457,7 @@ export default function App() {
                     )}
                   </motion.div>
 
-                  {/* Bottom of Directory View — Animated Shift-Reset Toast Confirmation */}
+                  {/* Bottom of Directory View : Animated Shift-Reset Toast Confirmation */}
                   <div
                     id="online-directory-bottom-toast-region"
                     data-testid="online-directory-bottom-toast-region"
@@ -14495,7 +14500,7 @@ export default function App() {
                               {directoryQuickFilterMeta.shiftResetToast.message}
                             </span>
                             <span className="hidden sm:inline text-[11px] text-emerald-200/80 truncate">
-                              — {directoryQuickFilterMeta.shiftResetToast.detailText}
+                              / {directoryQuickFilterMeta.shiftResetToast.detailText}
                             </span>
                           </div>
                           <div className="inline-flex items-center gap-1.5 shrink-0">
@@ -15591,6 +15596,165 @@ export default function App() {
               </div>
             </section>
           )}
+
+          {/* ================================================================
+              WORKSPACE INTERACTIVE PRODUCT DEMO, SKELETON LOADER & LEGAL LEDGER (TOS + PRIVACY POLICY)
+              ================================================================ */}
+          {(() => {
+            const antiSlopSpec = evaluateAntiAiSlopAuditSpec();
+            const liveDemoSpec = buildLiveInteractiveProductDemoSpec({
+              activeRoomCode: activeStudyRoomCode,
+              timerMinutes: 25,
+              isRunning: true,
+              completedMinutesToday: dailyCompletedMinutes,
+              dailyTargetMinutes: dailyTargetMinutes,
+              soundscapePreset: 'Rain',
+            });
+            const skeletonSpec = buildWorkspaceSkeletonLoaderSpec({
+              isLoading: false,
+              rowCount: 3,
+            });
+            const legalSpec = buildLegalComplianceDocumentsSpec();
+
+            return (
+              <footer
+                data-anti-slop-audit={antiSlopSpec.auditVersion}
+                data-enforced-rules-count={antiSlopSpec.enforcedCount}
+                className="mt-10 border-t border-zinc-800 pt-8 space-y-6"
+              >
+                {/* Live Interactive Product Demo & Skeleton Loader Strip */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div
+                    data-testid={liveDemoSpec.containerTestId}
+                    className="border border-zinc-800 bg-[#121215] p-5 space-y-3"
+                  >
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5 text-xs font-mono">
+                      <span className="font-semibold text-[#F4F2ED] uppercase">
+                        Live Interactive Product Demo / {liveDemoSpec.activeRoomCode}
+                      </span>
+                      <span className="text-zinc-400 tabular-nums">
+                        {liveDemoSpec.completedMinutesToday}/{liveDemoSpec.dailyTargetMinutes}m ({liveDemoSpec.progressPercent}%)
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      Test a live 25-minute focus sprint, switch active study room codes, or jump directly into the Study Room sanctuary.
+                    </p>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      {liveDemoSpec.availableRooms.map((roomCode) => (
+                        <button
+                          key={roomCode}
+                          type="button"
+                          onClick={() => setActiveStudyRoomCode(roomCode)}
+                          className={`px-2.5 py-1 text-xs font-mono border cursor-pointer ${
+                            activeStudyRoomCode === roomCode
+                              ? 'border-zinc-500 bg-zinc-800 text-white font-semibold'
+                              : 'border-zinc-800 bg-[#0C0C0E] text-zinc-400'
+                          }`}
+                        >
+                          {roomCode}
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => handleLogFocusMinutes(25)}
+                        className="px-3 py-1 text-xs font-semibold bg-[#E6E2D8] text-[#141413] font-mono cursor-pointer"
+                      >
+                        +25m Demo Focus
+                      </button>
+                    </div>
+                  </div>
+
+                  <div
+                    data-testid={skeletonSpec.containerTestId}
+                    className="border border-zinc-800 bg-[#121215] p-5 space-y-3"
+                  >
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5 text-xs font-mono">
+                      <span className="font-semibold text-[#F4F2ED] uppercase">
+                        Workspace Skeleton Loader State
+                      </span>
+                      <span className="text-zinc-400">{skeletonSpec.statusLabel}</span>
+                    </div>
+                    <div className="divide-y divide-zinc-800">
+                      {skeletonSpec.rows.map((row) => (
+                        <div key={row.rowId} className="py-2 flex items-center gap-3">
+                          <span className="font-mono text-[11px] text-zinc-500">
+                            {row.indexCode}
+                          </span>
+                          <div className="flex-1 space-y-1">
+                            <div
+                              className="h-2 bg-zinc-800"
+                              style={{ width: `${row.primaryWidthPercent}%` }}
+                            />
+                            <div
+                              className="h-1.5 bg-zinc-900"
+                              style={{ width: `${row.secondaryWidthPercent}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Terms of Service & Privacy Policy Ledger */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 border border-zinc-800 bg-[#121215] divide-y lg:divide-y-0 lg:divide-x divide-zinc-800">
+                  <article
+                    id={legalSpec.tosElementId}
+                    data-testid={legalSpec.tosElementId}
+                    className="p-5 space-y-3"
+                  >
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                      <h2 className="text-sm font-bold text-[#F4F2ED]">
+                        {legalSpec.termsOfServiceTitle}
+                      </h2>
+                      <span className="font-mono text-[11px] text-zinc-400">
+                        Effective {legalSpec.effectiveDateIso}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-zinc-800">
+                      {legalSpec.termsOfServiceSections.map((sec) => (
+                        <div key={sec.sectionNumber} className="py-2.5 space-y-0.5">
+                          <div className="text-xs font-mono font-semibold text-zinc-200">
+                            {sec.sectionNumber} / {sec.heading}
+                          </div>
+                          <p className="text-xs text-zinc-400 leading-relaxed">
+                            {sec.clauseText}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+
+                  <article
+                    id={legalSpec.privacyPolicyElementId}
+                    data-testid={legalSpec.privacyPolicyElementId}
+                    className="p-5 space-y-3"
+                  >
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-2.5">
+                      <h2 className="text-sm font-bold text-[#F4F2ED]">
+                        {legalSpec.privacyPolicyTitle}
+                      </h2>
+                      <span className="font-mono text-[11px] text-zinc-400">
+                        Effective {legalSpec.effectiveDateIso}
+                      </span>
+                    </div>
+                    <div className="divide-y divide-zinc-800">
+                      {legalSpec.privacyPolicySections.map((sec) => (
+                        <div key={sec.sectionNumber} className="py-2.5 space-y-0.5">
+                          <div className="text-xs font-mono font-semibold text-zinc-200">
+                            {sec.sectionNumber} / {sec.heading}
+                          </div>
+                          <p className="text-xs text-zinc-400 leading-relaxed">
+                            {sec.clauseText}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </article>
+                </div>
+              </footer>
+            );
+          })()}
         </main>
       </div>
 

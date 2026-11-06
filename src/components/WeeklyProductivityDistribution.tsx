@@ -11,7 +11,7 @@ import {
   PieChart,
   Pie,
 } from 'recharts';
-import { BookOpen, Clock, Layers, Award, PlusCircle, ArrowUpRight } from 'lucide-react';
+import { BookOpen, Clock, Layers, Award, PlusCircle, ArrowUpRight } from './ArchitecturalGlyphs';
 import {
   WeeklyTopicDistributionSummary,
   WeeklyTopicDistributionEntry,

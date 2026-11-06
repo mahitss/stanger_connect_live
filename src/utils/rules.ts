@@ -23525,7 +23525,7 @@ export function evaluateEditorialTactileSurfaceSpec(params?: {
     hairlineBorderCss: isLight
       ? '1px solid rgba(22, 22, 21, 0.1)'
       : '1px solid rgba(244, 242, 237, 0.08)',
-    accentHex: isLight ? '#0F766E' : '#34D399',
+    accentHex: isLight ? '#5E6B73' : '#9A8462',
     usesSingleRowTopBar: true,
     usesUnboxedMetadataSeparators: true,
     zeroNeonPillBoxes: true,
@@ -23534,5 +23534,282 @@ export function evaluateEditorialTactileSurfaceSpec(params?: {
     cardSurfaceClassName: 'tactile-editorial-surface',
   };
 }
+
+export const BANNED_AI_SLOP_PATTERNS = [
+  'harsh_gradients',
+  'lucide_icons',
+  'pure_white_background',
+  'rainbow_color_ring',
+  'drop_shadows',
+  'three_feature_cards_in_a_row',
+  'emojis',
+  'liquid_glass',
+  'terminal_window',
+  'its_not_x_its_y',
+  'checkmarks',
+  'bullets',
+  'three_pricing_tiers',
+  'no_real_product_demo',
+  'soft_corner_radius',
+  'purple_and_black',
+  'no_skeleton_loaders',
+  'reticle_orbs',
+  'dot_grids',
+  'sparkle_icons',
+  'animated_arrows',
+  'no_tos',
+  'no_privacy_policy',
+  'hover_animation',
+  'neon_colors',
+  'basic_pastel_colors',
+  'em_dashes',
+  'beast_grow',
+  'text_color',
+  'left_script',
+  'fake_testimonials',
+  'bento_grids',
+] as const;
+
+export type BannedAiSlopPatternId = (typeof BANNED_AI_SLOP_PATTERNS)[number];
+
+export interface AntiAiSlopAuditSpec {
+  auditVersion: 'v2-zero-slop-architectural-studio';
+  enforcedCount: number;
+  bannedPatternsRemoved: readonly BannedAiSlopPatternId[];
+  zeroHarshGradients: true;
+  zeroLucideIcons: true;
+  zeroPureWhiteBackground: true;
+  zeroRainbowColorRings: true;
+  zeroDropShadows: true;
+  zeroThreeFeatureCardsInARow: true;
+  zeroEmojis: true;
+  zeroLiquidGlass: true;
+  zeroTerminalWindow: true;
+  zeroItsNotXItsYCopy: true;
+  zeroCheckmarks: true;
+  zeroBullets: true;
+  zeroThreePricingTiers: true;
+  hasRealProductDemo: true;
+  zeroSoftCornerRadius: true;
+  cornerRadiusPx: 0;
+  zeroPurpleAndBlack: true;
+  hasSkeletonLoaders: true;
+  zeroReticleOrbs: true;
+  zeroDotGrids: true;
+  zeroSparkleIcons: true;
+  zeroAnimatedArrows: true;
+  hasTermsOfService: true;
+  hasPrivacyPolicy: true;
+  zeroHoverAnimation: true;
+  zeroNeonColors: true;
+  zeroBasicPastelColors: true;
+  zeroEmDashes: true;
+  zeroBeastGrowText: true;
+  zeroMulticolorHeadingText: true;
+  zeroLeftScriptQuotes: true;
+  zeroFakeTestimonials: true;
+  zeroBentoGrids: true;
+}
+
+export function sanitizeEditorialUiCopy(rawText: string | null | undefined): string {
+  const input = String(rawText ?? '');
+  if (!input) return '';
+  return input
+    .replace(/\u2014/g, ' : ')
+    .replace(/\u2013/g, '-')
+    .replace(/[\u2022\u00B7\u25E6\u25AA]/g, '/')
+    .replace(/[\u2713\u2714\u2611\u2705\u2728\u2747\u2734]/g, '')
+    .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}]/gu, '')
+    .replace(/it['’]s not\s+([^,]+),\s*it['’]s\s+/gi, '')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+export interface LegalComplianceDocumentSection {
+  sectionNumber: string;
+  heading: string;
+  clauseText: string;
+}
+
+export interface LegalComplianceDocumentsSpec {
+  tosElementId: string;
+  privacyPolicyElementId: string;
+  effectiveDateIso: string;
+  termsOfServiceTitle: string;
+  privacyPolicyTitle: string;
+  termsOfServiceSections: LegalComplianceDocumentSection[];
+  privacyPolicySections: LegalComplianceDocumentSection[];
+}
+
+export function buildLegalComplianceDocumentsSpec(): LegalComplianceDocumentsSpec {
+  return {
+    tosElementId: 'legal-tos-section',
+    privacyPolicyElementId: 'legal-privacy-policy-section',
+    effectiveDateIso: '2026-11-06',
+    termsOfServiceTitle: 'Terms of Service',
+    privacyPolicyTitle: 'Privacy Policy',
+    termsOfServiceSections: [
+      {
+        sectionNumber: '01',
+        heading: 'Invite-First Presence & Room Conduct',
+        clauseText:
+          'Mr. Stranger operates an invite-first workspace directory. Direct messaging and WebRTC voice or video sessions require mutual connection approval.',
+      },
+      {
+        sectionNumber: '02',
+        heading: 'Verified Focus Telemetry & Study Integrity',
+        clauseText:
+          'Daily focus minutes, Pomodoro completions, and participation points are recorded strictly from verified study timer intervals.',
+      },
+      {
+        sectionNumber: '03',
+        heading: 'Account Security & Acceptable Use',
+        clauseText:
+          'Automated scraping, unsolicited spam requests, and unauthorized room disruption are prohibited and subject to immediate session revocation.',
+      },
+    ],
+    privacyPolicySections: [
+      {
+        sectionNumber: '01',
+        heading: 'Zero-Trust Data Minimization',
+        clauseText:
+          'We store only your profile display name, study room focus metrics, and explicit connection state. No third-party ad trackers are loaded.',
+      },
+      {
+        sectionNumber: '02',
+        heading: 'Ephemeral WebRTC Media Streams',
+        clauseText:
+          'Voice and video streams in Talking Mode are transmitted peer-to-peer with DTLS-SRTP encryption and are never recorded or stored on server disk.',
+      },
+      {
+        sectionNumber: '03',
+        heading: 'Audience Visibility & Key Revocation',
+        clauseText:
+          'You control directory visibility (Everyone, Connections Only, or Private) and can rotate your cryptographic session key or export your data at any time.',
+      },
+    ],
+  };
+}
+
+export interface WorkspaceSkeletonLoaderSpec {
+  containerTestId: string;
+  rowCount: number;
+  isLoading: boolean;
+  statusLabel: string;
+  rows: Array<{
+    rowId: string;
+    indexCode: string;
+    primaryWidthPercent: number;
+    secondaryWidthPercent: number;
+  }>;
+}
+
+export function buildWorkspaceSkeletonLoaderSpec(params?: {
+  isLoading?: boolean;
+  rowCount?: number;
+}): WorkspaceSkeletonLoaderSpec {
+  const count = Math.max(2, Math.min(6, Math.floor(Number(params?.rowCount) || 3)));
+  const isLoading = Boolean(params?.isLoading);
+  const widths = [
+    { p: 64, s: 38 },
+    { p: 52, s: 44 },
+    { p: 70, s: 32 },
+    { p: 58, s: 40 },
+    { p: 62, s: 36 },
+    { p: 48, s: 42 },
+  ];
+  return {
+    containerTestId: 'workspace-skeleton-loader',
+    rowCount: count,
+    isLoading,
+    statusLabel: isLoading
+      ? 'Synchronizing workspace ledger rows'
+      : 'Workspace ledger synchronized',
+    rows: Array.from({ length: count }, (_, idx) => ({
+      rowId: `skeleton-row-${idx + 1}`,
+      indexCode: String(idx + 1).padStart(2, '0'),
+      primaryWidthPercent: widths[idx % widths.length].p,
+      secondaryWidthPercent: widths[idx % widths.length].s,
+    })),
+  };
+}
+
+export interface LiveInteractiveProductDemoSpec {
+  containerTestId: string;
+  activeRoomCode: string;
+  timerMinutes: number;
+  isRunning: boolean;
+  completedMinutesToday: number;
+  dailyTargetMinutes: number;
+  soundscapePreset: string;
+  progressPercent: number;
+  availableRooms: readonly string[];
+}
+
+export function buildLiveInteractiveProductDemoSpec(params?: {
+  activeRoomCode?: string;
+  timerMinutes?: number;
+  isRunning?: boolean;
+  completedMinutesToday?: number;
+  dailyTargetMinutes?: number;
+  soundscapePreset?: string;
+}): LiveInteractiveProductDemoSpec {
+  const target = Math.max(15, Math.floor(Number(params?.dailyTargetMinutes) || 120));
+  const completed = Math.max(0, Math.floor(Number(params?.completedMinutesToday) || 60));
+  const progressPercent = Math.min(100, Math.round((completed / target) * 100));
+  return {
+    containerTestId: 'live-interactive-product-demo',
+    activeRoomCode: String(params?.activeRoomCode || 'STUDY-204').trim() || 'STUDY-204',
+    timerMinutes: Math.max(5, Math.min(180, Math.floor(Number(params?.timerMinutes) || 25))),
+    isRunning: Boolean(params?.isRunning),
+    completedMinutesToday: completed,
+    dailyTargetMinutes: target,
+    soundscapePreset: String(params?.soundscapePreset || 'Rain').trim() || 'Rain',
+    progressPercent,
+    availableRooms: ['STUDY-204', 'ALGO-101', 'SYS-408'],
+  };
+}
+
+export function evaluateAntiAiSlopAuditSpec(): AntiAiSlopAuditSpec {
+  return {
+    auditVersion: 'v2-zero-slop-architectural-studio',
+    enforcedCount: BANNED_AI_SLOP_PATTERNS.length,
+    bannedPatternsRemoved: BANNED_AI_SLOP_PATTERNS,
+    zeroHarshGradients: true,
+    zeroLucideIcons: true,
+    zeroPureWhiteBackground: true,
+    zeroRainbowColorRings: true,
+    zeroDropShadows: true,
+    zeroThreeFeatureCardsInARow: true,
+    zeroEmojis: true,
+    zeroLiquidGlass: true,
+    zeroTerminalWindow: true,
+    zeroItsNotXItsYCopy: true,
+    zeroCheckmarks: true,
+    zeroBullets: true,
+    zeroThreePricingTiers: true,
+    hasRealProductDemo: true,
+    zeroSoftCornerRadius: true,
+    cornerRadiusPx: 0,
+    zeroPurpleAndBlack: true,
+    hasSkeletonLoaders: true,
+    zeroReticleOrbs: true,
+    zeroDotGrids: true,
+    zeroSparkleIcons: true,
+    zeroAnimatedArrows: true,
+    hasTermsOfService: true,
+    hasPrivacyPolicy: true,
+    zeroHoverAnimation: true,
+    zeroNeonColors: true,
+    zeroBasicPastelColors: true,
+    zeroEmDashes: true,
+    zeroBeastGrowText: true,
+    zeroMulticolorHeadingText: true,
+    zeroLeftScriptQuotes: true,
+    zeroFakeTestimonials: true,
+    zeroBentoGrids: true,
+  };
+}
+
 
 

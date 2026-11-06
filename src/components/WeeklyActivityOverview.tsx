@@ -19,7 +19,7 @@ import {
   Flame,
   Download,
   FileSpreadsheet,
-} from 'lucide-react';
+} from './ArchitecturalGlyphs';
 import {
   WeeklyActivitySummary,
   WeeklyActivityDayEntry,

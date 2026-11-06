@@ -19,7 +19,7 @@ import {
   normalizeStudyRoomCode,
   sanitizeSafeText,
 } from '../utils/rules';
-import { BarChart3, ArrowUpRight, Plus, CheckCircle2 } from 'lucide-react';
+import { BarChart3, ArrowUpRight, Plus, CheckCircle2 } from './ArchitecturalGlyphs';
 
 interface StudyRoomWeeklyRoomFocusRechartsCardProps {
   summary: WeeklyFocusByRoomCodeSummary;

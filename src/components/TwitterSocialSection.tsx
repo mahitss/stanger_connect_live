@@ -28,7 +28,7 @@ import {
   Users,
   X,
   BadgeCheck,
-} from 'lucide-react';
+} from './ArchitecturalGlyphs';
 import {
   CURATED_STUDY_MOMENT_IMAGES,
   getStudyMomentPlaceholderById,

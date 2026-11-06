@@ -124,7 +124,7 @@ import {
   Globe,
   Play,
   HeartHandshake,
-} from 'lucide-react';
+} from './ArchitecturalGlyphs';
 
 export interface StudyDeskItem {
   uid: string;
@@ -2097,7 +2097,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                   </button>
                 ) : (
                   <span className="text-emerald-400 font-mono text-[11px]">
-                    ✓ Your desk is live in {activeRoomCode}
+                    Your desk is live in {activeRoomCode}
                   </span>
                 )}
               </div>
@@ -2430,7 +2430,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         </div>
       </div>
 
-      {/* "EASY AS ABC" — 24/7 MR. STRANGER LIVE STUDY ROOMS LOBBY */}
+      {/* "EASY AS ABC" : 24/7 MR. STRANGER LIVE STUDY ROOMS LOBBY */}
       <div
         data-testid="mr-stranger-live-room-lobby"
         className="p-6 rounded-xl border border-zinc-800/90 bg-[#0A0A0C] space-y-6"
@@ -2444,7 +2444,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               Choose Your 24/7 Mr. Stranger Study Room
             </h2>
             <p className="text-xs sm:text-sm text-zinc-400">
-              Pick a room format below and click <strong className="text-white">Join now</strong> — your desk, timer, and room soundscape configure automatically so everyone can join properly.
+              Pick a room format below and click <strong className="text-white">Join now</strong>: your desk, timer, and room soundscape configure automatically so everyone can join properly.
             </p>
           </div>
 
@@ -2549,7 +2549,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         </div>
       </div>
 
-      {/* "JUST A STUDY ROOM? THINK AGAIN!" — 3 MR. STRANGER STUDY PILLARS */}
+      {/* "JUST A STUDY ROOM? THINK AGAIN!" : 3 MR. STRANGER STUDY PILLARS */}
       <div
         data-testid="mr-stranger-study-pillars"
         className="grid grid-cols-1 md:grid-cols-3 gap-4"
@@ -2573,7 +2573,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
             </div>
             <div className="pt-2 border-t border-zinc-800/70">
               <span className="inline-block text-[11px] font-mono text-zinc-400">
-                ✓ {pillar.highlightBadge}
+                {pillar.highlightBadge}
               </span>
             </div>
           </div>
@@ -2848,7 +2848,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 </span>
               </div>
               <p className="text-xs text-zinc-400">
-                {ambientBalanceSpec.recommendedUseCase} —{' '}
+                {ambientBalanceSpec.recommendedUseCase}:{' '}
                 <span className="font-mono text-zinc-300">
                   {ambientBalanceSpec.activeLayersSummary}
                 </span>
@@ -3292,7 +3292,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               </span>
             </div>
             <p className="text-xs text-zinc-400">
-              Set the exact hours and minutes you want to study. Study sessions are strictly recorded from the real running timer — if you study 2 hours (2:00:00), you cannot record 3 hours (3:00:00) without the timer going until 3:00:00.
+              Set the exact hours and minutes you want to study. Study sessions are strictly recorded from the real running timer: if you study 2 hours (2:00:00), you cannot record 3 hours (3:00:00) without the timer going until 3:00:00.
             </p>
           </div>
 

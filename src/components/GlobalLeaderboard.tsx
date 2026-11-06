@@ -8,7 +8,7 @@ import {
   TrendingDown,
   Minus,
   PartyPopper,
-} from 'lucide-react';
+} from './ArchitecturalGlyphs';
 import {
   LeaderboardCandidate,
   LeaderboardSortBy,

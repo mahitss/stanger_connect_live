@@ -394,6 +394,12 @@ import {
   WORKSPACE_QR_SUCCESSFUL_SCAN_CHIME_STATUS_BADGE_ID,
   buildWorkspaceQrSuccessfulScanChimeToggleSpec,
   evaluateEditorialTactileSurfaceSpec,
+  BANNED_AI_SLOP_PATTERNS,
+  sanitizeEditorialUiCopy,
+  buildLegalComplianceDocumentsSpec,
+  buildWorkspaceSkeletonLoaderSpec,
+  buildLiveInteractiveProductDemoSpec,
+  evaluateAntiAiSlopAuditSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9466,5 +9472,84 @@ test('Editorial tactile surface specification enforces architectural paper grain
   assert.equal(lightSpec.primaryInkHex, '#161615');
   assert.equal(lightSpec.grainOverlayOpacity, 0.028);
 });
+
+test('Anti-AI-Slop audit enforces all 32 banned pattern removals, copy sanitization (no em-dashes, bullets, emojis, checkmarks, sparkles, or trope phrasing), TOS/Privacy Policy, skeleton loaders, and live product demo', () => {
+  const audit = evaluateAntiAiSlopAuditSpec();
+  assert.equal(audit.auditVersion, 'v2-zero-slop-architectural-studio');
+  assert.equal(audit.enforcedCount, 32);
+  assert.equal(audit.bannedPatternsRemoved.length, 32);
+  assert.equal(audit.zeroHarshGradients, true);
+  assert.equal(audit.zeroLucideIcons, true);
+  assert.equal(audit.zeroPureWhiteBackground, true);
+  assert.equal(audit.zeroRainbowColorRings, true);
+  assert.equal(audit.zeroDropShadows, true);
+  assert.equal(audit.zeroThreeFeatureCardsInARow, true);
+  assert.equal(audit.zeroEmojis, true);
+  assert.equal(audit.zeroLiquidGlass, true);
+  assert.equal(audit.zeroTerminalWindow, true);
+  assert.equal(audit.zeroItsNotXItsYCopy, true);
+  assert.equal(audit.zeroCheckmarks, true);
+  assert.equal(audit.zeroBullets, true);
+  assert.equal(audit.zeroThreePricingTiers, true);
+  assert.equal(audit.hasRealProductDemo, true);
+  assert.equal(audit.zeroSoftCornerRadius, true);
+  assert.equal(audit.cornerRadiusPx, 0);
+  assert.equal(audit.zeroPurpleAndBlack, true);
+  assert.equal(audit.hasSkeletonLoaders, true);
+  assert.equal(audit.zeroReticleOrbs, true);
+  assert.equal(audit.zeroDotGrids, true);
+  assert.equal(audit.zeroSparkleIcons, true);
+  assert.equal(audit.zeroAnimatedArrows, true);
+  assert.equal(audit.hasTermsOfService, true);
+  assert.equal(audit.hasPrivacyPolicy, true);
+  assert.equal(audit.zeroHoverAnimation, true);
+  assert.equal(audit.zeroNeonColors, true);
+  assert.equal(audit.zeroBasicPastelColors, true);
+  assert.equal(audit.zeroEmDashes, true);
+  assert.equal(audit.zeroBeastGrowText, true);
+  assert.equal(audit.zeroMulticolorHeadingText, true);
+  assert.equal(audit.zeroLeftScriptQuotes, true);
+  assert.equal(audit.zeroFakeTestimonials, true);
+  assert.equal(audit.zeroBentoGrids, true);
+
+  // Copy sanitizer strips em-dashes, bullets, checkmarks, sparkles, emojis, and "It's not X, it's Y"
+  const dirtyText =
+    "It's not a chat room, it's a deep work sanctuary — • 60m logged ✓ ✨ 🎯";
+  const cleaned = sanitizeEditorialUiCopy(dirtyText);
+  assert.equal(cleaned.includes('—'), false);
+  assert.equal(cleaned.includes('•'), false);
+  assert.equal(cleaned.includes('✓'), false);
+  assert.equal(cleaned.includes('✨'), false);
+  assert.equal(cleaned.includes('🎯'), false);
+  assert.equal(cleaned.toLowerCase().includes("it's not"), false);
+
+  // Legal compliance documents (TOS + Privacy Policy)
+  const legal = buildLegalComplianceDocumentsSpec();
+  assert.equal(legal.tosElementId, 'legal-tos-section');
+  assert.equal(legal.privacyPolicyElementId, 'legal-privacy-policy-section');
+  assert.equal(legal.termsOfServiceSections.length, 3);
+  assert.equal(legal.privacyPolicySections.length, 3);
+
+  // Skeleton loaders spec
+  const skeleton = buildWorkspaceSkeletonLoaderSpec({ isLoading: true, rowCount: 3 });
+  assert.equal(skeleton.containerTestId, 'workspace-skeleton-loader');
+  assert.equal(skeleton.isLoading, true);
+  assert.equal(skeleton.rows.length, 3);
+
+  // Live interactive product demo spec
+  const demo = buildLiveInteractiveProductDemoSpec({
+    activeRoomCode: 'STUDY-204',
+    timerMinutes: 25,
+    isRunning: true,
+    completedMinutesToday: 60,
+    dailyTargetMinutes: 120,
+    soundscapePreset: 'Rain',
+  });
+  assert.equal(demo.containerTestId, 'live-interactive-product-demo');
+  assert.equal(demo.activeRoomCode, 'STUDY-204');
+  assert.equal(demo.progressPercent, 50);
+  assert.equal(BANNED_AI_SLOP_PATTERNS.includes('lucide_icons'), true);
+});
+
 
 

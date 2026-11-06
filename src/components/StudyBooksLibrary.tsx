@@ -11,7 +11,7 @@ import {
   Sparkles,
   FileText,
   Play,
-} from 'lucide-react';
+} from './ArchitecturalGlyphs';
 import {
   StudyBookItem,
   StudyBookCategory,

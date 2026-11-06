@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ShieldCheck, Mic, MicOff, Video, VideoOff, PhoneOff } from 'lucide-react';
+import { ShieldCheck, Mic, MicOff, Video, VideoOff, PhoneOff } from './ArchitecturalGlyphs';
 import { OnlinePeer } from '../../server';
 
 interface TalkingRoomViewProps {
@@ -189,7 +189,7 @@ export const TalkingRoomView: React.FC<TalkingRoomViewProps> = ({
 
     const handleSignal = async () => {
       if (signalData.type === 'offer') {
-        // Never auto-open camera/mic on incoming offer — ring and wait for explicit user acceptance
+        // Never auto-open camera/mic on incoming offer: ring and wait for explicit user acceptance
         setCallStatus('ringing');
       } else if (signalData.type === 'answer' && peerConnRef.current) {
         await peerConnRef.current.setRemoteDescription(

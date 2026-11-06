@@ -1023,7 +1023,7 @@ export const PopularMoods24hSummary: React.FC<PopularMoods24hSummaryProps> = ({
                 data-testid="popular-mood-trend-all-hidden-msg"
                 className="fill-zinc-400 font-mono text-[11px]"
               >
-                All trend lines hidden — click a legend item or Show All Lines
+                All trend lines hidden: click a legend item or Show All Lines
               </text>
             )}
 
