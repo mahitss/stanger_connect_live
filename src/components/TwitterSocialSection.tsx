@@ -35,7 +35,6 @@ import {
   selectStudyMomentPlaceholder,
   MomentCommentRecord,
   canUserCommentOnMoment,
-  buildMomentCommentThreadGroups,
   toggleCollapsedCommentThread,
   getNestedThreadAnimationState,
   ThreadedMomentCommentItem,
@@ -55,6 +54,7 @@ import {
   MOMENT_COMMENTS_LIST_TRANSITION_DURATION_MS,
   MomentCommentsListTransitionAction,
   resolveMomentCommentsListTransitionSpec,
+  filterMomentCommentThreadGroupsByKeyword,
 } from '../utils/rules';
 import type { OnlinePeer } from '../../server';
 
@@ -207,6 +207,9 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
     threadId: string | null;
     action: MomentCommentsListTransitionAction;
   } | null>(null);
+  const [commentSearchQueriesByMoment, setCommentSearchQueriesByMoment] = useState<
+    Record<string, string>
+  >({});
 
   useEffect(() => {
     return () => {
@@ -1494,10 +1497,18 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                       className="ml-0 sm:ml-13 rounded-xl border border-zinc-800/80 bg-[#050505]/80 p-3.5 space-y-3"
                     >
                       {(() => {
-                        const threadGroups = buildMomentCommentThreadGroups(
-                          itemComments,
-                          collapsedCommentThreadIds
+                        const rawMomentCommentQuery =
+                          commentSearchQueriesByMoment[item.id] || '';
+                        const commentSearchResult =
+                          filterMomentCommentThreadGroupsByKeyword({
+                            comments: itemComments,
+                            collapsedThreadIds: collapsedCommentThreadIds,
+                            rawSearchQuery: rawMomentCommentQuery,
+                          });
+                        const matchedCommentIdsSet = new Set(
+                          commentSearchResult.matchedCommentIds
                         );
+                        const threadGroups = commentSearchResult.filteredThreadGroups;
                         const threadsWithReplies = threadGroups.filter(
                           (g) => g.totalRepliesCount > 0
                         );
@@ -1580,8 +1591,17 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                                 data-parent-comment-id={parentCommentId || ''}
                                 data-comment-depth={depth}
                                 data-is-reply={isReply ? 'true' : 'false'}
+                                data-search-matched={
+                                  commentSearchResult.isSearchActive &&
+                                  matchedCommentIdsSet.has(cmt.id)
+                                    ? 'true'
+                                    : 'false'
+                                }
                                 className={`p-3 rounded-xl border space-y-1.5 ${
-                                  isReply
+                                  commentSearchResult.isSearchActive &&
+                                  matchedCommentIdsSet.has(cmt.id)
+                                    ? 'bg-[#0D0D10] border-[#D97706]'
+                                    : isReply
                                     ? 'bg-[#08080A] border-zinc-800/70'
                                     : 'bg-[#0A0A0C] border-zinc-800/80'
                                 }`}
@@ -1800,12 +1820,13 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
 
                         return (
                           <>
-                            <div className="flex flex-wrap items-center justify-between gap-2">
-                              <span className="text-xs font-bold text-zinc-200">
-                                Thread Replies ({itemComments.length})
-                              </span>
-                              <div className="flex items-center gap-3">
-                                {threadsWithReplies.length > 0 && (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs font-bold text-zinc-200">
+                                  Thread Replies ({itemComments.length})
+                                </span>
+                                <div className="flex items-center gap-3">
+                                  {threadsWithReplies.length > 0 && (
                                     <button
                                       type="button"
                                       onClick={() => {
@@ -1852,7 +1873,96 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                                 </div>
                               </div>
 
-                              {threadGroups.length > 0 &&
+                              {/* Per-Moment Comments Keyword Search Input Bar */}
+                              <div
+                                className="flex items-center gap-2 px-2.5 py-1.5 bg-[#0A0A0C] border border-zinc-800"
+                                data-testid={`moment-comment-search-bar-${item.id}`}
+                              >
+                                <Search
+                                  aria-hidden="true"
+                                  className="w-3.5 h-3.5 text-zinc-500 shrink-0"
+                                />
+                                <input
+                                  type="text"
+                                  maxLength={120}
+                                  value={rawMomentCommentQuery}
+                                  onChange={(e) => {
+                                    const nextVal = e.target.value;
+                                    triggerMomentCommentsListTransition(
+                                      item.id,
+                                      null,
+                                      nextVal.trim() ? 'expand_all' : 'collapse_all'
+                                    );
+                                    setCommentSearchQueriesByMoment((prev) => ({
+                                      ...prev,
+                                      [item.id]: nextVal,
+                                    }));
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Escape' && rawMomentCommentQuery) {
+                                      e.preventDefault();
+                                      setCommentSearchQueriesByMoment((prev) => ({
+                                        ...prev,
+                                        [item.id]: '',
+                                      }));
+                                    }
+                                  }}
+                                  placeholder="Search comments by keyword or @author..."
+                                  aria-label={`Search comments on ${item.authorName}'s moment`}
+                                  data-testid={`moment-comment-search-input-${item.id}`}
+                                  data-moment-comment-search-input="true"
+                                  className="flex-1 min-w-0 bg-transparent text-xs text-white placeholder:text-zinc-500 focus:outline-none font-mono"
+                                />
+                                <span
+                                  data-testid={`moment-comment-search-count-${item.id}`}
+                                  className="text-[11px] font-mono text-zinc-400 tabular-nums whitespace-nowrap shrink-0"
+                                >
+                                  {commentSearchResult.statusSummaryLabel}
+                                </span>
+                                {commentSearchResult.isSearchActive && (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setCommentSearchQueriesByMoment((prev) => ({
+                                        ...prev,
+                                        [item.id]: '',
+                                      }))
+                                    }
+                                    aria-label="Clear comment keyword search"
+                                    data-testid={`moment-comment-search-clear-${item.id}`}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-mono uppercase tracking-wider bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-700 shrink-0"
+                                  >
+                                    <X className="w-2.5 h-2.5 shrink-0" />
+                                    <span>Clear</span>
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            {commentSearchResult.hasNoMatches ? (
+                              <div
+                                data-testid={`moment-comment-search-empty-${item.id}`}
+                                className="p-3 bg-[#08080A] border border-zinc-800/80 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-zinc-400"
+                              >
+                                <span>
+                                  No comments matching &ldquo;{commentSearchResult.normalizedQuery}&rdquo;
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setCommentSearchQueriesByMoment((prev) => ({
+                                      ...prev,
+                                      [item.id]: '',
+                                    }))
+                                  }
+                                  data-testid={`moment-comment-search-empty-clear-${item.id}`}
+                                  className="px-2 py-0.5 text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 whitespace-nowrap shrink-0"
+                                >
+                                  Clear search
+                                </button>
+                              </div>
+                            ) : (
+                              threadGroups.length > 0 &&
                                 (() => {
                                   const isListTransitioningForMoment =
                                     threadListTransitionState?.momentId === item.id;
@@ -1885,6 +1995,12 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                                       }
                                       data-visible-replies-count={
                                         listTransitionSpec.visibleNestedRepliesCount
+                                      }
+                                      data-comment-search-query={
+                                        commentSearchResult.normalizedQuery
+                                      }
+                                      data-comment-search-matches-count={
+                                        commentSearchResult.matchedCommentsCount
                                       }
                                     >
                                       {threadGroups.map((group) => {
@@ -1937,7 +2053,8 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                                       })}
                                     </div>
                                   );
-                                })()}
+                                })()
+                            )}
                           </>
                         );
                       })()}

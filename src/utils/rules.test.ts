@@ -408,6 +408,9 @@ import {
   MOMENT_COMMENTS_LIST_TRANSITION_DURATION_MS,
   MOMENT_COMMENTS_LIST_TRANSITION_EASING,
   resolveMomentCommentsListTransitionSpec,
+  normalizeMomentCommentSearchQuery,
+  matchesMomentCommentSearchQuery,
+  filterMomentCommentThreadGroupsByKeyword,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9720,5 +9723,94 @@ test('resolveMomentCommentsListTransitionSpec and getNestedThreadAnimationState 
   assert.equal(animExpanded.transitionDurationMs, 260);
   assert.equal(animExpanded.transitionTimingFunction, 'cubic-bezier(0.22, 1, 0.36, 1)');
 });
+
+test('filterMomentCommentThreadGroupsByKeyword filters moment comments by keyword or author handle and auto-expands matching nested threads', () => {
+  assert.equal(normalizeMomentCommentSearchQuery('  deep   work  '), 'deep work');
+
+  const comments = [
+    {
+      id: 'c_root_1',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_maya',
+      authorName: 'Maya Lin',
+      text: 'Completed 90m silent architecture block in STUDY-204.',
+      visibility: 'public' as const,
+      createdAtMs: 1_000,
+    },
+    {
+      id: 'c_reply_1',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_alex',
+      authorName: 'Alex Rivera',
+      text: 'Switching to Pomodoro cadence for the evening sprint.',
+      visibility: 'public' as const,
+      createdAtMs: 2_000,
+      parentCommentId: 'c_root_1',
+      replyToAuthorName: 'Maya Lin',
+    },
+    {
+      id: 'c_root_2',
+      momentId: 'm_1',
+      momentAuthorUid: 'usr_alex',
+      authorUid: 'usr_aarav',
+      authorName: 'Aarav Mehta',
+      text: 'Reviewing distributed consensus notes now.',
+      visibility: 'public' as const,
+      createdAtMs: 3_000,
+    },
+  ];
+
+  // 1. Empty query returns all comments and preserves collapsed state
+  const emptyRes = filterMomentCommentThreadGroupsByKeyword({
+    comments,
+    collapsedThreadIds: ['c_root_1'],
+    rawSearchQuery: '   ',
+  });
+  assert.equal(emptyRes.isSearchActive, false);
+  assert.equal(emptyRes.matchedCommentsCount, 3);
+  assert.equal(emptyRes.filteredThreadGroups.length, 2);
+  assert.equal(emptyRes.filteredThreadGroups[0].isCollapsed, true);
+  assert.equal(emptyRes.hasNoMatches, false);
+
+  // 2. Keyword matching a nested reply ('Pomodoro') keeps its root thread context and auto-expands the thread
+  const nestedRes = filterMomentCommentThreadGroupsByKeyword({
+    comments,
+    collapsedThreadIds: ['c_root_1'],
+    rawSearchQuery: 'pomodoro',
+  });
+  assert.equal(nestedRes.isSearchActive, true);
+  assert.equal(nestedRes.matchedCommentsCount, 1);
+  assert.deepEqual(nestedRes.matchedCommentIds, ['c_reply_1']);
+  assert.equal(nestedRes.filteredThreadGroups.length, 1);
+  assert.equal(nestedRes.filteredThreadGroups[0].rootItem.comment.id, 'c_root_1');
+  assert.equal(nestedRes.filteredThreadGroups[0].nestedReplies.length, 1);
+  assert.equal(nestedRes.filteredThreadGroups[0].nestedReplies[0].comment.id, 'c_reply_1');
+  assert.equal(nestedRes.filteredThreadGroups[0].isCollapsed, false);
+  assert.equal(nestedRes.statusSummaryLabel, '1 of 3 match');
+
+  // 3. Keyword matching author name + text ('aarav consensus')
+  const authorRes = filterMomentCommentThreadGroupsByKeyword({
+    comments,
+    rawSearchQuery: 'aarav consensus',
+  });
+  assert.equal(authorRes.matchedCommentsCount, 1);
+  assert.deepEqual(authorRes.matchedCommentIds, ['c_root_2']);
+  assert.equal(authorRes.filteredThreadGroups.length, 1);
+  assert.equal(authorRes.filteredThreadGroups[0].rootItem.comment.id, 'c_root_2');
+
+  // 4. Non-matching keyword sets hasNoMatches = true
+  const noMatchRes = filterMomentCommentThreadGroupsByKeyword({
+    comments,
+    rawSearchQuery: 'quantum-entanglement-xyz',
+  });
+  assert.equal(noMatchRes.isSearchActive, true);
+  assert.equal(noMatchRes.matchedCommentsCount, 0);
+  assert.equal(noMatchRes.filteredThreadGroups.length, 0);
+  assert.equal(noMatchRes.hasNoMatches, true);
+  assert.equal(matchesMomentCommentSearchQuery(comments[0], 'STUDY-204'), true);
+});
+
 
 

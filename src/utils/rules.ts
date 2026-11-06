@@ -24126,4 +24126,138 @@ export function resolveMomentCommentsListTransitionSpec(params: {
   };
 }
 
+// ============================================================================
+// PER-MOMENT COMMENTS KEYWORD SEARCH & THREAD FILTERING ENGINE
+// ============================================================================
+
+export function normalizeMomentCommentSearchQuery(rawQuery?: string | null): string {
+  return String(rawQuery || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120);
+}
+
+export function matchesMomentCommentSearchQuery(
+  comment: MomentCommentRecord,
+  rawQuery?: string | null
+): boolean {
+  const normalizedQuery = normalizeMomentCommentSearchQuery(rawQuery).toLowerCase();
+  if (!normalizedQuery) return true;
+
+  const tokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  if (tokens.length === 0) return true;
+
+  const handle = deriveTwitterHandle(
+    String(comment?.authorName || ''),
+    String(comment?.authorUid || '')
+  );
+  const haystack = [
+    String(comment?.text || ''),
+    String(comment?.authorName || ''),
+    handle,
+    String(comment?.replyToAuthorName || ''),
+  ]
+    .join(' ')
+    .toLowerCase();
+
+  return tokens.every((token) => haystack.includes(token));
+}
+
+export interface FilteredMomentCommentThreadsResult {
+  normalizedQuery: string;
+  isSearchActive: boolean;
+  filteredThreadGroups: MomentCommentThreadGroup[];
+  totalCommentsCount: number;
+  matchedCommentsCount: number;
+  matchedThreadGroupsCount: number;
+  visibleCommentsInThreadsCount: number;
+  matchedCommentIds: string[];
+  hasNoMatches: boolean;
+  statusSummaryLabel: string;
+}
+
+export function filterMomentCommentThreadGroupsByKeyword(params: {
+  comments?: MomentCommentRecord[];
+  collapsedThreadIds?: Iterable<string>;
+  rawSearchQuery?: string | null;
+  maxDepth?: number;
+}): FilteredMomentCommentThreadsResult {
+  const comments = Array.isArray(params?.comments) ? params.comments : [];
+  const collapsedThreadIds = params?.collapsedThreadIds || [];
+  const maxDepth = typeof params?.maxDepth === 'number' ? params.maxDepth : 3;
+  const normalizedQuery = normalizeMomentCommentSearchQuery(params?.rawSearchQuery);
+  const isSearchActive = normalizedQuery.length > 0;
+
+  const allGroups = buildMomentCommentThreadGroups(comments, collapsedThreadIds, maxDepth);
+
+  if (!isSearchActive) {
+    const allIds = comments.map((c) => c.id);
+    return {
+      normalizedQuery: '',
+      isSearchActive: false,
+      filteredThreadGroups: allGroups,
+      totalCommentsCount: comments.length,
+      matchedCommentsCount: comments.length,
+      matchedThreadGroupsCount: allGroups.length,
+      visibleCommentsInThreadsCount: comments.length,
+      matchedCommentIds: allIds,
+      hasNoMatches: false,
+      statusSummaryLabel: `${comments.length} total`,
+    };
+  }
+
+  const matchedCommentIds: string[] = [];
+  const filteredThreadGroups: MomentCommentThreadGroup[] = [];
+  let visibleCommentsInThreadsCount = 0;
+
+  for (const group of allGroups) {
+    const rootMatches = matchesMomentCommentSearchQuery(
+      group.rootItem.comment,
+      normalizedQuery
+    );
+    if (rootMatches) {
+      matchedCommentIds.push(group.rootItem.comment.id);
+    }
+
+    const matchingReplies = group.nestedReplies.filter((replyItem) => {
+      const matched = matchesMomentCommentSearchQuery(
+        replyItem.comment,
+        normalizedQuery
+      );
+      if (matched) {
+        matchedCommentIds.push(replyItem.comment.id);
+      }
+      return matched;
+    });
+
+    if (rootMatches || matchingReplies.length > 0) {
+      filteredThreadGroups.push({
+        rootItem: group.rootItem,
+        nestedReplies: matchingReplies,
+        totalRepliesCount: matchingReplies.length,
+        // Automatically expand threads with matching replies while searching so matches are visible
+        isCollapsed: false,
+      });
+      visibleCommentsInThreadsCount += 1 + matchingReplies.length;
+    }
+  }
+
+  const matchedCommentsCount = matchedCommentIds.length;
+  const hasNoMatches = comments.length > 0 && matchedCommentsCount === 0;
+
+  return {
+    normalizedQuery,
+    isSearchActive: true,
+    filteredThreadGroups,
+    totalCommentsCount: comments.length,
+    matchedCommentsCount,
+    matchedThreadGroupsCount: filteredThreadGroups.length,
+    visibleCommentsInThreadsCount,
+    matchedCommentIds,
+    hasNoMatches,
+    statusSummaryLabel: `${matchedCommentsCount} of ${comments.length} match`,
+  };
+}
+
+
 
