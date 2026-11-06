@@ -3386,9 +3386,12 @@ export default function App() {
         : activeReplyTargetByMoment[momentItem.id] || null;
 
     const rawText =
-      explicitReplyTarget && momentReplyInputs[explicitReplyTarget.commentId] !== undefined
+      explicitReplyTarget &&
+      momentReplyInputs[explicitReplyTarget.commentId]?.trim()
         ? momentReplyInputs[explicitReplyTarget.commentId]
-        : momentCommentInputs[momentItem.id] || '';
+        : (momentCommentInputs[momentItem.id] ||
+            (replyTarget ? momentReplyInputs[replyTarget.commentId] : '') ||
+            '');
 
     const check = validateAndSanitizeMomentComment(rawText);
     if (!check.valid) {

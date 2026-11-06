@@ -60,6 +60,7 @@ import {
   MomentCommentReactionsByCommentMap,
   toggleMomentCommentReaction,
   evaluateMomentCommentReactionsSpec,
+  resolveMomentCommentReplyingToIndicatorSpec,
 } from '../utils/rules';
 import type { OnlinePeer } from '../../server';
 
@@ -2166,45 +2167,151 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                       })()}
 
                       {commentGate.allowed ? (
-                        <form
-                          onSubmit={(e) => handleAddMomentComment(e, item)}
-                          className="space-y-2 pt-1"
-                          data-testid={`moment-comment-form-${item.id}`}
-                        >
-                          {itemCommentError && (
-                            <p
-                              className="text-xs text-rose-400"
-                              data-testid={`moment-comment-error-${item.id}`}
-                            >
-                              {itemCommentError}
-                            </p>
-                          )}
-                          <div className="flex flex-col sm:flex-row gap-2">
-                            <input
-                              id={`tweet-reply-input-${item.id}`}
-                              type="text"
-                              maxLength={400}
-                              value={momentCommentInputs[item.id] || ''}
-                              onChange={(e) =>
-                                setMomentCommentInputs((prev) => ({
-                                  ...prev,
-                                  [item.id]: e.target.value,
-                                }))
+                        (() => {
+                          const replyingToSpec =
+                            resolveMomentCommentReplyingToIndicatorSpec({
+                              momentId: item.id,
+                              momentAuthorName: item.authorName,
+                              momentAuthorHandle: authorHandle,
+                              activeReplyTarget:
+                                activeReplyTargetByMoment[item.id] || null,
+                            });
+                          const handleCancelReplyingMode = () => {
+                            setActiveReplyTargetByMoment((prev) => ({
+                              ...prev,
+                              [item.id]: null,
+                            }));
+                            setMomentCommentErrors((prev) => ({
+                              ...prev,
+                              [item.id]: '',
+                            }));
+                          };
+                          return (
+                            <form
+                              onSubmit={(e) => handleAddMomentComment(e, item)}
+                              className="space-y-2 pt-1"
+                              data-testid={`moment-comment-form-${item.id}`}
+                              data-replying-mode={
+                                replyingToSpec.isReplyingToComment
+                                  ? 'true'
+                                  : 'false'
                               }
-                              placeholder={`Post your reply to ${authorHandle}...`}
-                              aria-label={`Comment on ${item.authorName}'s photo moment`}
-                              data-testid="moment-comment-input"
-                              className="flex-1 px-3.5 py-2 text-xs bg-[#0A0A0C] border border-zinc-800 rounded-full text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500"
-                            />
-                            <button
-                              type="submit"
-                              data-testid="moment-comment-submit"
-                              className="px-4 py-2 text-xs font-bold bg-sky-500 hover:bg-sky-400 text-white rounded-full whitespace-nowrap shrink-0"
+                              data-replying-to-comment-id={
+                                replyingToSpec.targetCommentId || ''
+                              }
+                              data-replying-to-author={
+                                replyingToSpec.targetAuthorName || ''
+                              }
                             >
-                              Reply
-                            </button>
-                          </div>
-                        </form>
+                              {itemCommentError && (
+                                <p
+                                  className="text-xs text-rose-400"
+                                  data-testid={`moment-comment-error-${item.id}`}
+                                >
+                                  {itemCommentError}
+                                </p>
+                              )}
+                              <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 min-w-0">
+                                {replyingToSpec.isReplyingToComment && (
+                                  <div
+                                    role="status"
+                                    aria-live="polite"
+                                    data-testid={replyingToSpec.indicatorTestId}
+                                    data-replying-indicator="true"
+                                    data-replying-to-author={
+                                      replyingToSpec.targetAuthorName || ''
+                                    }
+                                    data-replying-to-comment-id={
+                                      replyingToSpec.targetCommentId || ''
+                                    }
+                                    className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-sky-500/15 border border-sky-400/50 text-[11px] text-sky-200 shrink-0 max-w-full"
+                                  >
+                                    <span className="inline-flex items-center gap-1 min-w-0">
+                                      <span
+                                        aria-hidden="true"
+                                        className="text-sky-400 font-mono text-xs leading-none shrink-0"
+                                      >
+                                        ↳
+                                      </span>
+                                      <span className="text-[11px] font-mono text-sky-300 whitespace-nowrap">
+                                        {replyingToSpec.indicatorPrefixLabel}
+                                      </span>
+                                      <strong
+                                        data-testid={
+                                          replyingToSpec.authorBadgeTestId
+                                        }
+                                        className="font-semibold text-white truncate max-w-[110px]"
+                                      >
+                                        {replyingToSpec.authorDisplayBadge}
+                                      </strong>
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={handleCancelReplyingMode}
+                                      aria-label={
+                                        replyingToSpec.cancelButtonAriaLabel
+                                      }
+                                      data-testid={
+                                        replyingToSpec.cancelButtonTestId
+                                      }
+                                      data-cancel-reply-mode="true"
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-[#0A0A0C]/90 hover:bg-zinc-800 text-[10px] font-mono text-zinc-200 hover:text-white border border-sky-400/30 transition-colors shrink-0"
+                                    >
+                                      <span aria-hidden="true">×</span>
+                                      <span>
+                                        {replyingToSpec.cancelButtonLabel}
+                                      </span>
+                                    </button>
+                                  </div>
+                                )}
+                                <input
+                                  id={`tweet-reply-input-${item.id}`}
+                                  type="text"
+                                  maxLength={400}
+                                  value={momentCommentInputs[item.id] || ''}
+                                  onChange={(e) =>
+                                    setMomentCommentInputs((prev) => ({
+                                      ...prev,
+                                      [item.id]: e.target.value,
+                                    }))
+                                  }
+                                  onKeyDown={(e) => {
+                                    if (
+                                      e.key === 'Escape' &&
+                                      replyingToSpec.isReplyingToComment
+                                    ) {
+                                      e.preventDefault();
+                                      handleCancelReplyingMode();
+                                    }
+                                  }}
+                                  placeholder={replyingToSpec.inputPlaceholder}
+                                  aria-label={replyingToSpec.inputAriaLabel}
+                                  data-testid="moment-comment-input"
+                                  data-replying-mode={
+                                    replyingToSpec.isReplyingToComment
+                                      ? 'true'
+                                      : 'false'
+                                  }
+                                  data-replying-to-author={
+                                    replyingToSpec.targetAuthorName || ''
+                                  }
+                                  className={`flex-1 min-w-0 px-3 py-2 text-xs bg-[#0A0A0C] border rounded-full text-white placeholder:text-zinc-500 focus:outline-none transition-colors ${
+                                    replyingToSpec.isReplyingToComment
+                                      ? 'border-sky-500/70 focus:border-sky-400'
+                                      : 'border-zinc-800 focus:border-sky-500'
+                                  }`}
+                                />
+                                <button
+                                  type="submit"
+                                  data-testid="moment-comment-submit"
+                                  className="px-3.5 py-2 text-xs font-bold bg-sky-500 hover:bg-sky-400 text-white rounded-full whitespace-nowrap shrink-0"
+                                >
+                                  {replyingToSpec.submitButtonLabel}
+                                </button>
+                              </div>
+                            </form>
+                          );
+                        })()
                       ) : (
                         <div
                           className="p-3 rounded-xl bg-[#0A0A0C] border border-zinc-800/80 text-xs text-zinc-400 flex flex-wrap items-center justify-between gap-2"

@@ -24587,3 +24587,89 @@ export function evaluateMomentCommentReactionsSpec(params: {
     summaryText,
   };
 }
+
+// ============================================================================
+// MOMENT COMMENT 'REPLYING TO' MODE INDICATOR SPEC
+// ============================================================================
+
+export interface MomentCommentReplyingToModeSpec {
+  momentId: string;
+  isReplyingToComment: boolean;
+  targetCommentId: string | null;
+  targetAuthorName: string | null;
+  targetAuthorHandle: string | null;
+  indicatorPrefixLabel: string;
+  authorDisplayBadge: string;
+  indicatorFullLabel: string;
+  cancelButtonLabel: string;
+  cancelButtonAriaLabel: string;
+  inputPlaceholder: string;
+  inputAriaLabel: string;
+  submitButtonLabel: string;
+  indicatorTestId: string;
+  authorBadgeTestId: string;
+  cancelButtonTestId: string;
+}
+
+export function resolveMomentCommentReplyingToIndicatorSpec(params: {
+  momentId: string;
+  momentAuthorName: string;
+  momentAuthorHandle?: string | null;
+  activeReplyTarget?: { commentId: string; authorName: string } | null;
+}): MomentCommentReplyingToModeSpec {
+  const cleanMomentId = String(params.momentId || '').trim();
+  const cleanMomentAuthorName =
+    String(params.momentAuthorName || '').trim() || 'Author';
+  const cleanMomentAuthorHandle =
+    String(params.momentAuthorHandle || '').trim() ||
+    deriveTwitterHandle(cleanMomentAuthorName);
+
+  const rawTargetCommentId = String(
+    params.activeReplyTarget?.commentId || ''
+  ).trim();
+  const rawTargetAuthorName = String(
+    params.activeReplyTarget?.authorName || ''
+  ).trim();
+
+  const isReplyingToComment = Boolean(
+    rawTargetCommentId.length > 0 && rawTargetAuthorName.length > 0
+  );
+
+  const targetCommentId = isReplyingToComment ? rawTargetCommentId : null;
+  const targetAuthorName = isReplyingToComment ? rawTargetAuthorName : null;
+  const targetAuthorHandle = isReplyingToComment
+    ? deriveTwitterHandle(rawTargetAuthorName)
+    : null;
+
+  const authorDisplayBadge = targetAuthorName ? `@${targetAuthorName}` : '';
+  const indicatorPrefixLabel = 'Replying to';
+  const indicatorFullLabel = targetAuthorName
+    ? `Replying to @${targetAuthorName}`
+    : '';
+
+  return {
+    momentId: cleanMomentId,
+    isReplyingToComment,
+    targetCommentId,
+    targetAuthorName,
+    targetAuthorHandle,
+    indicatorPrefixLabel,
+    authorDisplayBadge,
+    indicatorFullLabel,
+    cancelButtonLabel: 'Cancel',
+    cancelButtonAriaLabel: targetAuthorName
+      ? `Cancel replying to ${targetAuthorName}`
+      : 'Cancel replying mode',
+    inputPlaceholder: targetAuthorName
+      ? `Write a reply to @${targetAuthorName}...`
+      : `Post your reply to ${cleanMomentAuthorHandle}...`,
+    inputAriaLabel: targetAuthorName
+      ? `Replying to comment by ${targetAuthorName} on ${cleanMomentAuthorName}'s photo moment`
+      : `Comment on ${cleanMomentAuthorName}'s photo moment`,
+    submitButtonLabel: targetAuthorName ? 'Post Reply' : 'Reply',
+    indicatorTestId: `moment-comment-replying-indicator-${cleanMomentId}`,
+    authorBadgeTestId: `moment-comment-replying-author-${cleanMomentId}`,
+    cancelButtonTestId: `cancel-moment-comment-reply-mode-${cleanMomentId}`,
+  };
+}
+

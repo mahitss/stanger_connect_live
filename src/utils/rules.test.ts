@@ -417,6 +417,7 @@ import {
   normalizeMomentCommentReactionId,
   toggleMomentCommentReaction,
   evaluateMomentCommentReactionsSpec,
+  resolveMomentCommentReplyingToIndicatorSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9936,3 +9937,60 @@ test('Moment comment emoji reactions support like, helpful, and thinking sentime
   assert.equal(step4.count, 1);
   assert.equal(step4.totalReactionsOnComment, 2);
 });
+
+test('Moment comment replying-to mode indicator resolves active reply author name, cancel button metadata, and dynamic input placeholder', () => {
+  // Default (non-replying) state
+  const idleSpec = resolveMomentCommentReplyingToIndicatorSpec({
+    momentId: 'mom_201',
+    momentAuthorName: 'Mahit Saxena',
+    momentAuthorHandle: '@mahit_saxena',
+    activeReplyTarget: null,
+  });
+  assert.equal(idleSpec.isReplyingToComment, false);
+  assert.equal(idleSpec.targetCommentId, null);
+  assert.equal(idleSpec.targetAuthorName, null);
+  assert.equal(idleSpec.indicatorFullLabel, '');
+  assert.equal(idleSpec.inputPlaceholder, 'Post your reply to @mahit_saxena...');
+  assert.equal(idleSpec.submitButtonLabel, 'Reply');
+  assert.equal(
+    idleSpec.indicatorTestId,
+    'moment-comment-replying-indicator-mom_201'
+  );
+  assert.equal(
+    idleSpec.cancelButtonTestId,
+    'cancel-moment-comment-reply-mode-mom_201'
+  );
+
+  // Active 'replying to' mode state
+  const activeSpec = resolveMomentCommentReplyingToIndicatorSpec({
+    momentId: 'mom_201',
+    momentAuthorName: 'Mahit Saxena',
+    momentAuthorHandle: '@mahit_saxena',
+    activeReplyTarget: {
+      commentId: 'cmt_999',
+      authorName: 'Elena Rostova',
+    },
+  });
+  assert.equal(activeSpec.isReplyingToComment, true);
+  assert.equal(activeSpec.targetCommentId, 'cmt_999');
+  assert.equal(activeSpec.targetAuthorName, 'Elena Rostova');
+  assert.equal(activeSpec.targetAuthorHandle, '@elena_rostova');
+  assert.equal(activeSpec.indicatorPrefixLabel, 'Replying to');
+  assert.equal(activeSpec.authorDisplayBadge, '@Elena Rostova');
+  assert.equal(activeSpec.indicatorFullLabel, 'Replying to @Elena Rostova');
+  assert.equal(activeSpec.cancelButtonLabel, 'Cancel');
+  assert.equal(
+    activeSpec.cancelButtonAriaLabel,
+    'Cancel replying to Elena Rostova'
+  );
+  assert.equal(
+    activeSpec.inputPlaceholder,
+    'Write a reply to @Elena Rostova...'
+  );
+  assert.equal(activeSpec.submitButtonLabel, 'Post Reply');
+  assert.equal(
+    activeSpec.authorBadgeTestId,
+    'moment-comment-replying-author-mom_201'
+  );
+});
+
