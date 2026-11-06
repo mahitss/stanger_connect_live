@@ -55,6 +55,11 @@ import {
   MomentCommentsListTransitionAction,
   resolveMomentCommentsListTransitionSpec,
   filterMomentCommentThreadGroupsByKeyword,
+  MOMENT_COMMENT_REACTIONS_STORAGE_KEY,
+  MomentCommentReactionId,
+  MomentCommentReactionsByCommentMap,
+  toggleMomentCommentReaction,
+  evaluateMomentCommentReactionsSpec,
 } from '../utils/rules';
 import type { OnlinePeer } from '../../server';
 
@@ -210,6 +215,44 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
   const [commentSearchQueriesByMoment, setCommentSearchQueriesByMoment] = useState<
     Record<string, string>
   >({});
+  const [commentReactionsByCommentId, setCommentReactionsByCommentId] =
+    useState<MomentCommentReactionsByCommentMap>(() => {
+      try {
+        const raw = window.localStorage.getItem(MOMENT_COMMENT_REACTIONS_STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed && typeof parsed === 'object') {
+            return parsed as MomentCommentReactionsByCommentMap;
+          }
+        }
+      } catch {
+        // ignore storage errors
+      }
+      return {};
+    });
+
+  const handleToggleCommentReaction = (
+    commentId: string,
+    reactionId: MomentCommentReactionId
+  ) => {
+    setCommentReactionsByCommentId((prev) => {
+      const result = toggleMomentCommentReaction({
+        reactionsMap: prev,
+        commentId,
+        reactionId,
+        userUid: currentIdentity.uid,
+      });
+      try {
+        window.localStorage.setItem(
+          MOMENT_COMMENT_REACTIONS_STORAGE_KEY,
+          JSON.stringify(result.updatedMap)
+        );
+      } catch {
+        // ignore storage errors
+      }
+      return result.updatedMap;
+    });
+  };
 
   useEffect(() => {
     return () => {
@@ -1748,6 +1791,69 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                                 >
                                   {cmt.text}
                                 </p>
+
+                                {/* Emoji Reaction Buttons ('like', 'helpful', 'thinking') */}
+                                {(() => {
+                                  const commentReactionsSpec =
+                                    evaluateMomentCommentReactionsSpec({
+                                      reactionsMap: commentReactionsByCommentId,
+                                      commentId: cmt.id,
+                                      currentUid: currentIdentity.uid,
+                                    });
+                                  return (
+                                    <div
+                                      role="group"
+                                      aria-label={`Reactions for comment by ${cmt.authorName}`}
+                                      data-testid={`moment-comment-reactions-bar-${cmt.id}`}
+                                      data-comment-id={cmt.id}
+                                      data-total-reactions={
+                                        commentReactionsSpec.totalReactionsCount
+                                      }
+                                      className="flex flex-wrap items-center gap-1.5 pt-1"
+                                    >
+                                      {commentReactionsSpec.reactions.map((reaction) => (
+                                        <button
+                                          key={reaction.id}
+                                          type="button"
+                                          onClick={() =>
+                                            handleToggleCommentReaction(
+                                              cmt.id,
+                                              reaction.id
+                                            )
+                                          }
+                                          aria-pressed={reaction.isReactedByMe}
+                                          aria-label={reaction.ariaLabel}
+                                          title={reaction.sentimentDescription}
+                                          data-testid={reaction.buttonTestId}
+                                          data-comment-id={cmt.id}
+                                          data-reaction-id={reaction.id}
+                                          data-reacted={
+                                            reaction.isReactedByMe ? 'true' : 'false'
+                                          }
+                                          data-reaction-count={reaction.count}
+                                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full border text-[11px] font-medium transition-colors whitespace-nowrap shrink-0 ${
+                                            reaction.isReactedByMe
+                                              ? reaction.id === 'like'
+                                                ? 'bg-rose-500/15 border-rose-400/50 text-rose-300 font-semibold'
+                                                : reaction.id === 'helpful'
+                                                ? 'bg-amber-500/15 border-amber-400/50 text-amber-300 font-semibold'
+                                                : 'bg-sky-500/15 border-sky-400/50 text-sky-300 font-semibold'
+                                              : 'bg-[#050505] border-zinc-800/90 text-zinc-400 hover:border-zinc-700 hover:text-zinc-200'
+                                          }`}
+                                        >
+                                          <span aria-hidden="true">{reaction.emoji}</span>
+                                          <span>{reaction.label}</span>
+                                          <span
+                                            data-testid={reaction.countTestId}
+                                            className="font-mono text-[10px] tabular-nums opacity-90"
+                                          >
+                                            {reaction.count}
+                                          </span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  );
+                                })()}
                               </div>
 
                               {commentGate.allowed && isReplyingToThis && (

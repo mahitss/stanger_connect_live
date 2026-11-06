@@ -413,6 +413,10 @@ import {
   filterMomentCommentThreadGroupsByKeyword,
   normalizeCozySanctuaryHubTab,
   buildCozySanctuaryHubLayoutSpec,
+  MOMENT_COMMENT_REACTION_PRESETS,
+  normalizeMomentCommentReactionId,
+  toggleMomentCommentReaction,
+  evaluateMomentCommentReactionsSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9855,4 +9859,80 @@ test('normalizeCozySanctuaryHubTab and buildCozySanctuaryHubLayoutSpec organize 
   assert.equal(insightsSpec.showActivityInsights, true);
   assert.equal(insightsSpec.showAdvancedDirectoryTools, true);
   assert.equal(insightsSpec.showGoalSettingsDrawer, true);
+});
+
+test('Moment comment emoji reactions support like, helpful, and thinking sentiments with per-user toggle, deduplication, and count evaluation', () => {
+  assert.equal(MOMENT_COMMENT_REACTION_PRESETS.length, 3);
+  assert.deepEqual(
+    MOMENT_COMMENT_REACTION_PRESETS.map((p) => p.id),
+    ['like', 'helpful', 'thinking']
+  );
+
+  assert.equal(normalizeMomentCommentReactionId('LIKE'), 'like');
+  assert.equal(normalizeMomentCommentReactionId('helpful'), 'helpful');
+  assert.equal(normalizeMomentCommentReactionId('Thinking'), 'thinking');
+  assert.equal(normalizeMomentCommentReactionId('unknown'), null);
+
+  // 1. User Alice toggles 'helpful' on comment c_101
+  const step1 = toggleMomentCommentReaction({
+    reactionsMap: {},
+    commentId: 'c_101',
+    reactionId: 'helpful',
+    userUid: 'usr_alice',
+  });
+  assert.equal(step1.isReacted, true);
+  assert.equal(step1.count, 1);
+  assert.equal(step1.reactionId, 'helpful');
+  assert.equal(step1.totalReactionsOnComment, 1);
+
+  // 2. User Bob toggles 'helpful' and 'thinking' on comment c_101
+  const step2 = toggleMomentCommentReaction({
+    reactionsMap: step1.updatedMap,
+    commentId: 'c_101',
+    reactionId: 'helpful',
+    userUid: 'usr_bob',
+  });
+  assert.equal(step2.count, 2);
+
+  const step3 = toggleMomentCommentReaction({
+    reactionsMap: step2.updatedMap,
+    commentId: 'c_101',
+    reactionId: 'thinking',
+    userUid: 'usr_bob',
+  });
+  assert.equal(step3.count, 1);
+  assert.equal(step3.totalReactionsOnComment, 3);
+
+  // 3. Evaluate spec for Alice on c_101
+  const evalAlice = evaluateMomentCommentReactionsSpec({
+    reactionsMap: step3.updatedMap,
+    commentId: 'c_101',
+    currentUid: 'usr_alice',
+  });
+  assert.equal(evalAlice.totalReactionsCount, 3);
+  assert.deepEqual(evalAlice.activeReactionIds, ['helpful', 'thinking']);
+  assert.equal(evalAlice.summaryText, '3 reactions');
+
+  const likeBtn = evalAlice.reactions.find((r) => r.id === 'like')!;
+  const helpfulBtn = evalAlice.reactions.find((r) => r.id === 'helpful')!;
+  const thinkingBtn = evalAlice.reactions.find((r) => r.id === 'thinking')!;
+
+  assert.equal(likeBtn.count, 0);
+  assert.equal(likeBtn.isReactedByMe, false);
+  assert.equal(helpfulBtn.count, 2);
+  assert.equal(helpfulBtn.isReactedByMe, true);
+  assert.equal(helpfulBtn.buttonTestId, 'comment-reaction-btn-c_101-helpful');
+  assert.equal(thinkingBtn.count, 1);
+  assert.equal(thinkingBtn.isReactedByMe, false);
+
+  // 4. Alice clicks 'helpful' again to remove her reaction
+  const step4 = toggleMomentCommentReaction({
+    reactionsMap: step3.updatedMap,
+    commentId: 'c_101',
+    reactionId: 'helpful',
+    userUid: 'usr_alice',
+  });
+  assert.equal(step4.isReacted, false);
+  assert.equal(step4.count, 1);
+  assert.equal(step4.totalReactionsOnComment, 2);
 });

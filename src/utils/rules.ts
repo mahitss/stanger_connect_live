@@ -24389,3 +24389,201 @@ export function buildCozySanctuaryHubLayoutSpec(params?: {
     goalProgressBadge: `${completedFocusMinutes} / ${dailyTargetMinutes} min today`,
   };
 }
+
+// ============================================================================
+// MOMENT COMMENT EMOJI REACTIONS ('like', 'helpful', 'thinking')
+// ============================================================================
+
+export type MomentCommentReactionId = 'like' | 'helpful' | 'thinking';
+
+export interface MomentCommentReactionPreset {
+  id: MomentCommentReactionId;
+  emoji: string;
+  label: string;
+  sentimentDescription: string;
+}
+
+export const MOMENT_COMMENT_REACTIONS_STORAGE_KEY =
+  'mr_stranger_moment_comment_reactions_v1';
+
+export const MOMENT_COMMENT_REACTION_PRESETS: readonly MomentCommentReactionPreset[] = [
+  {
+    id: 'like',
+    emoji: '❤️',
+    label: 'Like',
+    sentimentDescription: 'Express warm appreciation for this comment',
+  },
+  {
+    id: 'helpful',
+    emoji: '💡',
+    label: 'Helpful',
+    sentimentDescription: 'Mark this comment as a helpful study insight',
+  },
+  {
+    id: 'thinking',
+    emoji: '🤔',
+    label: 'Thinking',
+    sentimentDescription: 'Share that this comment sparked deep reflection',
+  },
+] as const;
+
+export type MomentCommentReactionsByCommentMap = Record<
+  string,
+  Partial<Record<MomentCommentReactionId, string[]>>
+>;
+
+export interface EvaluatedMomentCommentReactionItem extends MomentCommentReactionPreset {
+  count: number;
+  isReactedByMe: boolean;
+  reactorUids: string[];
+  buttonTestId: string;
+  countTestId: string;
+  ariaLabel: string;
+}
+
+export interface MomentCommentReactionsEvaluationSpec {
+  commentId: string;
+  totalReactionsCount: number;
+  activeReactionIds: MomentCommentReactionId[];
+  reactions: EvaluatedMomentCommentReactionItem[];
+  summaryText: string;
+}
+
+export function normalizeMomentCommentReactionId(
+  rawInput?: string | null
+): MomentCommentReactionId | null {
+  const cleaned = String(rawInput || '')
+    .trim()
+    .toLowerCase();
+  if (cleaned === 'like' || cleaned === 'heart' || cleaned === '❤️') {
+    return 'like';
+  }
+  if (cleaned === 'helpful' || cleaned === 'idea' || cleaned === '💡') {
+    return 'helpful';
+  }
+  if (cleaned === 'thinking' || cleaned === 'hmm' || cleaned === '🤔') {
+    return 'thinking';
+  }
+  return null;
+}
+
+export function toggleMomentCommentReaction(params: {
+  reactionsMap?: MomentCommentReactionsByCommentMap;
+  commentId: string;
+  reactionId: MomentCommentReactionId | string;
+  userUid: string;
+}): {
+  updatedMap: MomentCommentReactionsByCommentMap;
+  isReacted: boolean;
+  count: number;
+  reactionId: MomentCommentReactionId | null;
+  totalReactionsOnComment: number;
+} {
+  const baseMap: MomentCommentReactionsByCommentMap = params.reactionsMap
+    ? { ...params.reactionsMap }
+    : {};
+  const cleanCommentId = String(params.commentId || '').trim();
+  const cleanUid = String(params.userUid || '').trim();
+  const normalizedReaction = normalizeMomentCommentReactionId(params.reactionId);
+
+  if (!cleanCommentId || !cleanUid || !normalizedReaction) {
+    return {
+      updatedMap: baseMap,
+      isReacted: false,
+      count: 0,
+      reactionId: normalizedReaction,
+      totalReactionsOnComment: 0,
+    };
+  }
+
+  const existingForComment = { ...(baseMap[cleanCommentId] || {}) };
+  const existingUids = Array.isArray(existingForComment[normalizedReaction])
+    ? [...(existingForComment[normalizedReaction] as string[])]
+    : [];
+
+  const alreadyReacted = existingUids.includes(cleanUid);
+  const nextUids = alreadyReacted
+    ? existingUids.filter((id) => id !== cleanUid)
+    : [...existingUids, cleanUid];
+
+  existingForComment[normalizedReaction] = nextUids;
+  baseMap[cleanCommentId] = existingForComment;
+
+  let totalReactionsOnComment = 0;
+  for (const preset of MOMENT_COMMENT_REACTION_PRESETS) {
+    const arr = existingForComment[preset.id];
+    if (Array.isArray(arr)) {
+      totalReactionsOnComment += arr.length;
+    }
+  }
+
+  return {
+    updatedMap: baseMap,
+    isReacted: !alreadyReacted,
+    count: nextUids.length,
+    reactionId: normalizedReaction,
+    totalReactionsOnComment,
+  };
+}
+
+export function evaluateMomentCommentReactionsSpec(params: {
+  reactionsMap?: MomentCommentReactionsByCommentMap;
+  commentId: string;
+  currentUid?: string | null;
+}): MomentCommentReactionsEvaluationSpec {
+  const cleanCommentId = String(params.commentId || '').trim();
+  const cleanUid = String(params.currentUid || '').trim();
+  const commentReactions =
+    (cleanCommentId && params.reactionsMap?.[cleanCommentId]) || {};
+
+  const activeReactionIds: MomentCommentReactionId[] = [];
+  let totalReactionsCount = 0;
+
+  const reactions: EvaluatedMomentCommentReactionItem[] =
+    MOMENT_COMMENT_REACTION_PRESETS.map((preset) => {
+      const rawUids = commentReactions[preset.id];
+      const reactorUids = Array.isArray(rawUids)
+        ? Array.from(
+            new Set(
+              rawUids
+                .map((u) => String(u || '').trim())
+                .filter((u) => u.length > 0)
+            )
+          )
+        : [];
+      const count = reactorUids.length;
+      const isReactedByMe = Boolean(cleanUid && reactorUids.includes(cleanUid));
+
+      if (count > 0) {
+        activeReactionIds.push(preset.id);
+        totalReactionsCount += count;
+      }
+
+      return {
+        ...preset,
+        count,
+        isReactedByMe,
+        reactorUids,
+        buttonTestId: `comment-reaction-btn-${cleanCommentId}-${preset.id}`,
+        countTestId: `comment-reaction-count-${cleanCommentId}-${preset.id}`,
+        ariaLabel: `${preset.label} reaction (${preset.emoji}) · ${count}${
+          isReactedByMe ? ' · Reacted by you' : ''
+        }`,
+      };
+    });
+
+  const summaryText =
+    totalReactionsCount === 0
+      ? 'No reactions yet'
+      : totalReactionsCount === 1
+      ? '1 reaction'
+      : `${totalReactionsCount} reactions`;
+
+  return {
+    commentId: cleanCommentId,
+    totalReactionsCount,
+    activeReactionIds,
+    reactions,
+    summaryText,
+  };
+}
