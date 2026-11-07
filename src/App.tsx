@@ -6682,7 +6682,7 @@ export default function App() {
                       transition={{ duration: 0.24, ease: 'easeOut' }}
                       className={`absolute left-0 top-full mt-2 z-50 w-80 sm:w-[29.5rem] max-h-[calc(100vh-5rem)] overflow-y-auto overscroll-contain rounded-lg border border-slate-200 dark:border-zinc-800 bg-white dark:bg-[#0A0A0C] p-4 shadow-2xl space-y-3 text-left font-sans transition-all duration-200 ${workspaceHeaderQrMeta.detectionFlash.popoverFlashClassName}`}
                     >
-                      {/* Subtle Detection Flash Overlay (Immediate Visual Confirmation Before Showing Join Toast) */}
+                      {/* Subtle Detection Flash Overlay with Tactile Flicker Animation (Immediate Visual Confirmation Before Showing Join Toast) */}
                       <AnimatePresence initial={false}>
                         {workspaceHeaderQrMeta.detectionFlash.isFlashActive && (
                           <motion.div
@@ -6698,37 +6698,70 @@ export default function App() {
                               workspaceHeaderQrMeta.detectionFlash.detectedRoomCode ||
                               workspaceHeaderQrMeta.roomCode
                             }
+                            data-flicker-active={
+                              workspaceHeaderQrMeta.detectionFlash.hasTactileFlicker
+                                ? 'true'
+                                : 'false'
+                            }
+                            data-flicker-animation={
+                              workspaceHeaderQrMeta.detectionFlash
+                                .flickerAnimationName
+                            }
+                            data-flicker-pulses={String(
+                              workspaceHeaderQrMeta.detectionFlash
+                                .flickerPulsesCount
+                            )}
                             aria-live="polite"
-                            initial={{ opacity: 0 }}
+                            initial={{ opacity: 0.92 }}
                             animate={{
                               opacity:
                                 workspaceHeaderQrMeta.detectionFlash
-                                  .overlayOpacityKeyframes,
+                                  .flickerOpacityKeyframes,
                             }}
                             exit={{ opacity: 0 }}
                             transition={{
                               duration:
                                 workspaceHeaderQrMeta.detectionFlash
                                   .flashDurationSec,
-                              ease: 'easeOut',
+                              ease: 'linear',
                             }}
-                            className="pointer-events-none absolute inset-0 z-30 rounded-lg bg-gradient-to-br from-emerald-300/40 via-white/30 to-emerald-500/30 ring-2 ring-inset ring-emerald-400/90 flex items-start justify-center pt-2.5"
+                            className={`pointer-events-none absolute inset-0 z-30 overflow-hidden rounded-lg flex items-start justify-center pt-2.5 ${workspaceHeaderQrMeta.detectionFlash.flickerOverlayClassName}`}
                           >
-                            <span
+                            <div
+                              data-testid={
+                                workspaceHeaderQrMeta.detectionFlash.flickerSpec
+                                  .glintElementTestId
+                              }
+                              aria-hidden="true"
+                              className="qr-detection-shutter-glint-sweep pointer-events-none absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-transparent via-emerald-200/45 to-transparent"
+                            />
+                            <motion.span
                               id={workspaceHeaderQrMeta.detectionFlash.badgeElementId}
                               data-testid={
                                 workspaceHeaderQrMeta.detectionFlash.badgeTestId
                               }
-                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-950/95 border border-emerald-400/80 text-[11px] font-mono font-bold text-emerald-200 shadow-lg"
+                              data-flicker-badge="true"
+                              animate={{
+                                scale:
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .flickerBadgeScaleKeyframes,
+                              }}
+                              transition={{
+                                duration:
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .flashDurationSec,
+                                ease: 'easeOut',
+                              }}
+                              className={`relative z-10 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-emerald-950/95 border border-emerald-400/90 text-[11px] font-mono font-bold text-emerald-200 shadow-[0_0_20px_rgba(16,185,129,0.5)] ${workspaceHeaderQrMeta.detectionFlash.flickerBadgeClassName}`}
                             >
-                              <Sparkles className="w-3.5 h-3.5 text-emerald-300 shrink-0" />
+                              <Sparkles className="w-3.5 h-3.5 text-emerald-300 shrink-0 animate-pulse" />
                               <span>
                                 {
                                   workspaceHeaderQrMeta.detectionFlash
                                     .confirmationLabel
                                 }
                               </span>
-                            </span>
+                            </motion.span>
                           </motion.div>
                         )}
                       </AnimatePresence>

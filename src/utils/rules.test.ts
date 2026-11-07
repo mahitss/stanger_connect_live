@@ -425,6 +425,13 @@ import {
   MOMENT_THREAD_INITIAL_VISIBLE_REPLIES_LIMIT,
   toggleExpandedDeepReplyThread,
   evaluateMomentThreadRepliesPaginationSpec,
+  WORKSPACE_QR_DETECTION_FLICKER_ANIMATION_NAME,
+  WORKSPACE_QR_DETECTION_FLICKER_CLASS_NAME,
+  WORKSPACE_QR_DETECTION_BADGE_FLICKER_CLASS_NAME,
+  WORKSPACE_QR_DETECTION_FLICKER_PULSES_COUNT,
+  WORKSPACE_QR_DETECTION_FLICKER_KEYFRAMES,
+  WORKSPACE_QR_DETECTION_FLICKER_BADGE_SCALE_KEYFRAMES,
+  evaluateWorkspaceQrDetectionFlickerSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -10108,3 +10115,70 @@ test('Moment comment thread pagination truncates threads exceeding 3 replies and
   assert.equal(expanded.hiddenRepliesCount, 0);
   assert.equal(expanded.toggleButtonLabel, 'Show fewer replies (2 hidden)');
 });
+
+test('QR detection flash overlay applies a subtle 3-pulse tactile flicker animation upon successful scan confirmation', () => {
+  assert.equal(
+    WORKSPACE_QR_DETECTION_FLICKER_ANIMATION_NAME,
+    'qrDetectionTactileFlicker'
+  );
+  assert.equal(
+    WORKSPACE_QR_DETECTION_FLICKER_CLASS_NAME,
+    'qr-detection-flash-tactile-flicker'
+  );
+  assert.equal(
+    WORKSPACE_QR_DETECTION_BADGE_FLICKER_CLASS_NAME,
+    'qr-detection-badge-tactile-flicker'
+  );
+  assert.equal(WORKSPACE_QR_DETECTION_FLICKER_PULSES_COUNT, 3);
+  assert.deepEqual(
+    WORKSPACE_QR_DETECTION_FLICKER_KEYFRAMES,
+    [0, 0.52, 0.18, 0.62, 0.24, 0.44, 0]
+  );
+
+  // 1. Idle state has tactile flicker disabled
+  const idleFlicker = evaluateWorkspaceQrDetectionFlickerSpec({
+    isFlashActive: false,
+    flashTriggerCount: 0,
+  });
+  assert.equal(idleFlicker.enabled, false);
+  assert.equal(idleFlicker.animationName, 'none');
+  assert.equal(idleFlicker.overlayClassName, '');
+  assert.equal(idleFlicker.badgeClassName, '');
+  assert.equal(idleFlicker.pulsesCount, 0);
+  assert.deepEqual(idleFlicker.opacityKeyframes, [0, 0, 0, 0, 0, 0, 0]);
+  assert.deepEqual(idleFlicker.badgeScaleKeyframes, [1, 1, 1, 1, 1]);
+
+  // 2. Active QR detection flash enables tactile 3-pulse flicker on overlay and badge
+  const activeFlash = evaluateWorkspaceQrDetectionFlashSpec({
+    isFlashActive: true,
+    flashTriggerCount: 2,
+    detectedRoomCode: 'STUDY-777',
+  });
+  assert.equal(activeFlash.hasTactileFlicker, true);
+  assert.equal(
+    activeFlash.flickerAnimationName,
+    'qrDetectionTactileFlicker'
+  );
+  assert.equal(
+    activeFlash.flickerOverlayClassName,
+    'qr-detection-flash-tactile-flicker'
+  );
+  assert.equal(
+    activeFlash.flickerBadgeClassName,
+    'qr-detection-badge-tactile-flicker'
+  );
+  assert.equal(activeFlash.flickerPulsesCount, 3);
+  assert.deepEqual(
+    activeFlash.flickerOpacityKeyframes,
+    [0, 0.52, 0.18, 0.62, 0.24, 0.44, 0]
+  );
+  assert.deepEqual(
+    activeFlash.flickerBadgeScaleKeyframes,
+    [...WORKSPACE_QR_DETECTION_FLICKER_BADGE_SCALE_KEYFRAMES]
+  );
+  assert.equal(
+    activeFlash.flickerSpec.glintElementTestId,
+    'workspace-header-qr-detection-flicker-glint'
+  );
+});
+

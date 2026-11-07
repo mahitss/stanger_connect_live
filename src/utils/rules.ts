@@ -23329,6 +23329,83 @@ export const WORKSPACE_QR_DETECTION_FLASH_BADGE_ID =
 export const WORKSPACE_QR_SIMULATE_DETECT_BUTTON_ID =
   'workspace-header-qr-simulate-detect-btn';
 
+export const WORKSPACE_QR_DETECTION_FLICKER_ANIMATION_NAME =
+  'qrDetectionTactileFlicker' as const;
+export const WORKSPACE_QR_DETECTION_FLICKER_CLASS_NAME =
+  'qr-detection-flash-tactile-flicker' as const;
+export const WORKSPACE_QR_DETECTION_BADGE_FLICKER_CLASS_NAME =
+  'qr-detection-badge-tactile-flicker' as const;
+export const WORKSPACE_QR_DETECTION_FLICKER_PULSES_COUNT = 3;
+export const WORKSPACE_QR_DETECTION_FLICKER_KEYFRAMES: readonly [
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+  number,
+] = [0, 0.52, 0.18, 0.62, 0.24, 0.44, 0];
+export const WORKSPACE_QR_DETECTION_FLICKER_BADGE_SCALE_KEYFRAMES: readonly [
+  number,
+  number,
+  number,
+  number,
+  number,
+] = [0.96, 1.04, 0.99, 1.02, 1];
+
+export interface WorkspaceQrDetectionFlickerSpec {
+  enabled: boolean;
+  animationName: typeof WORKSPACE_QR_DETECTION_FLICKER_ANIMATION_NAME | 'none';
+  overlayClassName: string;
+  badgeClassName: string;
+  pulsesCount: number;
+  durationMs: number;
+  durationSec: number;
+  timingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)';
+  opacityKeyframes: number[];
+  badgeScaleKeyframes: number[];
+  glintElementTestId: 'workspace-header-qr-detection-flicker-glint';
+}
+
+export function evaluateWorkspaceQrDetectionFlickerSpec(input?: {
+  isFlashActive?: boolean;
+  flashTriggerCount?: number;
+  durationMs?: number;
+}): WorkspaceQrDetectionFlickerSpec {
+  const isFlashActive = Boolean(input?.isFlashActive);
+  const rawDuration = Number(input?.durationMs);
+  const durationMs =
+    Number.isFinite(rawDuration) && rawDuration > 0
+      ? Math.floor(rawDuration)
+      : WORKSPACE_QR_DETECTION_FLASH_DURATION_MS;
+
+  return {
+    enabled: isFlashActive,
+    animationName: isFlashActive
+      ? WORKSPACE_QR_DETECTION_FLICKER_ANIMATION_NAME
+      : 'none',
+    overlayClassName: isFlashActive
+      ? WORKSPACE_QR_DETECTION_FLICKER_CLASS_NAME
+      : '',
+    badgeClassName: isFlashActive
+      ? WORKSPACE_QR_DETECTION_BADGE_FLICKER_CLASS_NAME
+      : '',
+    pulsesCount: isFlashActive
+      ? WORKSPACE_QR_DETECTION_FLICKER_PULSES_COUNT
+      : 0,
+    durationMs,
+    durationSec: Number((durationMs / 1000).toFixed(2)),
+    timingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+    opacityKeyframes: isFlashActive
+      ? [...WORKSPACE_QR_DETECTION_FLICKER_KEYFRAMES]
+      : [0, 0, 0, 0, 0, 0, 0],
+    badgeScaleKeyframes: isFlashActive
+      ? [...WORKSPACE_QR_DETECTION_FLICKER_BADGE_SCALE_KEYFRAMES]
+      : [1, 1, 1, 1, 1],
+    glintElementTestId: 'workspace-header-qr-detection-flicker-glint',
+  };
+}
+
 export interface WorkspaceQrDetectionFlashSpec {
   popoverElementId: 'workspace-header-qr-popover';
   overlayElementId: typeof WORKSPACE_QR_DETECTION_FLASH_OVERLAY_ID;
@@ -23353,6 +23430,16 @@ export interface WorkspaceQrDetectionFlashSpec {
   borderGlowShadow: string;
   confirmationLabel: string;
   statusAnnouncement: string;
+  hasTactileFlicker: boolean;
+  flickerAnimationName:
+    | typeof WORKSPACE_QR_DETECTION_FLICKER_ANIMATION_NAME
+    | 'none';
+  flickerOverlayClassName: string;
+  flickerBadgeClassName: string;
+  flickerPulsesCount: number;
+  flickerOpacityKeyframes: number[];
+  flickerBadgeScaleKeyframes: number[];
+  flickerSpec: WorkspaceQrDetectionFlickerSpec;
 }
 
 export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
@@ -23371,6 +23458,11 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
   const fallbackRoom =
     String(input?.fallbackRoomCode || 'STUDY-204').trim() || 'STUDY-204';
   const targetRoomLabel = cleanDetectedRoom || fallbackRoom;
+  const flickerSpec = evaluateWorkspaceQrDetectionFlickerSpec({
+    isFlashActive,
+    flashTriggerCount,
+    durationMs: WORKSPACE_QR_DETECTION_FLASH_DURATION_MS,
+  });
 
   return {
     popoverElementId: 'workspace-header-qr-popover',
@@ -23410,6 +23502,14 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
     statusAnnouncement: isFlashActive
       ? `QR code detected for ${targetRoomLabel} — confirming before showing join toast`
       : 'QR scanner popover ready',
+    hasTactileFlicker: flickerSpec.enabled,
+    flickerAnimationName: flickerSpec.animationName,
+    flickerOverlayClassName: flickerSpec.overlayClassName,
+    flickerBadgeClassName: flickerSpec.badgeClassName,
+    flickerPulsesCount: flickerSpec.pulsesCount,
+    flickerOpacityKeyframes: flickerSpec.opacityKeyframes,
+    flickerBadgeScaleKeyframes: flickerSpec.badgeScaleKeyframes,
+    flickerSpec,
   };
 }
 

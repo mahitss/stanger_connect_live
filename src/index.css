@@ -564,4 +564,125 @@ div.moment-thread-slide-out {
   }
 }
 
+/* ============================================================================
+   QR DETECTION FLASH OVERLAY — SUBTLE TACTILE FLICKER ANIMATION
+   ============================================================================ */
+
+@keyframes qrDetectionTactileFlicker {
+  0% {
+    opacity: 0.15;
+    background-color: rgba(16, 185, 129, 0.12);
+    border-color: rgba(52, 211, 153, 0.45);
+    filter: brightness(1);
+  }
+  14% {
+    opacity: 0.94;
+    background-color: rgba(16, 185, 129, 0.34);
+    border-color: rgba(110, 231, 183, 0.98);
+    filter: brightness(1.18);
+  }
+  30% {
+    opacity: 0.26;
+    background-color: rgba(16, 185, 129, 0.1);
+    border-color: rgba(52, 211, 153, 0.45);
+    filter: brightness(0.96);
+  }
+  48% {
+    opacity: 0.98;
+    background-color: rgba(52, 211, 153, 0.38);
+    border-color: rgba(167, 243, 208, 1);
+    filter: brightness(1.24);
+  }
+  68% {
+    opacity: 0.32;
+    background-color: rgba(16, 185, 129, 0.14);
+    border-color: rgba(52, 211, 153, 0.55);
+    filter: brightness(1.02);
+  }
+  84% {
+    opacity: 0.84;
+    background-color: rgba(16, 185, 129, 0.28);
+    border-color: rgba(110, 231, 183, 0.92);
+    filter: brightness(1.14);
+  }
+  100% {
+    opacity: 0;
+    background-color: rgba(16, 185, 129, 0);
+    border-color: rgba(52, 211, 153, 0);
+    filter: brightness(1);
+  }
+}
+
+@keyframes qrDetectionBadgeTactilePulse {
+  0% {
+    transform: translateY(-2px) scale(0.96);
+    filter: brightness(1);
+  }
+  22% {
+    transform: translateY(0px) scale(1.04);
+    filter: brightness(1.16);
+  }
+  44% {
+    transform: translateY(0px) scale(0.985);
+    filter: brightness(0.98);
+  }
+  66% {
+    transform: translateY(0px) scale(1.025);
+    filter: brightness(1.1);
+  }
+  100% {
+    transform: translateY(0px) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes qrDetectionShutterGlintSweep {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.85;
+  }
+  65% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(360%);
+    opacity: 0;
+  }
+}
+
+div.qr-detection-flash-tactile-flicker {
+  background-color: rgba(16, 185, 129, 0.26) !important;
+  border: 2px solid rgba(110, 231, 183, 0.92) !important;
+  animation: qrDetectionTactileFlicker 480ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  will-change: opacity, background-color, border-color, filter;
+}
+
+span.qr-detection-badge-tactile-flicker {
+  background-color: #09261e !important;
+  border: 1.5px solid #6ee7b7 !important;
+  color: #d1fae5 !important;
+  animation: qrDetectionBadgeTactilePulse 440ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  will-change: transform, filter;
+}
+
+div.qr-detection-shutter-glint-sweep {
+  background-color: rgba(167, 243, 208, 0.24) !important;
+  border-bottom: 1.5px solid rgba(110, 231, 183, 0.85) !important;
+  animation: qrDetectionShutterGlintSweep 460ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  will-change: transform, opacity;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  div.qr-detection-flash-tactile-flicker,
+  span.qr-detection-badge-tactile-flicker,
+  div.qr-detection-shutter-glint-sweep {
+    animation-duration: 1ms !important;
+  }
+}
+
+
+
 
