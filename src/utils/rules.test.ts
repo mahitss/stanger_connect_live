@@ -432,6 +432,16 @@ import {
   WORKSPACE_QR_DETECTION_FLICKER_KEYFRAMES,
   WORKSPACE_QR_DETECTION_FLICKER_BADGE_SCALE_KEYFRAMES,
   evaluateWorkspaceQrDetectionFlickerSpec,
+  WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS,
+  WORKSPACE_QR_QUICK_REPORT_BUTTON_ID,
+  WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID,
+  WORKSPACE_QR_QUICK_REPORT_MODAL_ID,
+  WORKSPACE_QR_QUICK_REPORT_DOWNLOAD_BTN_ID,
+  WORKSPACE_QR_QUICK_REPORT_CLOSE_BTN_ID,
+  WORKSPACE_QR_QUICK_REPORT_MIME_TYPE,
+  buildWorkspaceQrQuickReportPdfFilename,
+  escapePdfTextLiteral,
+  buildWorkspaceQrHistoryQuickReportPdfSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -10181,4 +10191,127 @@ test('QR detection flash overlay applies a subtle 3-pulse tactile flicker animat
     'workspace-header-qr-detection-flicker-glint'
   );
 });
+
+test('QR history Quick Report generates a visually styled PDF summary of the last 10 scanned study rooms with timestamps and categories', () => {
+  assert.equal(WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS, 10);
+  assert.equal(
+    WORKSPACE_QR_QUICK_REPORT_BUTTON_ID,
+    'workspace-header-qr-history-quick-report-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID,
+    'workspace-header-qr-search-history-quick-report-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_QUICK_REPORT_MODAL_ID,
+    'workspace-header-qr-history-quick-report-modal'
+  );
+  assert.equal(
+    WORKSPACE_QR_QUICK_REPORT_DOWNLOAD_BTN_ID,
+    'workspace-header-qr-history-quick-report-download-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_QUICK_REPORT_CLOSE_BTN_ID,
+    'workspace-header-qr-history-quick-report-close-btn'
+  );
+  assert.equal(WORKSPACE_QR_QUICK_REPORT_MIME_TYPE, 'application/pdf');
+  assert.equal(
+    escapePdfTextLiteral('Room (A) \\ Test'),
+    'Room \\(A\\) \\\\ Test'
+  );
+  assert.equal(
+    buildWorkspaceQrQuickReportPdfFilename('STUDY-108'),
+    'mr-stranger-qr-quick-report-study-108.pdf'
+  );
+
+  const nowMs = Date.UTC(2026, 10, 7, 18, 0, 0);
+  // Create 12 candidate scan records across Study, Work, and Casual categories
+  const twelveScans = normalizeStoredWorkspaceQrRecentScans(
+    Array.from({ length: 12 }, (_, idx) => {
+      const category =
+        idx % 3 === 0 ? 'Study' : idx % 3 === 1 ? 'Work' : 'Casual';
+      const roomCode = `ROOM-${String(idx + 1).padStart(2, '0')}`;
+      return {
+        id: `scan_${idx + 1}`,
+        roomCode,
+        workspaceUrl: `https://sanctuary.example.com/?room=${roomCode}`,
+        rawValue: `https://sanctuary.example.com/?room=${roomCode}`,
+        scannedAtMs: nowMs - (idx + 1) * 120_000,
+        scanSourceChannel: idx % 2 === 0 ? 'camera' : 'share-link',
+        category,
+      };
+    }),
+    20
+  );
+
+  const report = buildWorkspaceQrHistoryQuickReportPdfSpec(twelveScans, {
+    nowMs,
+    activeRoomCode: 'SANCTUARY-108',
+    maxItems: 10,
+  });
+
+  assert.equal(report.maxItems, 10);
+  assert.equal(report.recordCount, 10);
+  assert.equal(report.rowCount, 10);
+  assert.equal(report.hasRecords, true);
+  assert.equal(report.isDisabled, false);
+  assert.equal(report.buttonLabel, 'Quick Report');
+  assert.equal(report.generatedButtonLabel, 'Report Ready!');
+  assert.equal(
+    report.filename,
+    'mr-stranger-qr-quick-report-sanctuary-108.pdf'
+  );
+  assert.equal(report.rows.length, 10);
+  assert.equal(report.rows[0]?.roomCode, 'ROOM-01');
+  assert.equal(report.rows[0]?.category, 'Study');
+  assert.equal(report.rows[0]?.relativeTimeLabel, '2m ago');
+  assert.equal(report.rows[9]?.roomCode, 'ROOM-10');
+  assert.equal(report.countsByCategory.Study, 4);
+  assert.equal(report.countsByCategory.Work, 3);
+  assert.equal(report.countsByCategory.Casual, 3);
+
+  // Verify valid %PDF-1.4 document with styled header, categories, and timestamps
+  assert.ok(report.pdfContent.startsWith('%PDF-1.4\n'));
+  assert.ok(report.pdfContent.includes('xref\n0 7\n'));
+  assert.ok(report.pdfContent.trimEnd().endsWith('%%EOF'));
+  assert.ok(
+    report.pdfContent.includes('MR. STRANGER SANCTUARY - QR STUDY ROOMS QUICK REPORT')
+  );
+  assert.ok(report.pdfContent.includes('(ROOM-01) Tj'));
+  assert.ok(report.pdfContent.includes('(ROOM-10) Tj'));
+  assert.ok(!report.pdfContent.includes('(ROOM-11) Tj'));
+  assert.ok(report.pdfContent.includes('(Study) Tj'));
+  assert.ok(report.pdfContent.includes('(Work) Tj'));
+  assert.ok(report.pdfContent.includes('(Casual) Tj'));
+
+  // Empty scan list disables Quick Report button cleanly
+  const emptyReport = buildWorkspaceQrHistoryQuickReportPdfSpec([], { nowMs });
+  assert.equal(emptyReport.recordCount, 0);
+  assert.equal(emptyReport.hasRecords, false);
+  assert.equal(emptyReport.isDisabled, true);
+
+  // Verify getWorkspaceHeaderQrCodeMeta wires Quick Report into both historySection and searchHistory
+  const qrMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'https://sanctuary.example.com/',
+    roomCode: 'SANCTUARY-108',
+    recentScans: twelveScans,
+    historyStatsReferenceTimestampMs: nowMs,
+  });
+  assert.equal(
+    qrMeta.historySection.quickReportButtonElementId,
+    'workspace-header-qr-history-quick-report-btn'
+  );
+  assert.equal(qrMeta.historySection.quickReportButtonLabel, 'Quick Report');
+  assert.equal(qrMeta.historySection.quickReport.recordCount, 10);
+  assert.equal(
+    qrMeta.searchHistory.quickReportButtonElementId,
+    'workspace-header-qr-history-quick-report-btn'
+  );
+  assert.equal(
+    qrMeta.searchHistory.searchHistoryQuickReportButtonElementId,
+    'workspace-header-qr-search-history-quick-report-btn'
+  );
+  assert.equal(qrMeta.searchHistory.quickReport.recordCount, 10);
+});
+
 

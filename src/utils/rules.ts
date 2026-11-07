@@ -16356,6 +16356,13 @@ export interface WorkspaceQrSearchHistorySpec {
   exportCsvButtonLabel: 'Export CSV';
   exportedCsvButtonLabel: 'Exported CSV!';
   csvExport: WorkspaceQrHistoryCsvExportSpec;
+  quickReportButtonElementId: typeof WORKSPACE_QR_QUICK_REPORT_BUTTON_ID;
+  quickReportButtonTestId: typeof WORKSPACE_QR_QUICK_REPORT_BUTTON_ID;
+  searchHistoryQuickReportButtonElementId: typeof WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID;
+  searchHistoryQuickReportButtonTestId: typeof WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID;
+  quickReportButtonLabel: 'Quick Report';
+  generatedQuickReportButtonLabel: 'Report Ready!';
+  quickReport: WorkspaceQrHistoryQuickReportSpec;
   activeTab: WorkspaceQrHistoryTab;
   statistics: WorkspaceQrHistoryStatisticsSpec;
   listElementId: 'workspace-header-qr-search-history-list';
@@ -16515,6 +16522,9 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
   roomCode?: string | null;
   isCsvExported?: boolean;
   csvExportCount?: number;
+  isQuickReportGenerated?: boolean;
+  isQuickReportPreviewOpen?: boolean;
+  quickReportGeneratedCount?: number;
   maxItems?: number;
 }): WorkspaceQrSearchHistorySpec {
   const cap = Math.max(
@@ -16570,6 +16580,16 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     isExported: input?.isCsvExported,
     exportCount: input?.csvExportCount,
   });
+  const quickReport = buildWorkspaceQrHistoryQuickReportPdfSpec(
+    input?.recentScans,
+    {
+      roomCode: input?.roomCode,
+      referenceTimestampMs: input?.referenceTimestampMs,
+      isGenerated: input?.isQuickReportGenerated,
+      isPreviewOpen: input?.isQuickReportPreviewOpen,
+      generatedCount: input?.quickReportGeneratedCount,
+    }
+  );
   const filteredEntries = filterWorkspaceQrSearchHistory(
     savedEntries,
     rawQuery,
@@ -16757,6 +16777,15 @@ export function buildWorkspaceQrSearchHistorySpec(input?: {
     exportCsvButtonLabel: 'Export CSV',
     exportedCsvButtonLabel: 'Exported CSV!',
     csvExport,
+    quickReportButtonElementId: WORKSPACE_QR_QUICK_REPORT_BUTTON_ID,
+    quickReportButtonTestId: WORKSPACE_QR_QUICK_REPORT_BUTTON_ID,
+    searchHistoryQuickReportButtonElementId:
+      WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID,
+    searchHistoryQuickReportButtonTestId:
+      WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID,
+    quickReportButtonLabel: 'Quick Report',
+    generatedQuickReportButtonLabel: 'Report Ready!',
+    quickReport,
     activeTab,
     statistics,
     listElementId: 'workspace-header-qr-search-history-list',
@@ -16846,6 +16875,11 @@ export interface WorkspaceQrHistorySectionSpec {
   exportCsvButtonLabel: 'Export CSV';
   exportedCsvButtonLabel: 'Exported CSV!';
   csvExport: WorkspaceQrHistoryCsvExportSpec;
+  quickReportButtonElementId: typeof WORKSPACE_QR_QUICK_REPORT_BUTTON_ID;
+  quickReportButtonTestId: typeof WORKSPACE_QR_QUICK_REPORT_BUTTON_ID;
+  quickReportButtonLabel: 'Quick Report';
+  generatedQuickReportButtonLabel: 'Report Ready!';
+  quickReport: WorkspaceQrHistoryQuickReportSpec;
   activeTab: WorkspaceQrHistoryTab;
   statistics: WorkspaceQrHistoryStatisticsSpec;
   panelElementId: 'workspace-header-qr-history-panel';
@@ -16924,6 +16958,9 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
   roomCode?: string | null;
   isCsvExported?: boolean;
   csvExportCount?: number;
+  isQuickReportGenerated?: boolean;
+  isQuickReportPreviewOpen?: boolean;
+  quickReportGeneratedCount?: number;
   maxItems?: number;
 }): WorkspaceQrHistorySectionSpec {
   const cap = Math.max(
@@ -16967,6 +17004,16 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     isExported: input?.isCsvExported,
     exportCount: input?.csvExportCount,
   });
+  const quickReport = buildWorkspaceQrHistoryQuickReportPdfSpec(
+    input?.recentScans,
+    {
+      roomCode: input?.roomCode,
+      referenceTimestampMs: input?.referenceTimestampMs,
+      isGenerated: input?.isQuickReportGenerated,
+      isPreviewOpen: input?.isQuickReportPreviewOpen,
+      generatedCount: input?.quickReportGeneratedCount,
+    }
+  );
   const sortedEntries = filterWorkspaceQrSearchHistory(
     allSortedEntries,
     rawQuery,
@@ -17153,6 +17200,11 @@ export function buildWorkspaceQrHistorySectionSpec(input?: {
     exportCsvButtonLabel: 'Export CSV',
     exportedCsvButtonLabel: 'Exported CSV!',
     csvExport,
+    quickReportButtonElementId: WORKSPACE_QR_QUICK_REPORT_BUTTON_ID,
+    quickReportButtonTestId: WORKSPACE_QR_QUICK_REPORT_BUTTON_ID,
+    quickReportButtonLabel: 'Quick Report',
+    generatedQuickReportButtonLabel: 'Report Ready!',
+    quickReport,
     activeTab,
     statistics,
     panelElementId: 'workspace-header-qr-history-panel',
@@ -18205,6 +18257,9 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   selectedHistoryDetailsRoomCode?: string | null;
   isHistoryCsvExported?: boolean;
   historyCsvExportCount?: number;
+  isQuickReportGenerated?: boolean;
+  isQuickReportPreviewOpen?: boolean;
+  quickReportGeneratedCount?: number;
   qrScannerSoundPreferences?: WorkspaceQrScannerSoundPreferences | unknown;
   qrScannerSoundVolumePreferences?:
     | WorkspaceQrScannerSoundVolumePreferences
@@ -18263,6 +18318,9 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     roomCode,
     isCsvExported: input?.isHistoryCsvExported,
     csvExportCount: input?.historyCsvExportCount,
+    isQuickReportGenerated: input?.isQuickReportGenerated,
+    isQuickReportPreviewOpen: input?.isQuickReportPreviewOpen,
+    quickReportGeneratedCount: input?.quickReportGeneratedCount,
   });
   const searchHistory = buildWorkspaceQrSearchHistorySpec({
     recentScans: input?.recentScans ?? [],
@@ -18277,6 +18335,9 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     roomCode,
     isCsvExported: input?.isHistoryCsvExported,
     csvExportCount: input?.historyCsvExportCount,
+    isQuickReportGenerated: input?.isQuickReportGenerated,
+    isQuickReportPreviewOpen: input?.isQuickReportPreviewOpen,
+    quickReportGeneratedCount: input?.quickReportGeneratedCount,
   });
   const historyDetailsModal = searchHistory.detailsModal;
   const soundSettingsSection = buildWorkspaceQrSoundSettingsSectionSpec({
@@ -24987,3 +25048,401 @@ export function evaluateMomentThreadRepliesPaginationSpec<T>(params: {
     toggleButtonTestId: `view-more-replies-btn-${cleanRootId}`,
   };
 }
+
+// ============================================================================
+// QR HISTORY 'QUICK REPORT' STYLED PDF SUMMARY (LAST 10 SCANNED STUDY ROOMS)
+// ============================================================================
+
+export const WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS = 10;
+export const WORKSPACE_QR_QUICK_REPORT_BUTTON_ID =
+  'workspace-header-qr-history-quick-report-btn' as const;
+export const WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID =
+  'workspace-header-qr-search-history-quick-report-btn' as const;
+export const WORKSPACE_QR_QUICK_REPORT_MODAL_ID =
+  'workspace-header-qr-history-quick-report-modal' as const;
+export const WORKSPACE_QR_QUICK_REPORT_DOWNLOAD_BTN_ID =
+  'workspace-header-qr-history-quick-report-download-btn' as const;
+export const WORKSPACE_QR_QUICK_REPORT_CLOSE_BTN_ID =
+  'workspace-header-qr-history-quick-report-close-btn' as const;
+export const WORKSPACE_QR_QUICK_REPORT_MIME_TYPE = 'application/pdf' as const;
+export const DEFAULT_WORKSPACE_QR_QUICK_REPORT_FILENAME =
+  'mr-stranger-qr-quick-report-last-10.pdf' as const;
+
+export function escapePdfTextLiteral(value: unknown): string {
+  if (value === null || value === undefined) return '';
+  return String(value)
+    .replace(/[^\x20-\x7E]/g, '-')
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)');
+}
+
+export function buildWorkspaceQrQuickReportPdfFilename(
+  roomCode?: string | null
+): string {
+  const cleaned = (roomCode ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  if (!cleaned) {
+    return DEFAULT_WORKSPACE_QR_QUICK_REPORT_FILENAME;
+  }
+  return `mr-stranger-qr-quick-report-${cleaned}.pdf`;
+}
+
+export interface WorkspaceQrQuickReportRowSpec {
+  rank: number;
+  id: string;
+  roomCode: string;
+  category: WorkspaceQrHistoryRoomCategory;
+  categoryColorTagSpec: WorkspaceQrHistoryCategoryColorTagSpec;
+  categoryHexColor: string;
+  categoryRgbNormalized: [number, number, number];
+  scannedAtMs: number;
+  scannedAtIso: string;
+  formattedTimestamp: string;
+  relativeTimeLabel: string;
+  scanSourceChannel: WorkspaceQrScanSourceChannel;
+  scanSourceLabel: 'Camera' | 'Share Link';
+  isPinned: boolean;
+  workspaceUrl: string;
+  rowElementId: string;
+  rowTestId: string;
+}
+
+export interface WorkspaceQrHistoryQuickReportSpec {
+  buttonElementId: typeof WORKSPACE_QR_QUICK_REPORT_BUTTON_ID;
+  buttonTestId: typeof WORKSPACE_QR_QUICK_REPORT_BUTTON_ID;
+  searchHistoryButtonElementId: typeof WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID;
+  searchHistoryButtonTestId: typeof WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID;
+  modalElementId: typeof WORKSPACE_QR_QUICK_REPORT_MODAL_ID;
+  modalTestId: typeof WORKSPACE_QR_QUICK_REPORT_MODAL_ID;
+  downloadButtonElementId: typeof WORKSPACE_QR_QUICK_REPORT_DOWNLOAD_BTN_ID;
+  downloadButtonTestId: typeof WORKSPACE_QR_QUICK_REPORT_DOWNLOAD_BTN_ID;
+  closeButtonElementId: typeof WORKSPACE_QR_QUICK_REPORT_CLOSE_BTN_ID;
+  closeButtonTestId: typeof WORKSPACE_QR_QUICK_REPORT_CLOSE_BTN_ID;
+  buttonLabel: 'Quick Report';
+  generatedButtonLabel: 'Report Ready!';
+  downloadButtonLabel: 'Download PDF';
+  mimeType: typeof WORKSPACE_QR_QUICK_REPORT_MIME_TYPE;
+  filename: string;
+  maxItems: typeof WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS;
+  rowCount: number;
+  recordCount: number;
+  hasRecords: boolean;
+  isDisabled: boolean;
+  isGenerated: boolean;
+  isPreviewOpen: boolean;
+  generatedCount: number;
+  reportTitle: string;
+  reportSubtitle: string;
+  generatedAtIso: string;
+  generatedAtLabel: string;
+  countsByCategory: Record<WorkspaceQrHistoryRoomCategory, number>;
+  categorySummaryLabel: string;
+  rows: WorkspaceQrQuickReportRowSpec[];
+  reportedRoomCodes: string[];
+  pdfContent: string;
+  dataUrl: string;
+  ariaLabel: string;
+  title: string;
+}
+
+export function generateStyledQrQuickReportPdfDocument(params: {
+  title: string;
+  subtitle: string;
+  generatedAtLabel: string;
+  roomCode: string;
+  rows: readonly WorkspaceQrQuickReportRowSpec[];
+  countsByCategory: Record<WorkspaceQrHistoryRoomCategory, number>;
+}): string {
+  const lines: string[] = [];
+
+  // 1. Page Background & Warm Sanctuary Header Banner
+  lines.push('0.98 0.97 0.95 rg 0 0 612 792 re f');
+  lines.push('0.09 0.08 0.07 rg 36 692 540 66 re f');
+  lines.push('0.20 0.73 0.53 rg 36 754 540 4 re f');
+
+  // Header Title & Subtitle
+  lines.push('BT /F2 13 Tf 0.96 0.95 0.92 rg 50 732 Td');
+  lines.push(`(${escapePdfTextLiteral(params.title)}) Tj ET`);
+  lines.push('BT /F1 9 Tf 0.65 0.85 0.76 rg 50 715 Td');
+  lines.push(`(${escapePdfTextLiteral(params.subtitle)}) Tj ET`);
+  lines.push('BT /F1 8 Tf 0.78 0.76 0.72 rg 50 701 Td');
+  lines.push(
+    `(${escapePdfTextLiteral(
+      `Generated: ${params.generatedAtLabel} | Active Room: ${params.roomCode} | Rooms: ${params.rows.length}/10`
+    )}) Tj ET`
+  );
+
+  // 2. Category Breakdown Summary Strip
+  lines.push('0.93 0.91 0.88 rg 36 656 540 26 re f');
+  lines.push('0.82 0.79 0.74 RG 0.8 w 36 656 540 26 re S');
+  const catSummary = `Category Summary (Last ${params.rows.length} Scanned Rooms) — Study: ${params.countsByCategory.Study}  |  Work: ${params.countsByCategory.Work}  |  Casual: ${params.countsByCategory.Casual}`;
+  lines.push('BT /F2 9 Tf 0.14 0.13 0.11 rg 48 666 Td');
+  lines.push(`(${escapePdfTextLiteral(catSummary)}) Tj ET`);
+
+  // 3. Styled Table Header
+  lines.push('0.14 0.13 0.12 rg 36 624 540 24 re f');
+  lines.push('BT /F2 8.5 Tf 0.96 0.95 0.92 rg 46 633 Td (#) Tj ET');
+  lines.push('BT /F2 8.5 Tf 0.96 0.95 0.92 rg 72 633 Td (STUDY ROOM) Tj ET');
+  lines.push('BT /F2 8.5 Tf 0.96 0.95 0.92 rg 195 633 Td (CATEGORY) Tj ET');
+  lines.push(
+    'BT /F2 8.5 Tf 0.96 0.95 0.92 rg 285 633 Td (SCANNED TIMESTAMP (UTC)) Tj ET'
+  );
+  lines.push('BT /F2 8.5 Tf 0.96 0.95 0.92 rg 445 633 Td (RELATIVE) Tj ET');
+  lines.push('BT /F2 8.5 Tf 0.96 0.95 0.92 rg 510 633 Td (SOURCE) Tj ET');
+
+  // 4. Up to 10 Scanned Study Room Rows
+  const rowHeight = 36;
+  params.rows.slice(0, WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS).forEach((row, idx) => {
+    const topY = 624 - (idx + 1) * rowHeight;
+    const isEven = idx % 2 === 0;
+    if (isEven) {
+      lines.push(`0.99 0.98 0.96 rg 36 ${topY} 540 ${rowHeight} re f`);
+    } else {
+      lines.push(`0.95 0.93 0.90 rg 36 ${topY} 540 ${rowHeight} re f`);
+    }
+    lines.push(`0.86 0.84 0.79 RG 0.5 w 36 ${topY} 540 ${rowHeight} re S`);
+
+    // Category color accent bar on the left edge of each row
+    const [r, g, b] = row.categoryRgbNormalized;
+    lines.push(
+      `${r.toFixed(2)} ${g.toFixed(2)} ${b.toFixed(2)} rg 36 ${topY} 4 ${rowHeight} re f`
+    );
+
+    const textY = topY + 14;
+    lines.push(`BT /F2 8.5 Tf 0.35 0.33 0.30 rg 46 ${textY} Td (${row.rank}) Tj ET`);
+    lines.push(
+      `BT /F2 9.5 Tf 0.10 0.09 0.08 rg 72 ${textY} Td (${escapePdfTextLiteral(
+        row.roomCode
+      )}) Tj ET`
+    );
+    lines.push(
+      `BT /F2 8.5 Tf ${r.toFixed(2)} ${g.toFixed(2)} ${b.toFixed(
+        2
+      )} rg 195 ${textY} Td (${escapePdfTextLiteral(row.category)}) Tj ET`
+    );
+    lines.push(
+      `BT /F1 8.5 Tf 0.22 0.20 0.18 rg 285 ${textY} Td (${escapePdfTextLiteral(
+        row.formattedTimestamp
+      )}) Tj ET`
+    );
+    lines.push(
+      `BT /F1 8 Tf 0.40 0.38 0.34 rg 445 ${textY} Td (${escapePdfTextLiteral(
+        row.relativeTimeLabel
+      )}) Tj ET`
+    );
+    lines.push(
+      `BT /F1 8 Tf 0.30 0.28 0.25 rg 510 ${textY} Td (${escapePdfTextLiteral(
+        row.scanSourceLabel
+      )}) Tj ET`
+    );
+  });
+
+  if (params.rows.length === 0) {
+    lines.push('0.96 0.95 0.92 rg 36 576 540 44 re f');
+    lines.push(
+      'BT /F1 9 Tf 0.40 0.38 0.34 rg 50 594 Td (No scanned study rooms recorded yet.) Tj ET'
+    );
+  }
+
+  // 5. Footer
+  lines.push(
+    'BT /F1 7.5 Tf 0.45 0.43 0.39 rg 36 42 Td (Mr. Stranger · Quiet Study Sanctuary — Verified QR History Summary Report) Tj ET'
+  );
+
+  const contentStream = lines.join('\n');
+  const objects: string[] = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /Contents 6 0 R >>\nendobj',
+    '4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj',
+    '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj',
+    `6 0 obj\n<< /Length ${contentStream.length} >>\nstream\n${contentStream}\nendstream\nendobj`,
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets: number[] = [0];
+  for (const obj of objects) {
+    offsets.push(pdf.length);
+    pdf += `${obj}\n`;
+  }
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += '0000000000 65535 f \n';
+  for (let i = 1; i <= objects.length; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return pdf;
+}
+
+export function buildWorkspaceQrHistoryQuickReportPdfSpec(
+  entries: WorkspaceQrRecentScanEntry[] | unknown,
+  options?: {
+    roomCode?: string | null;
+    activeRoomCode?: string | null;
+    referenceTimestampMs?: number;
+    nowMs?: number;
+    isGenerated?: boolean;
+    isPreviewOpen?: boolean;
+    generatedCount?: number;
+    maxItems?: number;
+  }
+): WorkspaceQrHistoryQuickReportSpec {
+  const cap = Math.max(
+    1,
+    Math.min(
+      WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS,
+      Math.floor(options?.maxItems || WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS)
+    )
+  );
+  const rawReferenceMs =
+    options?.referenceTimestampMs ?? options?.nowMs ?? Date.now();
+  const referenceMs =
+    typeof rawReferenceMs === 'number' &&
+    Number.isFinite(rawReferenceMs) &&
+    rawReferenceMs > 0
+      ? Math.floor(rawReferenceMs)
+      : Date.now();
+  const resolvedRoomCode = options?.roomCode ?? options?.activeRoomCode ?? null;
+
+  // Normalize up to 20 candidate scans, then take the last 10 scanned study rooms ordered by most recent timestamp
+  const normalizedCandidates = normalizeStoredWorkspaceQrRecentScans(entries, 20);
+  const chronologicalLast10 = [...normalizedCandidates]
+    .sort((a, b) => {
+      if (b.scannedAtMs !== a.scannedAtMs) {
+        return b.scannedAtMs - a.scannedAtMs;
+      }
+      return a.roomCode.localeCompare(b.roomCode);
+    })
+    .slice(0, cap);
+
+  const countsByCategory =
+    computeWorkspaceQrHistoryCountsByCategory(chronologicalLast10);
+
+  const rows: WorkspaceQrQuickReportRowSpec[] = chronologicalLast10.map(
+    (entry, idx) => {
+      const category = normalizeWorkspaceQrHistoryRoomCategory(entry.category);
+      const categoryColorTagSpec =
+        getWorkspaceQrHistoryCategoryColorTagSpec(category);
+      const formattedTs = formatWorkspaceQrHistoryOriginalTimestamp(
+        entry.scannedAtMs,
+        referenceMs
+      );
+      const scanSource = resolveWorkspaceQrHistoryScanSourceDetails(entry);
+      const categoryHexColor =
+        category === 'Work'
+          ? '#38BDF8'
+          : category === 'Casual'
+            ? '#FBBF24'
+            : '#34D399';
+      const categoryRgbNormalized: [number, number, number] =
+        category === 'Work'
+          ? [0.16, 0.52, 0.78]
+          : category === 'Casual'
+            ? [0.82, 0.56, 0.14]
+            : [0.16, 0.62, 0.44];
+
+      return {
+        rank: idx + 1,
+        id: entry.id,
+        roomCode: entry.roomCode,
+        category,
+        categoryColorTagSpec,
+        categoryHexColor,
+        categoryRgbNormalized,
+        scannedAtMs: entry.scannedAtMs,
+        scannedAtIso: formattedTs.scannedAtIso,
+        formattedTimestamp: formattedTs.formattedUtcTimestamp,
+        relativeTimeLabel: formattedTs.relativeTimeLabel,
+        scanSourceChannel: scanSource.sourceChannel,
+        scanSourceLabel: scanSource.sourceChannelLabel,
+        isPinned: Boolean(entry.isPinned),
+        workspaceUrl: entry.workspaceUrl,
+        rowElementId: `workspace-header-qr-quick-report-row-${idx}`,
+        rowTestId: `workspace-header-qr-quick-report-row-${idx}`,
+      };
+    }
+  );
+
+  const activeRoom = normalizeStudyRoomCode(resolvedRoomCode || 'STUDY-204');
+  const generatedTs = formatWorkspaceQrHistoryOriginalTimestamp(
+    referenceMs,
+    referenceMs
+  );
+  const reportTitle = 'QR Scan Quick Report · Last 10 Study Rooms';
+  const reportSubtitle =
+    'Visually styled PDF summary of recent scanned study rooms, timestamps, and categories';
+  const categorySummaryLabel = `Study: ${countsByCategory.Study} · Work: ${countsByCategory.Work} · Casual: ${countsByCategory.Casual}`;
+
+  const pdfContent = generateStyledQrQuickReportPdfDocument({
+    title: 'MR. STRANGER SANCTUARY - QR STUDY ROOMS QUICK REPORT',
+    subtitle: reportSubtitle,
+    generatedAtLabel: generatedTs.formattedUtcTimestamp,
+    roomCode: activeRoom,
+    rows,
+    countsByCategory,
+  });
+
+  const dataUrl = `data:application/pdf;charset=utf-8,${encodeURIComponent(
+    pdfContent
+  )}`;
+  const filename = buildWorkspaceQrQuickReportPdfFilename(resolvedRoomCode);
+  const rowCount = rows.length;
+  const hasRecords = rowCount > 0;
+  const isGenerated = Boolean(options?.isGenerated);
+  const isPreviewOpen = Boolean(options?.isPreviewOpen);
+  const generatedCount = Math.max(0, Math.floor(options?.generatedCount ?? 0));
+
+  return {
+    buttonElementId: WORKSPACE_QR_QUICK_REPORT_BUTTON_ID,
+    buttonTestId: WORKSPACE_QR_QUICK_REPORT_BUTTON_ID,
+    searchHistoryButtonElementId:
+      WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID,
+    searchHistoryButtonTestId:
+      WORKSPACE_QR_SEARCH_HISTORY_QUICK_REPORT_BUTTON_ID,
+    modalElementId: WORKSPACE_QR_QUICK_REPORT_MODAL_ID,
+    modalTestId: WORKSPACE_QR_QUICK_REPORT_MODAL_ID,
+    downloadButtonElementId: WORKSPACE_QR_QUICK_REPORT_DOWNLOAD_BTN_ID,
+    downloadButtonTestId: WORKSPACE_QR_QUICK_REPORT_DOWNLOAD_BTN_ID,
+    closeButtonElementId: WORKSPACE_QR_QUICK_REPORT_CLOSE_BTN_ID,
+    closeButtonTestId: WORKSPACE_QR_QUICK_REPORT_CLOSE_BTN_ID,
+    buttonLabel: 'Quick Report',
+    generatedButtonLabel: 'Report Ready!',
+    downloadButtonLabel: 'Download PDF',
+    mimeType: WORKSPACE_QR_QUICK_REPORT_MIME_TYPE,
+    filename,
+    maxItems: WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS,
+    rowCount,
+    recordCount: rowCount,
+    hasRecords,
+    isDisabled: !hasRecords,
+    isGenerated,
+    isPreviewOpen,
+    generatedCount,
+    reportTitle,
+    reportSubtitle,
+    generatedAtIso: generatedTs.scannedAtIso,
+    generatedAtLabel: generatedTs.formattedUtcTimestamp,
+    countsByCategory,
+    categorySummaryLabel,
+    rows,
+    reportedRoomCodes: rows.map((r) => r.roomCode),
+    pdfContent,
+    dataUrl,
+    ariaLabel: hasRecords
+      ? `Generate Quick Report PDF summary of the last ${rowCount} scanned study ${
+          rowCount === 1 ? 'room' : 'rooms'
+        } (${filename})`
+      : 'Generate Quick Report PDF summary (no scanned study rooms yet)',
+    title: hasRecords
+      ? `Generate visually styled PDF summary of your last ${rowCount} scanned study ${
+          rowCount === 1 ? 'room' : 'rooms'
+        } (${filename})`
+      : 'Scan a study room QR code to generate a Quick Report PDF',
+  };
+}
+

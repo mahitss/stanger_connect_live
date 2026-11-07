@@ -256,6 +256,8 @@ import {
   WorkspaceQrHistorySortOrder,
   normalizeWorkspaceQrHistorySortOrder,
   buildWorkspaceQrHistoryCsvExport,
+  WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS,
+  buildWorkspaceQrHistoryQuickReportPdfSpec,
   WorkspaceQrHistoryTab,
   normalizeWorkspaceQrHistoryTab,
   toggleWorkspaceQrHistorySectionExpanded,
@@ -979,7 +981,7 @@ export default function App() {
       if (raw) {
         const normalized = normalizeStoredWorkspaceQrRecentScans(
           JSON.parse(raw),
-          MAX_WORKSPACE_QR_SEARCH_HISTORY
+          WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS
         );
         localStorage.setItem(
           WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
@@ -1035,6 +1037,19 @@ export default function App() {
     setWorkspaceHeaderQrHistoryCsvExportCount,
   ] = useState<number>(0);
   const qrHistoryCsvExportTimerRef = useRef<number | null>(null);
+  const [
+    isWorkspaceHeaderQrQuickReportGenerated,
+    setIsWorkspaceHeaderQrQuickReportGenerated,
+  ] = useState<boolean>(false);
+  const [
+    isWorkspaceHeaderQrQuickReportPreviewOpen,
+    setIsWorkspaceHeaderQrQuickReportPreviewOpen,
+  ] = useState<boolean>(false);
+  const [
+    workspaceHeaderQrQuickReportCount,
+    setWorkspaceHeaderQrQuickReportCount,
+  ] = useState<number>(0);
+  const qrHistoryQuickReportTimerRef = useRef<number | null>(null);
   const [qrScannerSoundPreferences, setQrScannerSoundPreferences] =
     useState<WorkspaceQrScannerSoundPreferences>(() => {
       try {
@@ -3766,7 +3781,7 @@ export default function App() {
     setRecentWorkspaceQrScans((prev) => {
       const merged = normalizeStoredWorkspaceQrRecentScans(
         [...preset.seededQrScans, ...prev],
-        MAX_WORKSPACE_QR_SEARCH_HISTORY
+        WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS
       );
       try {
         localStorage.setItem(
@@ -4511,6 +4526,9 @@ export default function App() {
     selectedHistoryDetailsRoomCode: selectedQrHistoryDetailsRoomCode,
     isHistoryCsvExported: isWorkspaceHeaderQrHistoryCsvExported,
     historyCsvExportCount: workspaceHeaderQrHistoryCsvExportCount,
+    isQuickReportGenerated: isWorkspaceHeaderQrQuickReportGenerated,
+    isQuickReportPreviewOpen: isWorkspaceHeaderQrQuickReportPreviewOpen,
+    quickReportGeneratedCount: workspaceHeaderQrQuickReportCount,
     qrScannerSoundPreferences,
     qrScannerSoundVolumePreferences,
     uiSoundPreferences: uiSoundPrefs,
@@ -4651,6 +4669,74 @@ export default function App() {
     );
   };
 
+  const triggerQuickReportPdfDownload = (
+    quickReport: ReturnType<typeof buildWorkspaceQrHistoryQuickReportPdfSpec>
+  ) => {
+    if (typeof document === 'undefined' || !quickReport.hasRecords) return;
+    let objectUrl: string | null = null;
+    try {
+      if (
+        typeof Blob !== 'undefined' &&
+        typeof URL !== 'undefined' &&
+        URL.createObjectURL
+      ) {
+        const blob = new Blob([quickReport.pdfContent], {
+          type: quickReport.mimeType,
+        });
+        objectUrl = URL.createObjectURL(blob);
+      }
+    } catch {
+      objectUrl = null;
+    }
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl || quickReport.dataUrl;
+    anchor.download = quickReport.filename;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    if (objectUrl && typeof URL !== 'undefined' && URL.revokeObjectURL) {
+      window.setTimeout(() => {
+        URL.revokeObjectURL(objectUrl as string);
+      }, 250);
+    }
+  };
+
+  const handleGenerateWorkspaceQrHistoryQuickReport = () => {
+    const quickReport = buildWorkspaceQrHistoryQuickReportPdfSpec(
+      recentWorkspaceQrScans,
+      {
+        roomCode: activeStudyRoomCode,
+        isGenerated: true,
+        isPreviewOpen: true,
+        generatedCount: workspaceHeaderQrQuickReportCount + 1,
+      }
+    );
+    if (!quickReport.hasRecords) return;
+
+    triggerQuickReportPdfDownload(quickReport);
+
+    setIsWorkspaceHeaderQrQuickReportGenerated(true);
+    setIsWorkspaceHeaderQrQuickReportPreviewOpen(true);
+    setWorkspaceHeaderQrQuickReportCount((prev) => prev + 1);
+    if (qrHistoryQuickReportTimerRef.current !== null) {
+      window.clearTimeout(qrHistoryQuickReportTimerRef.current);
+    }
+    qrHistoryQuickReportTimerRef.current = window.setTimeout(() => {
+      setIsWorkspaceHeaderQrQuickReportGenerated(false);
+      qrHistoryQuickReportTimerRef.current = null;
+    }, 2200);
+
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+    setLastSoundFeedback(
+      `Generated Quick Report PDF (${quickReport.rowCount} scanned ${
+        quickReport.rowCount === 1 ? 'room' : 'rooms'
+      }) — ${quickReport.filename}`
+    );
+  };
+
   const handleClearRecentWorkspaceQrScans = () => {
     setRecentWorkspaceQrScans([]);
     setWorkspaceHeaderQrHistorySearchQuery('');
@@ -4661,6 +4747,8 @@ export default function App() {
     setSelectedQrHistoryDetailsRoomCode(null);
     setCopiedQrHistoryRoomCode(null);
     setIsWorkspaceHeaderQrHistoryCsvExported(false);
+    setIsWorkspaceHeaderQrQuickReportGenerated(false);
+    setIsWorkspaceHeaderQrQuickReportPreviewOpen(false);
     if (qrHistoryCopyTimerRef.current !== null) {
       window.clearTimeout(qrHistoryCopyTimerRef.current);
       qrHistoryCopyTimerRef.current = null;
@@ -4668,6 +4756,10 @@ export default function App() {
     if (qrHistoryCsvExportTimerRef.current !== null) {
       window.clearTimeout(qrHistoryCsvExportTimerRef.current);
       qrHistoryCsvExportTimerRef.current = null;
+    }
+    if (qrHistoryQuickReportTimerRef.current !== null) {
+      window.clearTimeout(qrHistoryQuickReportTimerRef.current);
+      qrHistoryQuickReportTimerRef.current = null;
     }
     try {
       localStorage.setItem(WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY, '[]');
@@ -4721,7 +4813,7 @@ export default function App() {
       const result = removeWorkspaceQrRecentScanEntry(
         prev,
         entryOrIdentifier,
-        MAX_WORKSPACE_QR_SEARCH_HISTORY
+        WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS
       );
       try {
         localStorage.setItem(
@@ -4765,7 +4857,7 @@ export default function App() {
         prev,
         entryOrIdentifier,
         Date.now(),
-        MAX_WORKSPACE_QR_SEARCH_HISTORY
+        WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS
       );
       try {
         localStorage.setItem(
@@ -4798,7 +4890,7 @@ export default function App() {
         prev,
         entryOrIdentifier,
         explicitCategory,
-        MAX_WORKSPACE_QR_SEARCH_HISTORY
+        WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS
       );
       try {
         localStorage.setItem(
@@ -5062,7 +5154,7 @@ export default function App() {
         prev,
         parsed,
         Date.now(),
-        MAX_WORKSPACE_QR_RECENT_SCANS
+        WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS
       );
       try {
         localStorage.setItem(
@@ -7344,6 +7436,86 @@ export default function App() {
                                 type="button"
                                 id={
                                   workspaceHeaderQrMeta.searchHistory
+                                    .quickReportButtonElementId
+                                }
+                                data-testid={
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReportButtonTestId
+                                }
+                                data-search-history-quick-report-id={
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .searchHistoryQuickReportButtonElementId
+                                }
+                                data-report-filename={
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.filename
+                                }
+                                data-report-row-count={String(
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.rowCount
+                                )}
+                                data-report-max-items={String(
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.maxItems
+                                )}
+                                data-report-generated-count={String(
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.generatedCount
+                                )}
+                                data-report-generated={
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.isGenerated
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-report-preview-open={
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.isPreviewOpen
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                disabled={
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.isDisabled
+                                }
+                                onClick={
+                                  handleGenerateWorkspaceQrHistoryQuickReport
+                                }
+                                aria-label={
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.ariaLabel
+                                }
+                                title={
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.title
+                                }
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-[9px] font-mono font-semibold transition-colors ${
+                                  workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.isDisabled
+                                    ? 'bg-slate-50 border-slate-200 text-slate-400 dark:bg-zinc-900/40 dark:border-zinc-800 dark:text-zinc-600 cursor-not-allowed'
+                                    : workspaceHeaderQrMeta.searchHistory
+                                          .quickReport.isGenerated ||
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .quickReport.isPreviewOpen
+                                      ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+                                      : 'bg-slate-100 hover:bg-emerald-500/15 border-slate-200 hover:border-emerald-500/40 text-slate-700 hover:text-emerald-700 dark:bg-zinc-900 dark:hover:bg-emerald-500/15 dark:border-zinc-800 dark:hover:border-emerald-500/40 dark:text-zinc-300 dark:hover:text-emerald-300'
+                                }`}
+                              >
+                                <BookOpen className="w-2.5 h-2.5 shrink-0" />
+                                <span>
+                                  {workspaceHeaderQrMeta.searchHistory
+                                    .quickReport.isGenerated
+                                    ? workspaceHeaderQrMeta.searchHistory
+                                        .generatedQuickReportButtonLabel
+                                    : workspaceHeaderQrMeta.searchHistory
+                                        .quickReportButtonLabel}
+                                </span>
+                              </button>
+
+                              <button
+                                type="button"
+                                id={
+                                  workspaceHeaderQrMeta.searchHistory
                                     .exportCsvButtonElementId
                                 }
                                 data-testid={
@@ -7424,6 +7596,146 @@ export default function App() {
                               )}
                             </div>
                           </div>
+
+                          {/* Visually Styled PDF Quick Report Summary (Last 10 Scanned Study Rooms) */}
+                          {workspaceHeaderQrMeta.searchHistory.quickReport
+                            .isPreviewOpen && (
+                            <div
+                              id={
+                                workspaceHeaderQrMeta.searchHistory.quickReport
+                                  .modalElementId
+                              }
+                              data-testid={
+                                workspaceHeaderQrMeta.searchHistory.quickReport
+                                  .modalTestId
+                              }
+                              data-report-filename={
+                                workspaceHeaderQrMeta.searchHistory.quickReport
+                                  .filename
+                              }
+                              data-report-row-count={String(
+                                workspaceHeaderQrMeta.searchHistory.quickReport
+                                  .rowCount
+                              )}
+                              data-report-max-items={String(
+                                workspaceHeaderQrMeta.searchHistory.quickReport
+                                  .maxItems
+                              )}
+                              role="region"
+                              aria-label={
+                                workspaceHeaderQrMeta.searchHistory.quickReport
+                                  .reportTitle
+                              }
+                              className="p-2.5 rounded-lg border border-emerald-500/40 bg-slate-50 dark:bg-zinc-900/90 space-y-2"
+                            >
+                              <div className="flex items-start justify-between gap-2 pb-1.5 border-b border-slate-200 dark:border-zinc-800">
+                                <div className="space-y-0.5 min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-[9px] font-mono font-bold text-emerald-700 dark:text-emerald-300">
+                                      PDF SUMMARY
+                                    </span>
+                                    <span className="text-[11px] font-bold text-slate-900 dark:text-zinc-100">
+                                      {
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .quickReport.reportTitle
+                                      }
+                                    </span>
+                                  </div>
+                                  <p className="text-[10px] font-mono text-slate-500 dark:text-zinc-400">
+                                    {
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .quickReport.categorySummaryLabel
+                                    }{' '}
+                                    ·{' '}
+                                    {
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .quickReport.filename
+                                    }
+                                  </p>
+                                </div>
+                                <div className="inline-flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    id={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .quickReport.downloadButtonElementId
+                                    }
+                                    data-testid={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .quickReport.downloadButtonTestId
+                                    }
+                                    onClick={() =>
+                                      triggerQuickReportPdfDownload(
+                                        workspaceHeaderQrMeta.searchHistory
+                                          .quickReport
+                                      )
+                                    }
+                                    className="px-2 py-0.5 rounded border border-emerald-500/50 bg-emerald-500/20 text-[9px] font-mono font-semibold text-emerald-700 dark:text-emerald-300"
+                                  >
+                                    {
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .quickReport.downloadButtonLabel
+                                    }
+                                  </button>
+                                  <button
+                                    type="button"
+                                    id={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .quickReport.closeButtonElementId
+                                    }
+                                    data-testid={
+                                      workspaceHeaderQrMeta.searchHistory
+                                        .quickReport.closeButtonTestId
+                                    }
+                                    onClick={() =>
+                                      setIsWorkspaceHeaderQrQuickReportPreviewOpen(
+                                        false
+                                      )
+                                    }
+                                    aria-label="Close Quick Report PDF summary"
+                                    className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-800 text-[9px] font-mono text-slate-500 dark:text-zinc-400"
+                                  >
+                                    Close
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1 max-h-44 overflow-y-auto pr-0.5">
+                                {workspaceHeaderQrMeta.searchHistory.quickReport.rows.map(
+                                  (row) => (
+                                    <div
+                                      key={row.id}
+                                      id={row.rowElementId}
+                                      data-testid={row.rowTestId}
+                                      data-room-code={row.roomCode}
+                                      data-category={row.category}
+                                      data-timestamp={row.formattedTimestamp}
+                                      className="flex items-center justify-between gap-2 px-2 py-1 rounded border border-slate-200/80 dark:border-zinc-800/80 bg-white dark:bg-zinc-950/70 text-[10px] font-mono"
+                                    >
+                                      <div className="flex items-center gap-1.5 min-w-0">
+                                        <span className="text-slate-400 dark:text-zinc-500 w-4 shrink-0">
+                                          #{row.rank}
+                                        </span>
+                                        <span className="font-bold text-slate-900 dark:text-zinc-100 truncate">
+                                          {row.roomCode}
+                                        </span>
+                                        <span
+                                          className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold ${row.categoryColorTagSpec.tagClassName}`}
+                                        >
+                                          {row.category}
+                                        </span>
+                                      </div>
+                                      <div className="flex items-center gap-1.5 text-[9px] text-slate-500 dark:text-zinc-400 shrink-0">
+                                        <span>{row.formattedTimestamp}</span>
+                                        <span>·</span>
+                                        <span>{row.relativeTimeLabel}</span>
+                                      </div>
+                                    </div>
+                                  )
+                                )}
+                              </div>
+                            </div>
+                          )}
 
                           {workspaceHeaderQrMeta.historySection.isExpanded && (
                             <div
