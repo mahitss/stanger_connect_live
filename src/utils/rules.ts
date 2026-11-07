@@ -18268,6 +18268,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   scanChimePlayedCount?: number;
   isDetectionFlashActive?: boolean;
   detectionFlashCount?: number;
+  vibrationTriggerCount?: number;
+  isVibrationSupported?: boolean;
   generationCount?: number;
   downloadCount?: number;
   roomCode?: string | null;
@@ -18398,6 +18400,9 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     detectionFlash: evaluateWorkspaceQrDetectionFlashSpec({
       isFlashActive: Boolean(input?.isDetectionFlashActive),
       flashTriggerCount: input?.detectionFlashCount ?? 0,
+      vibrationTriggerCount:
+        input?.vibrationTriggerCount ?? input?.detectionFlashCount ?? 0,
+      isVibrationSupported: input?.isVibrationSupported,
       detectedRoomCode: lastJoinedWorkspaceRoomCode,
       fallbackRoomCode: roomCode,
     }),
@@ -23501,11 +23506,19 @@ export interface WorkspaceQrDetectionFlashSpec {
   flickerOpacityKeyframes: number[];
   flickerBadgeScaleKeyframes: number[];
   flickerSpec: WorkspaceQrDetectionFlickerSpec;
+  viewportCardElementId: typeof WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID;
+  viewportCardTestId: typeof WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID;
+  hasHardwareVibration: boolean;
+  vibrationPatternMs: number[];
+  vibrationTotalDurationMs: number;
+  vibrationSpec: WorkspaceQrDetectionVibrationSpec;
 }
 
 export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
   isFlashActive?: boolean;
   flashTriggerCount?: number;
+  vibrationTriggerCount?: number;
+  isVibrationSupported?: boolean;
   detectedRoomCode?: string | null;
   fallbackRoomCode?: string | null;
 }): WorkspaceQrDetectionFlashSpec {
@@ -23513,6 +23526,12 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
   const flashTriggerCount = Math.max(
     0,
     Math.floor(Number(input?.flashTriggerCount) || 0)
+  );
+  const vibrationTriggerCount = Math.max(
+    0,
+    Math.floor(
+      Number(input?.vibrationTriggerCount ?? input?.flashTriggerCount) || 0
+    )
   );
   const cleanDetectedRoom =
     String(input?.detectedRoomCode || '').trim() || null;
@@ -23523,6 +23542,12 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
     isFlashActive,
     flashTriggerCount,
     durationMs: WORKSPACE_QR_DETECTION_FLASH_DURATION_MS,
+  });
+  const vibrationSpec = evaluateWorkspaceQrDetectionVibrationSpec({
+    isFlashActive,
+    vibrationTriggerCount,
+    detectedRoomCode: cleanDetectedRoom || fallbackRoom,
+    isVibrationSupported: input?.isVibrationSupported,
   });
 
   return {
@@ -23571,6 +23596,12 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
     flickerOpacityKeyframes: flickerSpec.opacityKeyframes,
     flickerBadgeScaleKeyframes: flickerSpec.badgeScaleKeyframes,
     flickerSpec,
+    viewportCardElementId: WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID,
+    viewportCardTestId: WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID,
+    hasHardwareVibration: vibrationSpec.enabled,
+    vibrationPatternMs: vibrationSpec.vibrationPatternMs,
+    vibrationTotalDurationMs: vibrationSpec.totalDurationMs,
+    vibrationSpec,
   };
 }
 
@@ -25445,4 +25476,153 @@ export function buildWorkspaceQrHistoryQuickReportPdfSpec(
       : 'Scan a study room QR code to generate a Quick Report PDF',
   };
 }
+
+// ============================================================================
+// QR SCAN CONFIRMATION HARDWARE VIBRATION (navigator.vibrate) FOR MOBILE
+// ============================================================================
+
+export const WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID =
+  'workspace-header-qr-scan-viewport-card' as const;
+export const WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID =
+  'workspace-header-qr-scan-vibration-indicator' as const;
+export const WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS = [35, 25, 45] as const;
+export const WORKSPACE_QR_DETECTION_VIBRATION_TOTAL_MS = 105;
+export const WORKSPACE_QR_DETECTION_VIBRATION_PULSES_COUNT = 2;
+
+export interface WorkspaceQrDetectionVibrationSpec {
+  viewportCardElementId: typeof WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID;
+  viewportCardTestId: typeof WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID;
+  indicatorElementId: typeof WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID;
+  indicatorTestId: typeof WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID;
+  enabled: boolean;
+  isVibrationSupported: boolean;
+  vibrationPatternMs: number[];
+  configuredPatternMs: readonly [35, 25, 45];
+  patternAttributeValue: '35,25,45';
+  totalDurationMs: number;
+  pulseCount: number;
+  triggerCount: number;
+  detectedRoomCode: string | null;
+  shortBadgeLabel: string;
+  statusLabel: string;
+}
+
+export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
+  isFlashActive?: boolean;
+  vibrationTriggerCount?: number;
+  detectedRoomCode?: string | null;
+  isVibrationSupported?: boolean;
+}): WorkspaceQrDetectionVibrationSpec {
+  const isFlashActive = Boolean(input?.isFlashActive);
+  const triggerCount = Math.max(
+    0,
+    Math.floor(Number(input?.vibrationTriggerCount) || 0)
+  );
+  const detectedRoomCode =
+    String(input?.detectedRoomCode || '').trim() || null;
+  const isVibrationSupported =
+    typeof input?.isVibrationSupported === 'boolean'
+      ? input.isVibrationSupported
+      : typeof navigator !== 'undefined' &&
+        typeof navigator?.vibrate === 'function';
+
+  return {
+    viewportCardElementId: WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID,
+    viewportCardTestId: WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID,
+    indicatorElementId: WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID,
+    indicatorTestId: WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID,
+    enabled: isFlashActive,
+    isVibrationSupported,
+    vibrationPatternMs: isFlashActive
+      ? [...WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS]
+      : [],
+    configuredPatternMs: WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS,
+    patternAttributeValue: '35,25,45',
+    totalDurationMs: isFlashActive
+      ? WORKSPACE_QR_DETECTION_VIBRATION_TOTAL_MS
+      : 0,
+    pulseCount: isFlashActive
+      ? WORKSPACE_QR_DETECTION_VIBRATION_PULSES_COUNT
+      : 0,
+    triggerCount,
+    detectedRoomCode,
+    shortBadgeLabel: isFlashActive
+      ? 'Haptic Pulse · 105ms'
+      : 'Mobile Haptic · 105ms',
+    statusLabel: isFlashActive
+      ? `Haptic vibration triggered (${WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS.join(
+          '-'
+        )}ms)`
+      : isVibrationSupported
+        ? `Mobile haptics ready (${WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS.join(
+            '-'
+          )}ms)`
+        : `Tactile haptics configured (${WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS.join(
+            '-'
+          )}ms)`,
+  };
+}
+
+export interface WorkspaceQrHardwareVibrationTriggerResult {
+  triggered: boolean;
+  isSupported: boolean;
+  patternMs: number[];
+  totalDurationMs: number;
+}
+
+export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
+  navigatorLike?: { vibrate?: (pattern: number | number[]) => boolean } | null;
+  patternMs?: readonly number[];
+  enabled?: boolean;
+}): WorkspaceQrHardwareVibrationTriggerResult {
+  const enabled = options?.enabled !== false;
+  const pattern = Array.isArray(options?.patternMs) && options.patternMs.length > 0
+    ? options.patternMs.map((n) => Math.max(0, Math.floor(Number(n) || 0)))
+    : [...WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS];
+  const totalDurationMs = pattern.reduce((sum, val) => sum + val, 0);
+
+  if (!enabled) {
+    return {
+      triggered: false,
+      isSupported: false,
+      patternMs: [],
+      totalDurationMs: 0,
+    };
+  }
+
+  const nav =
+    options?.navigatorLike !== undefined
+      ? options.navigatorLike
+      : typeof navigator !== 'undefined'
+        ? navigator
+        : null;
+  const isSupported = Boolean(nav && typeof nav.vibrate === 'function');
+
+  if (!isSupported || !nav || typeof nav.vibrate !== 'function') {
+    return {
+      triggered: false,
+      isSupported: false,
+      patternMs: pattern,
+      totalDurationMs,
+    };
+  }
+
+  try {
+    const didVibrate = Boolean(nav.vibrate(pattern));
+    return {
+      triggered: didVibrate,
+      isSupported: true,
+      patternMs: pattern,
+      totalDurationMs,
+    };
+  } catch {
+    return {
+      triggered: false,
+      isSupported: true,
+      patternMs: pattern,
+      totalDurationMs,
+    };
+  }
+}
+
 

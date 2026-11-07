@@ -281,6 +281,7 @@ import {
   resolveDailyGoalReachedTransition,
   evaluateDailyFocusGoalReachedToast,
   resolveWorkspaceQrDetectionFlashSequence,
+  triggerWorkspaceQrDetectionHardwareVibration,
   evaluateEditorialTactileSurfaceSpec,
   sanitizeEditorialUiCopy,
   compactMinimalUiText,
@@ -1102,6 +1103,10 @@ export default function App() {
   const [
     workspaceHeaderQrDetectionFlashCount,
     setWorkspaceHeaderQrDetectionFlashCount,
+  ] = useState<number>(0);
+  const [
+    workspaceHeaderQrVibrationCount,
+    setWorkspaceHeaderQrVibrationCount,
   ] = useState<number>(0);
   const workspaceHeaderQrDetectionFlashTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrScanToastLeadInTimerRef = useRef<number | null>(null);
@@ -4535,6 +4540,7 @@ export default function App() {
     scanChimePlayedCount: workspaceHeaderQrScanChimeCount,
     isDetectionFlashActive: isWorkspaceHeaderQrDetectionFlashActive,
     detectionFlashCount: workspaceHeaderQrDetectionFlashCount,
+    vibrationTriggerCount: workspaceHeaderQrVibrationCount,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
@@ -5118,9 +5124,11 @@ export default function App() {
       return false;
     }
 
-    // 1. Trigger immediate subtle 'flash' animation on the QR scanner popover before showing the join toast
+    // 1. Trigger immediate subtle 'flash' animation + short mobile hardware vibration (navigator.vibrate) on the QR scanner popover before showing the join toast
     setIsWorkspaceHeaderQrDetectionFlashActive(true);
     setWorkspaceHeaderQrDetectionFlashCount(flashSequence.nextFlashCount);
+    triggerWorkspaceQrDetectionHardwareVibration();
+    setWorkspaceHeaderQrVibrationCount((c) => c + 1);
     if (workspaceHeaderQrDetectionFlashTimerRef.current !== null) {
       window.clearTimeout(workspaceHeaderQrDetectionFlashTimerRef.current);
     }
@@ -6893,9 +6901,36 @@ export default function App() {
                       </div>
 
                       <div
-                        data-testid="workspace-header-qr-scan-viewport-card"
+                        id={
+                          workspaceHeaderQrMeta.detectionFlash
+                            .viewportCardElementId
+                        }
+                        data-testid={
+                          workspaceHeaderQrMeta.detectionFlash
+                            .viewportCardTestId
+                        }
                         data-flash-active={
                           workspaceHeaderQrMeta.detectionFlash.isFlashActive
+                            ? 'true'
+                            : 'false'
+                        }
+                        data-vibrate-active={
+                          workspaceHeaderQrMeta.detectionFlash
+                            .hasHardwareVibration
+                            ? 'true'
+                            : 'false'
+                        }
+                        data-vibrate-pattern={
+                          workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                            .patternAttributeValue
+                        }
+                        data-vibrate-count={String(
+                          workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                            .triggerCount
+                        )}
+                        data-vibrate-supported={
+                          workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                            .isVibrationSupported
                             ? 'true'
                             : 'false'
                         }
@@ -7012,12 +7047,46 @@ export default function App() {
                           </div>
                         ) : (
                           <>
-                            <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-mono text-slate-600 whitespace-nowrap">
+                            <div className="mt-2 flex items-center justify-center gap-1.5 text-[10px] font-mono text-slate-600 whitespace-nowrap flex-wrap">
                               <span className="font-semibold text-emerald-700">
                                 Room: {workspaceHeaderQrMeta.roomCode}
                               </span>
                               <span>·</span>
                               <span>Mobile Instant Access</span>
+                              <span>·</span>
+                              <span
+                                id={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.indicatorElementId
+                                }
+                                data-testid={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.indicatorTestId
+                                }
+                                data-vibrate-pattern={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.patternAttributeValue
+                                }
+                                data-vibrate-count={String(
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.triggerCount
+                                )}
+                                title={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.statusLabel
+                                }
+                                className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold transition-colors ${
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .hasHardwareVibration
+                                    ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-800'
+                                    : 'bg-slate-100 border-slate-200 text-slate-600'
+                                }`}
+                              >
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.shortBadgeLabel
+                                }
+                              </span>
                             </div>
                             <p
                               id={workspaceHeaderQrMeta.instructionElementId}

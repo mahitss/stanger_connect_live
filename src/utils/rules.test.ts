@@ -442,6 +442,13 @@ import {
   buildWorkspaceQrQuickReportPdfFilename,
   escapePdfTextLiteral,
   buildWorkspaceQrHistoryQuickReportPdfSpec,
+  WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID,
+  WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID,
+  WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS,
+  WORKSPACE_QR_DETECTION_VIBRATION_TOTAL_MS,
+  WORKSPACE_QR_DETECTION_VIBRATION_PULSES_COUNT,
+  evaluateWorkspaceQrDetectionVibrationSpec,
+  triggerWorkspaceQrDetectionHardwareVibration,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -10313,5 +10320,76 @@ test('QR history Quick Report generates a visually styled PDF summary of the las
   );
   assert.equal(qrMeta.searchHistory.quickReport.recordCount, 10);
 });
+
+test('QR scan confirmation triggers short hardware vibration (navigator.vibrate) on #workspace-header-qr-scan-viewport-card upon successful code detection', () => {
+  assert.equal(
+    WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID,
+    'workspace-header-qr-scan-viewport-card'
+  );
+  assert.equal(
+    WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID,
+    'workspace-header-qr-scan-vibration-indicator'
+  );
+  assert.deepEqual(WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS, [35, 25, 45]);
+  assert.equal(WORKSPACE_QR_DETECTION_VIBRATION_TOTAL_MS, 105);
+  assert.equal(WORKSPACE_QR_DETECTION_VIBRATION_PULSES_COUNT, 2);
+
+  // 1. Idle state has vibration inactive but configured with 35,25,45ms pattern
+  const idleVib = evaluateWorkspaceQrDetectionVibrationSpec({
+    isFlashActive: false,
+    vibrationTriggerCount: 0,
+    isVibrationSupported: true,
+  });
+  assert.equal(idleVib.enabled, false);
+  assert.equal(idleVib.isVibrationSupported, true);
+  assert.deepEqual(idleVib.vibrationPatternMs, []);
+  assert.deepEqual(idleVib.configuredPatternMs, [35, 25, 45]);
+  assert.equal(idleVib.patternAttributeValue, '35,25,45');
+  assert.equal(idleVib.totalDurationMs, 0);
+  assert.equal(idleVib.pulseCount, 0);
+  assert.equal(idleVib.shortBadgeLabel, 'Mobile Haptic · 105ms');
+
+  // 2. Active QR detection flash enables short hardware vibration spec
+  const activeFlash = evaluateWorkspaceQrDetectionFlashSpec({
+    isFlashActive: true,
+    flashTriggerCount: 3,
+    vibrationTriggerCount: 3,
+    isVibrationSupported: true,
+    detectedRoomCode: 'STUDY-808',
+  });
+  assert.equal(
+    activeFlash.viewportCardElementId,
+    'workspace-header-qr-scan-viewport-card'
+  );
+  assert.equal(activeFlash.hasHardwareVibration, true);
+  assert.deepEqual(activeFlash.vibrationPatternMs, [35, 25, 45]);
+  assert.equal(activeFlash.vibrationTotalDurationMs, 105);
+  assert.equal(activeFlash.vibrationSpec.triggerCount, 3);
+  assert.equal(activeFlash.vibrationSpec.shortBadgeLabel, 'Haptic Pulse · 105ms');
+
+  // 3. Hardware trigger invokes navigatorLike.vibrate([35, 25, 45]) and handles unsupported devices safely
+  const vibratedPatterns: Array<number | number[]> = [];
+  const mobileResult = triggerWorkspaceQrDetectionHardwareVibration({
+    navigatorLike: {
+      vibrate: (pattern) => {
+        vibratedPatterns.push(pattern);
+        return true;
+      },
+    },
+  });
+  assert.equal(mobileResult.triggered, true);
+  assert.equal(mobileResult.isSupported, true);
+  assert.deepEqual(mobileResult.patternMs, [35, 25, 45]);
+  assert.equal(mobileResult.totalDurationMs, 105);
+  assert.deepEqual(vibratedPatterns, [[35, 25, 45]]);
+
+  const unsupportedResult = triggerWorkspaceQrDetectionHardwareVibration({
+    navigatorLike: {},
+  });
+  assert.equal(unsupportedResult.triggered, false);
+  assert.equal(unsupportedResult.isSupported, false);
+  assert.deepEqual(unsupportedResult.patternMs, [35, 25, 45]);
+});
+
 
 
