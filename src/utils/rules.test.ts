@@ -454,6 +454,14 @@ import {
   WORKSPACE_QR_VIBRATION_INTENSITY_PRESETS,
   normalizeWorkspaceQrVibrationIntensity,
   resolveWorkspaceQrVibrationIntensityPreset,
+  WORKSPACE_QR_VIBRATION_MODE_TOGGLE_ID,
+  WORKSPACE_QR_VIBRATION_MODE_BTN_PULSE_ID,
+  WORKSPACE_QR_VIBRATION_MODE_BTN_CONTINUOUS_ID,
+  WORKSPACE_QR_VIBRATION_PATTERN_MODE_STORAGE_KEY,
+  WORKSPACE_QR_VIBRATION_PATTERN_MODES,
+  DEFAULT_WORKSPACE_QR_VIBRATION_PATTERN_MODE,
+  normalizeWorkspaceQrVibrationPatternMode,
+  resolveWorkspaceQrVibrationModePattern,
   WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID,
   WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID,
   WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID,
@@ -10683,6 +10691,134 @@ test('QR vibration pattern preview button and dedicated pattern-length icon anim
     3
   );
 });
+
+test('QR vibration pattern mode toggle supports Continuous vs Pulse vibration patterns across soft, medium, and strong intensities', () => {
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_MODE_TOGGLE_ID,
+    'workspace-header-qr-vibration-mode-toggle'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_MODE_BTN_PULSE_ID,
+    'workspace-header-qr-vibration-mode-btn-pulse'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_MODE_BTN_CONTINUOUS_ID,
+    'workspace-header-qr-vibration-mode-btn-continuous'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PATTERN_MODE_STORAGE_KEY,
+    'mr_stranger_qr_vibration_pattern_mode_v1'
+  );
+  assert.deepEqual(WORKSPACE_QR_VIBRATION_PATTERN_MODES, [
+    'pulse',
+    'continuous',
+  ]);
+  assert.equal(DEFAULT_WORKSPACE_QR_VIBRATION_PATTERN_MODE, 'pulse');
+
+  // 1. Normalization defaults invalid/missing inputs to 'pulse'
+  assert.equal(normalizeWorkspaceQrVibrationPatternMode(undefined), 'pulse');
+  assert.equal(normalizeWorkspaceQrVibrationPatternMode('invalid'), 'pulse');
+  assert.equal(normalizeWorkspaceQrVibrationPatternMode('PULSE'), 'pulse');
+  assert.equal(
+    normalizeWorkspaceQrVibrationPatternMode('  Continuous '),
+    'continuous'
+  );
+
+  // 2. Continuous mode resolves single-hold uninterrupted patterns ([60], [105], [275]) with pulseCount = 1
+  const softContinuous = resolveWorkspaceQrVibrationModePattern({
+    intensity: 'soft',
+    patternMode: 'continuous',
+  });
+  assert.equal(softContinuous.patternMode, 'continuous');
+  assert.equal(softContinuous.patternModeLabel, 'Continuous');
+  assert.equal(
+    softContinuous.confirmationTypeLabel,
+    'Continuous Hold Confirmation'
+  );
+  assert.deepEqual(softContinuous.patternMs, [60]);
+  assert.equal(softContinuous.patternAttributeValue, '60');
+  assert.equal(softContinuous.patternCadenceLabel, '60ms hold');
+  assert.equal(softContinuous.totalDurationMs, 60);
+  assert.equal(softContinuous.pulseCount, 1);
+
+  const mediumContinuous = resolveWorkspaceQrVibrationModePattern({
+    intensity: 'medium',
+    patternMode: 'continuous',
+  });
+  assert.deepEqual(mediumContinuous.patternMs, [105]);
+  assert.equal(mediumContinuous.patternAttributeValue, '105');
+  assert.equal(mediumContinuous.patternCadenceLabel, '105ms hold');
+  assert.equal(mediumContinuous.totalDurationMs, 105);
+  assert.equal(mediumContinuous.pulseCount, 1);
+
+  const strongContinuous = resolveWorkspaceQrVibrationModePattern({
+    intensity: 'strong',
+    patternMode: 'continuous',
+  });
+  assert.deepEqual(strongContinuous.patternMs, [275]);
+  assert.equal(strongContinuous.patternAttributeValue, '275');
+  assert.equal(strongContinuous.patternCadenceLabel, '275ms hold');
+  assert.equal(strongContinuous.totalDurationMs, 275);
+  assert.equal(strongContinuous.pulseCount, 1);
+
+  // 3. evaluateWorkspaceQrDetectionVibrationSpec exposes modeOptions and single-segment visualization in continuous mode
+  const specContinuous = evaluateWorkspaceQrDetectionVibrationSpec({
+    isFlashActive: true,
+    vibrationIntensity: 'medium',
+    vibrationPatternMode: 'continuous',
+    vibrationTriggerCount: 4,
+    isVibrationSupported: true,
+  });
+  assert.equal(specContinuous.patternMode, 'continuous');
+  assert.equal(specContinuous.patternModeLabel, 'Continuous');
+  assert.deepEqual(specContinuous.vibrationPatternMs, [105]);
+  assert.equal(specContinuous.configuredPulseCount, 1);
+  assert.equal(specContinuous.modeOptions.length, 2);
+  assert.equal(specContinuous.modeOptions[0]?.id, 'pulse');
+  assert.equal(specContinuous.modeOptions[0]?.isSelected, false);
+  assert.equal(specContinuous.modeOptions[1]?.id, 'continuous');
+  assert.equal(specContinuous.modeOptions[1]?.isSelected, true);
+  assert.equal(
+    specContinuous.visualPreview.patternLengthVisualization.segments.length,
+    1
+  );
+  assert.equal(
+    specContinuous.visualPreview.patternLengthVisualization.buttonIdleLabel,
+    'Preview Medium Continuous (105ms)'
+  );
+  assert.equal(
+    specContinuous.visualPreview.patternLengthVisualization.buttonActiveLabel,
+    'Playing 105ms Continuous…'
+  );
+
+  // 4. triggerWorkspaceQrDetectionHardwareVibration dispatches continuous vs pulse patterns to navigator.vibrate
+  const recorded: number[][] = [];
+  const mockNav = {
+    vibrate: (pattern: number | number[]) => {
+      recorded.push(Array.isArray(pattern) ? [...pattern] : [pattern]);
+      return true;
+    },
+  };
+  const pulseRes = triggerWorkspaceQrDetectionHardwareVibration({
+    navigatorLike: mockNav,
+    intensity: 'medium',
+    patternMode: 'pulse',
+  });
+  assert.equal(pulseRes.patternMode, 'pulse');
+  assert.deepEqual(pulseRes.patternMs, [35, 25, 45]);
+  assert.equal(pulseRes.pulseCount, 2);
+
+  const contRes = triggerWorkspaceQrDetectionHardwareVibration({
+    navigatorLike: mockNav,
+    intensity: 'medium',
+    patternMode: 'continuous',
+  });
+  assert.equal(contRes.patternMode, 'continuous');
+  assert.deepEqual(contRes.patternMs, [105]);
+  assert.equal(contRes.pulseCount, 1);
+  assert.deepEqual(recorded, [[35, 25, 45], [105]]);
+});
+
 
 
 

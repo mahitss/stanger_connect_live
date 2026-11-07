@@ -18270,6 +18270,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   detectionFlashCount?: number;
   vibrationTriggerCount?: number;
   vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  vibrationPatternMode?: WorkspaceQrVibrationPatternMode | string | null;
   isVibrationPreviewAnimating?: boolean;
   vibrationPreviewCount?: number;
   isVibrationSupported?: boolean;
@@ -18406,6 +18407,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
       vibrationTriggerCount:
         input?.vibrationTriggerCount ?? input?.detectionFlashCount ?? 0,
       vibrationIntensity: input?.vibrationIntensity,
+      vibrationPatternMode: input?.vibrationPatternMode,
       isVibrationPreviewAnimating: input?.isVibrationPreviewAnimating,
       vibrationPreviewCount: input?.vibrationPreviewCount,
       isVibrationSupported: input?.isVibrationSupported,
@@ -23525,6 +23527,7 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
   flashTriggerCount?: number;
   vibrationTriggerCount?: number;
   vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  vibrationPatternMode?: WorkspaceQrVibrationPatternMode | string | null;
   isVibrationPreviewAnimating?: boolean;
   vibrationPreviewCount?: number;
   isVibrationSupported?: boolean;
@@ -23556,6 +23559,7 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
     isFlashActive,
     vibrationTriggerCount,
     vibrationIntensity: input?.vibrationIntensity,
+    vibrationPatternMode: input?.vibrationPatternMode,
     isVibrationPreviewAnimating: input?.isVibrationPreviewAnimating,
     vibrationPreviewCount: input?.vibrationPreviewCount,
     detectedRoomCode: cleanDetectedRoom || fallbackRoom,
@@ -23636,6 +23640,7 @@ export function resolveWorkspaceQrDetectionFlashSequence(params: {
   fallbackOrigin?: string;
   previousFlashCount?: number;
   vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  vibrationPatternMode?: WorkspaceQrVibrationPatternMode | string | null;
   nowMs?: number;
 }): WorkspaceQrDetectionFlashSequenceResult {
   const prevCount = Math.max(
@@ -23667,6 +23672,7 @@ export function resolveWorkspaceQrDetectionFlashSequence(params: {
         isFlashActive: false,
         flashTriggerCount: prevCount,
         vibrationIntensity: params.vibrationIntensity,
+        vibrationPatternMode: params.vibrationPatternMode,
         detectedRoomCode: null,
       }),
     };
@@ -23688,6 +23694,7 @@ export function resolveWorkspaceQrDetectionFlashSequence(params: {
       isFlashActive: true,
       flashTriggerCount: nextFlashCount,
       vibrationIntensity: params.vibrationIntensity,
+      vibrationPatternMode: params.vibrationPatternMode,
       detectedRoomCode: parsedResult.roomCode,
     }),
   };
@@ -25591,6 +25598,147 @@ export interface WorkspaceQrVibrationIntensityOptionSpec
   isSelected: boolean;
 }
 
+export const WORKSPACE_QR_VIBRATION_MODE_TOGGLE_ID =
+  'workspace-header-qr-vibration-mode-toggle' as const;
+export const WORKSPACE_QR_VIBRATION_MODE_BTN_PULSE_ID =
+  'workspace-header-qr-vibration-mode-btn-pulse' as const;
+export const WORKSPACE_QR_VIBRATION_MODE_BTN_CONTINUOUS_ID =
+  'workspace-header-qr-vibration-mode-btn-continuous' as const;
+export const WORKSPACE_QR_VIBRATION_PATTERN_MODE_STORAGE_KEY =
+  'mr_stranger_qr_vibration_pattern_mode_v1' as const;
+
+export type WorkspaceQrVibrationPatternMode = 'pulse' | 'continuous';
+
+export const WORKSPACE_QR_VIBRATION_PATTERN_MODES: readonly WorkspaceQrVibrationPatternMode[] =
+  ['pulse', 'continuous'] as const;
+
+export const DEFAULT_WORKSPACE_QR_VIBRATION_PATTERN_MODE: WorkspaceQrVibrationPatternMode =
+  'pulse';
+
+export function normalizeWorkspaceQrVibrationPatternMode(
+  value?: unknown
+): WorkspaceQrVibrationPatternMode {
+  const cleaned = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  if (cleaned === 'continuous' || cleaned === 'pulse') {
+    return cleaned;
+  }
+  return DEFAULT_WORKSPACE_QR_VIBRATION_PATTERN_MODE;
+}
+
+export interface WorkspaceQrVibrationPatternModeOptionSpec {
+  id: WorkspaceQrVibrationPatternMode;
+  label: 'Pulse' | 'Continuous';
+  shortDescription: string;
+  confirmationTypeLabel:
+    | 'Rhythmic Pulse Confirmation'
+    | 'Continuous Hold Confirmation';
+  buttonElementId: string;
+  buttonTestId: string;
+  isSelected: boolean;
+}
+
+export type WorkspaceQrVibrationPatternAttributeValue =
+  | '20,15,25'
+  | '35,25,45'
+  | '65,30,85,30,65'
+  | '60'
+  | '105'
+  | '275';
+
+export type WorkspaceQrVibrationPatternCadenceLabel =
+  | '20-15-25ms'
+  | '35-25-45ms'
+  | '65-30-85-30-65ms'
+  | '60ms hold'
+  | '105ms hold'
+  | '275ms hold';
+
+export interface ResolvedWorkspaceQrVibrationModePatternSpec {
+  intensity: WorkspaceQrVibrationIntensityLevel;
+  intensityLabel: 'Soft' | 'Medium' | 'Strong';
+  patternMode: WorkspaceQrVibrationPatternMode;
+  patternModeLabel: 'Pulse' | 'Continuous';
+  confirmationTypeLabel:
+    | 'Rhythmic Pulse Confirmation'
+    | 'Continuous Hold Confirmation';
+  patternMs: readonly number[];
+  patternAttributeValue: WorkspaceQrVibrationPatternAttributeValue;
+  patternCadenceLabel: WorkspaceQrVibrationPatternCadenceLabel;
+  totalDurationMs: 60 | 105 | 275;
+  pulseCount: 1 | 2 | 3;
+  description: string;
+}
+
+export function resolveWorkspaceQrVibrationModePattern(params?: {
+  intensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  patternMode?: WorkspaceQrVibrationPatternMode | string | null;
+}): ResolvedWorkspaceQrVibrationModePatternSpec {
+  const preset = resolveWorkspaceQrVibrationIntensityPreset(params?.intensity);
+  const patternMode = normalizeWorkspaceQrVibrationPatternMode(
+    params?.patternMode
+  );
+
+  if (patternMode === 'continuous') {
+    const continuousPatternMs: readonly number[] =
+      preset.id === 'soft'
+        ? ([60] as const)
+        : preset.id === 'strong'
+          ? ([275] as const)
+          : ([105] as const);
+    const patternAttributeValue: '60' | '105' | '275' =
+      preset.id === 'soft' ? '60' : preset.id === 'strong' ? '275' : '105';
+    const patternCadenceLabel: '60ms hold' | '105ms hold' | '275ms hold' =
+      preset.id === 'soft'
+        ? '60ms hold'
+        : preset.id === 'strong'
+          ? '275ms hold'
+          : '105ms hold';
+    const description =
+      preset.id === 'soft'
+        ? 'Gentle 60ms continuous hold (60ms uninterrupted)'
+        : preset.id === 'strong'
+          ? 'Pronounced 275ms continuous hold (275ms uninterrupted)'
+          : 'Balanced 105ms continuous hold (105ms uninterrupted)';
+
+    return {
+      intensity: preset.id,
+      intensityLabel: preset.label,
+      patternMode: 'continuous',
+      patternModeLabel: 'Continuous',
+      confirmationTypeLabel: 'Continuous Hold Confirmation',
+      patternMs: continuousPatternMs,
+      patternAttributeValue,
+      patternCadenceLabel,
+      totalDurationMs: preset.totalDurationMs,
+      pulseCount: 1,
+      description,
+    };
+  }
+
+  const pulseCadenceLabel: '20-15-25ms' | '35-25-45ms' | '65-30-85-30-65ms' =
+    preset.id === 'soft'
+      ? '20-15-25ms'
+      : preset.id === 'strong'
+        ? '65-30-85-30-65ms'
+        : '35-25-45ms';
+
+  return {
+    intensity: preset.id,
+    intensityLabel: preset.label,
+    patternMode: 'pulse',
+    patternModeLabel: 'Pulse',
+    confirmationTypeLabel: 'Rhythmic Pulse Confirmation',
+    patternMs: preset.patternMs,
+    patternAttributeValue: preset.patternAttributeValue,
+    patternCadenceLabel: pulseCadenceLabel,
+    totalDurationMs: preset.totalDurationMs,
+    pulseCount: preset.pulseCount,
+    description: preset.description,
+  };
+}
+
 export const WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID =
   'workspace-header-qr-vibration-preview-test-btn' as const;
 export const WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID =
@@ -25617,13 +25765,15 @@ export interface WorkspaceQrVibrationPatternLengthVisualizationSpec {
   patternIconTestId: typeof WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID;
   intensity: WorkspaceQrVibrationIntensityLevel;
   intensityLabel: 'Soft' | 'Medium' | 'Strong';
+  patternMode: WorkspaceQrVibrationPatternMode;
+  patternModeLabel: 'Pulse' | 'Continuous';
   patternMs: readonly number[];
-  patternAttributeValue: '20,15,25' | '35,25,45' | '65,30,85,30,65';
-  patternCadenceLabel: '20-15-25ms' | '35-25-45ms' | '65-30-85-30-65ms';
+  patternAttributeValue: WorkspaceQrVibrationPatternAttributeValue;
+  patternCadenceLabel: WorkspaceQrVibrationPatternCadenceLabel;
   totalPatternLengthMs: 60 | 105 | 275;
   maxReferencePatternLengthMs: typeof WORKSPACE_QR_VIBRATION_MAX_PATTERN_LENGTH_MS;
   patternLengthRatioPercent: 22 | 38 | 100;
-  pulseCount: 2 | 3;
+  pulseCount: 1 | 2 | 3;
   isAnimating: boolean;
   patternIconAnimationName:
     | 'qrVibrationPatternLengthSoft'
@@ -25639,40 +25789,46 @@ export interface WorkspaceQrVibrationPatternLengthVisualizationSpec {
 
 export function evaluateWorkspaceQrVibrationPatternLengthSpec(input?: {
   intensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  patternMode?: WorkspaceQrVibrationPatternMode | string | null;
   isPreviewAnimating?: boolean;
 }): WorkspaceQrVibrationPatternLengthVisualizationSpec {
-  const preset = resolveWorkspaceQrVibrationIntensityPreset(input?.intensity);
+  const resolved = resolveWorkspaceQrVibrationModePattern({
+    intensity: input?.intensity,
+    patternMode: input?.patternMode,
+  });
   const isAnimating = Boolean(input?.isPreviewAnimating);
   const visualAnimationDurationMs: 260 | 360 | 480 =
-    preset.id === 'soft' ? 260 : preset.id === 'strong' ? 480 : 360;
+    resolved.intensity === 'soft'
+      ? 260
+      : resolved.intensity === 'strong'
+        ? 480
+        : 360;
   const patternLengthRatioPercent: 22 | 38 | 100 =
-    preset.id === 'soft' ? 22 : preset.id === 'strong' ? 100 : 38;
-  const patternCadenceLabel: '20-15-25ms' | '35-25-45ms' | '65-30-85-30-65ms' =
-    preset.id === 'soft'
-      ? '20-15-25ms'
-      : preset.id === 'strong'
-        ? '65-30-85-30-65ms'
-        : '35-25-45ms';
+    resolved.intensity === 'soft'
+      ? 22
+      : resolved.intensity === 'strong'
+        ? 100
+        : 38;
 
   const patternIconAnimationName = !isAnimating
     ? 'none'
-    : preset.id === 'soft'
+    : resolved.intensity === 'soft'
       ? 'qrVibrationPatternLengthSoft'
-      : preset.id === 'strong'
+      : resolved.intensity === 'strong'
         ? 'qrVibrationPatternLengthStrong'
         : 'qrVibrationPatternLengthMedium';
 
   const patternIconAnimationClassName = !isAnimating
     ? ''
-    : preset.id === 'soft'
+    : resolved.intensity === 'soft'
       ? 'qr-vibration-pattern-length-soft'
-      : preset.id === 'strong'
+      : resolved.intensity === 'strong'
         ? 'qr-vibration-pattern-length-strong'
         : 'qr-vibration-pattern-length-medium';
 
   let elapsedMs = 0;
-  const segments: WorkspaceQrVibrationPatternSegmentSpec[] = preset.patternMs.map(
-    (durationMs, index) => {
+  const segments: WorkspaceQrVibrationPatternSegmentSpec[] =
+    resolved.patternMs.map((durationMs, index) => {
       const delayMs = elapsedMs;
       elapsedMs += durationMs;
       return {
@@ -25688,32 +25844,39 @@ export function evaluateWorkspaceQrVibrationPatternLengthSpec(input?: {
         ),
         relativeSharePercent: Math.max(
           5,
-          Math.round((durationMs / preset.totalDurationMs) * 100)
+          Math.round((durationMs / resolved.totalDurationMs) * 100)
         ),
       };
-    }
-  );
+    });
 
   return {
     previewButtonElementId: WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID,
     previewButtonTestId: WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID,
     patternIconElementId: WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID,
     patternIconTestId: WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID,
-    intensity: preset.id,
-    intensityLabel: preset.label,
-    patternMs: preset.patternMs,
-    patternAttributeValue: preset.patternAttributeValue,
-    patternCadenceLabel,
-    totalPatternLengthMs: preset.totalDurationMs,
+    intensity: resolved.intensity,
+    intensityLabel: resolved.intensityLabel,
+    patternMode: resolved.patternMode,
+    patternModeLabel: resolved.patternModeLabel,
+    patternMs: resolved.patternMs,
+    patternAttributeValue: resolved.patternAttributeValue,
+    patternCadenceLabel: resolved.patternCadenceLabel,
+    totalPatternLengthMs: resolved.totalDurationMs,
     maxReferencePatternLengthMs: WORKSPACE_QR_VIBRATION_MAX_PATTERN_LENGTH_MS,
     patternLengthRatioPercent,
-    pulseCount: preset.pulseCount,
+    pulseCount: resolved.pulseCount,
     isAnimating,
     patternIconAnimationName,
     patternIconAnimationClassName,
     visualAnimationDurationMs,
-    buttonIdleLabel: `Preview ${preset.label} (${preset.totalDurationMs}ms)`,
-    buttonActiveLabel: `Playing ${preset.totalDurationMs}ms Pattern…`,
+    buttonIdleLabel:
+      resolved.patternMode === 'continuous'
+        ? `Preview ${resolved.intensityLabel} Continuous (${resolved.totalDurationMs}ms)`
+        : `Preview ${resolved.intensityLabel} (${resolved.totalDurationMs}ms)`,
+    buttonActiveLabel:
+      resolved.patternMode === 'continuous'
+        ? `Playing ${resolved.totalDurationMs}ms Continuous…`
+        : `Playing ${resolved.totalDurationMs}ms Pattern…`,
     segments,
   };
 }
@@ -25729,6 +25892,8 @@ export interface WorkspaceQrVibrationVisualPreviewSpec {
   previewTriggerCount: number;
   intensity: WorkspaceQrVibrationIntensityLevel;
   intensityLabel: 'Soft' | 'Medium' | 'Strong';
+  patternMode: WorkspaceQrVibrationPatternMode;
+  patternModeLabel: 'Pulse' | 'Continuous';
   animationName:
     | 'qrHapticIconPreviewSoft'
     | 'qrHapticIconPreviewMedium'
@@ -25740,7 +25905,7 @@ export interface WorkspaceQrVibrationVisualPreviewSpec {
   rotationDeg: 6 | 12 | 20;
   scalePeak: 1.08 | 1.16 | 1.26;
   patternMs: readonly number[];
-  patternAttributeValue: '20,15,25' | '35,25,45' | '65,30,85,30,65';
+  patternAttributeValue: WorkspaceQrVibrationPatternAttributeValue;
   patternLengthVisualization: WorkspaceQrVibrationPatternLengthVisualizationSpec;
   ariaLabel: string;
   title: string;
@@ -25748,10 +25913,14 @@ export interface WorkspaceQrVibrationVisualPreviewSpec {
 
 export function evaluateWorkspaceQrVibrationVisualPreviewSpec(input?: {
   intensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  patternMode?: WorkspaceQrVibrationPatternMode | string | null;
   isPreviewAnimating?: boolean;
   previewTriggerCount?: number;
 }): WorkspaceQrVibrationVisualPreviewSpec {
-  const preset = resolveWorkspaceQrVibrationIntensityPreset(input?.intensity);
+  const resolved = resolveWorkspaceQrVibrationModePattern({
+    intensity: input?.intensity,
+    patternMode: input?.patternMode,
+  });
   const isAnimating = Boolean(input?.isPreviewAnimating);
   const previewTriggerCount = Math.max(
     0,
@@ -25759,33 +25928,50 @@ export function evaluateWorkspaceQrVibrationVisualPreviewSpec(input?: {
   );
 
   const animationDurationMs: 260 | 360 | 480 =
-    preset.id === 'soft' ? 260 : preset.id === 'strong' ? 480 : 360;
+    resolved.intensity === 'soft'
+      ? 260
+      : resolved.intensity === 'strong'
+        ? 480
+        : 360;
   const amplitudePx: 1.5 | 3 | 5 =
-    preset.id === 'soft' ? 1.5 : preset.id === 'strong' ? 5 : 3;
+    resolved.intensity === 'soft'
+      ? 1.5
+      : resolved.intensity === 'strong'
+        ? 5
+        : 3;
   const rotationDeg: 6 | 12 | 20 =
-    preset.id === 'soft' ? 6 : preset.id === 'strong' ? 20 : 12;
+    resolved.intensity === 'soft'
+      ? 6
+      : resolved.intensity === 'strong'
+        ? 20
+        : 12;
   const scalePeak: 1.08 | 1.16 | 1.26 =
-    preset.id === 'soft' ? 1.08 : preset.id === 'strong' ? 1.26 : 1.16;
+    resolved.intensity === 'soft'
+      ? 1.08
+      : resolved.intensity === 'strong'
+        ? 1.26
+        : 1.16;
 
   const animationName = !isAnimating
     ? 'none'
-    : preset.id === 'soft'
+    : resolved.intensity === 'soft'
       ? 'qrHapticIconPreviewSoft'
-      : preset.id === 'strong'
+      : resolved.intensity === 'strong'
         ? 'qrHapticIconPreviewStrong'
         : 'qrHapticIconPreviewMedium';
 
   const iconAnimationClassName = !isAnimating
     ? ''
-    : preset.id === 'soft'
+    : resolved.intensity === 'soft'
       ? 'qr-haptic-preview-icon-soft'
-      : preset.id === 'strong'
+      : resolved.intensity === 'strong'
         ? 'qr-haptic-preview-icon-strong'
         : 'qr-haptic-preview-icon-medium';
 
   const patternLengthVisualization =
     evaluateWorkspaceQrVibrationPatternLengthSpec({
-      intensity: preset.id,
+      intensity: resolved.intensity,
+      patternMode: resolved.patternMode,
       isPreviewAnimating: isAnimating,
     });
 
@@ -25798,19 +25984,21 @@ export function evaluateWorkspaceQrVibrationVisualPreviewSpec(input?: {
     activeButtonLabel: 'Buzzing!',
     isAnimating,
     previewTriggerCount,
-    intensity: preset.id,
-    intensityLabel: preset.label,
+    intensity: resolved.intensity,
+    intensityLabel: resolved.intensityLabel,
+    patternMode: resolved.patternMode,
+    patternModeLabel: resolved.patternModeLabel,
     animationName,
     iconAnimationClassName,
     animationDurationMs,
     amplitudePx,
     rotationDeg,
     scalePeak,
-    patternMs: preset.patternMs,
-    patternAttributeValue: preset.patternAttributeValue,
+    patternMs: resolved.patternMs,
+    patternAttributeValue: resolved.patternAttributeValue,
     patternLengthVisualization,
-    ariaLabel: `Test ${preset.label.toLowerCase()} vibration intensity (${preset.patternAttributeValue}ms)`,
-    title: `Preview ${preset.label} haptic feedback (${preset.totalDurationMs}ms · ${preset.patternAttributeValue}ms)`,
+    ariaLabel: `Test ${resolved.intensityLabel.toLowerCase()} vibration intensity (${resolved.patternAttributeValue}ms)`,
+    title: `Preview ${resolved.intensityLabel} haptic feedback (${resolved.totalDurationMs}ms · ${resolved.patternAttributeValue}ms)`,
   };
 }
 
@@ -25821,18 +26009,26 @@ export interface WorkspaceQrDetectionVibrationSpec {
   indicatorTestId: typeof WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID;
   selectorElementId: typeof WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID;
   selectorTestId: typeof WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID;
+  modeToggleElementId: typeof WORKSPACE_QR_VIBRATION_MODE_TOGGLE_ID;
+  modeToggleTestId: typeof WORKSPACE_QR_VIBRATION_MODE_TOGGLE_ID;
   enabled: boolean;
   isVibrationSupported: boolean;
   intensity: WorkspaceQrVibrationIntensityLevel;
   intensityLabel: 'Soft' | 'Medium' | 'Strong';
   intensityDescription: string;
+  patternMode: WorkspaceQrVibrationPatternMode;
+  patternModeLabel: 'Pulse' | 'Continuous';
+  confirmationTypeLabel:
+    | 'Rhythmic Pulse Confirmation'
+    | 'Continuous Hold Confirmation';
+  modeOptions: WorkspaceQrVibrationPatternModeOptionSpec[];
   options: WorkspaceQrVibrationIntensityOptionSpec[];
   visualPreview: WorkspaceQrVibrationVisualPreviewSpec;
   vibrationPatternMs: number[];
   configuredPatternMs: readonly number[];
-  patternAttributeValue: '20,15,25' | '35,25,45' | '65,30,85,30,65';
+  patternAttributeValue: WorkspaceQrVibrationPatternAttributeValue;
   configuredTotalDurationMs: 60 | 105 | 275;
-  configuredPulseCount: 2 | 3;
+  configuredPulseCount: 1 | 2 | 3;
   totalDurationMs: number;
   pulseCount: number;
   triggerCount: number;
@@ -25845,6 +26041,7 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
   isFlashActive?: boolean;
   vibrationTriggerCount?: number;
   vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  vibrationPatternMode?: WorkspaceQrVibrationPatternMode | string | null;
   isVibrationPreviewAnimating?: boolean;
   vibrationPreviewCount?: number;
   detectedRoomCode?: string | null;
@@ -25855,9 +26052,10 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
     0,
     Math.floor(Number(input?.vibrationTriggerCount) || 0)
   );
-  const preset = resolveWorkspaceQrVibrationIntensityPreset(
-    input?.vibrationIntensity
-  );
+  const resolved = resolveWorkspaceQrVibrationModePattern({
+    intensity: input?.vibrationIntensity,
+    patternMode: input?.vibrationPatternMode,
+  });
   const detectedRoomCode =
     String(input?.detectedRoomCode || '').trim() || null;
   const isVibrationSupported =
@@ -25869,11 +26067,33 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
   const options: WorkspaceQrVibrationIntensityOptionSpec[] =
     WORKSPACE_QR_VIBRATION_INTENSITY_LEVELS.map((level) => ({
       ...WORKSPACE_QR_VIBRATION_INTENSITY_PRESETS[level],
-      isSelected: level === preset.id,
+      isSelected: level === resolved.intensity,
     }));
 
+  const modeOptions: WorkspaceQrVibrationPatternModeOptionSpec[] = [
+    {
+      id: 'pulse',
+      label: 'Pulse',
+      shortDescription: 'Rhythmic multi-tap cadence for standard room scans',
+      confirmationTypeLabel: 'Rhythmic Pulse Confirmation',
+      buttonElementId: WORKSPACE_QR_VIBRATION_MODE_BTN_PULSE_ID,
+      buttonTestId: WORKSPACE_QR_VIBRATION_MODE_BTN_PULSE_ID,
+      isSelected: resolved.patternMode === 'pulse',
+    },
+    {
+      id: 'continuous',
+      label: 'Continuous',
+      shortDescription: 'Sustained single-hold buzz for instant confirmation',
+      confirmationTypeLabel: 'Continuous Hold Confirmation',
+      buttonElementId: WORKSPACE_QR_VIBRATION_MODE_BTN_CONTINUOUS_ID,
+      buttonTestId: WORKSPACE_QR_VIBRATION_MODE_BTN_CONTINUOUS_ID,
+      isSelected: resolved.patternMode === 'continuous',
+    },
+  ];
+
   const visualPreview = evaluateWorkspaceQrVibrationVisualPreviewSpec({
-    intensity: preset.id,
+    intensity: resolved.intensity,
+    patternMode: resolved.patternMode,
     isPreviewAnimating: Boolean(
       input?.isVibrationPreviewAnimating || isFlashActive
     ),
@@ -25881,15 +26101,19 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
   });
 
   const shortBadgeLabel =
-    preset.id === 'medium'
+    resolved.patternMode === 'continuous'
       ? isFlashActive
-        ? 'Haptic Pulse · 105ms'
-        : 'Mobile Haptic · 105ms'
-      : isFlashActive
-        ? `Haptic Pulse (${preset.label} · ${preset.totalDurationMs}ms)`
-        : `Mobile Haptic · ${preset.label} (${preset.totalDurationMs}ms)`;
+        ? `Continuous Hold (${resolved.intensityLabel} · ${resolved.totalDurationMs}ms)`
+        : `Continuous Haptic · ${resolved.intensityLabel} (${resolved.totalDurationMs}ms)`
+      : resolved.intensity === 'medium'
+        ? isFlashActive
+          ? 'Haptic Pulse · 105ms'
+          : 'Mobile Haptic · 105ms'
+        : isFlashActive
+          ? `Haptic Pulse (${resolved.intensityLabel} · ${resolved.totalDurationMs}ms)`
+          : `Mobile Haptic · ${resolved.intensityLabel} (${resolved.totalDurationMs}ms)`;
 
-  const patternJoined = preset.patternMs.join('-');
+  const patternJoined = resolved.patternMs.join('-');
 
   return {
     viewportCardElementId: WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID,
@@ -25898,28 +26122,34 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
     indicatorTestId: WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID,
     selectorElementId: WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID,
     selectorTestId: WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID,
+    modeToggleElementId: WORKSPACE_QR_VIBRATION_MODE_TOGGLE_ID,
+    modeToggleTestId: WORKSPACE_QR_VIBRATION_MODE_TOGGLE_ID,
     enabled: isFlashActive,
     isVibrationSupported,
-    intensity: preset.id,
-    intensityLabel: preset.label,
-    intensityDescription: preset.description,
+    intensity: resolved.intensity,
+    intensityLabel: resolved.intensityLabel,
+    intensityDescription: resolved.description,
+    patternMode: resolved.patternMode,
+    patternModeLabel: resolved.patternModeLabel,
+    confirmationTypeLabel: resolved.confirmationTypeLabel,
+    modeOptions,
     options,
     visualPreview,
-    vibrationPatternMs: isFlashActive ? [...preset.patternMs] : [],
-    configuredPatternMs: preset.patternMs,
-    patternAttributeValue: preset.patternAttributeValue,
-    configuredTotalDurationMs: preset.totalDurationMs,
-    configuredPulseCount: preset.pulseCount,
-    totalDurationMs: isFlashActive ? preset.totalDurationMs : 0,
-    pulseCount: isFlashActive ? preset.pulseCount : 0,
+    vibrationPatternMs: isFlashActive ? [...resolved.patternMs] : [],
+    configuredPatternMs: resolved.patternMs,
+    patternAttributeValue: resolved.patternAttributeValue,
+    configuredTotalDurationMs: resolved.totalDurationMs,
+    configuredPulseCount: resolved.pulseCount,
+    totalDurationMs: isFlashActive ? resolved.totalDurationMs : 0,
+    pulseCount: isFlashActive ? resolved.pulseCount : 0,
     triggerCount,
     detectedRoomCode,
     shortBadgeLabel,
     statusLabel: isFlashActive
-      ? `Haptic vibration triggered (${preset.label}: ${patternJoined}ms)`
+      ? `Haptic vibration triggered (${resolved.intensityLabel}: ${patternJoined}ms)`
       : isVibrationSupported
-        ? `Mobile haptics ready (${preset.label}: ${patternJoined}ms)`
-        : `Tactile haptics configured (${preset.label}: ${patternJoined}ms)`,
+        ? `Mobile haptics ready (${resolved.intensityLabel}: ${patternJoined}ms)`
+        : `Tactile haptics configured (${resolved.intensityLabel}: ${patternJoined}ms)`,
   };
 }
 
@@ -25928,6 +26158,8 @@ export interface WorkspaceQrHardwareVibrationTriggerResult {
   isSupported: boolean;
   intensity: WorkspaceQrVibrationIntensityLevel;
   intensityLabel: 'Soft' | 'Medium' | 'Strong';
+  patternMode: WorkspaceQrVibrationPatternMode;
+  patternModeLabel: 'Pulse' | 'Continuous';
   patternMs: number[];
   totalDurationMs: number;
   pulseCount: number;
@@ -25936,15 +26168,19 @@ export interface WorkspaceQrHardwareVibrationTriggerResult {
 export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
   navigatorLike?: { vibrate?: (pattern: number | number[]) => boolean } | null;
   intensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  patternMode?: WorkspaceQrVibrationPatternMode | string | null;
   patternMs?: readonly number[];
   enabled?: boolean;
 }): WorkspaceQrHardwareVibrationTriggerResult {
   const enabled = options?.enabled !== false;
-  const preset = resolveWorkspaceQrVibrationIntensityPreset(options?.intensity);
+  const resolved = resolveWorkspaceQrVibrationModePattern({
+    intensity: options?.intensity,
+    patternMode: options?.patternMode,
+  });
   const pattern =
     Array.isArray(options?.patternMs) && options.patternMs.length > 0
       ? options.patternMs.map((n) => Math.max(0, Math.floor(Number(n) || 0)))
-      : [...preset.patternMs];
+      : [...resolved.patternMs];
   const totalDurationMs = pattern.reduce((sum, val) => sum + val, 0);
   const pulseCount = Math.ceil(pattern.length / 2);
 
@@ -25952,8 +26188,10 @@ export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
     return {
       triggered: false,
       isSupported: false,
-      intensity: preset.id,
-      intensityLabel: preset.label,
+      intensity: resolved.intensity,
+      intensityLabel: resolved.intensityLabel,
+      patternMode: resolved.patternMode,
+      patternModeLabel: resolved.patternModeLabel,
       patternMs: [],
       totalDurationMs: 0,
       pulseCount: 0,
@@ -25972,8 +26210,10 @@ export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
     return {
       triggered: false,
       isSupported: false,
-      intensity: preset.id,
-      intensityLabel: preset.label,
+      intensity: resolved.intensity,
+      intensityLabel: resolved.intensityLabel,
+      patternMode: resolved.patternMode,
+      patternModeLabel: resolved.patternModeLabel,
       patternMs: pattern,
       totalDurationMs,
       pulseCount,
@@ -25985,8 +26225,10 @@ export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
     return {
       triggered: didVibrate,
       isSupported: true,
-      intensity: preset.id,
-      intensityLabel: preset.label,
+      intensity: resolved.intensity,
+      intensityLabel: resolved.intensityLabel,
+      patternMode: resolved.patternMode,
+      patternModeLabel: resolved.patternModeLabel,
       patternMs: pattern,
       totalDurationMs,
       pulseCount,
@@ -25995,8 +26237,10 @@ export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
     return {
       triggered: false,
       isSupported: true,
-      intensity: preset.id,
-      intensityLabel: preset.label,
+      intensity: resolved.intensity,
+      intensityLabel: resolved.intensityLabel,
+      patternMode: resolved.patternMode,
+      patternModeLabel: resolved.patternModeLabel,
       patternMs: pattern,
       totalDurationMs,
       pulseCount,

@@ -285,6 +285,9 @@ import {
   WORKSPACE_QR_VIBRATION_INTENSITY_STORAGE_KEY,
   WorkspaceQrVibrationIntensityLevel,
   normalizeWorkspaceQrVibrationIntensity,
+  WORKSPACE_QR_VIBRATION_PATTERN_MODE_STORAGE_KEY,
+  WorkspaceQrVibrationPatternMode,
+  normalizeWorkspaceQrVibrationPatternMode,
   evaluateWorkspaceQrVibrationVisualPreviewSpec,
   evaluateEditorialTactileSurfaceSpec,
   sanitizeEditorialUiCopy,
@@ -1126,6 +1129,22 @@ export default function App() {
       return normalizeWorkspaceQrVibrationIntensity(saved);
     } catch {
       return 'medium';
+    }
+  });
+  const [
+    workspaceHeaderQrVibrationPatternMode,
+    setWorkspaceHeaderQrVibrationPatternMode,
+  ] = useState<WorkspaceQrVibrationPatternMode>(() => {
+    try {
+      const saved =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem(
+              WORKSPACE_QR_VIBRATION_PATTERN_MODE_STORAGE_KEY
+            )
+          : null;
+      return normalizeWorkspaceQrVibrationPatternMode(saved);
+    } catch {
+      return 'pulse';
     }
   });
   const [
@@ -4571,6 +4590,7 @@ export default function App() {
     detectionFlashCount: workspaceHeaderQrDetectionFlashCount,
     vibrationTriggerCount: workspaceHeaderQrVibrationCount,
     vibrationIntensity: workspaceHeaderQrVibrationIntensity,
+    vibrationPatternMode: workspaceHeaderQrVibrationPatternMode,
     isVibrationPreviewAnimating: isWorkspaceHeaderQrVibrationPreviewAnimating,
     vibrationPreviewCount: workspaceHeaderQrVibrationPreviewCount,
     generationCount: workspaceHeaderQrGenerationCount,
@@ -4579,17 +4599,23 @@ export default function App() {
   });
 
   const handleTriggerWorkspaceQrVibrationVisualPreview = (
-    overrideIntensity?: WorkspaceQrVibrationIntensityLevel
+    overrideIntensity?: WorkspaceQrVibrationIntensityLevel,
+    overridePatternMode?: WorkspaceQrVibrationPatternMode
   ) => {
     const targetIntensity = normalizeWorkspaceQrVibrationIntensity(
       overrideIntensity ?? workspaceHeaderQrVibrationIntensity
     );
+    const targetPatternMode = normalizeWorkspaceQrVibrationPatternMode(
+      overridePatternMode ?? workspaceHeaderQrVibrationPatternMode
+    );
     const previewSpec = evaluateWorkspaceQrVibrationVisualPreviewSpec({
       intensity: targetIntensity,
+      patternMode: targetPatternMode,
       isPreviewAnimating: true,
     });
     triggerWorkspaceQrDetectionHardwareVibration({
       intensity: targetIntensity,
+      patternMode: targetPatternMode,
     });
     setWorkspaceHeaderQrVibrationCount((c) => c + 1);
     setWorkspaceHeaderQrVibrationPreviewCount((c) => c + 1);
@@ -5167,6 +5193,7 @@ export default function App() {
       fallbackOrigin,
       previousFlashCount: workspaceHeaderQrDetectionFlashCount,
       vibrationIntensity: workspaceHeaderQrVibrationIntensity,
+      vibrationPatternMode: workspaceHeaderQrVibrationPatternMode,
     });
     const parsed = flashSequence.parsedResult;
     if (!flashSequence.detected || !parsed.isValid) {
@@ -5190,6 +5217,7 @@ export default function App() {
     setWorkspaceHeaderQrDetectionFlashCount(flashSequence.nextFlashCount);
     triggerWorkspaceQrDetectionHardwareVibration({
       intensity: workspaceHeaderQrVibrationIntensity,
+      patternMode: workspaceHeaderQrVibrationPatternMode,
     });
     setWorkspaceHeaderQrVibrationCount((c) => c + 1);
     if (workspaceHeaderQrDetectionFlashTimerRef.current !== null) {
@@ -7450,6 +7478,10 @@ export default function App() {
                             workspaceHeaderQrMeta.detectionFlash.vibrationSpec
                               .intensity
                           }
+                          data-vibrate-mode={
+                            workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                              .patternMode
+                          }
                           data-vibrate-pattern={
                             workspaceHeaderQrMeta.detectionFlash.vibrationSpec
                               .patternAttributeValue
@@ -7497,6 +7529,10 @@ export default function App() {
                                   workspaceHeaderQrMeta.detectionFlash
                                     .vibrationSpec.intensity
                                 }
+                                data-mode={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.patternMode
+                                }
                                 aria-hidden="true"
                                 className={`inline-flex items-center justify-center w-4 h-4 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-500 dark:text-emerald-400 shrink-0 ${
                                   workspaceHeaderQrMeta.detectionFlash
@@ -7531,6 +7567,11 @@ export default function App() {
                                 ·{' '}
                                 {
                                   workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.patternModeLabel
+                                }{' '}
+                                ·{' '}
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
                                     .vibrationSpec.configuredTotalDurationMs
                                 }
                                 ms (
@@ -7555,6 +7596,10 @@ export default function App() {
                                 data-intensity={
                                   workspaceHeaderQrMeta.detectionFlash
                                     .vibrationSpec.intensity
+                                }
+                                data-mode={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.patternMode
                                 }
                                 data-pattern={
                                   workspaceHeaderQrMeta.detectionFlash
@@ -7624,8 +7669,86 @@ export default function App() {
                             {
                               workspaceHeaderQrMeta.detectionFlash.vibrationSpec
                                 .intensityDescription
+                            }{' '}
+                            ·{' '}
+                            {
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .confirmationTypeLabel
                             }
                           </p>
+                          {/* Continuous vs Pulse Vibration Pattern Toggle */}
+                          <div
+                            id={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .modeToggleElementId
+                            }
+                            data-testid={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .modeToggleTestId
+                            }
+                            data-pattern-mode={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .patternMode
+                            }
+                            role="group"
+                            aria-label="Vibration pattern mode: Pulse vs Continuous"
+                            className="flex items-center justify-between gap-2 pt-0.5"
+                          >
+                            <span className="text-[10px] font-medium text-slate-600 dark:text-zinc-400 whitespace-nowrap shrink-0">
+                              Pattern Feel:
+                            </span>
+                            <div className="flex items-center gap-1.5 flex-1">
+                              {workspaceHeaderQrMeta.detectionFlash.vibrationSpec.modeOptions.map(
+                                (modeOpt) => (
+                                  <button
+                                    key={modeOpt.id}
+                                    type="button"
+                                    id={modeOpt.buttonElementId}
+                                    data-testid={modeOpt.buttonTestId}
+                                    data-mode={modeOpt.id}
+                                    data-selected={
+                                      modeOpt.isSelected ? 'true' : 'false'
+                                    }
+                                    aria-pressed={modeOpt.isSelected}
+                                    title={`${modeOpt.label} mode: ${modeOpt.shortDescription}`}
+                                    onClick={() => {
+                                      const normalizedMode =
+                                        normalizeWorkspaceQrVibrationPatternMode(
+                                          modeOpt.id
+                                        );
+                                      setWorkspaceHeaderQrVibrationPatternMode(
+                                        normalizedMode
+                                      );
+                                      try {
+                                        localStorage.setItem(
+                                          WORKSPACE_QR_VIBRATION_PATTERN_MODE_STORAGE_KEY,
+                                          normalizedMode
+                                        );
+                                      } catch {
+                                        // ignore storage write errors
+                                      }
+                                      handleTriggerWorkspaceQrVibrationVisualPreview(
+                                        undefined,
+                                        normalizedMode
+                                      );
+                                    }}
+                                    className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded border text-[10px] font-mono transition-colors cursor-pointer whitespace-nowrap ${
+                                      modeOpt.isSelected
+                                        ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-700 dark:text-emerald-300 font-bold'
+                                        : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200 text-slate-600 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:border-zinc-800 dark:text-zinc-400 font-medium'
+                                    }`}
+                                  >
+                                    <span>{modeOpt.label}</span>
+                                    <span className="text-[9px] opacity-75">
+                                      {modeOpt.id === 'pulse'
+                                        ? '(Multi-tap)'
+                                        : '(Single hold)'}
+                                    </span>
+                                  </button>
+                                )
+                              )}
+                            </div>
+                          </div>
                           <div className="flex items-center gap-1.5 pt-0.5">
                             {workspaceHeaderQrMeta.detectionFlash.vibrationSpec.options.map(
                               (opt) => (
@@ -7690,6 +7813,10 @@ export default function App() {
                               workspaceHeaderQrMeta.detectionFlash.vibrationSpec
                                 .intensity
                             }
+                            data-mode={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .patternMode
+                            }
                             data-pattern={
                               workspaceHeaderQrMeta.detectionFlash.vibrationSpec
                                 .patternAttributeValue
@@ -7715,8 +7842,8 @@ export default function App() {
                                 ? 'true'
                                 : 'false'
                             }
-                            aria-label={`Preview ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.intensityLabel.toLowerCase()} vibration pattern (${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.totalPatternLengthMs}ms length)`}
-                            title={`Trigger ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.intensityLabel} device vibration (${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.patternCadenceLabel} · ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.totalPatternLengthMs}ms total length)`}
+                            aria-label={`Preview ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.intensityLabel.toLowerCase()} ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.patternMode} vibration pattern (${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.totalPatternLengthMs}ms length)`}
+                            title={`Trigger ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.intensityLabel} ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.patternModeLabel} device vibration (${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.patternCadenceLabel} · ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.totalPatternLengthMs}ms total length)`}
                             onClick={() =>
                               handleTriggerWorkspaceQrVibrationVisualPreview()
                             }
@@ -7757,6 +7884,10 @@ export default function App() {
                                   workspaceHeaderQrMeta.detectionFlash
                                     .vibrationSpec.intensity
                                 }
+                                data-mode={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.patternMode
+                                }
                                 data-pattern-length-ms={String(
                                   workspaceHeaderQrMeta.detectionFlash
                                     .vibrationSpec.visualPreview
@@ -7788,94 +7919,137 @@ export default function App() {
                                   className="w-6 h-3"
                                 >
                                   {workspaceHeaderQrMeta.detectionFlash.vibrationSpec
-                                    .intensity === 'soft' && (
+                                    .patternMode === 'continuous' ? (
                                     <>
                                       <rect
                                         x="2"
-                                        y="3.5"
-                                        width="4"
-                                        height="5"
-                                        rx="1"
-                                        fill="currentColor"
-                                      />
-                                      <rect
-                                        x="8"
-                                        y="2.5"
-                                        width="5"
-                                        height="7"
-                                        rx="1"
-                                        fill="currentColor"
-                                      />
-                                      <line
-                                        x1="15"
-                                        y1="6"
-                                        x2="26"
-                                        y2="6"
-                                        stroke="currentColor"
-                                        strokeOpacity="0.3"
-                                        strokeWidth="1.2"
-                                        strokeDasharray="2 2"
-                                      />
-                                    </>
-                                  )}
-                                  {workspaceHeaderQrMeta.detectionFlash.vibrationSpec
-                                    .intensity === 'medium' && (
-                                    <>
-                                      <rect
-                                        x="2"
-                                        y="2.5"
-                                        width="6.5"
-                                        height="7"
-                                        rx="1"
-                                        fill="currentColor"
-                                      />
-                                      <rect
-                                        x="11"
-                                        y="1.5"
-                                        width="8"
-                                        height="9"
-                                        rx="1"
-                                        fill="currentColor"
-                                      />
-                                      <line
-                                        x1="21"
-                                        y1="6"
-                                        x2="26"
-                                        y2="6"
-                                        stroke="currentColor"
-                                        strokeOpacity="0.3"
-                                        strokeWidth="1.2"
-                                        strokeDasharray="2 2"
-                                      />
-                                    </>
-                                  )}
-                                  {workspaceHeaderQrMeta.detectionFlash.vibrationSpec
-                                    .intensity === 'strong' && (
-                                    <>
-                                      <rect
-                                        x="1.5"
                                         y="2"
-                                        width="6.5"
+                                        width={
+                                          workspaceHeaderQrMeta.detectionFlash
+                                            .vibrationSpec.intensity === 'soft'
+                                            ? '9'
+                                            : workspaceHeaderQrMeta.detectionFlash
+                                                  .vibrationSpec.intensity ===
+                                                'strong'
+                                              ? '24'
+                                              : '16'
+                                        }
                                         height="8"
-                                        rx="1"
+                                        rx="1.5"
                                         fill="currentColor"
                                       />
-                                      <rect
-                                        x="10"
-                                        y="1"
-                                        width="8"
-                                        height="10"
-                                        rx="1"
-                                        fill="currentColor"
-                                      />
-                                      <rect
-                                        x="20"
-                                        y="2"
-                                        width="6.5"
-                                        height="8"
-                                        rx="1"
-                                        fill="currentColor"
-                                      />
+                                      {workspaceHeaderQrMeta.detectionFlash
+                                        .vibrationSpec.intensity !== 'strong' && (
+                                        <line
+                                          x1={
+                                            workspaceHeaderQrMeta.detectionFlash
+                                              .vibrationSpec.intensity === 'soft'
+                                              ? '13'
+                                              : '20'
+                                          }
+                                          y1="6"
+                                          x2="26"
+                                          y2="6"
+                                          stroke="currentColor"
+                                          strokeOpacity="0.3"
+                                          strokeWidth="1.2"
+                                          strokeDasharray="2 2"
+                                        />
+                                      )}
+                                    </>
+                                  ) : (
+                                    <>
+                                      {workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                        .intensity === 'soft' && (
+                                        <>
+                                          <rect
+                                            x="2"
+                                            y="3.5"
+                                            width="4"
+                                            height="5"
+                                            rx="1"
+                                            fill="currentColor"
+                                          />
+                                          <rect
+                                            x="8"
+                                            y="2.5"
+                                            width="5"
+                                            height="7"
+                                            rx="1"
+                                            fill="currentColor"
+                                          />
+                                          <line
+                                            x1="15"
+                                            y1="6"
+                                            x2="26"
+                                            y2="6"
+                                            stroke="currentColor"
+                                            strokeOpacity="0.3"
+                                            strokeWidth="1.2"
+                                            strokeDasharray="2 2"
+                                          />
+                                        </>
+                                      )}
+                                      {workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                        .intensity === 'medium' && (
+                                        <>
+                                          <rect
+                                            x="2"
+                                            y="2.5"
+                                            width="6.5"
+                                            height="7"
+                                            rx="1"
+                                            fill="currentColor"
+                                          />
+                                          <rect
+                                            x="11"
+                                            y="1.5"
+                                            width="8"
+                                            height="9"
+                                            rx="1"
+                                            fill="currentColor"
+                                          />
+                                          <line
+                                            x1="21"
+                                            y1="6"
+                                            x2="26"
+                                            y2="6"
+                                            stroke="currentColor"
+                                            strokeOpacity="0.3"
+                                            strokeWidth="1.2"
+                                            strokeDasharray="2 2"
+                                          />
+                                        </>
+                                      )}
+                                      {workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                        .intensity === 'strong' && (
+                                        <>
+                                          <rect
+                                            x="1.5"
+                                            y="2"
+                                            width="6.5"
+                                            height="8"
+                                            rx="1"
+                                            fill="currentColor"
+                                          />
+                                          <rect
+                                            x="10"
+                                            y="1"
+                                            width="8"
+                                            height="10"
+                                            rx="1"
+                                            fill="currentColor"
+                                          />
+                                          <rect
+                                            x="20"
+                                            y="2"
+                                            width="6.5"
+                                            height="8"
+                                            rx="1"
+                                            fill="currentColor"
+                                          />
+                                        </>
+                                      )}
                                     </>
                                   )}
                                 </svg>
