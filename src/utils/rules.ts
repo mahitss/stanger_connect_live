@@ -18270,6 +18270,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   detectionFlashCount?: number;
   vibrationTriggerCount?: number;
   vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  isVibrationPreviewAnimating?: boolean;
+  vibrationPreviewCount?: number;
   isVibrationSupported?: boolean;
   generationCount?: number;
   downloadCount?: number;
@@ -18404,6 +18406,8 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
       vibrationTriggerCount:
         input?.vibrationTriggerCount ?? input?.detectionFlashCount ?? 0,
       vibrationIntensity: input?.vibrationIntensity,
+      isVibrationPreviewAnimating: input?.isVibrationPreviewAnimating,
+      vibrationPreviewCount: input?.vibrationPreviewCount,
       isVibrationSupported: input?.isVibrationSupported,
       detectedRoomCode: lastJoinedWorkspaceRoomCode,
       fallbackRoomCode: roomCode,
@@ -23521,6 +23525,8 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
   flashTriggerCount?: number;
   vibrationTriggerCount?: number;
   vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  isVibrationPreviewAnimating?: boolean;
+  vibrationPreviewCount?: number;
   isVibrationSupported?: boolean;
   detectedRoomCode?: string | null;
   fallbackRoomCode?: string | null;
@@ -23550,6 +23556,8 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
     isFlashActive,
     vibrationTriggerCount,
     vibrationIntensity: input?.vibrationIntensity,
+    isVibrationPreviewAnimating: input?.isVibrationPreviewAnimating,
+    vibrationPreviewCount: input?.vibrationPreviewCount,
     detectedRoomCode: cleanDetectedRoom || fallbackRoom,
     isVibrationSupported: input?.isVibrationSupported,
   });
@@ -25583,6 +25591,99 @@ export interface WorkspaceQrVibrationIntensityOptionSpec
   isSelected: boolean;
 }
 
+export const WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID =
+  'workspace-header-qr-vibration-preview-test-btn' as const;
+export const WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID =
+  'workspace-header-qr-vibration-preview-icon' as const;
+
+export interface WorkspaceQrVibrationVisualPreviewSpec {
+  testButtonElementId: typeof WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID;
+  testButtonTestId: typeof WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID;
+  iconElementId: typeof WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID;
+  iconTestId: typeof WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID;
+  buttonLabel: 'Test';
+  activeButtonLabel: 'Buzzing!';
+  isAnimating: boolean;
+  previewTriggerCount: number;
+  intensity: WorkspaceQrVibrationIntensityLevel;
+  intensityLabel: 'Soft' | 'Medium' | 'Strong';
+  animationName:
+    | 'qrHapticIconPreviewSoft'
+    | 'qrHapticIconPreviewMedium'
+    | 'qrHapticIconPreviewStrong'
+    | 'none';
+  iconAnimationClassName: string;
+  animationDurationMs: 260 | 360 | 480;
+  amplitudePx: 1.5 | 3 | 5;
+  rotationDeg: 6 | 12 | 20;
+  scalePeak: 1.08 | 1.16 | 1.26;
+  patternMs: readonly number[];
+  patternAttributeValue: '20,15,25' | '35,25,45' | '65,30,85,30,65';
+  ariaLabel: string;
+  title: string;
+}
+
+export function evaluateWorkspaceQrVibrationVisualPreviewSpec(input?: {
+  intensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  isPreviewAnimating?: boolean;
+  previewTriggerCount?: number;
+}): WorkspaceQrVibrationVisualPreviewSpec {
+  const preset = resolveWorkspaceQrVibrationIntensityPreset(input?.intensity);
+  const isAnimating = Boolean(input?.isPreviewAnimating);
+  const previewTriggerCount = Math.max(
+    0,
+    Math.floor(Number(input?.previewTriggerCount) || 0)
+  );
+
+  const animationDurationMs: 260 | 360 | 480 =
+    preset.id === 'soft' ? 260 : preset.id === 'strong' ? 480 : 360;
+  const amplitudePx: 1.5 | 3 | 5 =
+    preset.id === 'soft' ? 1.5 : preset.id === 'strong' ? 5 : 3;
+  const rotationDeg: 6 | 12 | 20 =
+    preset.id === 'soft' ? 6 : preset.id === 'strong' ? 20 : 12;
+  const scalePeak: 1.08 | 1.16 | 1.26 =
+    preset.id === 'soft' ? 1.08 : preset.id === 'strong' ? 1.26 : 1.16;
+
+  const animationName = !isAnimating
+    ? 'none'
+    : preset.id === 'soft'
+      ? 'qrHapticIconPreviewSoft'
+      : preset.id === 'strong'
+        ? 'qrHapticIconPreviewStrong'
+        : 'qrHapticIconPreviewMedium';
+
+  const iconAnimationClassName = !isAnimating
+    ? ''
+    : preset.id === 'soft'
+      ? 'qr-haptic-preview-icon-soft'
+      : preset.id === 'strong'
+        ? 'qr-haptic-preview-icon-strong'
+        : 'qr-haptic-preview-icon-medium';
+
+  return {
+    testButtonElementId: WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID,
+    testButtonTestId: WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID,
+    iconElementId: WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID,
+    iconTestId: WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID,
+    buttonLabel: 'Test',
+    activeButtonLabel: 'Buzzing!',
+    isAnimating,
+    previewTriggerCount,
+    intensity: preset.id,
+    intensityLabel: preset.label,
+    animationName,
+    iconAnimationClassName,
+    animationDurationMs,
+    amplitudePx,
+    rotationDeg,
+    scalePeak,
+    patternMs: preset.patternMs,
+    patternAttributeValue: preset.patternAttributeValue,
+    ariaLabel: `Test ${preset.label.toLowerCase()} vibration intensity (${preset.patternAttributeValue}ms)`,
+    title: `Preview ${preset.label} haptic feedback (${preset.totalDurationMs}ms · ${preset.patternAttributeValue}ms)`,
+  };
+}
+
 export interface WorkspaceQrDetectionVibrationSpec {
   viewportCardElementId: typeof WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID;
   viewportCardTestId: typeof WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID;
@@ -25596,6 +25697,7 @@ export interface WorkspaceQrDetectionVibrationSpec {
   intensityLabel: 'Soft' | 'Medium' | 'Strong';
   intensityDescription: string;
   options: WorkspaceQrVibrationIntensityOptionSpec[];
+  visualPreview: WorkspaceQrVibrationVisualPreviewSpec;
   vibrationPatternMs: number[];
   configuredPatternMs: readonly number[];
   patternAttributeValue: '20,15,25' | '35,25,45' | '65,30,85,30,65';
@@ -25613,6 +25715,8 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
   isFlashActive?: boolean;
   vibrationTriggerCount?: number;
   vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  isVibrationPreviewAnimating?: boolean;
+  vibrationPreviewCount?: number;
   detectedRoomCode?: string | null;
   isVibrationSupported?: boolean;
 }): WorkspaceQrDetectionVibrationSpec {
@@ -25638,6 +25742,14 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
       isSelected: level === preset.id,
     }));
 
+  const visualPreview = evaluateWorkspaceQrVibrationVisualPreviewSpec({
+    intensity: preset.id,
+    isPreviewAnimating: Boolean(
+      input?.isVibrationPreviewAnimating || isFlashActive
+    ),
+    previewTriggerCount: input?.vibrationPreviewCount ?? triggerCount,
+  });
+
   const shortBadgeLabel =
     preset.id === 'medium'
       ? isFlashActive
@@ -25662,6 +25774,7 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
     intensityLabel: preset.label,
     intensityDescription: preset.description,
     options,
+    visualPreview,
     vibrationPatternMs: isFlashActive ? [...preset.patternMs] : [],
     configuredPatternMs: preset.patternMs,
     patternAttributeValue: preset.patternAttributeValue,

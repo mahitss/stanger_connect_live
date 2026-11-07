@@ -678,10 +678,92 @@ div.qr-detection-shutter-glint-sweep {
 @media (prefers-reduced-motion: reduce) {
   div.qr-detection-flash-tactile-flicker,
   span.qr-detection-badge-tactile-flicker,
-  div.qr-detection-shutter-glint-sweep {
+  div.qr-detection-shutter-glint-sweep,
+  .qr-haptic-preview-icon-soft,
+  .qr-haptic-preview-icon-medium,
+  .qr-haptic-preview-icon-strong {
     animation-duration: 1ms !important;
   }
 }
+
+@keyframes qrHapticIconPreviewSoft {
+  0%,
+  100% {
+    transform: translateX(0px) rotate(0deg) scale(1);
+  }
+  25% {
+    transform: translateX(-1.5px) rotate(-6deg) scale(1.08);
+  }
+  50% {
+    transform: translateX(1.5px) rotate(6deg) scale(1.06);
+  }
+  75% {
+    transform: translateX(-1px) rotate(-4deg) scale(1.04);
+  }
+}
+
+@keyframes qrHapticIconPreviewMedium {
+  0%,
+  100% {
+    transform: translateX(0px) rotate(0deg) scale(1);
+  }
+  20% {
+    transform: translateX(-3px) rotate(-12deg) scale(1.16);
+  }
+  40% {
+    transform: translateX(3px) rotate(12deg) scale(1.12);
+  }
+  60% {
+    transform: translateX(-2.5px) rotate(-10deg) scale(1.14);
+  }
+  80% {
+    transform: translateX(2px) rotate(8deg) scale(1.06);
+  }
+}
+
+@keyframes qrHapticIconPreviewStrong {
+  0%,
+  100% {
+    transform: translateX(0px) rotate(0deg) scale(1);
+  }
+  15% {
+    transform: translateX(-5px) rotate(-20deg) scale(1.26);
+  }
+  30% {
+    transform: translateX(5px) rotate(20deg) scale(1.22);
+  }
+  45% {
+    transform: translateX(-4.5px) rotate(-18deg) scale(1.25);
+  }
+  60% {
+    transform: translateX(4.5px) rotate(18deg) scale(1.2);
+  }
+  75% {
+    transform: translateX(-3.5px) rotate(-14deg) scale(1.16);
+  }
+  90% {
+    transform: translateX(2.5px) rotate(10deg) scale(1.08);
+  }
+}
+
+.qr-haptic-preview-icon-soft {
+  display: inline-flex;
+  animation: qrHapticIconPreviewSoft 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  will-change: transform;
+}
+
+.qr-haptic-preview-icon-medium {
+  display: inline-flex;
+  animation: qrHapticIconPreviewMedium 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  will-change: transform;
+}
+
+.qr-haptic-preview-icon-strong {
+  display: inline-flex;
+  animation: qrHapticIconPreviewStrong 480ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  will-change: transform;
+}
+
 
 
 

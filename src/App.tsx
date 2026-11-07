@@ -285,6 +285,7 @@ import {
   WORKSPACE_QR_VIBRATION_INTENSITY_STORAGE_KEY,
   WorkspaceQrVibrationIntensityLevel,
   normalizeWorkspaceQrVibrationIntensity,
+  evaluateWorkspaceQrVibrationVisualPreviewSpec,
   evaluateEditorialTactileSurfaceSpec,
   sanitizeEditorialUiCopy,
   compactMinimalUiText,
@@ -1127,6 +1128,15 @@ export default function App() {
       return 'medium';
     }
   });
+  const [
+    isWorkspaceHeaderQrVibrationPreviewAnimating,
+    setIsWorkspaceHeaderQrVibrationPreviewAnimating,
+  ] = useState<boolean>(false);
+  const [
+    workspaceHeaderQrVibrationPreviewCount,
+    setWorkspaceHeaderQrVibrationPreviewCount,
+  ] = useState<number>(0);
+  const workspaceHeaderQrVibrationPreviewTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrDetectionFlashTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrScanToastLeadInTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrScanToastTimerRef = useRef<number | null>(null);
@@ -4561,10 +4571,43 @@ export default function App() {
     detectionFlashCount: workspaceHeaderQrDetectionFlashCount,
     vibrationTriggerCount: workspaceHeaderQrVibrationCount,
     vibrationIntensity: workspaceHeaderQrVibrationIntensity,
+    isVibrationPreviewAnimating: isWorkspaceHeaderQrVibrationPreviewAnimating,
+    vibrationPreviewCount: workspaceHeaderQrVibrationPreviewCount,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
   });
+
+  const handleTriggerWorkspaceQrVibrationVisualPreview = (
+    overrideIntensity?: WorkspaceQrVibrationIntensityLevel
+  ) => {
+    const targetIntensity = normalizeWorkspaceQrVibrationIntensity(
+      overrideIntensity ?? workspaceHeaderQrVibrationIntensity
+    );
+    const previewSpec = evaluateWorkspaceQrVibrationVisualPreviewSpec({
+      intensity: targetIntensity,
+      isPreviewAnimating: true,
+    });
+    triggerWorkspaceQrDetectionHardwareVibration({
+      intensity: targetIntensity,
+    });
+    setWorkspaceHeaderQrVibrationCount((c) => c + 1);
+    setWorkspaceHeaderQrVibrationPreviewCount((c) => c + 1);
+    setIsWorkspaceHeaderQrVibrationPreviewAnimating(false);
+    if (workspaceHeaderQrVibrationPreviewTimerRef.current !== null) {
+      window.clearTimeout(workspaceHeaderQrVibrationPreviewTimerRef.current);
+    }
+    window.requestAnimationFrame(() => {
+      setIsWorkspaceHeaderQrVibrationPreviewAnimating(true);
+      workspaceHeaderQrVibrationPreviewTimerRef.current = window.setTimeout(
+        () => {
+          setIsWorkspaceHeaderQrVibrationPreviewAnimating(false);
+          workspaceHeaderQrVibrationPreviewTimerRef.current = null;
+        },
+        previewSpec.animationDurationMs
+      );
+    });
+  };
 
   const handleToggleWorkspaceQrScannerSoundPreference = (
     key: WorkspaceQrSoundSettingKey
@@ -7418,34 +7461,167 @@ export default function App() {
                             workspaceHeaderQrMeta.detectionFlash.vibrationSpec
                               .configuredTotalDurationMs
                           )}
+                          data-preview-animating={
+                            workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                              .visualPreview.isAnimating
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-preview-count={String(
+                            workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                              .visualPreview.previewTriggerCount
+                          )}
                           role="group"
                           aria-label="Hardware vibration intensity for QR scan confirmation"
                           className="flex flex-col gap-1.5 px-2.5 py-2 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50/90 dark:bg-zinc-900/70"
                         >
                           <div className="flex items-center justify-between gap-2 flex-wrap">
                             <div className="flex items-center gap-1.5">
-                              <Zap className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                              <span
+                                id={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.iconElementId
+                                }
+                                data-testid={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.iconTestId
+                                }
+                                data-animating={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.isAnimating
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-animation-name={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.animationName
+                                }
+                                data-intensity={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.intensity
+                                }
+                                aria-hidden="true"
+                                className={`inline-flex items-center justify-center w-4 h-4 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-500 dark:text-emerald-400 shrink-0 ${
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .iconAnimationClassName
+                                }`}
+                              >
+                                <svg
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.6"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="w-3 h-3"
+                                >
+                                  <rect x="5" y="3" width="6" height="10" rx="1.2" />
+                                  <path d="M2.5 5.5C1.8 6.8 1.8 9.2 2.5 10.5" />
+                                  <path d="M13.5 5.5C14.2 6.8 14.2 9.2 13.5 10.5" />
+                                </svg>
+                              </span>
                               <span className="text-[11px] font-bold text-slate-800 dark:text-zinc-100">
                                 Hardware Vibration Intensity
                               </span>
                             </div>
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-mono tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">
-                              {
-                                workspaceHeaderQrMeta.detectionFlash
-                                  .vibrationSpec.intensityLabel
-                              }{' '}
-                              ·{' '}
-                              {
-                                workspaceHeaderQrMeta.detectionFlash
-                                  .vibrationSpec.configuredTotalDurationMs
-                              }
-                              ms (
-                              {
-                                workspaceHeaderQrMeta.detectionFlash
-                                  .vibrationSpec.patternAttributeValue
-                              }
-                              )
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-mono tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.intensityLabel
+                                }{' '}
+                                ·{' '}
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.configuredTotalDurationMs
+                                }
+                                ms (
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.patternAttributeValue
+                                }
+                                )
+                              </span>
+                              <button
+                                type="button"
+                                id={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .testButtonElementId
+                                }
+                                data-testid={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .testButtonTestId
+                                }
+                                data-intensity={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.intensity
+                                }
+                                data-pattern={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.patternAttributeValue
+                                }
+                                data-animating={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.isAnimating
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-preview-count={String(
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .previewTriggerCount
+                                )}
+                                aria-label={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.ariaLabel
+                                }
+                                title={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.title
+                                }
+                                onClick={() =>
+                                  handleTriggerWorkspaceQrVibrationVisualPreview()
+                                }
+                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded border text-[9px] font-mono font-bold transition-colors cursor-pointer ${
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.isAnimating
+                                    ? 'bg-emerald-500/25 border-emerald-500/70 text-emerald-700 dark:text-emerald-300'
+                                    : 'bg-slate-100 hover:bg-emerald-500/15 border-slate-200 hover:border-emerald-500/40 text-slate-700 hover:text-emerald-700 dark:bg-zinc-900 dark:hover:bg-emerald-500/15 dark:border-zinc-800 dark:hover:border-emerald-500/40 dark:text-zinc-300 dark:hover:text-emerald-300'
+                                }`}
+                              >
+                                <svg
+                                  viewBox="0 0 16 16"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.7"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  aria-hidden="true"
+                                  className={`w-2.5 h-2.5 text-emerald-500 dark:text-emerald-400 shrink-0 ${
+                                    workspaceHeaderQrMeta.detectionFlash
+                                      .vibrationSpec.visualPreview
+                                      .iconAnimationClassName
+                                  }`}
+                                >
+                                  <rect x="5" y="3" width="6" height="10" rx="1.2" />
+                                  <path d="M2.5 5.5C1.8 6.8 1.8 9.2 2.5 10.5" />
+                                  <path d="M13.5 5.5C14.2 6.8 14.2 9.2 13.5 10.5" />
+                                </svg>
+                                <span>
+                                  {workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.isAnimating
+                                    ? workspaceHeaderQrMeta.detectionFlash
+                                        .vibrationSpec.visualPreview
+                                        .activeButtonLabel
+                                    : workspaceHeaderQrMeta.detectionFlash
+                                        .vibrationSpec.visualPreview
+                                        .buttonLabel}
+                                </span>
+                              </button>
+                            </div>
                           </div>
                           <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-snug">
                             {
@@ -7483,13 +7659,8 @@ export default function App() {
                                     } catch {
                                       // ignore storage write errors
                                     }
-                                    triggerWorkspaceQrDetectionHardwareVibration(
-                                      {
-                                        intensity: normalized,
-                                      }
-                                    );
-                                    setWorkspaceHeaderQrVibrationCount(
-                                      (c) => c + 1
+                                    handleTriggerWorkspaceQrVibrationVisualPreview(
+                                      normalized
                                     );
                                   }}
                                   className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded border text-[10px] font-mono transition-colors cursor-pointer ${

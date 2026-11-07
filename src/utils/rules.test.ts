@@ -454,6 +454,9 @@ import {
   WORKSPACE_QR_VIBRATION_INTENSITY_PRESETS,
   normalizeWorkspaceQrVibrationIntensity,
   resolveWorkspaceQrVibrationIntensityPreset,
+  WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID,
+  WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID,
+  evaluateWorkspaceQrVibrationVisualPreviewSpec,
   evaluateWorkspaceQrDetectionVibrationSpec,
   triggerWorkspaceQrDetectionHardwareVibration,
 } from './rules.ts';
@@ -10502,6 +10505,102 @@ test('User-configurable hardware vibration intensity setting supports soft, medi
     [65, 30, 85, 30, 65],
   ]);
 });
+
+test('QR vibration intensity visual preview Test button animates haptic feedback icon with intensity-specific keyframes and duration', () => {
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID,
+    'workspace-header-qr-vibration-preview-test-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID,
+    'workspace-header-qr-vibration-preview-icon'
+  );
+
+  // 1. Idle preview state has animation disabled and displays 'Test' button label
+  const idlePreview = evaluateWorkspaceQrVibrationVisualPreviewSpec({
+    intensity: 'medium',
+    isPreviewAnimating: false,
+    previewTriggerCount: 0,
+  });
+  assert.equal(idlePreview.isAnimating, false);
+  assert.equal(idlePreview.buttonLabel, 'Test');
+  assert.equal(idlePreview.activeButtonLabel, 'Buzzing!');
+  assert.equal(idlePreview.animationName, 'none');
+  assert.equal(idlePreview.iconAnimationClassName, '');
+  assert.equal(idlePreview.animationDurationMs, 360);
+
+  // 2. Soft active preview uses gentle 260ms micro-shake animation
+  const softPreview = evaluateWorkspaceQrVibrationVisualPreviewSpec({
+    intensity: 'soft',
+    isPreviewAnimating: true,
+    previewTriggerCount: 1,
+  });
+  assert.equal(softPreview.isAnimating, true);
+  assert.equal(softPreview.intensity, 'soft');
+  assert.equal(softPreview.animationName, 'qrHapticIconPreviewSoft');
+  assert.equal(softPreview.iconAnimationClassName, 'qr-haptic-preview-icon-soft');
+  assert.equal(softPreview.animationDurationMs, 260);
+  assert.equal(softPreview.amplitudePx, 1.5);
+  assert.equal(softPreview.rotationDeg, 6);
+  assert.equal(softPreview.scalePeak, 1.08);
+
+  // 3. Medium active preview uses balanced 360ms double-pulse animation
+  const mediumPreview = evaluateWorkspaceQrVibrationVisualPreviewSpec({
+    intensity: 'medium',
+    isPreviewAnimating: true,
+    previewTriggerCount: 2,
+  });
+  assert.equal(mediumPreview.animationName, 'qrHapticIconPreviewMedium');
+  assert.equal(
+    mediumPreview.iconAnimationClassName,
+    'qr-haptic-preview-icon-medium'
+  );
+  assert.equal(mediumPreview.animationDurationMs, 360);
+  assert.equal(mediumPreview.amplitudePx, 3);
+  assert.equal(mediumPreview.rotationDeg, 12);
+  assert.equal(mediumPreview.scalePeak, 1.16);
+
+  // 4. Strong active preview uses pronounced 480ms triple-pulse animation
+  const strongPreview = evaluateWorkspaceQrVibrationVisualPreviewSpec({
+    intensity: 'strong',
+    isPreviewAnimating: true,
+    previewTriggerCount: 3,
+  });
+  assert.equal(strongPreview.animationName, 'qrHapticIconPreviewStrong');
+  assert.equal(
+    strongPreview.iconAnimationClassName,
+    'qr-haptic-preview-icon-strong'
+  );
+  assert.equal(strongPreview.animationDurationMs, 480);
+  assert.equal(strongPreview.amplitudePx, 5);
+  assert.equal(strongPreview.rotationDeg, 20);
+  assert.equal(strongPreview.scalePeak, 1.26);
+
+  // 5. getWorkspaceHeaderQrCodeMeta wires visualPreview state through detectionFlash.vibrationSpec
+  const qrMeta = getWorkspaceHeaderQrCodeMeta({
+    roomCode: 'STUDY-204',
+    vibrationIntensity: 'strong',
+    isVibrationPreviewAnimating: true,
+    vibrationPreviewCount: 5,
+  });
+  assert.equal(
+    qrMeta.detectionFlash.vibrationSpec.visualPreview.testButtonElementId,
+    'workspace-header-qr-vibration-preview-test-btn'
+  );
+  assert.equal(
+    qrMeta.detectionFlash.vibrationSpec.visualPreview.isAnimating,
+    true
+  );
+  assert.equal(
+    qrMeta.detectionFlash.vibrationSpec.visualPreview.animationName,
+    'qrHapticIconPreviewStrong'
+  );
+  assert.equal(
+    qrMeta.detectionFlash.vibrationSpec.visualPreview.previewTriggerCount,
+    5
+  );
+});
+
 
 
 
