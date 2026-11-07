@@ -224,6 +224,19 @@
           "type": "string",
           "enum": ["public", "connections"]
         },
+        "studyRoomCode": {
+          "type": "string",
+          "description": "Optional Study Room code linked to this moment",
+          "minLength": 1,
+          "maxLength": 24,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "locationTag": {
+          "type": "string",
+          "description": "Optional human-readable location or study space tag",
+          "minLength": 1,
+          "maxLength": 80
+        },
         "createdAt": {
           "type": "string",
           "format": "date-time"

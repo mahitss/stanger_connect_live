@@ -361,6 +361,8 @@ async function startServer() {
       caption: string;
       photoDataUrl: string;
       visibility: 'public' | 'connections';
+      studyRoomCode?: string;
+      locationTag?: string;
       createdAtMs: number;
     }
   >();
@@ -1071,6 +1073,16 @@ async function startServer() {
           }
           const visibility: 'public' | 'connections' =
             rawMoment.visibility === 'connections' ? 'connections' : 'public';
+          const cleanRoomCode = rawMoment.studyRoomCode
+            ? String(rawMoment.studyRoomCode)
+                .trim()
+                .toUpperCase()
+                .replace(/[^A-Z0-9_-]/g, '')
+                .slice(0, 24)
+            : '';
+          const cleanLocationTag = rawMoment.locationTag
+            ? sanitizeSafeText(String(rawMoment.locationTag), 80).trim()
+            : '';
           const momentRecord = {
             id: momentId,
             authorUid: registeredUid,
@@ -1078,6 +1090,8 @@ async function startServer() {
             caption: sanitizeSafeText(rawCaption, 500),
             photoDataUrl,
             visibility,
+            ...(cleanRoomCode ? { studyRoomCode: cleanRoomCode } : {}),
+            ...(cleanLocationTag ? { locationTag: cleanLocationTag } : {}),
             createdAtMs: Number(rawMoment.createdAtMs) || Date.now(),
           };
           liveMoments.set(momentId, momentRecord);

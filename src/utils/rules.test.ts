@@ -418,6 +418,13 @@ import {
   toggleMomentCommentReaction,
   evaluateMomentCommentReactionsSpec,
   resolveMomentCommentReplyingToIndicatorSpec,
+  CURATED_MOMENT_LOCATION_PRESETS,
+  normalizeMomentStudyRoomCode,
+  normalizeMomentLocationTag,
+  resolveMomentRoomAndLocationTagSpec,
+  MOMENT_THREAD_INITIAL_VISIBLE_REPLIES_LIMIT,
+  toggleExpandedDeepReplyThread,
+  evaluateMomentThreadRepliesPaginationSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -9994,3 +10001,110 @@ test('Moment comment replying-to mode indicator resolves active reply author nam
   );
 });
 
+test('Moment optional Study Room Code and Location tag normalizes inputs and resolves active room link status', () => {
+  assert.equal(CURATED_MOMENT_LOCATION_PRESETS.length >= 3, true);
+  assert.equal(normalizeMomentStudyRoomCode('  study-204! '), 'STUDY-204');
+  assert.equal(normalizeMomentStudyRoomCode('   '), null);
+  assert.equal(
+    normalizeMomentLocationTag('  Quiet Library Desk  '),
+    'Quiet Library Desk'
+  );
+  assert.equal(normalizeMomentLocationTag(''), null);
+
+  // 1. Active Study Room + Location Tag
+  const activeRoomSpec = resolveMomentRoomAndLocationTagSpec({
+    momentId: 'mom_301',
+    studyRoomCode: 'study-204',
+    locationTag: 'Quiet Library Desk',
+    activeRoomCodes: ['STUDY-204', 'STUDY-108'],
+    currentActiveStudyRoomCode: 'STUDY-204',
+  });
+  assert.equal(activeRoomSpec.hasAnyTag, true);
+  assert.equal(activeRoomSpec.studyRoomCode, 'STUDY-204');
+  assert.equal(activeRoomSpec.locationTag, 'Quiet Library Desk');
+  assert.equal(activeRoomSpec.isRoomActive, true);
+  assert.equal(activeRoomSpec.canLinkToRoom, true);
+  assert.equal(activeRoomSpec.roomBadgeLabel, 'Active Room · STUDY-204');
+  assert.equal(
+    activeRoomSpec.roomLinkActionLabel,
+    'Join Active Room STUDY-204'
+  );
+  assert.equal(activeRoomSpec.roomLinkTestId, 'moment-room-link-mom_301');
+  assert.equal(
+    activeRoomSpec.locationBadgeTestId,
+    'moment-location-badge-mom_301'
+  );
+
+  // 2. Inactive Study Room only
+  const inactiveRoomSpec = resolveMomentRoomAndLocationTagSpec({
+    momentId: 'mom_302',
+    studyRoomCode: 'ARCH-900',
+    locationTag: null,
+    activeRoomCodes: ['STUDY-204'],
+    currentActiveStudyRoomCode: 'STUDY-204',
+  });
+  assert.equal(inactiveRoomSpec.hasAnyTag, true);
+  assert.equal(inactiveRoomSpec.isRoomActive, false);
+  assert.equal(inactiveRoomSpec.canLinkToRoom, true);
+  assert.equal(inactiveRoomSpec.roomBadgeLabel, 'Room · ARCH-900');
+  assert.equal(inactiveRoomSpec.roomLinkActionLabel, 'Open Room ARCH-900');
+
+  // 3. Location Tag only (no room code)
+  const locationOnlySpec = resolveMomentRoomAndLocationTagSpec({
+    momentId: 'mom_303',
+    studyRoomCode: '',
+    locationTag: 'Campus Commons',
+    activeRoomCodes: ['STUDY-204'],
+  });
+  assert.equal(locationOnlySpec.hasAnyTag, true);
+  assert.equal(locationOnlySpec.studyRoomCode, null);
+  assert.equal(locationOnlySpec.canLinkToRoom, false);
+  assert.equal(locationOnlySpec.locationTag, 'Campus Commons');
+});
+
+test('Moment comment thread pagination truncates threads exceeding 3 replies and exposes View more replies toggle', () => {
+  assert.equal(MOMENT_THREAD_INITIAL_VISIBLE_REPLIES_LIMIT, 3);
+
+  // Thread with 3 replies -> does NOT exceed limit, no 'View more replies' button
+  const threeReplies = ['r1', 'r2', 'r3'];
+  const withinLimit = evaluateMomentThreadRepliesPaginationSpec({
+    threadRootCommentId: 'root_1',
+    nestedReplies: threeReplies,
+    isExpandedAllReplies: false,
+  });
+  assert.equal(withinLimit.exceedsInitialLimit, false);
+  assert.equal(withinLimit.shouldTruncate, false);
+  assert.equal(withinLimit.showToggleMoreButton, false);
+  assert.deepEqual(withinLimit.visibleReplies, ['r1', 'r2', 'r3']);
+  assert.equal(withinLimit.hiddenRepliesCount, 0);
+
+  // Thread with 5 replies (> 3) -> truncates to first 3 and shows 'View more replies (2 more)'
+  const fiveReplies = ['r1', 'r2', 'r3', 'r4', 'r5'];
+  const truncated = evaluateMomentThreadRepliesPaginationSpec({
+    threadRootCommentId: 'root_2',
+    nestedReplies: fiveReplies,
+    isExpandedAllReplies: false,
+  });
+  assert.equal(truncated.exceedsInitialLimit, true);
+  assert.equal(truncated.shouldTruncate, true);
+  assert.equal(truncated.showToggleMoreButton, true);
+  assert.deepEqual(truncated.visibleReplies, ['r1', 'r2', 'r3']);
+  assert.equal(truncated.hiddenRepliesCount, 2);
+  assert.equal(truncated.toggleButtonLabel, 'View more replies (2 more)');
+  assert.equal(truncated.toggleButtonTestId, 'view-more-replies-btn-root_2');
+
+  // Toggle expanded state -> shows all 5 replies and offers 'Show fewer replies'
+  const expandedIds = toggleExpandedDeepReplyThread([], 'root_2');
+  assert.deepEqual(expandedIds, ['root_2']);
+
+  const expanded = evaluateMomentThreadRepliesPaginationSpec({
+    threadRootCommentId: 'root_2',
+    nestedReplies: fiveReplies,
+    isExpandedAllReplies: expandedIds.includes('root_2'),
+  });
+  assert.equal(expanded.shouldTruncate, false);
+  assert.equal(expanded.showToggleMoreButton, true);
+  assert.deepEqual(expanded.visibleReplies, ['r1', 'r2', 'r3', 'r4', 'r5']);
+  assert.equal(expanded.hiddenRepliesCount, 0);
+  assert.equal(expanded.toggleButtonLabel, 'Show fewer replies (2 hidden)');
+});

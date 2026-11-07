@@ -24673,3 +24673,217 @@ export function resolveMomentCommentReplyingToIndicatorSpec(params: {
   };
 }
 
+// ============================================================================
+// MOMENT OPTIONAL STUDY ROOM CODE & LOCATION TAG SPEC
+// ============================================================================
+
+export const CURATED_MOMENT_LOCATION_PRESETS: readonly string[] = [
+  'Quiet Library Desk',
+  'Late-Night Study Nook',
+  'Campus Commons',
+  'Deep Work Sanctuary',
+] as const;
+
+export interface MomentRoomAndLocationTagSpec {
+  momentId: string;
+  hasAnyTag: boolean;
+  studyRoomCode: string | null;
+  locationTag: string | null;
+  isRoomActive: boolean;
+  canLinkToRoom: boolean;
+  roomBadgeLabel: string;
+  locationBadgeLabel: string;
+  combinedSummaryLabel: string;
+  roomLinkActionLabel: string;
+  roomLinkAriaLabel: string;
+  roomLinkTestId: string;
+  locationBadgeTestId: string;
+}
+
+export function normalizeMomentStudyRoomCode(
+  rawRoomCode?: string | null
+): string | null {
+  const cleaned = String(rawRoomCode || '')
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]/g, '')
+    .slice(0, 24);
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+export function normalizeMomentLocationTag(
+  rawLocation?: string | null
+): string | null {
+  const cleaned = sanitizeSafeText(String(rawLocation || ''), 80).trim();
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+export function resolveMomentRoomAndLocationTagSpec(params: {
+  momentId: string;
+  studyRoomCode?: string | null;
+  locationTag?: string | null;
+  activeRoomCodes?: readonly string[];
+  currentActiveStudyRoomCode?: string | null;
+}): MomentRoomAndLocationTagSpec {
+  const cleanMomentId = String(params.momentId || '').trim();
+  const studyRoomCode = normalizeMomentStudyRoomCode(params.studyRoomCode);
+  const locationTag = normalizeMomentLocationTag(params.locationTag);
+  const hasAnyTag = Boolean(studyRoomCode || locationTag);
+
+  const normalizedActiveSet = new Set<string>();
+  const currentActiveNormalized = normalizeMomentStudyRoomCode(
+    params.currentActiveStudyRoomCode
+  );
+  if (currentActiveNormalized) {
+    normalizedActiveSet.add(currentActiveNormalized);
+  }
+  if (Array.isArray(params.activeRoomCodes)) {
+    for (const code of params.activeRoomCodes) {
+      const norm = normalizeMomentStudyRoomCode(code);
+      if (norm) normalizedActiveSet.add(norm);
+    }
+  }
+
+  const isRoomActive = Boolean(
+    studyRoomCode && normalizedActiveSet.has(studyRoomCode)
+  );
+  const canLinkToRoom = Boolean(studyRoomCode);
+
+  const roomBadgeLabel = studyRoomCode
+    ? isRoomActive
+      ? `Active Room · ${studyRoomCode}`
+      : `Room · ${studyRoomCode}`
+    : '';
+  const locationBadgeLabel = locationTag || '';
+
+  const combinedSummaryLabel =
+    studyRoomCode && locationTag
+      ? `${roomBadgeLabel} · ${locationTag}`
+      : studyRoomCode
+      ? roomBadgeLabel
+      : locationTag || '';
+
+  const roomLinkActionLabel = studyRoomCode
+    ? isRoomActive
+      ? `Join Active Room ${studyRoomCode}`
+      : `Open Room ${studyRoomCode}`
+    : '';
+
+  const roomLinkAriaLabel = studyRoomCode
+    ? isRoomActive
+      ? `Join active study room ${studyRoomCode}${
+          locationTag ? ` at ${locationTag}` : ''
+        }`
+      : `Open study room ${studyRoomCode}${
+          locationTag ? ` at ${locationTag}` : ''
+        }`
+    : '';
+
+  return {
+    momentId: cleanMomentId,
+    hasAnyTag,
+    studyRoomCode,
+    locationTag,
+    isRoomActive,
+    canLinkToRoom,
+    roomBadgeLabel,
+    locationBadgeLabel,
+    combinedSummaryLabel,
+    roomLinkActionLabel,
+    roomLinkAriaLabel,
+    roomLinkTestId: `moment-room-link-${cleanMomentId}`,
+    locationBadgeTestId: `moment-location-badge-${cleanMomentId}`,
+  };
+}
+
+// ============================================================================
+// MOMENT COMMENT THREAD 'VIEW MORE REPLIES' PAGINATION (> 3 REPLIES)
+// ============================================================================
+
+export const MOMENT_THREAD_INITIAL_VISIBLE_REPLIES_LIMIT = 3;
+
+export interface MomentThreadRepliesPaginationSpec<T> {
+  threadRootCommentId: string;
+  totalRepliesCount: number;
+  maxInitialVisible: number;
+  exceedsInitialLimit: boolean;
+  isExpandedAllReplies: boolean;
+  shouldTruncate: boolean;
+  visibleReplies: T[];
+  hiddenRepliesCount: number;
+  showToggleMoreButton: boolean;
+  toggleButtonLabel: string;
+  toggleButtonAriaLabel: string;
+  toggleButtonTestId: string;
+}
+
+export function toggleExpandedDeepReplyThread(
+  expandedThreadIds: readonly string[],
+  threadRootCommentId: string
+): string[] {
+  const cleanId = String(threadRootCommentId || '').trim();
+  if (!cleanId) return [...expandedThreadIds];
+  if (expandedThreadIds.includes(cleanId)) {
+    return expandedThreadIds.filter((id) => id !== cleanId);
+  }
+  return [...expandedThreadIds, cleanId];
+}
+
+export function evaluateMomentThreadRepliesPaginationSpec<T>(params: {
+  threadRootCommentId: string;
+  nestedReplies: readonly T[];
+  isExpandedAllReplies: boolean;
+  isSearchActive?: boolean;
+  maxInitialVisible?: number;
+}): MomentThreadRepliesPaginationSpec<T> {
+  const cleanRootId = String(params.threadRootCommentId || '').trim();
+  const maxInitialVisible = Math.max(
+    1,
+    Math.floor(
+      Number(params.maxInitialVisible) ||
+        MOMENT_THREAD_INITIAL_VISIBLE_REPLIES_LIMIT
+    )
+  );
+  const allReplies = Array.isArray(params.nestedReplies)
+    ? [...params.nestedReplies]
+    : [];
+  const totalRepliesCount = allReplies.length;
+  const exceedsInitialLimit = totalRepliesCount > maxInitialVisible;
+  const isSearchActive = Boolean(params.isSearchActive);
+  const isExpandedAllReplies = Boolean(params.isExpandedAllReplies);
+
+  const shouldTruncate =
+    exceedsInitialLimit && !isExpandedAllReplies && !isSearchActive;
+  const visibleReplies = shouldTruncate
+    ? allReplies.slice(0, maxInitialVisible)
+    : allReplies;
+  const hiddenRepliesCount = shouldTruncate
+    ? Math.max(0, totalRepliesCount - visibleReplies.length)
+    : 0;
+  const showToggleMoreButton = exceedsInitialLimit && !isSearchActive;
+
+  const toggleButtonLabel = shouldTruncate
+    ? `View more replies (${hiddenRepliesCount} more)`
+    : `Show fewer replies (${totalRepliesCount - maxInitialVisible} hidden)`;
+
+  const toggleButtonAriaLabel = shouldTruncate
+    ? `View more replies (${hiddenRepliesCount} additional ${
+        hiddenRepliesCount === 1 ? 'reply' : 'replies'
+      } in this thread)`
+    : `Show fewer replies (collapse to first ${maxInitialVisible} replies)`;
+
+  return {
+    threadRootCommentId: cleanRootId,
+    totalRepliesCount,
+    maxInitialVisible,
+    exceedsInitialLimit,
+    isExpandedAllReplies,
+    shouldTruncate,
+    visibleReplies,
+    hiddenRepliesCount,
+    showToggleMoreButton,
+    toggleButtonLabel,
+    toggleButtonAriaLabel,
+    toggleButtonTestId: `view-more-replies-btn-${cleanRootId}`,
+  };
+}

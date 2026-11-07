@@ -61,6 +61,11 @@ import {
   toggleMomentCommentReaction,
   evaluateMomentCommentReactionsSpec,
   resolveMomentCommentReplyingToIndicatorSpec,
+  CURATED_MOMENT_LOCATION_PRESETS,
+  normalizeMomentStudyRoomCode,
+  resolveMomentRoomAndLocationTagSpec,
+  toggleExpandedDeepReplyThread,
+  evaluateMomentThreadRepliesPaginationSpec,
 } from '../utils/rules';
 import type { OnlinePeer } from '../../server';
 
@@ -71,6 +76,8 @@ export interface TwitterMomentPost {
   caption: string;
   photoDataUrl: string;
   visibility: 'public' | 'connections';
+  studyRoomCode?: string;
+  locationTag?: string;
   createdAtMs?: number;
 }
 
@@ -91,6 +98,13 @@ interface TwitterSocialSectionProps {
   setMomentFilter: (filter: TwitterFeedFilter) => void;
   momentCaption: string;
   setMomentCaption: (caption: string) => void;
+  momentStudyRoomCode?: string;
+  setMomentStudyRoomCode?: (roomCode: string) => void;
+  momentLocationTag?: string;
+  setMomentLocationTag?: (location: string) => void;
+  activeStudyRoomCode?: string;
+  activeRoomCodes?: string[];
+  onNavigateToStudyRoom?: (roomCode: string) => void;
   momentPhotoDataUrl: string;
   setMomentPhotoDataUrl: (url: string) => void;
   selectedMomentPlaceholderId: string | null;
@@ -153,6 +167,13 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
   setMomentFilter,
   momentCaption,
   setMomentCaption,
+  momentStudyRoomCode = '',
+  setMomentStudyRoomCode,
+  momentLocationTag = '',
+  setMomentLocationTag,
+  activeStudyRoomCode = 'STUDY-204',
+  activeRoomCodes = [],
+  onNavigateToStudyRoom,
   momentPhotoDataUrl,
   setMomentPhotoDataUrl,
   selectedMomentPlaceholderId,
@@ -216,6 +237,9 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
   const [commentSearchQueriesByMoment, setCommentSearchQueriesByMoment] = useState<
     Record<string, string>
   >({});
+  const [expandedDeepReplyThreadIds, setExpandedDeepReplyThreadIds] = useState<
+    string[]
+  >([]);
   const [commentReactionsByCommentId, setCommentReactionsByCommentId] =
     useState<MomentCommentReactionsByCommentMap>(() => {
       try {
@@ -1015,6 +1039,130 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                   )}
                 </div>
 
+                {/* Optional Study Room Code & Location Tag Section */}
+                <div
+                  data-testid="moment-room-location-fields"
+                  className="p-3 rounded-xl bg-[#050505] border border-zinc-800/80 space-y-2.5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-zinc-200">
+                      Study Room Code &amp; Location Tag (Optional)
+                    </span>
+                    {activeStudyRoomCode && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setMomentStudyRoomCode?.(
+                            normalizeMomentStudyRoomCode(activeStudyRoomCode) ||
+                              activeStudyRoomCode
+                          )
+                        }
+                        data-testid="moment-attach-active-room-btn"
+                        className="px-2.5 py-0.5 rounded-full text-[11px] font-mono bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 transition-colors whitespace-nowrap"
+                      >
+                        + Attach Active Room ({activeStudyRoomCode})
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="moment-study-room-code-input"
+                        className="block text-[11px] font-mono text-zinc-400"
+                      >
+                        Study Room Code (Links to Room)
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          id="moment-study-room-code-input"
+                          type="text"
+                          maxLength={24}
+                          value={momentStudyRoomCode}
+                          onChange={(e) =>
+                            setMomentStudyRoomCode?.(
+                              e.target.value.toUpperCase()
+                            )
+                          }
+                          placeholder={`e.g. ${activeStudyRoomCode || 'STUDY-204'}`}
+                          aria-label="Optional Study Room Code to link with this moment"
+                          data-testid="moment-study-room-code-input"
+                          className="flex-1 min-w-0 px-3 py-1.5 text-xs font-mono bg-[#0A0A0C] border border-zinc-800 rounded-lg text-white placeholder:text-zinc-600 focus:outline-none focus:border-emerald-500/70"
+                        />
+                        {momentStudyRoomCode && (
+                          <button
+                            type="button"
+                            onClick={() => setMomentStudyRoomCode?.('')}
+                            aria-label="Clear Study Room Code"
+                            data-testid="moment-clear-room-code-btn"
+                            className="px-2 py-1.5 text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-lg shrink-0"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label
+                        htmlFor="moment-location-tag-input"
+                        className="block text-[11px] font-mono text-zinc-400"
+                      >
+                        Location / Study Space Tag
+                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          id="moment-location-tag-input"
+                          type="text"
+                          maxLength={80}
+                          value={momentLocationTag}
+                          onChange={(e) =>
+                            setMomentLocationTag?.(e.target.value)
+                          }
+                          placeholder="e.g. Quiet Library Desk"
+                          aria-label="Optional Location tag for this moment"
+                          data-testid="moment-location-tag-input"
+                          className="flex-1 min-w-0 px-3 py-1.5 text-xs bg-[#0A0A0C] border border-zinc-800 rounded-lg text-white placeholder:text-zinc-600 focus:outline-none focus:border-sky-500/70"
+                        />
+                        {momentLocationTag && (
+                          <button
+                            type="button"
+                            onClick={() => setMomentLocationTag?.('')}
+                            aria-label="Clear Location Tag"
+                            data-testid="moment-clear-location-tag-btn"
+                            className="px-2 py-1.5 text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-zinc-300 border border-zinc-800 rounded-lg shrink-0"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      Quick locations:
+                    </span>
+                    {CURATED_MOMENT_LOCATION_PRESETS.map((locPreset) => (
+                      <button
+                        key={locPreset}
+                        type="button"
+                        onClick={() => setMomentLocationTag?.(locPreset)}
+                        data-testid={`moment-location-preset-${locPreset
+                          .toLowerCase()
+                          .replace(/[^a-z0-9]+/g, '_')}`}
+                        className={`px-2 py-0.5 rounded-full text-[10px] font-mono border transition-colors ${
+                          momentLocationTag === locPreset
+                            ? 'bg-sky-500/15 border-sky-400/50 text-sky-300 font-semibold'
+                            : 'bg-[#0A0A0C] border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-700'
+                        }`}
+                      >
+                        {locPreset}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Device Photo Upload Input */}
                 <div className="p-3 rounded-xl bg-[#050505] border border-zinc-800/80 space-y-2">
                   <label
@@ -1360,6 +1508,77 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                     >
                       {renderTweetTextWithHashtags(item.caption)}
                     </p>
+
+                    {/* Optional Linked Study Room Code & Location Tag Banner */}
+                    {(() => {
+                      const roomLocationSpec =
+                        resolveMomentRoomAndLocationTagSpec({
+                          momentId: item.id,
+                          studyRoomCode: item.studyRoomCode,
+                          locationTag: item.locationTag,
+                          activeRoomCodes,
+                          currentActiveStudyRoomCode: activeStudyRoomCode,
+                        });
+                      if (!roomLocationSpec.hasAnyTag) return null;
+                      return (
+                        <div
+                          data-testid={`moment-room-location-row-${item.id}`}
+                          className="flex flex-wrap items-center gap-2 pl-0 sm:pl-13"
+                        >
+                          {roomLocationSpec.canLinkToRoom &&
+                            roomLocationSpec.studyRoomCode && (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onNavigateToStudyRoom?.(
+                                    roomLocationSpec.studyRoomCode!
+                                  )
+                                }
+                                aria-label={roomLocationSpec.roomLinkAriaLabel}
+                                data-testid={roomLocationSpec.roomLinkTestId}
+                                data-room-code={roomLocationSpec.studyRoomCode}
+                                data-room-active={
+                                  roomLocationSpec.isRoomActive
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono border transition-colors ${
+                                  roomLocationSpec.isRoomActive
+                                    ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-400/50 text-emerald-300 font-semibold'
+                                    : 'bg-sky-500/15 hover:bg-sky-500/25 border-sky-400/40 text-sky-300'
+                                }`}
+                              >
+                                <span
+                                  aria-hidden="true"
+                                  className={`w-1.5 h-1.5 rounded-full ${
+                                    roomLocationSpec.isRoomActive
+                                      ? 'bg-emerald-400'
+                                      : 'bg-sky-400'
+                                  }`}
+                                />
+                                <span>{roomLocationSpec.roomBadgeLabel}</span>
+                                <span className="text-[10px] underline underline-offset-2 opacity-90">
+                                  {roomLocationSpec.isRoomActive
+                                    ? 'Join Room →'
+                                    : 'Open Room →'}
+                                </span>
+                              </button>
+                            )}
+                          {roomLocationSpec.locationTag && (
+                            <span
+                              data-testid={roomLocationSpec.locationBadgeTestId}
+                              data-location-tag={roomLocationSpec.locationTag}
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[#050505] border border-zinc-800 text-xs font-mono text-zinc-300"
+                            >
+                              <span aria-hidden="true" className="text-amber-400">
+                                ⌖
+                              </span>
+                              <span>{roomLocationSpec.locationTag}</span>
+                            </span>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* Attached Media Image with Full-Screen Lightbox Zoom */}
                     <div className="pl-0 sm:pl-13">
@@ -2128,33 +2347,120 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
                                               group
                                             )}
 
-                                            {group.totalRepliesCount > 0 && (
-                                              <div
-                                                id={`moment-comment-thread-replies-${rootCmt.id}`}
-                                                data-testid={`moment-comment-thread-replies-${rootCmt.id}`}
-                                                data-thread-state={threadAnim.state}
-                                                aria-hidden={group.isCollapsed}
-                                                className={threadAnim.wrapperClassName}
-                                              >
-                                                <div
-                                                  className={`${threadAnim.innerContainerClassName} min-h-0 overflow-hidden space-y-2 pt-0.5`}
-                                                >
-                                                  {group.nestedReplies.map(
-                                                    (replyItem, replyIdx) => {
-                                                      const replyAnim =
-                                                        getNestedThreadAnimationState(
-                                                          group.isCollapsed,
-                                                          replyIdx
-                                                        );
-                                                      return renderThreadedCommentNode(
-                                                        replyItem,
-                                                        replyAnim
-                                                      );
+                                            {group.totalRepliesCount > 0 &&
+                                              (() => {
+                                                const repliesPaginationSpec =
+                                                  evaluateMomentThreadRepliesPaginationSpec(
+                                                    {
+                                                      threadRootCommentId:
+                                                        rootCmt.id,
+                                                      nestedReplies:
+                                                        group.nestedReplies,
+                                                      isExpandedAllReplies:
+                                                        expandedDeepReplyThreadIds.includes(
+                                                          rootCmt.id
+                                                        ),
+                                                      isSearchActive:
+                                                        commentSearchResult.isSearchActive,
                                                     }
-                                                  )}
-                                                </div>
-                                              </div>
-                                            )}
+                                                  );
+                                                return (
+                                                  <div
+                                                    id={`moment-comment-thread-replies-${rootCmt.id}`}
+                                                    data-testid={`moment-comment-thread-replies-${rootCmt.id}`}
+                                                    data-thread-state={
+                                                      threadAnim.state
+                                                    }
+                                                    data-total-replies={
+                                                      repliesPaginationSpec.totalRepliesCount
+                                                    }
+                                                    data-visible-replies={
+                                                      repliesPaginationSpec
+                                                        .visibleReplies.length
+                                                    }
+                                                    data-hidden-replies={
+                                                      repliesPaginationSpec.hiddenRepliesCount
+                                                    }
+                                                    aria-hidden={
+                                                      group.isCollapsed
+                                                    }
+                                                    className={
+                                                      threadAnim.wrapperClassName
+                                                    }
+                                                  >
+                                                    <div
+                                                      className={`${threadAnim.innerContainerClassName} min-h-0 overflow-hidden space-y-2 pt-0.5`}
+                                                    >
+                                                      {repliesPaginationSpec.visibleReplies.map(
+                                                        (
+                                                          replyItem,
+                                                          replyIdx
+                                                        ) => {
+                                                          const replyAnim =
+                                                            getNestedThreadAnimationState(
+                                                              group.isCollapsed,
+                                                              replyIdx
+                                                            );
+                                                          return renderThreadedCommentNode(
+                                                            replyItem,
+                                                            replyAnim
+                                                          );
+                                                        }
+                                                      )}
+                                                      {repliesPaginationSpec.showToggleMoreButton && (
+                                                        <div className="ml-6 sm:ml-8 pt-0.5">
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => {
+                                                              triggerMomentCommentsListTransition(
+                                                                item.id,
+                                                                rootCmt.id,
+                                                                repliesPaginationSpec.isExpandedAllReplies
+                                                                  ? 'collapse'
+                                                                  : 'expand'
+                                                              );
+                                                              setExpandedDeepReplyThreadIds(
+                                                                (prev) =>
+                                                                  toggleExpandedDeepReplyThread(
+                                                                    prev,
+                                                                    rootCmt.id
+                                                                  )
+                                                              );
+                                                            }}
+                                                            aria-expanded={
+                                                              repliesPaginationSpec.isExpandedAllReplies
+                                                            }
+                                                            aria-label={
+                                                              repliesPaginationSpec.toggleButtonAriaLabel
+                                                            }
+                                                            data-testid={
+                                                              repliesPaginationSpec.toggleButtonTestId
+                                                            }
+                                                            data-thread-id={
+                                                              rootCmt.id
+                                                            }
+                                                            data-hidden-replies-count={
+                                                              repliesPaginationSpec.hiddenRepliesCount
+                                                            }
+                                                            data-deep-replies-expanded={
+                                                              repliesPaginationSpec.isExpandedAllReplies
+                                                                ? 'true'
+                                                                : 'false'
+                                                            }
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-sky-500/10 hover:bg-sky-500/20 border border-sky-400/40 text-[11px] font-mono text-sky-300 hover:text-sky-200 transition-colors"
+                                                          >
+                                                            <span>
+                                                              {
+                                                                repliesPaginationSpec.toggleButtonLabel
+                                                              }
+                                                            </span>
+                                                          </button>
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })()}
                                           </div>
                                         );
                                       })}

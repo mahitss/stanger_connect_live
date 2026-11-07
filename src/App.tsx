@@ -292,6 +292,8 @@ import {
   CozySanctuaryHubTab,
   normalizeCozySanctuaryHubTab,
   buildCozySanctuaryHubLayoutSpec,
+  normalizeMomentStudyRoomCode,
+  normalizeMomentLocationTag,
 } from './utils/rules';
 import {
   CurvedTextArc,
@@ -356,6 +358,8 @@ interface MomentPostDoc {
   caption: string;
   photoDataUrl: string;
   visibility: 'public' | 'connections';
+  studyRoomCode?: string;
+  locationTag?: string;
   createdAtMs?: number;
 }
 
@@ -625,6 +629,8 @@ export default function App() {
   const [chatError, setChatError] = useState('');
 
   const [momentCaption, setMomentCaption] = useState('');
+  const [momentStudyRoomCode, setMomentStudyRoomCode] = useState('');
+  const [momentLocationTag, setMomentLocationTag] = useState('');
   const [momentPhotoDataUrl, setMomentPhotoDataUrl] = useState('');
   const [selectedMomentPlaceholderId, setSelectedMomentPlaceholderId] = useState<
     string | null
@@ -1847,15 +1853,26 @@ export default function App() {
       momentsQ,
       (snap) => {
         const docs = snap.docs
-          .map((d) => ({
-            id: d.id,
-            authorUid: String(d.data().authorUid),
-            authorName: String(d.data().authorName),
-            caption: String(d.data().caption),
-            photoDataUrl: String(d.data().photoDataUrl),
-            visibility: (d.data().visibility as 'public' | 'connections') || 'public',
-            createdAtMs: d.data().createdAt?.toMillis?.() || 0,
-          }))
+          .map((d) => {
+            const data = d.data();
+            const cleanRoom = normalizeMomentStudyRoomCode(
+              data.studyRoomCode ? String(data.studyRoomCode) : null
+            );
+            const cleanLoc = normalizeMomentLocationTag(
+              data.locationTag ? String(data.locationTag) : null
+            );
+            return {
+              id: d.id,
+              authorUid: String(data.authorUid),
+              authorName: String(data.authorName),
+              caption: String(data.caption),
+              photoDataUrl: String(data.photoDataUrl),
+              visibility: (data.visibility as 'public' | 'connections') || 'public',
+              ...(cleanRoom ? { studyRoomCode: cleanRoom } : {}),
+              ...(cleanLoc ? { locationTag: cleanLoc } : {}),
+              createdAtMs: data.createdAt?.toMillis?.() || 0,
+            };
+          })
           .sort((a, b) => b.createdAtMs - a.createdAtMs);
         setMoments(docs);
       },
@@ -2023,6 +2040,12 @@ export default function App() {
               const mergedMap = new Map<string, MomentPostDoc>();
               for (const raw of msg.moments) {
                 if (raw && raw.id && raw.photoDataUrl) {
+                  const cleanRoom = normalizeMomentStudyRoomCode(
+                    raw.studyRoomCode ? String(raw.studyRoomCode) : null
+                  );
+                  const cleanLoc = normalizeMomentLocationTag(
+                    raw.locationTag ? String(raw.locationTag) : null
+                  );
                   mergedMap.set(String(raw.id), {
                     id: String(raw.id),
                     authorUid: String(raw.authorUid || ''),
@@ -2030,6 +2053,8 @@ export default function App() {
                     caption: String(raw.caption || ''),
                     photoDataUrl: String(raw.photoDataUrl),
                     visibility: raw.visibility === 'connections' ? 'connections' : 'public',
+                    ...(cleanRoom ? { studyRoomCode: cleanRoom } : {}),
+                    ...(cleanLoc ? { locationTag: cleanLoc } : {}),
                   });
                 }
               }
@@ -2151,6 +2176,12 @@ export default function App() {
             });
           }
         } else if (msg.type === 'moment:publish' && msg.moment) {
+          const cleanRoom = normalizeMomentStudyRoomCode(
+            msg.moment.studyRoomCode ? String(msg.moment.studyRoomCode) : null
+          );
+          const cleanLoc = normalizeMomentLocationTag(
+            msg.moment.locationTag ? String(msg.moment.locationTag) : null
+          );
           const incomingMoment: MomentPostDoc = {
             id: String(msg.moment.id),
             authorUid: String(msg.moment.authorUid || ''),
@@ -2158,6 +2189,8 @@ export default function App() {
             caption: String(msg.moment.caption || ''),
             photoDataUrl: String(msg.moment.photoDataUrl || ''),
             visibility: msg.moment.visibility === 'connections' ? 'connections' : 'public',
+            ...(cleanRoom ? { studyRoomCode: cleanRoom } : {}),
+            ...(cleanLoc ? { locationTag: cleanLoc } : {}),
           };
           setMoments((prev) => {
             if (prev.some((m) => m.id === incomingMoment.id)) return prev;
@@ -3165,6 +3198,9 @@ export default function App() {
     });
     const finalPhotoData = resolvedImage.photoDataUrl;
 
+    const cleanRoomCode = normalizeMomentStudyRoomCode(momentStudyRoomCode);
+    const cleanLocationTag = normalizeMomentLocationTag(momentLocationTag);
+
     const momentId = `moment_${Date.now()}_${currentIdentity.uid}`;
     const newPost: MomentPostDoc = {
       id: momentId,
@@ -3173,6 +3209,8 @@ export default function App() {
       caption: safeCaption,
       photoDataUrl: finalPhotoData,
       visibility: momentVisibility,
+      ...(cleanRoomCode ? { studyRoomCode: cleanRoomCode } : {}),
+      ...(cleanLocationTag ? { locationTag: cleanLocationTag } : {}),
     };
 
     setMoments((prev) => {
@@ -3181,6 +3219,8 @@ export default function App() {
       return next;
     });
     setMomentCaption('');
+    setMomentStudyRoomCode('');
+    setMomentLocationTag('');
     setMomentPhotoDataUrl('');
     setSelectedMomentPlaceholderId(null);
     awardParticipation(15);
@@ -3205,6 +3245,8 @@ export default function App() {
           caption: newPost.caption,
           photoDataUrl: newPost.photoDataUrl,
           visibility: newPost.visibility,
+          ...(cleanRoomCode ? { studyRoomCode: cleanRoomCode } : {}),
+          ...(cleanLocationTag ? { locationTag: cleanLocationTag } : {}),
           createdAt: serverTimestamp(),
         });
       } catch (err) {
@@ -3226,6 +3268,7 @@ export default function App() {
       visibility: 'public',
     });
 
+    const cleanActiveRoom = normalizeMomentStudyRoomCode(activeStudyRoomCode);
     const momentId = `moment_goal_${Date.now()}_${currentIdentity.uid}`;
     const newPost: MomentPostDoc = {
       id: momentId,
@@ -3234,6 +3277,8 @@ export default function App() {
       caption: summary.caption,
       photoDataUrl: summary.photoDataUrl,
       visibility: summary.visibility,
+      ...(cleanActiveRoom ? { studyRoomCode: cleanActiveRoom } : {}),
+      locationTag: 'Quiet Study Sanctuary',
     };
 
     setMoments((prev) => {
@@ -3277,6 +3322,8 @@ export default function App() {
           caption: newPost.caption,
           photoDataUrl: newPost.photoDataUrl,
           visibility: newPost.visibility,
+          ...(cleanActiveRoom ? { studyRoomCode: cleanActiveRoom } : {}),
+          locationTag: 'Quiet Study Sanctuary',
           createdAt: serverTimestamp(),
         });
       } catch (err) {
@@ -15384,6 +15431,29 @@ export default function App() {
               setMomentFilter={setMomentFilter}
               momentCaption={momentCaption}
               setMomentCaption={setMomentCaption}
+              momentStudyRoomCode={momentStudyRoomCode}
+              setMomentStudyRoomCode={setMomentStudyRoomCode}
+              momentLocationTag={momentLocationTag}
+              setMomentLocationTag={setMomentLocationTag}
+              activeStudyRoomCode={activeStudyRoomCode}
+              activeRoomCodes={Array.from(
+                new Set(
+                  [
+                    activeStudyRoomCode,
+                    ...studyDesks.map((d) => d.roomCode),
+                    ...onlinePeers
+                      .map((p) => p.activeStudyRoomCode || '')
+                      .filter(Boolean),
+                  ].filter(Boolean)
+                )
+              )}
+              onNavigateToStudyRoom={(roomCode: string) => {
+                const clean = normalizeMomentStudyRoomCode(roomCode);
+                if (clean) {
+                  setActiveStudyRoomCode(clean);
+                  setActivePage('study');
+                }
+              }}
               momentPhotoDataUrl={momentPhotoDataUrl}
               setMomentPhotoDataUrl={setMomentPhotoDataUrl}
               selectedMomentPlaceholderId={selectedMomentPlaceholderId}

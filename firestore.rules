@@ -113,7 +113,7 @@ service cloud.firestore {
         'authorUid', 'authorName', 'caption', 'photoDataUrl', 'visibility', 'createdAt'
       ]) &&
       data.keys().hasOnly([
-        'authorUid', 'authorName', 'caption', 'photoDataUrl', 'visibility', 'createdAt'
+        'authorUid', 'authorName', 'caption', 'photoDataUrl', 'visibility', 'studyRoomCode', 'locationTag', 'createdAt'
       ]) &&
       data.authorUid is string && data.authorUid.size() >= 1 && data.authorUid.size() <= 128 && data.authorUid.matches('^[a-zA-Z0-9_\\-]+$') &&
       data.authorUid == request.auth.uid &&
@@ -121,6 +121,8 @@ service cloud.firestore {
       data.caption is string && data.caption.size() >= 1 && data.caption.size() <= 500 &&
       data.photoDataUrl is string && data.photoDataUrl.size() >= 10 && data.photoDataUrl.size() <= 650000 &&
       data.visibility is string && data.visibility.size() <= 16 && (data.visibility == 'public' || data.visibility == 'connections') &&
+      (!('studyRoomCode' in data) || (data.studyRoomCode is string && data.studyRoomCode.size() >= 1 && data.studyRoomCode.size() <= 24 && data.studyRoomCode.matches('^[a-zA-Z0-9_\\-]+$'))) &&
+      (!('locationTag' in data) || (data.locationTag is string && data.locationTag.size() >= 1 && data.locationTag.size() <= 80)) &&
       data.createdAt is timestamp;
     }
 
