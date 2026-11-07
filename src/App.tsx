@@ -4593,20 +4593,17 @@ export default function App() {
     });
     setWorkspaceHeaderQrVibrationCount((c) => c + 1);
     setWorkspaceHeaderQrVibrationPreviewCount((c) => c + 1);
-    setIsWorkspaceHeaderQrVibrationPreviewAnimating(false);
     if (workspaceHeaderQrVibrationPreviewTimerRef.current !== null) {
       window.clearTimeout(workspaceHeaderQrVibrationPreviewTimerRef.current);
     }
-    window.requestAnimationFrame(() => {
-      setIsWorkspaceHeaderQrVibrationPreviewAnimating(true);
-      workspaceHeaderQrVibrationPreviewTimerRef.current = window.setTimeout(
-        () => {
-          setIsWorkspaceHeaderQrVibrationPreviewAnimating(false);
-          workspaceHeaderQrVibrationPreviewTimerRef.current = null;
-        },
-        previewSpec.animationDurationMs
-      );
-    });
+    setIsWorkspaceHeaderQrVibrationPreviewAnimating(true);
+    workspaceHeaderQrVibrationPreviewTimerRef.current = window.setTimeout(
+      () => {
+        setIsWorkspaceHeaderQrVibrationPreviewAnimating(false);
+        workspaceHeaderQrVibrationPreviewTimerRef.current = null;
+      },
+      previewSpec.animationDurationMs
+    );
   };
 
   const handleToggleWorkspaceQrScannerSoundPreference = (
@@ -7677,6 +7674,260 @@ export default function App() {
                               )
                             )}
                           </div>
+                          <button
+                            type="button"
+                            id={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .visualPreview.patternLengthVisualization
+                                .previewButtonElementId
+                            }
+                            data-testid={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .visualPreview.patternLengthVisualization
+                                .previewButtonTestId
+                            }
+                            data-intensity={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .intensity
+                            }
+                            data-pattern={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .patternAttributeValue
+                            }
+                            data-pattern-length-ms={String(
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .visualPreview.patternLengthVisualization
+                                .totalPatternLengthMs
+                            )}
+                            data-pattern-length-ratio-percent={String(
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .visualPreview.patternLengthVisualization
+                                .patternLengthRatioPercent
+                            )}
+                            data-pulse-count={String(
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .visualPreview.patternLengthVisualization
+                                .pulseCount
+                            )}
+                            data-animating={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .visualPreview.isAnimating
+                                ? 'true'
+                                : 'false'
+                            }
+                            aria-label={`Preview ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.intensityLabel.toLowerCase()} vibration pattern (${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.totalPatternLengthMs}ms length)`}
+                            title={`Trigger ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.intensityLabel} device vibration (${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.patternCadenceLabel} · ${workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.totalPatternLengthMs}ms total length)`}
+                            onClick={() =>
+                              handleTriggerWorkspaceQrVibrationVisualPreview()
+                            }
+                            className={`mt-0.5 flex items-center justify-between gap-2 w-full px-2.5 py-1.5 rounded border text-[10px] font-mono transition-colors cursor-pointer ${
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .visualPreview.isAnimating
+                                ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-slate-100/90 hover:bg-emerald-500/10 border-slate-200 hover:border-emerald-500/40 text-slate-700 dark:bg-zinc-900/90 dark:hover:bg-emerald-500/15 dark:border-zinc-800 dark:hover:border-emerald-500/40 dark:text-zinc-200'
+                            }`}
+                          >
+                            <span className="inline-flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                              <span
+                                id={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .patternLengthVisualization
+                                    .patternIconElementId
+                                }
+                                data-testid={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .patternLengthVisualization
+                                    .patternIconTestId
+                                }
+                                data-animating={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview.isAnimating
+                                    ? 'true'
+                                    : 'false'
+                                }
+                                data-animation-name={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .patternLengthVisualization
+                                    .patternIconAnimationName
+                                }
+                                data-intensity={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.intensity
+                                }
+                                data-pattern-length-ms={String(
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .patternLengthVisualization
+                                    .totalPatternLengthMs
+                                )}
+                                data-pattern-length-ratio-percent={String(
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .patternLengthVisualization
+                                    .patternLengthRatioPercent
+                                )}
+                                data-pulse-count={String(
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .patternLengthVisualization.pulseCount
+                                )}
+                                aria-hidden="true"
+                                className={`inline-flex items-center justify-center px-1 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-600 dark:text-emerald-400 shrink-0 ${
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .patternLengthVisualization
+                                    .patternIconAnimationClassName
+                                }`}
+                              >
+                                <svg
+                                  viewBox="0 0 28 12"
+                                  fill="none"
+                                  className="w-6 h-3"
+                                >
+                                  {workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                    .intensity === 'soft' && (
+                                    <>
+                                      <rect
+                                        x="2"
+                                        y="3.5"
+                                        width="4"
+                                        height="5"
+                                        rx="1"
+                                        fill="currentColor"
+                                      />
+                                      <rect
+                                        x="8"
+                                        y="2.5"
+                                        width="5"
+                                        height="7"
+                                        rx="1"
+                                        fill="currentColor"
+                                      />
+                                      <line
+                                        x1="15"
+                                        y1="6"
+                                        x2="26"
+                                        y2="6"
+                                        stroke="currentColor"
+                                        strokeOpacity="0.3"
+                                        strokeWidth="1.2"
+                                        strokeDasharray="2 2"
+                                      />
+                                    </>
+                                  )}
+                                  {workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                    .intensity === 'medium' && (
+                                    <>
+                                      <rect
+                                        x="2"
+                                        y="2.5"
+                                        width="6.5"
+                                        height="7"
+                                        rx="1"
+                                        fill="currentColor"
+                                      />
+                                      <rect
+                                        x="11"
+                                        y="1.5"
+                                        width="8"
+                                        height="9"
+                                        rx="1"
+                                        fill="currentColor"
+                                      />
+                                      <line
+                                        x1="21"
+                                        y1="6"
+                                        x2="26"
+                                        y2="6"
+                                        stroke="currentColor"
+                                        strokeOpacity="0.3"
+                                        strokeWidth="1.2"
+                                        strokeDasharray="2 2"
+                                      />
+                                    </>
+                                  )}
+                                  {workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                    .intensity === 'strong' && (
+                                    <>
+                                      <rect
+                                        x="1.5"
+                                        y="2"
+                                        width="6.5"
+                                        height="8"
+                                        rx="1"
+                                        fill="currentColor"
+                                      />
+                                      <rect
+                                        x="10"
+                                        y="1"
+                                        width="8"
+                                        height="10"
+                                        rx="1"
+                                        fill="currentColor"
+                                      />
+                                      <rect
+                                        x="20"
+                                        y="2"
+                                        width="6.5"
+                                        height="8"
+                                        rx="1"
+                                        fill="currentColor"
+                                      />
+                                    </>
+                                  )}
+                                </svg>
+                              </span>
+                              <span className="font-semibold">
+                                {workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.visualPreview.isAnimating
+                                  ? workspaceHeaderQrMeta.detectionFlash
+                                      .vibrationSpec.visualPreview
+                                      .patternLengthVisualization
+                                      .buttonActiveLabel
+                                  : workspaceHeaderQrMeta.detectionFlash
+                                      .vibrationSpec.visualPreview
+                                      .patternLengthVisualization
+                                      .buttonIdleLabel}
+                              </span>
+                            </span>
+                            <span className="flex items-center gap-1.5 min-w-[84px]">
+                              <span
+                                aria-hidden="true"
+                                className="flex items-center gap-0.5 w-14 h-2 px-0.5 rounded bg-slate-200/80 dark:bg-zinc-800/90 overflow-hidden"
+                              >
+                                {workspaceHeaderQrMeta.detectionFlash.vibrationSpec.visualPreview.patternLengthVisualization.segments.map(
+                                  (seg) => (
+                                    <span
+                                      key={seg.index}
+                                      style={{
+                                        width: `${seg.widthPercentOfMax}%`,
+                                      }}
+                                      className={`h-1.5 rounded-xs transition-opacity ${
+                                        seg.kind === 'pulse'
+                                          ? workspaceHeaderQrMeta
+                                              .detectionFlash.vibrationSpec
+                                              .visualPreview.isAnimating
+                                            ? 'bg-emerald-500 dark:bg-emerald-400 opacity-100'
+                                            : 'bg-emerald-600/75 dark:bg-emerald-400/75 opacity-90'
+                                          : 'bg-transparent'
+                                      }`}
+                                    />
+                                  )
+                                )}
+                              </span>
+                              <span className="text-[9px] tabular-nums opacity-80 whitespace-nowrap">
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.visualPreview
+                                    .patternLengthVisualization
+                                    .patternCadenceLabel
+                                }
+                              </span>
+                            </span>
+                          </button>
                         </div>
 
                         {lastScannedWorkspaceQrResult && (

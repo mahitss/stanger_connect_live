@@ -25595,6 +25595,128 @@ export const WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID =
   'workspace-header-qr-vibration-preview-test-btn' as const;
 export const WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID =
   'workspace-header-qr-vibration-preview-icon' as const;
+export const WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID =
+  'workspace-header-qr-vibration-pattern-preview-btn' as const;
+export const WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID =
+  'workspace-header-qr-vibration-pattern-length-icon' as const;
+export const WORKSPACE_QR_VIBRATION_MAX_PATTERN_LENGTH_MS = 275 as const;
+
+export interface WorkspaceQrVibrationPatternSegmentSpec {
+  index: number;
+  kind: 'pulse' | 'pause';
+  durationMs: number;
+  delayMs: number;
+  widthPercentOfMax: number;
+  relativeSharePercent: number;
+}
+
+export interface WorkspaceQrVibrationPatternLengthVisualizationSpec {
+  previewButtonElementId: typeof WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID;
+  previewButtonTestId: typeof WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID;
+  patternIconElementId: typeof WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID;
+  patternIconTestId: typeof WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID;
+  intensity: WorkspaceQrVibrationIntensityLevel;
+  intensityLabel: 'Soft' | 'Medium' | 'Strong';
+  patternMs: readonly number[];
+  patternAttributeValue: '20,15,25' | '35,25,45' | '65,30,85,30,65';
+  patternCadenceLabel: '20-15-25ms' | '35-25-45ms' | '65-30-85-30-65ms';
+  totalPatternLengthMs: 60 | 105 | 275;
+  maxReferencePatternLengthMs: typeof WORKSPACE_QR_VIBRATION_MAX_PATTERN_LENGTH_MS;
+  patternLengthRatioPercent: 22 | 38 | 100;
+  pulseCount: 2 | 3;
+  isAnimating: boolean;
+  patternIconAnimationName:
+    | 'qrVibrationPatternLengthSoft'
+    | 'qrVibrationPatternLengthMedium'
+    | 'qrVibrationPatternLengthStrong'
+    | 'none';
+  patternIconAnimationClassName: string;
+  visualAnimationDurationMs: 260 | 360 | 480;
+  buttonIdleLabel: string;
+  buttonActiveLabel: string;
+  segments: WorkspaceQrVibrationPatternSegmentSpec[];
+}
+
+export function evaluateWorkspaceQrVibrationPatternLengthSpec(input?: {
+  intensity?: WorkspaceQrVibrationIntensityLevel | string | null;
+  isPreviewAnimating?: boolean;
+}): WorkspaceQrVibrationPatternLengthVisualizationSpec {
+  const preset = resolveWorkspaceQrVibrationIntensityPreset(input?.intensity);
+  const isAnimating = Boolean(input?.isPreviewAnimating);
+  const visualAnimationDurationMs: 260 | 360 | 480 =
+    preset.id === 'soft' ? 260 : preset.id === 'strong' ? 480 : 360;
+  const patternLengthRatioPercent: 22 | 38 | 100 =
+    preset.id === 'soft' ? 22 : preset.id === 'strong' ? 100 : 38;
+  const patternCadenceLabel: '20-15-25ms' | '35-25-45ms' | '65-30-85-30-65ms' =
+    preset.id === 'soft'
+      ? '20-15-25ms'
+      : preset.id === 'strong'
+        ? '65-30-85-30-65ms'
+        : '35-25-45ms';
+
+  const patternIconAnimationName = !isAnimating
+    ? 'none'
+    : preset.id === 'soft'
+      ? 'qrVibrationPatternLengthSoft'
+      : preset.id === 'strong'
+        ? 'qrVibrationPatternLengthStrong'
+        : 'qrVibrationPatternLengthMedium';
+
+  const patternIconAnimationClassName = !isAnimating
+    ? ''
+    : preset.id === 'soft'
+      ? 'qr-vibration-pattern-length-soft'
+      : preset.id === 'strong'
+        ? 'qr-vibration-pattern-length-strong'
+        : 'qr-vibration-pattern-length-medium';
+
+  let elapsedMs = 0;
+  const segments: WorkspaceQrVibrationPatternSegmentSpec[] = preset.patternMs.map(
+    (durationMs, index) => {
+      const delayMs = elapsedMs;
+      elapsedMs += durationMs;
+      return {
+        index,
+        kind: index % 2 === 0 ? 'pulse' : 'pause',
+        durationMs,
+        delayMs,
+        widthPercentOfMax: Math.max(
+          4,
+          Math.round(
+            (durationMs / WORKSPACE_QR_VIBRATION_MAX_PATTERN_LENGTH_MS) * 100
+          )
+        ),
+        relativeSharePercent: Math.max(
+          5,
+          Math.round((durationMs / preset.totalDurationMs) * 100)
+        ),
+      };
+    }
+  );
+
+  return {
+    previewButtonElementId: WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID,
+    previewButtonTestId: WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID,
+    patternIconElementId: WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID,
+    patternIconTestId: WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID,
+    intensity: preset.id,
+    intensityLabel: preset.label,
+    patternMs: preset.patternMs,
+    patternAttributeValue: preset.patternAttributeValue,
+    patternCadenceLabel,
+    totalPatternLengthMs: preset.totalDurationMs,
+    maxReferencePatternLengthMs: WORKSPACE_QR_VIBRATION_MAX_PATTERN_LENGTH_MS,
+    patternLengthRatioPercent,
+    pulseCount: preset.pulseCount,
+    isAnimating,
+    patternIconAnimationName,
+    patternIconAnimationClassName,
+    visualAnimationDurationMs,
+    buttonIdleLabel: `Preview ${preset.label} (${preset.totalDurationMs}ms)`,
+    buttonActiveLabel: `Playing ${preset.totalDurationMs}ms Pattern…`,
+    segments,
+  };
+}
 
 export interface WorkspaceQrVibrationVisualPreviewSpec {
   testButtonElementId: typeof WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID;
@@ -25619,6 +25741,7 @@ export interface WorkspaceQrVibrationVisualPreviewSpec {
   scalePeak: 1.08 | 1.16 | 1.26;
   patternMs: readonly number[];
   patternAttributeValue: '20,15,25' | '35,25,45' | '65,30,85,30,65';
+  patternLengthVisualization: WorkspaceQrVibrationPatternLengthVisualizationSpec;
   ariaLabel: string;
   title: string;
 }
@@ -25660,6 +25783,12 @@ export function evaluateWorkspaceQrVibrationVisualPreviewSpec(input?: {
         ? 'qr-haptic-preview-icon-strong'
         : 'qr-haptic-preview-icon-medium';
 
+  const patternLengthVisualization =
+    evaluateWorkspaceQrVibrationPatternLengthSpec({
+      intensity: preset.id,
+      isPreviewAnimating: isAnimating,
+    });
+
   return {
     testButtonElementId: WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID,
     testButtonTestId: WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID,
@@ -25679,6 +25808,7 @@ export function evaluateWorkspaceQrVibrationVisualPreviewSpec(input?: {
     scalePeak,
     patternMs: preset.patternMs,
     patternAttributeValue: preset.patternAttributeValue,
+    patternLengthVisualization,
     ariaLabel: `Test ${preset.label.toLowerCase()} vibration intensity (${preset.patternAttributeValue}ms)`,
     title: `Preview ${preset.label} haptic feedback (${preset.totalDurationMs}ms · ${preset.patternAttributeValue}ms)`,
   };

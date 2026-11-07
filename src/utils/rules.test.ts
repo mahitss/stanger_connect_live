@@ -456,6 +456,10 @@ import {
   resolveWorkspaceQrVibrationIntensityPreset,
   WORKSPACE_QR_VIBRATION_PREVIEW_TEST_BTN_ID,
   WORKSPACE_QR_VIBRATION_PREVIEW_ICON_ID,
+  WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID,
+  WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID,
+  WORKSPACE_QR_VIBRATION_MAX_PATTERN_LENGTH_MS,
+  evaluateWorkspaceQrVibrationPatternLengthSpec,
   evaluateWorkspaceQrVibrationVisualPreviewSpec,
   evaluateWorkspaceQrDetectionVibrationSpec,
   triggerWorkspaceQrDetectionHardwareVibration,
@@ -10600,6 +10604,86 @@ test('QR vibration intensity visual preview Test button animates haptic feedback
     5
   );
 });
+
+test('QR vibration pattern preview button and dedicated pattern-length icon animation visualize soft (60ms), medium (105ms), and strong (275ms) pattern lengths', () => {
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PATTERN_PREVIEW_BTN_ID,
+    'workspace-header-qr-vibration-pattern-preview-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PATTERN_LENGTH_ICON_ID,
+    'workspace-header-qr-vibration-pattern-length-icon'
+  );
+  assert.equal(WORKSPACE_QR_VIBRATION_MAX_PATTERN_LENGTH_MS, 275);
+
+  // 1. Soft pattern length (60ms = 22% of 275ms max, 3 segments: 20ms pulse, 15ms pause, 25ms pulse)
+  const softLength = evaluateWorkspaceQrVibrationPatternLengthSpec({
+    intensity: 'soft',
+    isPreviewAnimating: true,
+  });
+  assert.equal(softLength.totalPatternLengthMs, 60);
+  assert.equal(softLength.patternLengthRatioPercent, 22);
+  assert.equal(softLength.pulseCount, 2);
+  assert.equal(softLength.patternCadenceLabel, '20-15-25ms');
+  assert.equal(softLength.patternIconAnimationName, 'qrVibrationPatternLengthSoft');
+  assert.equal(
+    softLength.patternIconAnimationClassName,
+    'qr-vibration-pattern-length-soft'
+  );
+  assert.equal(softLength.buttonIdleLabel, 'Preview Soft (60ms)');
+  assert.equal(softLength.buttonActiveLabel, 'Playing 60ms Pattern…');
+  assert.equal(softLength.segments.length, 3);
+  assert.equal(softLength.segments[0]?.kind, 'pulse');
+  assert.equal(softLength.segments[1]?.kind, 'pause');
+  assert.equal(softLength.segments[2]?.kind, 'pulse');
+
+  // 2. Medium pattern length (105ms = 38% of 275ms max, 3 segments: 35ms pulse, 25ms pause, 45ms pulse)
+  const mediumLength = evaluateWorkspaceQrVibrationPatternLengthSpec({
+    intensity: 'medium',
+    isPreviewAnimating: true,
+  });
+  assert.equal(mediumLength.totalPatternLengthMs, 105);
+  assert.equal(mediumLength.patternLengthRatioPercent, 38);
+  assert.equal(mediumLength.pulseCount, 2);
+  assert.equal(mediumLength.patternCadenceLabel, '35-25-45ms');
+  assert.equal(
+    mediumLength.patternIconAnimationName,
+    'qrVibrationPatternLengthMedium'
+  );
+  assert.equal(
+    mediumLength.patternIconAnimationClassName,
+    'qr-vibration-pattern-length-medium'
+  );
+  assert.equal(mediumLength.buttonIdleLabel, 'Preview Medium (105ms)');
+  assert.equal(mediumLength.buttonActiveLabel, 'Playing 105ms Pattern…');
+  assert.equal(mediumLength.segments.length, 3);
+
+  // 3. Strong pattern length (275ms = 100% of 275ms max, 5 segments: 65-30-85-30-65ms, 3 pulses)
+  const strongLength = evaluateWorkspaceQrVibrationPatternLengthSpec({
+    intensity: 'strong',
+    isPreviewAnimating: true,
+  });
+  assert.equal(strongLength.totalPatternLengthMs, 275);
+  assert.equal(strongLength.patternLengthRatioPercent, 100);
+  assert.equal(strongLength.pulseCount, 3);
+  assert.equal(strongLength.patternCadenceLabel, '65-30-85-30-65ms');
+  assert.equal(
+    strongLength.patternIconAnimationName,
+    'qrVibrationPatternLengthStrong'
+  );
+  assert.equal(
+    strongLength.patternIconAnimationClassName,
+    'qr-vibration-pattern-length-strong'
+  );
+  assert.equal(strongLength.buttonIdleLabel, 'Preview Strong (275ms)');
+  assert.equal(strongLength.buttonActiveLabel, 'Playing 275ms Pattern…');
+  assert.equal(strongLength.segments.length, 5);
+  assert.equal(
+    strongLength.segments.filter((s) => s.kind === 'pulse').length,
+    3
+  );
+});
+
 
 
 

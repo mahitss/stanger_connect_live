@@ -681,7 +681,10 @@ div.qr-detection-shutter-glint-sweep {
   div.qr-detection-shutter-glint-sweep,
   .qr-haptic-preview-icon-soft,
   .qr-haptic-preview-icon-medium,
-  .qr-haptic-preview-icon-strong {
+  .qr-haptic-preview-icon-strong,
+  .qr-vibration-pattern-length-soft,
+  .qr-vibration-pattern-length-medium,
+  .qr-vibration-pattern-length-strong {
     animation-duration: 1ms !important;
   }
 }
@@ -746,6 +749,70 @@ div.qr-detection-shutter-glint-sweep {
   }
 }
 
+@keyframes qrVibrationPatternLengthSoft {
+  0%,
+  100% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.92;
+  }
+  30% {
+    transform: scaleX(1.06) scaleY(1.14);
+    opacity: 1;
+  }
+  65% {
+    transform: scaleX(1.04) scaleY(1.1);
+    opacity: 0.98;
+  }
+}
+
+@keyframes qrVibrationPatternLengthMedium {
+  0%,
+  100% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.92;
+  }
+  25% {
+    transform: scaleX(1.1) scaleY(1.22);
+    opacity: 1;
+  }
+  50% {
+    transform: scaleX(0.98) scaleY(0.95);
+    opacity: 0.85;
+  }
+  75% {
+    transform: scaleX(1.12) scaleY(1.24);
+    opacity: 1;
+  }
+}
+
+@keyframes qrVibrationPatternLengthStrong {
+  0%,
+  100% {
+    transform: scaleX(1) scaleY(1);
+    opacity: 0.92;
+  }
+  18% {
+    transform: scaleX(1.14) scaleY(1.3);
+    opacity: 1;
+  }
+  36% {
+    transform: scaleX(0.97) scaleY(0.92);
+    opacity: 0.84;
+  }
+  54% {
+    transform: scaleX(1.18) scaleY(1.34);
+    opacity: 1;
+  }
+  72% {
+    transform: scaleX(0.97) scaleY(0.92);
+    opacity: 0.84;
+  }
+  88% {
+    transform: scaleX(1.14) scaleY(1.28);
+    opacity: 1;
+  }
+}
+
 .qr-haptic-preview-icon-soft {
   display: inline-flex;
   animation: qrHapticIconPreviewSoft 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
@@ -763,6 +830,25 @@ div.qr-detection-shutter-glint-sweep {
   animation: qrHapticIconPreviewStrong 480ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
   will-change: transform;
 }
+
+.qr-vibration-pattern-length-soft {
+  display: inline-flex;
+  animation: qrVibrationPatternLengthSoft 260ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  will-change: transform, opacity;
+}
+
+.qr-vibration-pattern-length-medium {
+  display: inline-flex;
+  animation: qrVibrationPatternLengthMedium 360ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  will-change: transform, opacity;
+}
+
+.qr-vibration-pattern-length-strong {
+  display: inline-flex;
+  animation: qrVibrationPatternLengthStrong 480ms cubic-bezier(0.22, 1, 0.36, 1) forwards !important;
+  will-change: transform, opacity;
+}
+
 
 
 
