@@ -282,6 +282,9 @@ import {
   evaluateDailyFocusGoalReachedToast,
   resolveWorkspaceQrDetectionFlashSequence,
   triggerWorkspaceQrDetectionHardwareVibration,
+  WORKSPACE_QR_VIBRATION_INTENSITY_STORAGE_KEY,
+  WorkspaceQrVibrationIntensityLevel,
+  normalizeWorkspaceQrVibrationIntensity,
   evaluateEditorialTactileSurfaceSpec,
   sanitizeEditorialUiCopy,
   compactMinimalUiText,
@@ -1108,6 +1111,22 @@ export default function App() {
     workspaceHeaderQrVibrationCount,
     setWorkspaceHeaderQrVibrationCount,
   ] = useState<number>(0);
+  const [
+    workspaceHeaderQrVibrationIntensity,
+    setWorkspaceHeaderQrVibrationIntensity,
+  ] = useState<WorkspaceQrVibrationIntensityLevel>(() => {
+    try {
+      const saved =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem(
+              WORKSPACE_QR_VIBRATION_INTENSITY_STORAGE_KEY
+            )
+          : null;
+      return normalizeWorkspaceQrVibrationIntensity(saved);
+    } catch {
+      return 'medium';
+    }
+  });
   const workspaceHeaderQrDetectionFlashTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrScanToastLeadInTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrScanToastTimerRef = useRef<number | null>(null);
@@ -4541,6 +4560,7 @@ export default function App() {
     isDetectionFlashActive: isWorkspaceHeaderQrDetectionFlashActive,
     detectionFlashCount: workspaceHeaderQrDetectionFlashCount,
     vibrationTriggerCount: workspaceHeaderQrVibrationCount,
+    vibrationIntensity: workspaceHeaderQrVibrationIntensity,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
@@ -5106,6 +5126,7 @@ export default function App() {
       rawScannedValue,
       fallbackOrigin,
       previousFlashCount: workspaceHeaderQrDetectionFlashCount,
+      vibrationIntensity: workspaceHeaderQrVibrationIntensity,
     });
     const parsed = flashSequence.parsedResult;
     if (!flashSequence.detected || !parsed.isValid) {
@@ -5127,7 +5148,9 @@ export default function App() {
     // 1. Trigger immediate subtle 'flash' animation + short mobile hardware vibration (navigator.vibrate) on the QR scanner popover before showing the join toast
     setIsWorkspaceHeaderQrDetectionFlashActive(true);
     setWorkspaceHeaderQrDetectionFlashCount(flashSequence.nextFlashCount);
-    triggerWorkspaceQrDetectionHardwareVibration();
+    triggerWorkspaceQrDetectionHardwareVibration({
+      intensity: workspaceHeaderQrVibrationIntensity,
+    });
     setWorkspaceHeaderQrVibrationCount((c) => c + 1);
     if (workspaceHeaderQrDetectionFlashTimerRef.current !== null) {
       window.clearTimeout(workspaceHeaderQrDetectionFlashTimerRef.current);
@@ -6920,6 +6943,10 @@ export default function App() {
                             ? 'true'
                             : 'false'
                         }
+                        data-vibrate-intensity={
+                          workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                            .intensity
+                        }
                         data-vibrate-pattern={
                           workspaceHeaderQrMeta.detectionFlash.vibrationSpec
                             .patternAttributeValue
@@ -7062,6 +7089,10 @@ export default function App() {
                                 data-testid={
                                   workspaceHeaderQrMeta.detectionFlash
                                     .vibrationSpec.indicatorTestId
+                                }
+                                data-vibrate-intensity={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.intensity
                                 }
                                 data-vibrate-pattern={
                                   workspaceHeaderQrMeta.detectionFlash
@@ -7363,6 +7394,118 @@ export default function App() {
                               }
                             </span>
                           </button>
+                        </div>
+
+                        {/* User-Configurable Hardware Vibration Intensity ('soft', 'medium', 'strong') for QR Scans */}
+                        <div
+                          id={
+                            workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                              .selectorElementId
+                          }
+                          data-testid={
+                            workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                              .selectorTestId
+                          }
+                          data-vibrate-intensity={
+                            workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                              .intensity
+                          }
+                          data-vibrate-pattern={
+                            workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                              .patternAttributeValue
+                          }
+                          data-vibrate-duration-ms={String(
+                            workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                              .configuredTotalDurationMs
+                          )}
+                          role="group"
+                          aria-label="Hardware vibration intensity for QR scan confirmation"
+                          className="flex flex-col gap-1.5 px-2.5 py-2 rounded-md border border-slate-200 dark:border-zinc-800 bg-slate-50/90 dark:bg-zinc-900/70"
+                        >
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <div className="flex items-center gap-1.5">
+                              <Zap className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                              <span className="text-[11px] font-bold text-slate-800 dark:text-zinc-100">
+                                Hardware Vibration Intensity
+                              </span>
+                            </div>
+                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[9px] font-mono tabular-nums font-semibold text-emerald-700 dark:text-emerald-300">
+                              {
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.intensityLabel
+                              }{' '}
+                              ·{' '}
+                              {
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.configuredTotalDurationMs
+                              }
+                              ms (
+                              {
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.patternAttributeValue
+                              }
+                              )
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-slate-500 dark:text-zinc-400 leading-snug">
+                            {
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .intensityDescription
+                            }
+                          </p>
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            {workspaceHeaderQrMeta.detectionFlash.vibrationSpec.options.map(
+                              (opt) => (
+                                <button
+                                  key={opt.id}
+                                  type="button"
+                                  id={opt.buttonElementId}
+                                  data-testid={opt.buttonTestId}
+                                  data-intensity={opt.id}
+                                  data-pattern={opt.patternAttributeValue}
+                                  data-duration-ms={String(opt.totalDurationMs)}
+                                  data-selected={opt.isSelected ? 'true' : 'false'}
+                                  aria-pressed={opt.isSelected}
+                                  title={`${opt.label} vibration pattern (${opt.patternAttributeValue}ms)`}
+                                  onClick={() => {
+                                    const normalized =
+                                      normalizeWorkspaceQrVibrationIntensity(
+                                        opt.id
+                                      );
+                                    setWorkspaceHeaderQrVibrationIntensity(
+                                      normalized
+                                    );
+                                    try {
+                                      localStorage.setItem(
+                                        WORKSPACE_QR_VIBRATION_INTENSITY_STORAGE_KEY,
+                                        normalized
+                                      );
+                                    } catch {
+                                      // ignore storage write errors
+                                    }
+                                    triggerWorkspaceQrDetectionHardwareVibration(
+                                      {
+                                        intensity: normalized,
+                                      }
+                                    );
+                                    setWorkspaceHeaderQrVibrationCount(
+                                      (c) => c + 1
+                                    );
+                                  }}
+                                  className={`flex-1 flex items-center justify-center gap-1 px-2 py-1 rounded border text-[10px] font-mono transition-colors cursor-pointer ${
+                                    opt.isSelected
+                                      ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-700 dark:text-emerald-300 font-bold'
+                                      : 'bg-slate-100 hover:bg-slate-200/80 border-slate-200 text-slate-600 dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:border-zinc-800 dark:text-zinc-400 font-medium'
+                                  }`}
+                                >
+                                  <span>{opt.label}</span>
+                                  <span className="text-[9px] opacity-75">
+                                    ({opt.totalDurationMs}ms)
+                                  </span>
+                                </button>
+                              )
+                            )}
+                          </div>
                         </div>
 
                         {lastScannedWorkspaceQrResult && (

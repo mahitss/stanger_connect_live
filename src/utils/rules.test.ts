@@ -447,6 +447,13 @@ import {
   WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS,
   WORKSPACE_QR_DETECTION_VIBRATION_TOTAL_MS,
   WORKSPACE_QR_DETECTION_VIBRATION_PULSES_COUNT,
+  WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID,
+  WORKSPACE_QR_VIBRATION_INTENSITY_STORAGE_KEY,
+  WORKSPACE_QR_VIBRATION_INTENSITY_LEVELS,
+  DEFAULT_WORKSPACE_QR_VIBRATION_INTENSITY,
+  WORKSPACE_QR_VIBRATION_INTENSITY_PRESETS,
+  normalizeWorkspaceQrVibrationIntensity,
+  resolveWorkspaceQrVibrationIntensityPreset,
   evaluateWorkspaceQrDetectionVibrationSpec,
   triggerWorkspaceQrDetectionHardwareVibration,
 } from './rules.ts';
@@ -10390,6 +10397,112 @@ test('QR scan confirmation triggers short hardware vibration (navigator.vibrate)
   assert.equal(unsupportedResult.isSupported, false);
   assert.deepEqual(unsupportedResult.patternMs, [35, 25, 45]);
 });
+
+test('User-configurable hardware vibration intensity setting supports soft, medium, and strong navigator.vibrate patterns during QR scans', () => {
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID,
+    'workspace-header-qr-vibration-intensity-selector'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_INTENSITY_STORAGE_KEY,
+    'mr_stranger_qr_vibration_intensity_v1'
+  );
+  assert.deepEqual(WORKSPACE_QR_VIBRATION_INTENSITY_LEVELS, [
+    'soft',
+    'medium',
+    'strong',
+  ]);
+  assert.equal(DEFAULT_WORKSPACE_QR_VIBRATION_INTENSITY, 'medium');
+
+  // 1. Normalization defaults invalid values to 'medium' and normalizes case/whitespace
+  assert.equal(normalizeWorkspaceQrVibrationIntensity('  SOFT '), 'soft');
+  assert.equal(normalizeWorkspaceQrVibrationIntensity('Medium'), 'medium');
+  assert.equal(normalizeWorkspaceQrVibrationIntensity('STRONG'), 'strong');
+  assert.equal(normalizeWorkspaceQrVibrationIntensity('invalid'), 'medium');
+  assert.equal(normalizeWorkspaceQrVibrationIntensity(null), 'medium');
+
+  // 2. Preset specifications for soft (20-15-25ms / 60ms), medium (35-25-45ms / 105ms), strong (65-30-85-30-65ms / 275ms)
+  const softPreset = resolveWorkspaceQrVibrationIntensityPreset('soft');
+  assert.deepEqual(softPreset.patternMs, [20, 15, 25]);
+  assert.equal(softPreset.patternAttributeValue, '20,15,25');
+  assert.equal(softPreset.totalDurationMs, 60);
+  assert.equal(softPreset.pulseCount, 2);
+  assert.equal(
+    softPreset.buttonElementId,
+    'workspace-header-qr-vibration-intensity-btn-soft'
+  );
+
+  const mediumPreset = resolveWorkspaceQrVibrationIntensityPreset('medium');
+  assert.deepEqual(mediumPreset.patternMs, [35, 25, 45]);
+  assert.equal(mediumPreset.patternAttributeValue, '35,25,45');
+  assert.equal(mediumPreset.totalDurationMs, 105);
+  assert.equal(mediumPreset.pulseCount, 2);
+
+  const strongPreset = resolveWorkspaceQrVibrationIntensityPreset('strong');
+  assert.deepEqual(strongPreset.patternMs, [65, 30, 85, 30, 65]);
+  assert.equal(strongPreset.patternAttributeValue, '65,30,85,30,65');
+  assert.equal(strongPreset.totalDurationMs, 275);
+  assert.equal(strongPreset.pulseCount, 3);
+  assert.equal(
+    strongPreset.buttonElementId,
+    'workspace-header-qr-vibration-intensity-btn-strong'
+  );
+
+  // 3. evaluateWorkspaceQrDetectionVibrationSpec reflects selected intensity and options state
+  const strongSpec = evaluateWorkspaceQrDetectionVibrationSpec({
+    isFlashActive: true,
+    vibrationTriggerCount: 4,
+    vibrationIntensity: 'strong',
+    isVibrationSupported: true,
+    detectedRoomCode: 'STUDY-909',
+  });
+  assert.equal(strongSpec.intensity, 'strong');
+  assert.equal(strongSpec.intensityLabel, 'Strong');
+  assert.deepEqual(strongSpec.vibrationPatternMs, [65, 30, 85, 30, 65]);
+  assert.equal(strongSpec.patternAttributeValue, '65,30,85,30,65');
+  assert.equal(strongSpec.totalDurationMs, 275);
+  assert.equal(strongSpec.pulseCount, 3);
+  assert.equal(strongSpec.shortBadgeLabel, 'Haptic Pulse (Strong · 275ms)');
+  assert.equal(
+    strongSpec.options.find((o) => o.id === 'strong')?.isSelected,
+    true
+  );
+  assert.equal(
+    strongSpec.options.find((o) => o.id === 'soft')?.isSelected,
+    false
+  );
+
+  // 4. triggerWorkspaceQrDetectionHardwareVibration dispatches exact pattern for soft, medium, and strong
+  const recorded: Array<number | number[]> = [];
+  const mockNav = {
+    vibrate: (pattern: number | number[]) => {
+      recorded.push(pattern);
+      return true;
+    },
+  };
+
+  const softTrigger = triggerWorkspaceQrDetectionHardwareVibration({
+    navigatorLike: mockNav,
+    intensity: 'soft',
+  });
+  assert.equal(softTrigger.intensity, 'soft');
+  assert.deepEqual(softTrigger.patternMs, [20, 15, 25]);
+  assert.equal(softTrigger.totalDurationMs, 60);
+
+  const strongTrigger = triggerWorkspaceQrDetectionHardwareVibration({
+    navigatorLike: mockNav,
+    intensity: 'strong',
+  });
+  assert.equal(strongTrigger.intensity, 'strong');
+  assert.deepEqual(strongTrigger.patternMs, [65, 30, 85, 30, 65]);
+  assert.equal(strongTrigger.totalDurationMs, 275);
+  assert.equal(strongTrigger.pulseCount, 3);
+  assert.deepEqual(recorded, [
+    [20, 15, 25],
+    [65, 30, 85, 30, 65],
+  ]);
+});
+
 
 
 

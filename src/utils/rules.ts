@@ -18269,6 +18269,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   isDetectionFlashActive?: boolean;
   detectionFlashCount?: number;
   vibrationTriggerCount?: number;
+  vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
   isVibrationSupported?: boolean;
   generationCount?: number;
   downloadCount?: number;
@@ -18402,6 +18403,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
       flashTriggerCount: input?.detectionFlashCount ?? 0,
       vibrationTriggerCount:
         input?.vibrationTriggerCount ?? input?.detectionFlashCount ?? 0,
+      vibrationIntensity: input?.vibrationIntensity,
       isVibrationSupported: input?.isVibrationSupported,
       detectedRoomCode: lastJoinedWorkspaceRoomCode,
       fallbackRoomCode: roomCode,
@@ -23518,6 +23520,7 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
   isFlashActive?: boolean;
   flashTriggerCount?: number;
   vibrationTriggerCount?: number;
+  vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
   isVibrationSupported?: boolean;
   detectedRoomCode?: string | null;
   fallbackRoomCode?: string | null;
@@ -23546,6 +23549,7 @@ export function evaluateWorkspaceQrDetectionFlashSpec(input?: {
   const vibrationSpec = evaluateWorkspaceQrDetectionVibrationSpec({
     isFlashActive,
     vibrationTriggerCount,
+    vibrationIntensity: input?.vibrationIntensity,
     detectedRoomCode: cleanDetectedRoom || fallbackRoom,
     isVibrationSupported: input?.isVibrationSupported,
   });
@@ -23623,6 +23627,7 @@ export function resolveWorkspaceQrDetectionFlashSequence(params: {
   rawScannedValue: string;
   fallbackOrigin?: string;
   previousFlashCount?: number;
+  vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
   nowMs?: number;
 }): WorkspaceQrDetectionFlashSequenceResult {
   const prevCount = Math.max(
@@ -23653,6 +23658,7 @@ export function resolveWorkspaceQrDetectionFlashSequence(params: {
       flashSpec: evaluateWorkspaceQrDetectionFlashSpec({
         isFlashActive: false,
         flashTriggerCount: prevCount,
+        vibrationIntensity: params.vibrationIntensity,
         detectedRoomCode: null,
       }),
     };
@@ -23673,6 +23679,7 @@ export function resolveWorkspaceQrDetectionFlashSequence(params: {
     flashSpec: evaluateWorkspaceQrDetectionFlashSpec({
       isFlashActive: true,
       flashTriggerCount: nextFlashCount,
+      vibrationIntensity: params.vibrationIntensity,
       detectedRoomCode: parsedResult.roomCode,
     }),
   };
@@ -25485,20 +25492,115 @@ export const WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID =
   'workspace-header-qr-scan-viewport-card' as const;
 export const WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID =
   'workspace-header-qr-scan-vibration-indicator' as const;
+export const WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID =
+  'workspace-header-qr-vibration-intensity-selector' as const;
+export const WORKSPACE_QR_VIBRATION_INTENSITY_STORAGE_KEY =
+  'mr_stranger_qr_vibration_intensity_v1' as const;
 export const WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS = [35, 25, 45] as const;
 export const WORKSPACE_QR_DETECTION_VIBRATION_TOTAL_MS = 105;
 export const WORKSPACE_QR_DETECTION_VIBRATION_PULSES_COUNT = 2;
+
+export type WorkspaceQrVibrationIntensityLevel = 'soft' | 'medium' | 'strong';
+
+export const WORKSPACE_QR_VIBRATION_INTENSITY_LEVELS: readonly WorkspaceQrVibrationIntensityLevel[] =
+  ['soft', 'medium', 'strong'] as const;
+
+export const DEFAULT_WORKSPACE_QR_VIBRATION_INTENSITY: WorkspaceQrVibrationIntensityLevel =
+  'medium';
+
+export interface WorkspaceQrVibrationIntensityPresetSpec {
+  id: WorkspaceQrVibrationIntensityLevel;
+  label: 'Soft' | 'Medium' | 'Strong';
+  patternMs: readonly number[];
+  patternAttributeValue: '20,15,25' | '35,25,45' | '65,30,85,30,65';
+  totalDurationMs: 60 | 105 | 275;
+  pulseCount: 2 | 3;
+  description: string;
+  buttonElementId: string;
+  buttonTestId: string;
+}
+
+export const WORKSPACE_QR_VIBRATION_INTENSITY_PRESETS: Record<
+  WorkspaceQrVibrationIntensityLevel,
+  WorkspaceQrVibrationIntensityPresetSpec
+> = {
+  soft: {
+    id: 'soft',
+    label: 'Soft',
+    patternMs: [20, 15, 25] as const,
+    patternAttributeValue: '20,15,25',
+    totalDurationMs: 60,
+    pulseCount: 2,
+    description: 'Gentle 60ms micro-tap (20-15-25ms)',
+    buttonElementId: 'workspace-header-qr-vibration-intensity-btn-soft',
+    buttonTestId: 'workspace-header-qr-vibration-intensity-btn-soft',
+  },
+  medium: {
+    id: 'medium',
+    label: 'Medium',
+    patternMs: WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS,
+    patternAttributeValue: '35,25,45',
+    totalDurationMs: 105,
+    pulseCount: 2,
+    description: 'Balanced 105ms double-pulse (35-25-45ms)',
+    buttonElementId: 'workspace-header-qr-vibration-intensity-btn-medium',
+    buttonTestId: 'workspace-header-qr-vibration-intensity-btn-medium',
+  },
+  strong: {
+    id: 'strong',
+    label: 'Strong',
+    patternMs: [65, 30, 85, 30, 65] as const,
+    patternAttributeValue: '65,30,85,30,65',
+    totalDurationMs: 275,
+    pulseCount: 3,
+    description: 'Pronounced 275ms triple-pulse (65-30-85-30-65ms)',
+    buttonElementId: 'workspace-header-qr-vibration-intensity-btn-strong',
+    buttonTestId: 'workspace-header-qr-vibration-intensity-btn-strong',
+  },
+};
+
+export function normalizeWorkspaceQrVibrationIntensity(
+  value?: unknown
+): WorkspaceQrVibrationIntensityLevel {
+  const cleaned = String(value ?? '')
+    .trim()
+    .toLowerCase();
+  if (cleaned === 'soft' || cleaned === 'medium' || cleaned === 'strong') {
+    return cleaned;
+  }
+  return DEFAULT_WORKSPACE_QR_VIBRATION_INTENSITY;
+}
+
+export function resolveWorkspaceQrVibrationIntensityPreset(
+  intensity?: WorkspaceQrVibrationIntensityLevel | string | null
+): WorkspaceQrVibrationIntensityPresetSpec {
+  const normalized = normalizeWorkspaceQrVibrationIntensity(intensity);
+  return WORKSPACE_QR_VIBRATION_INTENSITY_PRESETS[normalized];
+}
+
+export interface WorkspaceQrVibrationIntensityOptionSpec
+  extends WorkspaceQrVibrationIntensityPresetSpec {
+  isSelected: boolean;
+}
 
 export interface WorkspaceQrDetectionVibrationSpec {
   viewportCardElementId: typeof WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID;
   viewportCardTestId: typeof WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID;
   indicatorElementId: typeof WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID;
   indicatorTestId: typeof WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID;
+  selectorElementId: typeof WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID;
+  selectorTestId: typeof WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID;
   enabled: boolean;
   isVibrationSupported: boolean;
+  intensity: WorkspaceQrVibrationIntensityLevel;
+  intensityLabel: 'Soft' | 'Medium' | 'Strong';
+  intensityDescription: string;
+  options: WorkspaceQrVibrationIntensityOptionSpec[];
   vibrationPatternMs: number[];
-  configuredPatternMs: readonly [35, 25, 45];
-  patternAttributeValue: '35,25,45';
+  configuredPatternMs: readonly number[];
+  patternAttributeValue: '20,15,25' | '35,25,45' | '65,30,85,30,65';
+  configuredTotalDurationMs: 60 | 105 | 275;
+  configuredPulseCount: 2 | 3;
   totalDurationMs: number;
   pulseCount: number;
   triggerCount: number;
@@ -25510,6 +25612,7 @@ export interface WorkspaceQrDetectionVibrationSpec {
 export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
   isFlashActive?: boolean;
   vibrationTriggerCount?: number;
+  vibrationIntensity?: WorkspaceQrVibrationIntensityLevel | string | null;
   detectedRoomCode?: string | null;
   isVibrationSupported?: boolean;
 }): WorkspaceQrDetectionVibrationSpec {
@@ -25517,6 +25620,9 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
   const triggerCount = Math.max(
     0,
     Math.floor(Number(input?.vibrationTriggerCount) || 0)
+  );
+  const preset = resolveWorkspaceQrVibrationIntensityPreset(
+    input?.vibrationIntensity
   );
   const detectedRoomCode =
     String(input?.detectedRoomCode || '').trim() || null;
@@ -25526,67 +25632,88 @@ export function evaluateWorkspaceQrDetectionVibrationSpec(input?: {
       : typeof navigator !== 'undefined' &&
         typeof navigator?.vibrate === 'function';
 
+  const options: WorkspaceQrVibrationIntensityOptionSpec[] =
+    WORKSPACE_QR_VIBRATION_INTENSITY_LEVELS.map((level) => ({
+      ...WORKSPACE_QR_VIBRATION_INTENSITY_PRESETS[level],
+      isSelected: level === preset.id,
+    }));
+
+  const shortBadgeLabel =
+    preset.id === 'medium'
+      ? isFlashActive
+        ? 'Haptic Pulse · 105ms'
+        : 'Mobile Haptic · 105ms'
+      : isFlashActive
+        ? `Haptic Pulse (${preset.label} · ${preset.totalDurationMs}ms)`
+        : `Mobile Haptic · ${preset.label} (${preset.totalDurationMs}ms)`;
+
+  const patternJoined = preset.patternMs.join('-');
+
   return {
     viewportCardElementId: WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID,
     viewportCardTestId: WORKSPACE_QR_SCAN_VIEWPORT_CARD_ID,
     indicatorElementId: WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID,
     indicatorTestId: WORKSPACE_QR_DETECTION_VIBRATION_INDICATOR_ID,
+    selectorElementId: WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID,
+    selectorTestId: WORKSPACE_QR_VIBRATION_INTENSITY_SELECTOR_ID,
     enabled: isFlashActive,
     isVibrationSupported,
-    vibrationPatternMs: isFlashActive
-      ? [...WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS]
-      : [],
-    configuredPatternMs: WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS,
-    patternAttributeValue: '35,25,45',
-    totalDurationMs: isFlashActive
-      ? WORKSPACE_QR_DETECTION_VIBRATION_TOTAL_MS
-      : 0,
-    pulseCount: isFlashActive
-      ? WORKSPACE_QR_DETECTION_VIBRATION_PULSES_COUNT
-      : 0,
+    intensity: preset.id,
+    intensityLabel: preset.label,
+    intensityDescription: preset.description,
+    options,
+    vibrationPatternMs: isFlashActive ? [...preset.patternMs] : [],
+    configuredPatternMs: preset.patternMs,
+    patternAttributeValue: preset.patternAttributeValue,
+    configuredTotalDurationMs: preset.totalDurationMs,
+    configuredPulseCount: preset.pulseCount,
+    totalDurationMs: isFlashActive ? preset.totalDurationMs : 0,
+    pulseCount: isFlashActive ? preset.pulseCount : 0,
     triggerCount,
     detectedRoomCode,
-    shortBadgeLabel: isFlashActive
-      ? 'Haptic Pulse · 105ms'
-      : 'Mobile Haptic · 105ms',
+    shortBadgeLabel,
     statusLabel: isFlashActive
-      ? `Haptic vibration triggered (${WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS.join(
-          '-'
-        )}ms)`
+      ? `Haptic vibration triggered (${preset.label}: ${patternJoined}ms)`
       : isVibrationSupported
-        ? `Mobile haptics ready (${WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS.join(
-            '-'
-          )}ms)`
-        : `Tactile haptics configured (${WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS.join(
-            '-'
-          )}ms)`,
+        ? `Mobile haptics ready (${preset.label}: ${patternJoined}ms)`
+        : `Tactile haptics configured (${preset.label}: ${patternJoined}ms)`,
   };
 }
 
 export interface WorkspaceQrHardwareVibrationTriggerResult {
   triggered: boolean;
   isSupported: boolean;
+  intensity: WorkspaceQrVibrationIntensityLevel;
+  intensityLabel: 'Soft' | 'Medium' | 'Strong';
   patternMs: number[];
   totalDurationMs: number;
+  pulseCount: number;
 }
 
 export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
   navigatorLike?: { vibrate?: (pattern: number | number[]) => boolean } | null;
+  intensity?: WorkspaceQrVibrationIntensityLevel | string | null;
   patternMs?: readonly number[];
   enabled?: boolean;
 }): WorkspaceQrHardwareVibrationTriggerResult {
   const enabled = options?.enabled !== false;
-  const pattern = Array.isArray(options?.patternMs) && options.patternMs.length > 0
-    ? options.patternMs.map((n) => Math.max(0, Math.floor(Number(n) || 0)))
-    : [...WORKSPACE_QR_DETECTION_VIBRATION_PATTERN_MS];
+  const preset = resolveWorkspaceQrVibrationIntensityPreset(options?.intensity);
+  const pattern =
+    Array.isArray(options?.patternMs) && options.patternMs.length > 0
+      ? options.patternMs.map((n) => Math.max(0, Math.floor(Number(n) || 0)))
+      : [...preset.patternMs];
   const totalDurationMs = pattern.reduce((sum, val) => sum + val, 0);
+  const pulseCount = Math.ceil(pattern.length / 2);
 
   if (!enabled) {
     return {
       triggered: false,
       isSupported: false,
+      intensity: preset.id,
+      intensityLabel: preset.label,
       patternMs: [],
       totalDurationMs: 0,
+      pulseCount: 0,
     };
   }
 
@@ -25602,8 +25729,11 @@ export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
     return {
       triggered: false,
       isSupported: false,
+      intensity: preset.id,
+      intensityLabel: preset.label,
       patternMs: pattern,
       totalDurationMs,
+      pulseCount,
     };
   }
 
@@ -25612,17 +25742,24 @@ export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
     return {
       triggered: didVibrate,
       isSupported: true,
+      intensity: preset.id,
+      intensityLabel: preset.label,
       patternMs: pattern,
       totalDurationMs,
+      pulseCount,
     };
   } catch {
     return {
       triggered: false,
       isSupported: true,
+      intensity: preset.id,
+      intensityLabel: preset.label,
       patternMs: pattern,
       totalDurationMs,
+      pulseCount,
     };
   }
 }
+
 
 
