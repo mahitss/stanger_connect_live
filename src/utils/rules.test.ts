@@ -471,6 +471,25 @@ import {
   evaluateWorkspaceQrVibrationVisualPreviewSpec,
   evaluateWorkspaceQrDetectionVibrationSpec,
   triggerWorkspaceQrDetectionHardwareVibration,
+  WORKSPACE_QR_SCAN_SESSION_TIMER_ID,
+  WORKSPACE_QR_SCAN_SESSION_TIMER_RESET_BTN_ID,
+  formatWorkspaceQrScanSessionTimer,
+  evaluateWorkspaceQrScanSessionTimerSpec,
+  WORKSPACE_QR_VIEWPORT_SCAN_ENTRIES_CONTAINER_ID,
+  normalizeWorkspaceQrCustomCategoryLabel,
+  renameWorkspaceQrRecentScanCategoryInline,
+  evaluateWorkspaceQrEntryInlineCategoryEditSpec,
+  WORKSPACE_QR_VIBRATION_PULSE_DURATION_CONTROL_ID,
+  WORKSPACE_QR_VIBRATION_PULSE_DURATION_SLIDER_ID,
+  WORKSPACE_QR_VIBRATION_PULSE_DURATION_VALUE_BADGE_ID,
+  WORKSPACE_QR_VIBRATION_PULSE_DURATION_RESET_BTN_ID,
+  WORKSPACE_QR_VIBRATION_PULSE_DURATION_STORAGE_KEY,
+  WORKSPACE_QR_VIBRATION_PULSE_DURATION_MIN_MS,
+  WORKSPACE_QR_VIBRATION_PULSE_DURATION_MAX_MS,
+  WORKSPACE_QR_VIBRATION_PULSE_DURATION_STEP_MS,
+  clampWorkspaceQrVibrationPulseDurationMs,
+  normalizeOptionalWorkspaceQrVibrationPulseDurationMs,
+  evaluateWorkspaceQrVibrationPulseDurationControlSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -10818,6 +10837,193 @@ test('QR vibration pattern mode toggle supports Continuous vs Pulse vibration pa
   assert.equal(contRes.pulseCount, 1);
   assert.deepEqual(recorded, [[35, 25, 45], [105]]);
 });
+
+test('QR scan session visual timer (#workspace-header-qr-scan-session-timer) formats active scanning duration and resets to 00:00 when closed', () => {
+  assert.equal(
+    WORKSPACE_QR_SCAN_SESSION_TIMER_ID,
+    'workspace-header-qr-scan-session-timer'
+  );
+  assert.equal(
+    WORKSPACE_QR_SCAN_SESSION_TIMER_RESET_BTN_ID,
+    'workspace-header-qr-scan-session-timer-reset-btn'
+  );
+
+  assert.equal(formatWorkspaceQrScanSessionTimer(0), '00:00');
+  assert.equal(formatWorkspaceQrScanSessionTimer(7), '00:07');
+  assert.equal(formatWorkspaceQrScanSessionTimer(65), '01:05');
+  assert.equal(formatWorkspaceQrScanSessionTimer(3661), '61:01');
+
+  const activeTimer = evaluateWorkspaceQrScanSessionTimerSpec({
+    isScannerOpen: true,
+    elapsedSeconds: 14,
+  });
+  assert.equal(activeTimer.elementId, 'workspace-header-qr-scan-session-timer');
+  assert.equal(activeTimer.isSessionActive, true);
+  assert.equal(activeTimer.elapsedSeconds, 14);
+  assert.equal(activeTimer.formattedTime, '00:14');
+  assert.equal(activeTimer.sessionLabel, 'QR Scan Session · 00:14');
+  assert.equal(activeTimer.shortTimerLabel, 'Session 00:14');
+  assert.equal(activeTimer.resetsWhenClosed, true);
+
+  // When scanner is closed, timer resets to 00:00 (0 seconds) even if prior elapsedSeconds was positive
+  const closedTimer = evaluateWorkspaceQrScanSessionTimerSpec({
+    isScannerOpen: false,
+    elapsedSeconds: 42,
+  });
+  assert.equal(closedTimer.isSessionActive, false);
+  assert.equal(closedTimer.elapsedSeconds, 0);
+  assert.equal(closedTimer.formattedTime, '00:00');
+  assert.equal(closedTimer.sessionLabel, 'Session Reset · 00:00');
+});
+
+test('Inline category label editing on QR scan entries within #workspace-header-qr-scan-viewport-card renames and persists custom category labels', () => {
+  assert.equal(
+    WORKSPACE_QR_VIEWPORT_SCAN_ENTRIES_CONTAINER_ID,
+    'workspace-header-qr-viewport-scan-entries'
+  );
+  assert.equal(
+    normalizeWorkspaceQrCustomCategoryLabel('  Quiet Lab  ', 'Study'),
+    'Quiet Lab'
+  );
+  assert.equal(normalizeWorkspaceQrCustomCategoryLabel('   ', 'Work'), 'Work');
+
+  const initialEntries = [
+    {
+      id: 'qr_1',
+      roomCode: 'NEXUS-A1',
+      workspaceUrl: 'https://example.com/?room=NEXUS-A1',
+      scannedAtMs: 1_760_000_000_000,
+      category: 'Study' as const,
+    },
+    {
+      id: 'qr_2',
+      roomCode: 'SYNAPSE-B2',
+      workspaceUrl: 'https://example.com/?room=SYNAPSE-B2',
+      scannedAtMs: 1_760_000_010_000,
+      category: 'Work' as const,
+    },
+  ];
+
+  const renamedRes = renameWorkspaceQrRecentScanCategoryInline(
+    initialEntries,
+    'NEXUS-A1',
+    'Quantum Study Pod'
+  );
+  assert.equal(renamedRes.categoryLabel, 'Quantum Study Pod');
+  assert.equal(renamedRes.isCustomLabel, true);
+  assert.equal(
+    renamedRes.updatedEntry?.customCategoryLabel,
+    'Quantum Study Pod'
+  );
+  assert.equal(renamedRes.updatedEntry?.category, 'Study');
+
+  // If renamed to a standard category name ('Casual'), it updates category and clears customCategoryLabel
+  const standardRenamed = renameWorkspaceQrRecentScanCategoryInline(
+    renamedRes.updatedScans,
+    'NEXUS-A1',
+    'Casual'
+  );
+  assert.equal(standardRenamed.category, 'Casual');
+  assert.equal(standardRenamed.categoryLabel, 'Casual');
+  assert.equal(standardRenamed.isCustomLabel, false);
+  assert.equal(standardRenamed.updatedEntry?.customCategoryLabel, undefined);
+
+  const inlineSpec = evaluateWorkspaceQrEntryInlineCategoryEditSpec({
+    entry: {
+      roomCode: 'NEXUS-A1',
+      category: 'Study',
+      customCategoryLabel: 'Quantum Study Pod',
+    },
+    editingRoomCode: 'NEXUS-A1',
+    draftLabel: 'Exam Prep Room',
+  });
+  assert.equal(
+    inlineSpec.viewportEntriesContainerElementId,
+    'workspace-header-qr-viewport-scan-entries'
+  );
+  assert.equal(
+    inlineSpec.inputElementId,
+    'workspace-header-qr-entry-category-input-nexus-a1'
+  );
+  assert.equal(inlineSpec.categoryLabel, 'Quantum Study Pod');
+  assert.equal(inlineSpec.isCustomCategoryLabel, true);
+  assert.equal(inlineSpec.isEditing, true);
+  assert.equal(inlineSpec.draftValue, 'Exam Prep Room');
+});
+
+test('QR vibration Pulse Duration slider (#workspace-header-qr-vibration-pulse-duration-slider) fine-tunes pulse timing independently of intensity and pattern modes', () => {
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PULSE_DURATION_CONTROL_ID,
+    'workspace-header-qr-vibration-pulse-duration-control'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PULSE_DURATION_SLIDER_ID,
+    'workspace-header-qr-vibration-pulse-duration-slider'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PULSE_DURATION_VALUE_BADGE_ID,
+    'workspace-header-qr-vibration-pulse-duration-value-badge'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PULSE_DURATION_RESET_BTN_ID,
+    'workspace-header-qr-vibration-pulse-duration-reset-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_VIBRATION_PULSE_DURATION_STORAGE_KEY,
+    'mr_stranger_qr_vibration_pulse_duration_ms_v1'
+  );
+  assert.equal(WORKSPACE_QR_VIBRATION_PULSE_DURATION_MIN_MS, 10);
+  assert.equal(WORKSPACE_QR_VIBRATION_PULSE_DURATION_MAX_MS, 150);
+  assert.equal(WORKSPACE_QR_VIBRATION_PULSE_DURATION_STEP_MS, 5);
+
+  assert.equal(clampWorkspaceQrVibrationPulseDurationMs(3), 10);
+  assert.equal(clampWorkspaceQrVibrationPulseDurationMs(220), 150);
+  assert.equal(clampWorkspaceQrVibrationPulseDurationMs(53), 55);
+  assert.equal(
+    normalizeOptionalWorkspaceQrVibrationPulseDurationMs(null),
+    null
+  );
+  assert.equal(normalizeOptionalWorkspaceQrVibrationPulseDurationMs(60), 60);
+
+  // Custom 55ms pulse duration across soft/medium/strong in Pulse and Continuous modes
+  const softPulseCustom = resolveWorkspaceQrVibrationModePattern({
+    intensity: 'soft',
+    patternMode: 'pulse',
+    pulseDurationMs: 55,
+  });
+  assert.deepEqual(softPulseCustom.patternMs, [55, 15, 55]);
+  assert.equal(softPulseCustom.totalDurationMs, 125);
+  assert.equal(softPulseCustom.pulseDurationMs, 55);
+  assert.equal(softPulseCustom.isCustomPulseDuration, true);
+
+  const strongPulseCustom = resolveWorkspaceQrVibrationModePattern({
+    intensity: 'strong',
+    patternMode: 'pulse',
+    pulseDurationMs: 50,
+  });
+  assert.deepEqual(strongPulseCustom.patternMs, [50, 30, 50, 30, 50]);
+  assert.equal(strongPulseCustom.totalDurationMs, 210);
+  assert.equal(strongPulseCustom.pulseCount, 3);
+
+  const mediumContinuousCustom = resolveWorkspaceQrVibrationModePattern({
+    intensity: 'medium',
+    patternMode: 'continuous',
+    pulseDurationMs: 60,
+  });
+  assert.deepEqual(mediumContinuousCustom.patternMs, [145]);
+  assert.equal(mediumContinuousCustom.totalDurationMs, 145);
+  assert.equal(mediumContinuousCustom.pulseCount, 1);
+
+  const sliderSpec = evaluateWorkspaceQrVibrationPulseDurationControlSpec({
+    intensity: 'medium',
+    pulseDurationMs: 65,
+  });
+  assert.equal(sliderSpec.pulseDurationMs, 65);
+  assert.equal(sliderSpec.defaultPresetPulseDurationMs, 40);
+  assert.equal(sliderSpec.isCustomPulseDuration, true);
+  assert.equal(sliderSpec.valueLabel, '65ms / pulse (Custom)');
+});
+
 
 
 

@@ -288,6 +288,13 @@ import {
   WORKSPACE_QR_VIBRATION_PATTERN_MODE_STORAGE_KEY,
   WorkspaceQrVibrationPatternMode,
   normalizeWorkspaceQrVibrationPatternMode,
+  WORKSPACE_QR_VIBRATION_PULSE_DURATION_STORAGE_KEY,
+  normalizeOptionalWorkspaceQrVibrationPulseDurationMs,
+  clampWorkspaceQrVibrationPulseDurationMs,
+  WORKSPACE_QR_VIEWPORT_SCAN_ENTRIES_CONTAINER_ID,
+  getWorkspaceQrHistoryCategoryColorTagSpec,
+  renameWorkspaceQrRecentScanCategoryInline,
+  evaluateWorkspaceQrEntryInlineCategoryEditSpec,
   evaluateWorkspaceQrVibrationVisualPreviewSpec,
   evaluateEditorialTactileSurfaceSpec,
   sanitizeEditorialUiCopy,
@@ -1148,6 +1155,34 @@ export default function App() {
     }
   });
   const [
+    workspaceHeaderQrVibrationPulseDurationMs,
+    setWorkspaceHeaderQrVibrationPulseDurationMs,
+  ] = useState<number | null>(() => {
+    try {
+      const saved =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem(
+              WORKSPACE_QR_VIBRATION_PULSE_DURATION_STORAGE_KEY
+            )
+          : null;
+      return normalizeOptionalWorkspaceQrVibrationPulseDurationMs(saved);
+    } catch {
+      return null;
+    }
+  });
+  const [
+    workspaceHeaderQrScanSessionElapsedSeconds,
+    setWorkspaceHeaderQrScanSessionElapsedSeconds,
+  ] = useState<number>(0);
+  const [
+    editingQrEntryCategoryRoomCode,
+    setEditingQrEntryCategoryRoomCode,
+  ] = useState<string | null>(null);
+  const [
+    editingQrEntryCategoryDraft,
+    setEditingQrEntryCategoryDraft,
+  ] = useState<string>('');
+  const [
     isWorkspaceHeaderQrVibrationPreviewAnimating,
     setIsWorkspaceHeaderQrVibrationPreviewAnimating,
   ] = useState<boolean>(false);
@@ -1216,8 +1251,14 @@ export default function App() {
     if (!isWorkspaceHeaderQrOpen) {
       stopWorkspaceHeaderQrCameraStream();
       setIsWorkspaceHeaderQrCameraScanning(false);
+      setWorkspaceHeaderQrScanSessionElapsedSeconds(0);
+      setEditingQrEntryCategoryRoomCode(null);
+      setEditingQrEntryCategoryDraft('');
       return;
     }
+    const sessionInterval = window.setInterval(() => {
+      setWorkspaceHeaderQrScanSessionElapsedSeconds((prev) => prev + 1);
+    }, 1000);
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
@@ -1239,6 +1280,7 @@ export default function App() {
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('mousedown', onMouseDown);
     return () => {
+      window.clearInterval(sessionInterval);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('mousedown', onMouseDown);
     };
@@ -4591,6 +4633,8 @@ export default function App() {
     vibrationTriggerCount: workspaceHeaderQrVibrationCount,
     vibrationIntensity: workspaceHeaderQrVibrationIntensity,
     vibrationPatternMode: workspaceHeaderQrVibrationPatternMode,
+    vibrationPulseDurationMs: workspaceHeaderQrVibrationPulseDurationMs,
+    scanSessionElapsedSeconds: workspaceHeaderQrScanSessionElapsedSeconds,
     isVibrationPreviewAnimating: isWorkspaceHeaderQrVibrationPreviewAnimating,
     vibrationPreviewCount: workspaceHeaderQrVibrationPreviewCount,
     generationCount: workspaceHeaderQrGenerationCount,
@@ -4600,7 +4644,8 @@ export default function App() {
 
   const handleTriggerWorkspaceQrVibrationVisualPreview = (
     overrideIntensity?: WorkspaceQrVibrationIntensityLevel,
-    overridePatternMode?: WorkspaceQrVibrationPatternMode
+    overridePatternMode?: WorkspaceQrVibrationPatternMode,
+    overridePulseDurationMs?: number | null
   ) => {
     const targetIntensity = normalizeWorkspaceQrVibrationIntensity(
       overrideIntensity ?? workspaceHeaderQrVibrationIntensity
@@ -4608,14 +4653,20 @@ export default function App() {
     const targetPatternMode = normalizeWorkspaceQrVibrationPatternMode(
       overridePatternMode ?? workspaceHeaderQrVibrationPatternMode
     );
+    const targetPulseDurationMs =
+      overridePulseDurationMs !== undefined
+        ? overridePulseDurationMs
+        : workspaceHeaderQrVibrationPulseDurationMs;
     const previewSpec = evaluateWorkspaceQrVibrationVisualPreviewSpec({
       intensity: targetIntensity,
       patternMode: targetPatternMode,
+      pulseDurationMs: targetPulseDurationMs,
       isPreviewAnimating: true,
     });
     triggerWorkspaceQrDetectionHardwareVibration({
       intensity: targetIntensity,
       patternMode: targetPatternMode,
+      pulseDurationMs: targetPulseDurationMs,
     });
     setWorkspaceHeaderQrVibrationCount((c) => c + 1);
     setWorkspaceHeaderQrVibrationPreviewCount((c) => c + 1);
@@ -4629,6 +4680,35 @@ export default function App() {
         workspaceHeaderQrVibrationPreviewTimerRef.current = null;
       },
       previewSpec.animationDurationMs
+    );
+  };
+
+  const handleChangeWorkspaceQrVibrationPulseDuration = (
+    rawMs: number | null
+  ) => {
+    const normalized =
+      rawMs === null
+        ? null
+        : clampWorkspaceQrVibrationPulseDurationMs(rawMs);
+    setWorkspaceHeaderQrVibrationPulseDurationMs(normalized);
+    try {
+      if (normalized === null) {
+        localStorage.removeItem(
+          WORKSPACE_QR_VIBRATION_PULSE_DURATION_STORAGE_KEY
+        );
+      } else {
+        localStorage.setItem(
+          WORKSPACE_QR_VIBRATION_PULSE_DURATION_STORAGE_KEY,
+          String(normalized)
+        );
+      }
+    } catch {
+      // ignore localStorage write errors
+    }
+    handleTriggerWorkspaceQrVibrationVisualPreview(
+      undefined,
+      undefined,
+      normalized
     );
   };
 
@@ -5004,6 +5084,90 @@ export default function App() {
     });
   };
 
+  const handleStartInlineEditWorkspaceQrEntryCategory = (
+    entryOrRoomCode:
+      | Pick<
+          WorkspaceQrRecentScanEntry,
+          'roomCode' | 'category' | 'customCategoryLabel'
+        >
+      | string,
+    explicitInitialLabel?: string
+  ) => {
+    if (typeof entryOrRoomCode === 'string') {
+      const normalizedRoom = normalizeStudyRoomCode(
+        entryOrRoomCode || 'STUDY-204'
+      );
+      setEditingQrEntryCategoryRoomCode(normalizedRoom);
+      setEditingQrEntryCategoryDraft(
+        (explicitInitialLabel ?? '').trim() || 'Study'
+      );
+      return;
+    }
+    const spec = evaluateWorkspaceQrEntryInlineCategoryEditSpec({
+      entry: entryOrRoomCode,
+    });
+    setEditingQrEntryCategoryRoomCode(spec.roomCode);
+    setEditingQrEntryCategoryDraft(
+      (explicitInitialLabel ?? '').trim() || spec.categoryLabel
+    );
+  };
+
+  const handleSaveInlineEditWorkspaceQrEntryCategory = (
+    entryOrIdentifier:
+      | Pick<
+          WorkspaceQrRecentScanEntry,
+          'id' | 'roomCode' | 'category' | 'customCategoryLabel'
+        >
+      | string,
+    explicitDraft?: string
+  ) => {
+    const nextDraft = explicitDraft ?? editingQrEntryCategoryDraft;
+    setRecentWorkspaceQrScans((prev) => {
+      const baseList =
+        Array.isArray(prev) && prev.length > 0
+          ? prev
+          : [
+              {
+                id: `qr_default_${workspaceHeaderQrMeta.roomCode}`,
+                roomCode: workspaceHeaderQrMeta.roomCode,
+                workspaceUrl: workspaceHeaderQrMeta.workspaceUrl,
+                scannedAtMs: Date.now(),
+                category: 'Study' as const,
+              },
+            ];
+      const result = renameWorkspaceQrRecentScanCategoryInline(
+        baseList,
+        entryOrIdentifier,
+        nextDraft,
+        WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS
+      );
+      try {
+        localStorage.setItem(
+          WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
+          result.serializedJson
+        );
+        localStorage.setItem(
+          WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
+          result.serializedJson
+        );
+      } catch {
+        // ignore localStorage write error
+      }
+      if (uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+      setLastSoundFeedback(result.feedbackMessage);
+      return result.updatedScans;
+    });
+    setEditingQrEntryCategoryRoomCode(null);
+    setEditingQrEntryCategoryDraft('');
+  };
+
+  const handleCancelInlineEditWorkspaceQrEntryCategory = () => {
+    setEditingQrEntryCategoryRoomCode(null);
+    setEditingQrEntryCategoryDraft('');
+  };
+
   const handleSelectRecentWorkspaceQrScan = (entry: WorkspaceQrRecentScanEntry) => {
     const normalizedCode = normalizeStudyRoomCode(entry.roomCode || 'STUDY-GLOBAL');
     setSelectedQrHistoryDetailsRoomCode(normalizedCode);
@@ -5194,6 +5358,7 @@ export default function App() {
       previousFlashCount: workspaceHeaderQrDetectionFlashCount,
       vibrationIntensity: workspaceHeaderQrVibrationIntensity,
       vibrationPatternMode: workspaceHeaderQrVibrationPatternMode,
+      vibrationPulseDurationMs: workspaceHeaderQrVibrationPulseDurationMs,
     });
     const parsed = flashSequence.parsedResult;
     if (!flashSequence.detected || !parsed.isValid) {
@@ -5218,6 +5383,7 @@ export default function App() {
     triggerWorkspaceQrDetectionHardwareVibration({
       intensity: workspaceHeaderQrVibrationIntensity,
       patternMode: workspaceHeaderQrVibrationPatternMode,
+      pulseDurationMs: workspaceHeaderQrVibrationPulseDurationMs,
     });
     setWorkspaceHeaderQrVibrationCount((c) => c + 1);
     if (workspaceHeaderQrDetectionFlashTimerRef.current !== null) {
@@ -7029,12 +7195,111 @@ export default function App() {
                             ? 'true'
                             : 'false'
                         }
+                        data-vibrate-pulse-duration-ms={String(
+                          workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                            .pulseDurationMs
+                        )}
+                        data-vibrate-custom-pulse-duration={
+                          workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                            .isCustomPulseDuration
+                            ? 'true'
+                            : 'false'
+                        }
+                        data-session-timer-seconds={String(
+                          workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                            .elapsedSeconds
+                        )}
+                        data-session-timer-formatted={
+                          workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                            .formattedTime
+                        }
                         className={`relative flex flex-col items-center justify-center rounded-lg border transition-all duration-200 ${
                           workspaceHeaderQrMeta.isCameraScanning
                             ? 'border-emerald-500/40 bg-slate-950 p-2.5 text-zinc-100'
                             : 'border-slate-200 dark:border-zinc-800 bg-white p-3'
                         } ${workspaceHeaderQrMeta.detectionFlash.viewportFlashClassName}`}
                       >
+                        {/* Active QR Scanning Session Visual Timer */}
+                        <div
+                          id={
+                            workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                              .elementId
+                          }
+                          data-testid={
+                            workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                              .testId
+                          }
+                          data-session-active={
+                            workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                              .isSessionActive
+                              ? 'true'
+                              : 'false'
+                          }
+                          data-elapsed-seconds={String(
+                            workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                              .elapsedSeconds
+                          )}
+                          data-formatted-time={
+                            workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                              .formattedTime
+                          }
+                          title={
+                            workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                              .title
+                          }
+                          aria-label={
+                            workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                              .ariaLabel
+                          }
+                          className={`mb-2 w-full flex items-center justify-between gap-1.5 px-2 py-1 rounded border text-[10px] font-mono transition-colors ${
+                            workspaceHeaderQrMeta.isCameraScanning
+                              ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+                              : 'bg-slate-50 border-slate-200 text-slate-700'
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .sessionTimer.isSessionActive
+                                  ? 'bg-emerald-500 animate-pulse'
+                                  : 'bg-slate-400'
+                              }`}
+                            />
+                            <Clock className="w-3 h-3 text-emerald-600 shrink-0" />
+                            <span className="font-semibold truncate">
+                              Session Timer:
+                            </span>
+                            <span
+                              data-testid="workspace-header-qr-scan-session-timer-value"
+                              className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 font-bold text-emerald-700"
+                            >
+                              {
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .sessionTimer.formattedTime
+                              }
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            id={
+                              workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                                .resetButtonElementId
+                            }
+                            data-testid={
+                              workspaceHeaderQrMeta.detectionFlash.sessionTimer
+                                .resetButtonTestId
+                            }
+                            onClick={() =>
+                              setWorkspaceHeaderQrScanSessionElapsedSeconds(0)
+                            }
+                            title="Reset active QR scanning session timer to 00:00"
+                            aria-label="Reset QR scanning session timer"
+                            className="px-1.5 py-0.5 rounded border border-slate-300 hover:border-emerald-500/50 bg-white hover:bg-emerald-50 text-[9px] font-semibold text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer shrink-0"
+                          >
+                            Reset
+                          </button>
+                        </div>
                         <svg
                           id={workspaceHeaderQrMeta.svgElementId}
                           data-testid={workspaceHeaderQrMeta.svgTestId}
@@ -7196,6 +7461,192 @@ export default function App() {
                             </p>
                           </>
                         )}
+
+                        {/* Inline Category Label Editor for QR Scan Entries inside #workspace-header-qr-scan-viewport-card */}
+                        <div
+                          id={WORKSPACE_QR_VIEWPORT_SCAN_ENTRIES_CONTAINER_ID}
+                          data-testid={
+                            WORKSPACE_QR_VIEWPORT_SCAN_ENTRIES_CONTAINER_ID
+                          }
+                          data-entry-count={String(
+                            Math.min(
+                              3,
+                              Math.max(
+                                1,
+                                workspaceHeaderQrMeta.searchHistory.items.length
+                              )
+                            )
+                          )}
+                          className="mt-2.5 pt-2 w-full border-t border-slate-200/80 space-y-1.5"
+                        >
+                          <div className="flex items-center justify-between gap-1 text-[9px] font-mono text-slate-500">
+                            <span className="font-semibold uppercase tracking-wider text-slate-600">
+                              Scanned Entries · Inline Category Edit
+                            </span>
+                            <span>Click category to rename</span>
+                          </div>
+                          <div className="space-y-1">
+                            {(workspaceHeaderQrMeta.searchHistory.items.length >
+                            0
+                              ? workspaceHeaderQrMeta.searchHistory.items.slice(
+                                  0,
+                                  3
+                                )
+                              : [
+                                  {
+                                    id: `qr_default_${workspaceHeaderQrMeta.roomCode}`,
+                                    roomCode: workspaceHeaderQrMeta.roomCode,
+                                    workspaceUrl:
+                                      workspaceHeaderQrMeta.workspaceUrl,
+                                    scannedAtMs: Date.now(),
+                                    category: 'Study' as const,
+                                    customCategoryLabel: undefined,
+                                    categoryColorTagSpec:
+                                      getWorkspaceQrHistoryCategoryColorTagSpec(
+                                        'Study'
+                                      ),
+                                  },
+                                ]
+                            ).map((viewportEntry) => {
+                                  const inlineSpec =
+                                    evaluateWorkspaceQrEntryInlineCategoryEditSpec(
+                                      {
+                                        entry: viewportEntry,
+                                        editingRoomCode:
+                                          editingQrEntryCategoryRoomCode,
+                                        draftLabel:
+                                          editingQrEntryCategoryDraft,
+                                      }
+                                    );
+                                  const entryContainerId = `workspace-header-qr-viewport-entry-${inlineSpec.roomCodeSlug}`;
+                                  const labelElementId = `workspace-header-qr-viewport-entry-label-${inlineSpec.roomCodeSlug}`;
+                                  return (
+                                    <div
+                                      key={`viewport-entry-${viewportEntry.roomCode}`}
+                                      id={entryContainerId}
+                                      data-testid={entryContainerId}
+                                      data-room-code={viewportEntry.roomCode}
+                                      data-category={viewportEntry.category}
+                                      data-category-label={
+                                        inlineSpec.categoryLabel
+                                      }
+                                      data-custom-category={
+                                        inlineSpec.isCustomCategoryLabel
+                                          ? 'true'
+                                          : 'false'
+                                      }
+                                      data-inline-editing={
+                                        inlineSpec.isEditing ? 'true' : 'false'
+                                      }
+                                      className="flex items-center justify-between gap-1.5 px-2 py-1 rounded border border-slate-200 bg-slate-50/90 text-[10px] font-mono text-slate-700"
+                                    >
+                                      <span className="font-bold text-emerald-700 shrink-0">
+                                        {viewportEntry.roomCode}
+                                      </span>
+                                      {inlineSpec.isEditing ? (
+                                        <div className="flex items-center gap-1 flex-1 min-w-0 justify-end">
+                                          <input
+                                            type="text"
+                                            id={inlineSpec.inputElementId}
+                                            data-testid={inlineSpec.inputTestId}
+                                            data-room-code={
+                                              viewportEntry.roomCode
+                                            }
+                                            value={editingQrEntryCategoryDraft}
+                                            maxLength={28}
+                                            onChange={(e) =>
+                                              setEditingQrEntryCategoryDraft(
+                                                e.target.value
+                                              )
+                                            }
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                handleSaveInlineEditWorkspaceQrEntryCategory(
+                                                  viewportEntry.roomCode
+                                                );
+                                              } else if (e.key === 'Escape') {
+                                                e.preventDefault();
+                                                handleCancelInlineEditWorkspaceQrEntryCategory();
+                                              }
+                                            }}
+                                            aria-label={`Inline edit category label for QR scan entry ${viewportEntry.roomCode}`}
+                                            placeholder="Category label..."
+                                            className="w-24 px-1.5 py-0.5 rounded border border-emerald-500 bg-white text-[10px] font-mono text-slate-800 focus:outline-none"
+                                          />
+                                          <button
+                                            type="button"
+                                            id={inlineSpec.saveButtonElementId}
+                                            data-testid={
+                                              inlineSpec.saveButtonTestId
+                                            }
+                                            onClick={() =>
+                                              handleSaveInlineEditWorkspaceQrEntryCategory(
+                                                viewportEntry.roomCode
+                                              )
+                                            }
+                                            aria-label={`Save category label for ${viewportEntry.roomCode}`}
+                                            className="px-1.5 py-0.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white text-[9px] font-semibold cursor-pointer shrink-0"
+                                          >
+                                            Save
+                                          </button>
+                                          <button
+                                            type="button"
+                                            id={
+                                              inlineSpec.cancelButtonElementId
+                                            }
+                                            data-testid={
+                                              inlineSpec.cancelButtonTestId
+                                            }
+                                            onClick={
+                                              handleCancelInlineEditWorkspaceQrEntryCategory
+                                            }
+                                            aria-label={`Cancel editing category label for ${viewportEntry.roomCode}`}
+                                            className="px-1.5 py-0.5 rounded border border-slate-300 bg-white hover:bg-slate-100 text-slate-600 text-[9px] font-semibold cursor-pointer shrink-0"
+                                          >
+                                            Cancel
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex items-center gap-1 min-w-0">
+                                          <span
+                                            id={labelElementId}
+                                            data-testid={labelElementId}
+                                            data-category-label={
+                                              inlineSpec.categoryLabel
+                                            }
+                                            className={`px-1.5 py-0.5 rounded border text-[9px] font-semibold truncate ${viewportEntry.categoryColorTagSpec.tagClassName}`}
+                                          >
+                                            {inlineSpec.categoryLabel}
+                                          </span>
+                                          <button
+                                            type="button"
+                                            id={inlineSpec.editButtonElementId}
+                                            data-testid={
+                                              inlineSpec.editButtonTestId
+                                            }
+                                            data-room-code={
+                                              viewportEntry.roomCode
+                                            }
+                                            onClick={() =>
+                                              handleStartInlineEditWorkspaceQrEntryCategory(
+                                                viewportEntry.roomCode,
+                                                inlineSpec.categoryLabel
+                                              )
+                                            }
+                                            title={`Rename category label for ${viewportEntry.roomCode}`}
+                                            aria-label={`Edit category label for ${viewportEntry.roomCode}`}
+                                            className="px-1.5 py-0.5 rounded border border-slate-300 hover:border-emerald-500/50 bg-white hover:bg-emerald-50 text-[9px] font-semibold text-slate-600 hover:text-emerald-700 transition-colors cursor-pointer shrink-0"
+                                          >
+                                            Rename
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                          </div>
+                        </div>
                       </div>
 
                       <div className="space-y-2">
@@ -7796,6 +8247,157 @@ export default function App() {
                                 </button>
                               )
                             )}
+                          </div>
+                          {/* Independent Pulse Duration Slider Control */}
+                          <div
+                            id={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .pulseDurationSpec.controlElementId
+                            }
+                            data-testid={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .pulseDurationSpec.controlTestId
+                            }
+                            data-pulse-duration-ms={String(
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .pulseDurationSpec.pulseDurationMs
+                            )}
+                            data-custom-duration={
+                              workspaceHeaderQrMeta.detectionFlash.vibrationSpec
+                                .pulseDurationSpec.isCustomPulseDuration
+                                ? 'true'
+                                : 'false'
+                            }
+                            className="pt-1 space-y-1 border-t border-slate-200/70 dark:border-zinc-800/80"
+                          >
+                            <div className="flex items-center justify-between gap-1.5">
+                              <label
+                                htmlFor={
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.pulseDurationSpec
+                                    .sliderElementId
+                                }
+                                className="text-[10px] font-mono font-semibold text-slate-700 dark:text-zinc-300"
+                              >
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.pulseDurationSpec.label
+                                }
+                              </label>
+                              <div className="flex items-center gap-1">
+                                <span
+                                  id={
+                                    workspaceHeaderQrMeta.detectionFlash
+                                      .vibrationSpec.pulseDurationSpec
+                                      .valueBadgeElementId
+                                  }
+                                  data-testid={
+                                    workspaceHeaderQrMeta.detectionFlash
+                                      .vibrationSpec.pulseDurationSpec
+                                      .valueBadgeTestId
+                                  }
+                                  data-pulse-duration-ms={String(
+                                    workspaceHeaderQrMeta.detectionFlash
+                                      .vibrationSpec.pulseDurationSpec
+                                      .pulseDurationMs
+                                  )}
+                                  className="px-1.5 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-[9px] font-mono font-bold text-emerald-700 dark:text-emerald-300"
+                                >
+                                  {
+                                    workspaceHeaderQrMeta.detectionFlash
+                                      .vibrationSpec.pulseDurationSpec
+                                      .valueLabel
+                                  }
+                                </span>
+                                <button
+                                  type="button"
+                                  id={
+                                    workspaceHeaderQrMeta.detectionFlash
+                                      .vibrationSpec.pulseDurationSpec
+                                      .resetButtonElementId
+                                  }
+                                  data-testid={
+                                    workspaceHeaderQrMeta.detectionFlash
+                                      .vibrationSpec.pulseDurationSpec
+                                      .resetButtonTestId
+                                  }
+                                  onClick={() =>
+                                    handleChangeWorkspaceQrVibrationPulseDuration(
+                                      null
+                                    )
+                                  }
+                                  title="Reset pulse duration to intensity preset default"
+                                  aria-label="Reset pulse duration to preset"
+                                  className="px-1.5 py-0.5 rounded border border-slate-200 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-[9px] font-mono text-slate-600 dark:text-zinc-400 transition-colors cursor-pointer"
+                                >
+                                  Preset
+                                </button>
+                              </div>
+                            </div>
+                            <input
+                              type="range"
+                              id={
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.pulseDurationSpec
+                                  .sliderElementId
+                              }
+                              data-testid={
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.pulseDurationSpec.sliderTestId
+                              }
+                              min={
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.pulseDurationSpec.minMs
+                              }
+                              max={
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.pulseDurationSpec.maxMs
+                              }
+                              step={
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.pulseDurationSpec.stepMs
+                              }
+                              value={
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.pulseDurationSpec
+                                  .pulseDurationMs
+                              }
+                              aria-label={
+                                workspaceHeaderQrMeta.detectionFlash
+                                  .vibrationSpec.pulseDurationSpec.ariaLabel
+                              }
+                              onChange={(e) =>
+                                handleChangeWorkspaceQrVibrationPulseDuration(
+                                  Number(e.target.value)
+                                )
+                              }
+                              className="w-full h-1.5 rounded-lg appearance-none bg-slate-200 dark:bg-zinc-800 accent-emerald-500 cursor-pointer"
+                            />
+                            <div className="flex items-center justify-between text-[9px] font-mono text-slate-400 dark:text-zinc-500">
+                              <span>
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.pulseDurationSpec.minMs
+                                }
+                                ms (Short)
+                              </span>
+                              <span>
+                                Preset:{' '}
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.pulseDurationSpec
+                                    .defaultPresetPulseDurationMs
+                                }
+                                ms / pulse
+                              </span>
+                              <span>
+                                {
+                                  workspaceHeaderQrMeta.detectionFlash
+                                    .vibrationSpec.pulseDurationSpec.maxMs
+                                }
+                                ms (Long)
+                              </span>
+                            </div>
                           </div>
                           <button
                             type="button"
@@ -9596,6 +10198,75 @@ export default function App() {
                                               />
                                               <span>{scanItem.categoryLabel}</span>
                                             </button>
+
+                                            {editingQrEntryCategoryRoomCode ===
+                                            scanItem.roomCode ? (
+                                              <span
+                                                onClick={(e) =>
+                                                  e.stopPropagation()
+                                                }
+                                                className="inline-flex items-center gap-1"
+                                              >
+                                                <input
+                                                  type="text"
+                                                  data-testid={`workspace-header-qr-recent-inline-category-input-${scanItem.id}`}
+                                                  value={
+                                                    editingQrEntryCategoryDraft
+                                                  }
+                                                  maxLength={28}
+                                                  onChange={(e) =>
+                                                    setEditingQrEntryCategoryDraft(
+                                                      e.target.value
+                                                    )
+                                                  }
+                                                  onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                      e.preventDefault();
+                                                      handleSaveInlineEditWorkspaceQrEntryCategory(
+                                                        scanItem.roomCode
+                                                      );
+                                                    } else if (
+                                                      e.key === 'Escape'
+                                                    ) {
+                                                      e.preventDefault();
+                                                      handleCancelInlineEditWorkspaceQrEntryCategory();
+                                                    }
+                                                  }}
+                                                  aria-label={`Inline edit category name for ${scanItem.roomCode}`}
+                                                  className="w-24 px-1.5 py-0.5 rounded border border-emerald-500 bg-white dark:bg-zinc-900 text-[9px] font-mono text-slate-800 dark:text-zinc-100"
+                                                />
+                                                <button
+                                                  type="button"
+                                                  data-testid={`workspace-header-qr-recent-inline-category-save-${scanItem.id}`}
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleSaveInlineEditWorkspaceQrEntryCategory(
+                                                      scanItem.roomCode
+                                                    );
+                                                  }}
+                                                  className="px-1.5 py-0.5 rounded bg-emerald-600 text-white text-[9px] font-mono font-semibold"
+                                                >
+                                                  Save
+                                                </button>
+                                              </span>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                data-testid={`workspace-header-qr-recent-inline-category-edit-${scanItem.id}`}
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleStartInlineEditWorkspaceQrEntryCategory(
+                                                    scanItem.roomCode,
+                                                    scanItem.categoryLabel
+                                                  );
+                                                }}
+                                                title={`Inline rename category label for ${scanItem.roomCode}`}
+                                                aria-label={`Inline rename category label for ${scanItem.roomCode}`}
+                                                className="px-1 py-0.5 rounded border border-slate-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 hover:border-emerald-500/50 text-[8px] font-mono text-slate-500 dark:text-zinc-400 hover:text-emerald-600 shrink-0"
+                                              >
+                                                Rename
+                                              </button>
+                                            )}
 
                                             <span
                                               id={scanItem.scanSourceBadgeElementId}
