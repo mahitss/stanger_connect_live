@@ -311,6 +311,11 @@ import {
   buildCozySanctuaryHubLayoutSpec,
   normalizeMomentStudyRoomCode,
   normalizeMomentLocationTag,
+  WORKSPACE_QR_TUTORIAL_STORAGE_KEY,
+  clampWorkspaceQrTutorialStepIndex,
+  resolveInitialWorkspaceQrTutorialState,
+  advanceWorkspaceQrTutorialStep,
+  evaluateWorkspaceQrScannerTutorialSpec,
 } from './utils/rules';
 import {
   CurvedTextArc,
@@ -1190,6 +1195,41 @@ export default function App() {
     workspaceHeaderQrVibrationPreviewCount,
     setWorkspaceHeaderQrVibrationPreviewCount,
   ] = useState<number>(0);
+  const initialQrTutorialState = (() => {
+    try {
+      const storedCompleted =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem(WORKSPACE_QR_TUTORIAL_STORAGE_KEY)
+          : null;
+      const searchStr =
+        typeof window !== 'undefined' && window.location?.search
+          ? window.location.search
+          : '';
+      return resolveInitialWorkspaceQrTutorialState({
+        storedCompletedValue: storedCompleted,
+        urlSearch: searchStr,
+        defaultOpenForNewUsers: true,
+      });
+    } catch {
+      return resolveInitialWorkspaceQrTutorialState({
+        storedCompletedValue: null,
+        urlSearch: '',
+        defaultOpenForNewUsers: true,
+      });
+    }
+  })();
+  const [
+    isWorkspaceHeaderQrTutorialActive,
+    setIsWorkspaceHeaderQrTutorialActive,
+  ] = useState<boolean>(initialQrTutorialState.isActive);
+  const [
+    workspaceHeaderQrTutorialStepIndex,
+    setWorkspaceHeaderQrTutorialStepIndex,
+  ] = useState<0 | 1 | 2 | 3>(initialQrTutorialState.currentStepIndex);
+  const [
+    isWorkspaceHeaderQrTutorialCompleted,
+    setIsWorkspaceHeaderQrTutorialCompleted,
+  ] = useState<boolean>(initialQrTutorialState.isCompleted);
   const workspaceHeaderQrVibrationPreviewTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrDetectionFlashTimerRef = useRef<number | null>(null);
   const workspaceHeaderQrScanToastLeadInTimerRef = useRef<number | null>(null);
@@ -1267,7 +1307,11 @@ export default function App() {
     };
     const onMouseDown = (e: MouseEvent) => {
       const targetEl = e.target as HTMLElement | null;
-      if (targetEl?.closest?.('#workspace-qr-scan-toast')) {
+      if (
+        targetEl?.closest?.('#workspace-qr-scan-toast') ||
+        targetEl?.closest?.('#workspace-header-qr-tutorial-overlay') ||
+        targetEl?.closest?.('#workspace-header-qr-tutorial-trigger-btn')
+      ) {
         return;
       }
       if (
@@ -4637,6 +4681,9 @@ export default function App() {
     scanSessionElapsedSeconds: workspaceHeaderQrScanSessionElapsedSeconds,
     isVibrationPreviewAnimating: isWorkspaceHeaderQrVibrationPreviewAnimating,
     vibrationPreviewCount: workspaceHeaderQrVibrationPreviewCount,
+    isTutorialActive: isWorkspaceHeaderQrTutorialActive,
+    tutorialStepIndex: workspaceHeaderQrTutorialStepIndex,
+    isTutorialCompleted: isWorkspaceHeaderQrTutorialCompleted,
     generationCount: workspaceHeaderQrGenerationCount,
     downloadCount: workspaceHeaderQrPngDownloadCount,
     roomCode: activeStudyRoomCode,
@@ -5323,6 +5370,12 @@ export default function App() {
     setWorkspaceHeaderQrHref(resolvedHref);
     if (!isWorkspaceHeaderQrOpen) {
       setWorkspaceHeaderQrGenerationCount((c) => c + 1);
+      if (
+        isWorkspaceHeaderQrTutorialActive &&
+        workspaceHeaderQrTutorialStepIndex === 0
+      ) {
+        setWorkspaceHeaderQrTutorialStepIndex(1);
+      }
     }
     setIsWorkspaceHeaderQrOpen((prev) => {
       const next = !prev;
@@ -5344,7 +5397,119 @@ export default function App() {
       setWorkspaceHeaderQrGenerationCount((c) => c + 1);
       setIsWorkspaceHeaderQrOpen(true);
     }
+    if (
+      isWorkspaceHeaderQrTutorialActive &&
+      workspaceHeaderQrTutorialStepIndex === 0
+    ) {
+      setWorkspaceHeaderQrTutorialStepIndex(1);
+    }
     void handleToggleWorkspaceHeaderQrCameraScanner();
+  };
+
+  const handleToggleWorkspaceHeaderQrTutorial = () => {
+    setIsWorkspaceHeaderQrTutorialActive((prev) => {
+      const next = !prev;
+      if (next) {
+        setWorkspaceHeaderQrTutorialStepIndex(0);
+      }
+      if (uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+      return next;
+    });
+  };
+
+  const handleCompleteOrSkipWorkspaceHeaderQrTutorial = () => {
+    setIsWorkspaceHeaderQrTutorialActive(false);
+    setIsWorkspaceHeaderQrTutorialCompleted(true);
+    try {
+      localStorage.setItem(WORKSPACE_QR_TUTORIAL_STORAGE_KEY, 'true');
+    } catch {
+      // ignore localStorage error
+    }
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+  };
+
+  const handleNavigateWorkspaceHeaderQrTutorialStep = (
+    direction: 'next' | 'prev' | 'jump',
+    targetIdx?: number
+  ) => {
+    const transition = advanceWorkspaceQrTutorialStep(
+      workspaceHeaderQrTutorialStepIndex,
+      direction,
+      targetIdx
+    );
+    if (transition.didComplete) {
+      handleCompleteOrSkipWorkspaceHeaderQrTutorial();
+      return;
+    }
+    setWorkspaceHeaderQrTutorialStepIndex(transition.nextStepIndex);
+    if (transition.shouldOpenPopover && !isWorkspaceHeaderQrOpen) {
+      const resolvedHref = resolveWorkspaceHeaderShareUrl(
+        typeof window !== 'undefined' && window.location?.href
+          ? window.location.href
+          : 'https://mrstranger.app/'
+      );
+      setWorkspaceHeaderQrHref(resolvedHref);
+      setWorkspaceHeaderQrGenerationCount((c) => c + 1);
+      setIsWorkspaceHeaderQrOpen(true);
+    }
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+  };
+
+  const handleTriggerWorkspaceHeaderQrTutorialStepAction = () => {
+    const resolvedHref = resolveWorkspaceHeaderShareUrl(
+      typeof window !== 'undefined' && window.location?.href
+        ? window.location.href
+        : 'https://mrstranger.app/'
+    );
+    setWorkspaceHeaderQrHref(resolvedHref);
+
+    if (workspaceHeaderQrTutorialStepIndex === 0) {
+      if (!isWorkspaceHeaderQrOpen) {
+        setWorkspaceHeaderQrGenerationCount((c) => c + 1);
+        setIsWorkspaceHeaderQrOpen(true);
+      }
+      setWorkspaceHeaderQrTutorialStepIndex(1);
+      if (uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+      return;
+    }
+
+    if (workspaceHeaderQrTutorialStepIndex === 1) {
+      if (!isWorkspaceHeaderQrOpen) {
+        setWorkspaceHeaderQrGenerationCount((c) => c + 1);
+        setIsWorkspaceHeaderQrOpen(true);
+      }
+      setWorkspaceHeaderQrTutorialStepIndex(2);
+      if (uiSoundPrefs.enabled) {
+        playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+      }
+      return;
+    }
+
+    if (workspaceHeaderQrTutorialStepIndex === 2) {
+      if (!isWorkspaceHeaderQrOpen) {
+        setWorkspaceHeaderQrGenerationCount((c) => c + 1);
+        setIsWorkspaceHeaderQrOpen(true);
+      }
+      handleApplyScannedWorkspaceQrPayload(
+        `${
+          typeof window !== 'undefined' && window.location?.origin
+            ? window.location.origin
+            : 'http://localhost:3000'
+        }/?room=${encodeURIComponent(activeStudyRoomCode || 'STUDY-204')}`
+      );
+      setWorkspaceHeaderQrTutorialStepIndex(3);
+      return;
+    }
+
+    handleCompleteOrSkipWorkspaceHeaderQrTutorial();
   };
 
   const handleApplyScannedWorkspaceQrPayload = (rawScannedValue: string): boolean => {
@@ -6883,11 +7048,64 @@ export default function App() {
                 )}
               </AnimatePresence>
 
-              {/* Workspace URL QR Code Generator Button & Adjacent Camera Scan Icon */}
+              {/* Workspace URL QR Code Generator Button, Adjacent Camera Scan Icon & Translucent Tutorial Spotlight */}
               <div
                 ref={workspaceHeaderQrContainerRef}
                 className="relative inline-flex items-center gap-1"
               >
+                {/* Translucent Highlight Effect Over the QR Scanner Button Group */}
+                {workspaceHeaderQrMeta.tutorial.isActive && (
+                  <div
+                    id={
+                      workspaceHeaderQrMeta.tutorial.translucentHighlight
+                        .ringElementId
+                    }
+                    data-testid={
+                      workspaceHeaderQrMeta.tutorial.translucentHighlight
+                        .ringTestId
+                    }
+                    data-tutorial-step={String(
+                      workspaceHeaderQrMeta.tutorial.currentStepNumber
+                    )}
+                    data-highlight-zone={
+                      workspaceHeaderQrMeta.tutorial.translucentHighlight
+                        .highlightZone
+                    }
+                    data-target-element={
+                      workspaceHeaderQrMeta.tutorial.translucentHighlight
+                        .targetElementId
+                    }
+                    data-highlight-opacity={String(
+                      workspaceHeaderQrMeta.tutorial.translucentHighlight
+                        .highlightOpacity
+                    )}
+                    aria-hidden="true"
+                    className={
+                      workspaceHeaderQrMeta.tutorial.translucentHighlight
+                        .ringClassName
+                    }
+                  >
+                    <span
+                      id={
+                        workspaceHeaderQrMeta.tutorial.translucentHighlight
+                          .badgeElementId
+                      }
+                      data-testid={
+                        workspaceHeaderQrMeta.tutorial.translucentHighlight
+                          .badgeTestId
+                      }
+                      className={`pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-emerald-950/95 border border-emerald-400/90 text-[9px] font-mono font-bold text-emerald-200 whitespace-nowrap ${
+                        workspaceHeaderQrMeta.isOpen ? 'opacity-0' : 'opacity-100'
+                      }`}
+                    >
+                      {
+                        workspaceHeaderQrMeta.tutorial.translucentHighlight
+                          .spotlightBadgeLabel
+                      }
+                    </span>
+                  </div>
+                )}
+
                 <input
                   type="hidden"
                   id={workspaceHeaderQrMeta.generationCountHiddenInputId}
@@ -6905,6 +7123,9 @@ export default function App() {
                   data-open={workspaceHeaderQrMeta.isOpen ? 'true' : 'false'}
                   data-qr-url={workspaceHeaderQrMeta.workspaceUrl}
                   data-includes-scanner="true"
+                  data-tutorial-highlighted={
+                    workspaceHeaderQrMeta.tutorial.isActive ? 'true' : 'false'
+                  }
                   data-generation-count={String(
                     workspaceHeaderQrMeta.generationCount
                   )}
@@ -6914,15 +7135,18 @@ export default function App() {
                   aria-label={workspaceHeaderQrMeta.ariaLabel}
                   title={workspaceHeaderQrMeta.title}
                   onClick={handleToggleWorkspaceHeaderQrCode}
-                  className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  className={`relative z-20 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 ${
                     workspaceHeaderQrMeta.isOpen
                       ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
-                      : 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500'
+                      : workspaceHeaderQrMeta.tutorial.isActive
+                        ? 'bg-emerald-500/15 border-emerald-400 text-emerald-800 dark:bg-emerald-500/20 dark:border-emerald-400 dark:text-emerald-200'
+                        : 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500'
                   }`}
                 >
                   <QrCode
                     className={`w-3.5 h-3.5 shrink-0 ${
-                      workspaceHeaderQrMeta.isOpen
+                      workspaceHeaderQrMeta.isOpen ||
+                      workspaceHeaderQrMeta.tutorial.isActive
                         ? 'text-emerald-600 dark:text-emerald-400'
                         : 'text-slate-600 dark:text-zinc-300'
                     }`}
@@ -6943,6 +7167,12 @@ export default function App() {
                     workspaceHeaderQrMeta.headerCameraStatusDot.color
                   }
                   data-includes-qr-scanner="true"
+                  data-tutorial-highlighted={
+                    workspaceHeaderQrMeta.tutorial.isActive ? 'true' : 'false'
+                  }
+                  data-tutorial-step={String(
+                    workspaceHeaderQrMeta.tutorial.currentStepNumber
+                  )}
                   aria-expanded={
                     workspaceHeaderQrMeta.isOpen &&
                     workspaceHeaderQrMeta.isCameraScanning
@@ -6951,11 +7181,14 @@ export default function App() {
                   aria-label={workspaceHeaderQrMeta.headerCameraScanAriaLabel}
                   title={workspaceHeaderQrMeta.headerCameraScanTitle}
                   onClick={handleOpenWorkspaceHeaderQrCameraScannerFromHeader}
-                  className={`inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors shrink-0 ${
+                  className={`relative z-20 inline-flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors shrink-0 ${
                     workspaceHeaderQrMeta.isOpen &&
                     workspaceHeaderQrMeta.isCameraScanning
                       ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
-                      : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-emerald-400 dark:hover:border-emerald-500/60'
+                      : workspaceHeaderQrMeta.tutorial.isActive
+                        ? workspaceHeaderQrMeta.tutorial.translucentHighlight
+                            .scannerButtonHighlightClassName
+                        : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-emerald-400 dark:hover:border-emerald-500/60'
                   }`}
                 >
                   <Camera
@@ -6989,6 +7222,45 @@ export default function App() {
                       workspaceHeaderQrMeta.headerCameraStatusDot.dotClassName
                     }
                   />
+                </button>
+
+                {/* Header Trigger Button for Interactive QR Scanner Step-by-Step Tutorial */}
+                <button
+                  type="button"
+                  id={workspaceHeaderQrMeta.tutorial.triggerButtonElementId}
+                  data-testid={
+                    workspaceHeaderQrMeta.tutorial.triggerButtonTestId
+                  }
+                  data-tutorial-active={
+                    workspaceHeaderQrMeta.tutorial.isActive ? 'true' : 'false'
+                  }
+                  data-tutorial-completed={
+                    workspaceHeaderQrMeta.tutorial.isCompleted
+                      ? 'true'
+                      : 'false'
+                  }
+                  data-tutorial-step={String(
+                    workspaceHeaderQrMeta.tutorial.currentStepNumber
+                  )}
+                  aria-expanded={workspaceHeaderQrMeta.tutorial.isActive}
+                  aria-controls={
+                    workspaceHeaderQrMeta.tutorial.overlayElementId
+                  }
+                  aria-label={
+                    workspaceHeaderQrMeta.tutorial.triggerButtonAriaLabel
+                  }
+                  title="Interactive step-by-step tutorial on using the QR scanner to join workspace rooms"
+                  onClick={handleToggleWorkspaceHeaderQrTutorial}
+                  className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-md border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 ${
+                    workspaceHeaderQrMeta.tutorial.isActive
+                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 dark:text-emerald-300'
+                      : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900'
+                  }`}
+                >
+                  <Info className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                  <span>
+                    {workspaceHeaderQrMeta.tutorial.triggerButtonLabel}
+                  </span>
                 </button>
 
                 <AnimatePresence initial={false}>
@@ -7145,16 +7417,44 @@ export default function App() {
                             {workspaceHeaderQrMeta.dialogSubtitle}
                           </p>
                         </div>
-                        <button
-                          type="button"
-                          id={workspaceHeaderQrMeta.closeButtonId}
-                          data-testid={workspaceHeaderQrMeta.closeButtonTestId}
-                          onClick={() => setIsWorkspaceHeaderQrOpen(false)}
-                          aria-label="Close QR code dialog"
-                          className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/80 transition-colors shrink-0"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <button
+                            type="button"
+                            id={
+                              workspaceHeaderQrMeta.tutorial
+                                .popoverTriggerButtonElementId
+                            }
+                            data-testid={
+                              workspaceHeaderQrMeta.tutorial
+                                .popoverTriggerButtonTestId
+                            }
+                            data-tutorial-active={
+                              workspaceHeaderQrMeta.tutorial.isActive
+                                ? 'true'
+                                : 'false'
+                            }
+                            onClick={() => {
+                              setIsWorkspaceHeaderQrTutorialActive(true);
+                              setWorkspaceHeaderQrTutorialStepIndex(0);
+                            }}
+                            title="Launch step-by-step QR scanner guide"
+                            aria-label="Launch step-by-step QR scanner tutorial"
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-[10px] font-mono font-semibold text-emerald-700 dark:text-emerald-300 transition-colors whitespace-nowrap"
+                          >
+                            <Info className="w-3 h-3 shrink-0" />
+                            <span>Step Guide</span>
+                          </button>
+                          <button
+                            type="button"
+                            id={workspaceHeaderQrMeta.closeButtonId}
+                            data-testid={workspaceHeaderQrMeta.closeButtonTestId}
+                            onClick={() => setIsWorkspaceHeaderQrOpen(false)}
+                            aria-label="Close QR code dialog"
+                            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:text-zinc-400 dark:hover:text-white dark:hover:bg-zinc-800/80 transition-colors shrink-0"
+                          >
+                            <X className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
 
                       <div
@@ -7468,6 +7768,12 @@ export default function App() {
                           data-testid={
                             WORKSPACE_QR_VIEWPORT_SCAN_ENTRIES_CONTAINER_ID
                           }
+                          data-tutorial-highlighted={
+                            workspaceHeaderQrMeta.tutorial.isActive &&
+                            workspaceHeaderQrMeta.tutorial.currentStepIndex === 3
+                              ? 'true'
+                              : 'false'
+                          }
                           data-entry-count={String(
                             Math.min(
                               3,
@@ -7477,7 +7783,12 @@ export default function App() {
                               )
                             )
                           )}
-                          className="mt-2.5 pt-2 w-full border-t border-slate-200/80 space-y-1.5"
+                          className={`mt-2.5 pt-2 w-full border-t border-slate-200/80 space-y-1.5 rounded-md transition-all ${
+                            workspaceHeaderQrMeta.tutorial.isActive &&
+                            workspaceHeaderQrMeta.tutorial.currentStepIndex === 3
+                              ? 'p-1.5 ring-2 ring-emerald-400/90 bg-emerald-500/10'
+                              : ''
+                          }`}
                         >
                           <div className="flex items-center justify-between gap-1 text-[9px] font-mono text-slate-500">
                             <span className="font-semibold uppercase tracking-wider text-slate-600">
@@ -7733,6 +8044,12 @@ export default function App() {
                             }
                             data-camera-status={workspaceHeaderQrMeta.cameraScanStatus}
                             data-facing-mode={workspaceHeaderQrMeta.cameraFacingMode}
+                            data-tutorial-highlighted={
+                              workspaceHeaderQrMeta.tutorial.isActive &&
+                              workspaceHeaderQrMeta.tutorial.currentStepIndex === 1
+                                ? 'true'
+                                : 'false'
+                            }
                             aria-pressed={workspaceHeaderQrMeta.isCameraScanning}
                             aria-label={workspaceHeaderQrMeta.scanCameraAriaLabel}
                             title={workspaceHeaderQrMeta.scanCameraTitle}
@@ -7740,7 +8057,10 @@ export default function App() {
                             className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
                               workspaceHeaderQrMeta.isCameraScanning
                                 ? 'border-amber-500/60 bg-amber-500/15 hover:bg-amber-500/25 text-amber-700 dark:text-amber-300'
-                                : 'border-slate-300 dark:border-zinc-700 bg-slate-900 hover:bg-slate-800 text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-100'
+                                : workspaceHeaderQrMeta.tutorial.isActive &&
+                                    workspaceHeaderQrMeta.tutorial.currentStepIndex === 1
+                                  ? 'ring-2 ring-emerald-400 border-emerald-400 bg-emerald-500/20 text-emerald-900 dark:text-emerald-200'
+                                  : 'border-slate-300 dark:border-zinc-700 bg-slate-900 hover:bg-slate-800 text-white dark:bg-zinc-900 dark:hover:bg-zinc-800 dark:text-zinc-100'
                             }`}
                           >
                             {workspaceHeaderQrMeta.isCameraScanning ? (
@@ -7762,6 +8082,12 @@ export default function App() {
                             data-testid={
                               workspaceHeaderQrMeta.detectionFlash.simulateButtonTestId
                             }
+                            data-tutorial-highlighted={
+                              workspaceHeaderQrMeta.tutorial.isActive &&
+                              workspaceHeaderQrMeta.tutorial.currentStepIndex === 2
+                                ? 'true'
+                                : 'false'
+                            }
                             onClick={() =>
                               handleApplyScannedWorkspaceQrPayload(
                                 `${
@@ -7775,7 +8101,12 @@ export default function App() {
                               )
                             }
                             title="Simulate detecting a workspace QR code to trigger the subtle confirmation flash followed by the join toast"
-                            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 text-xs font-semibold transition-colors whitespace-nowrap"
+                            className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
+                              workspaceHeaderQrMeta.tutorial.isActive &&
+                              workspaceHeaderQrMeta.tutorial.currentStepIndex === 2
+                                ? 'ring-2 ring-emerald-400 border-emerald-400 bg-emerald-500/25 text-emerald-800 dark:text-emerald-200'
+                                : 'border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+                            }`}
                           >
                             <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                             <span>Test QR Detection Flash</span>
@@ -18117,6 +18448,223 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Interactive Step-by-Step QR Scanner Tutorial Overlay with Translucent Scanner Button Highlight */}
+      <AnimatePresence initial={false}>
+        {workspaceHeaderQrMeta.tutorial.isActive && (
+          <motion.aside
+            key="workspace-header-qr-tutorial-overlay"
+            id={workspaceHeaderQrMeta.tutorial.overlayElementId}
+            data-testid={workspaceHeaderQrMeta.tutorial.overlayTestId}
+            data-tutorial-active="true"
+            data-current-step={String(
+              workspaceHeaderQrMeta.tutorial.currentStepNumber
+            )}
+            data-total-steps={String(workspaceHeaderQrMeta.tutorial.totalSteps)}
+            data-step-id={workspaceHeaderQrMeta.tutorial.currentStep.id}
+            data-target-element={
+              workspaceHeaderQrMeta.tutorial.currentStep.targetElementId
+            }
+            data-highlight-zone={
+              workspaceHeaderQrMeta.tutorial.currentStep.highlightZone
+            }
+            data-scanner-button-highlighted="true"
+            role="dialog"
+            aria-modal="false"
+            aria-label="Interactive Step-by-Step QR Scanner Tutorial"
+            initial={{ opacity: 0, y: -8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -8, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className={`fixed z-50 w-[calc(100vw-2rem)] sm:w-[24.5rem] rounded-xl border border-emerald-500/50 bg-[#FDFBF7] dark:bg-[#191715] p-4 text-left font-sans transition-all duration-200 ${
+              workspaceHeaderQrMeta.isOpen
+                ? 'top-14 left-4 sm:left-[16.25rem]'
+                : 'top-14 right-4 sm:right-6'
+            }`}
+          >
+            <div
+              id={workspaceHeaderQrMeta.tutorial.cardElementId}
+              data-testid={workspaceHeaderQrMeta.tutorial.cardTestId}
+              className="space-y-3"
+            >
+              {/* Header row: Kicker, Step Counter & Skip Button */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                    <QrCode className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-semibold">
+                      {workspaceHeaderQrMeta.tutorial.headerBadgeLabel}
+                    </span>
+                    <span aria-hidden="true">·</span>
+                    <span
+                      data-testid="workspace-header-qr-tutorial-step-counter"
+                      className="font-bold"
+                    >
+                      {workspaceHeaderQrMeta.tutorial.stepCounterLabel}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-zinc-400 truncate">
+                    Highlight:{' '}
+                    <span className="font-mono text-slate-800 dark:text-zinc-200">
+                      #{workspaceHeaderQrMeta.tutorial.currentStep.targetElementId}
+                    </span>
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  id={workspaceHeaderQrMeta.tutorial.skipButtonElementId}
+                  data-testid={workspaceHeaderQrMeta.tutorial.skipButtonTestId}
+                  onClick={handleCompleteOrSkipWorkspaceHeaderQrTutorial}
+                  aria-label="Skip and close QR scanner tutorial"
+                  className="px-2 py-1 rounded border border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-[11px] font-medium text-slate-700 dark:text-zinc-300 transition-colors whitespace-nowrap shrink-0"
+                >
+                  {workspaceHeaderQrMeta.tutorial.skipButtonLabel}
+                </button>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-600 dark:text-zinc-400">
+                  <span>Onboarding Progress</span>
+                  <span>
+                    {workspaceHeaderQrMeta.tutorial.progressPercent}% (
+                    {workspaceHeaderQrMeta.tutorial.compactStepCounterLabel})
+                  </span>
+                </div>
+                <div
+                  id={workspaceHeaderQrMeta.tutorial.progressBarElementId}
+                  data-testid={workspaceHeaderQrMeta.tutorial.progressBarTestId}
+                  data-progress-percent={String(
+                    workspaceHeaderQrMeta.tutorial.progressPercent
+                  )}
+                  role="progressbar"
+                  aria-valuenow={workspaceHeaderQrMeta.tutorial.progressPercent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="QR scanner tutorial completion progress"
+                  className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden"
+                >
+                  <div
+                    style={{
+                      width: `${workspaceHeaderQrMeta.tutorial.progressPercent}%`,
+                    }}
+                    className="h-full bg-emerald-600 dark:bg-emerald-500 transition-all duration-200"
+                  />
+                </div>
+              </div>
+
+              {/* Step Selector Tabs */}
+              <div
+                role="tablist"
+                aria-label="QR Scanner Tutorial Steps"
+                className="grid grid-cols-4 gap-1"
+              >
+                {workspaceHeaderQrMeta.tutorial.steps.map((stepItem) => (
+                  <button
+                    key={stepItem.id}
+                    type="button"
+                    role="tab"
+                    id={stepItem.stepTabElementId}
+                    data-testid={stepItem.stepTabTestId}
+                    aria-selected={stepItem.isCurrent}
+                    onClick={() =>
+                      handleNavigateWorkspaceHeaderQrTutorialStep(
+                        'jump',
+                        stepItem.index
+                      )
+                    }
+                    className={`px-1.5 py-1 rounded border text-[10px] font-mono tabular-nums font-semibold transition-colors whitespace-nowrap truncate ${
+                      stepItem.isCurrent
+                        ? 'bg-emerald-600 border-emerald-500 text-white'
+                        : stepItem.isCompletedStep
+                          ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-800 dark:text-emerald-300'
+                          : 'bg-slate-100 dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    {stepItem.shortLabel}
+                  </button>
+                ))}
+              </div>
+
+              {/* Current Step Content */}
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50/90 dark:bg-[#121110] space-y-2">
+                <h3
+                  data-testid="workspace-header-qr-tutorial-step-title"
+                  className="text-sm font-bold text-slate-900 dark:text-[#F5F2EB]"
+                >
+                  {workspaceHeaderQrMeta.tutorial.currentStep.title}
+                </h3>
+                <p
+                  data-testid="workspace-header-qr-tutorial-step-description"
+                  className="text-xs leading-relaxed text-slate-700 dark:text-zinc-300"
+                >
+                  {workspaceHeaderQrMeta.tutorial.currentStep.description}
+                </p>
+                <p
+                  data-testid="workspace-header-qr-tutorial-step-tip"
+                  className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300"
+                >
+                  Tip: {workspaceHeaderQrMeta.tutorial.currentStep.tipText}
+                </p>
+
+                {/* Interactive Live Step Action Button */}
+                <button
+                  type="button"
+                  id={workspaceHeaderQrMeta.tutorial.actionButtonElementId}
+                  data-testid={workspaceHeaderQrMeta.tutorial.actionButtonTestId}
+                  data-step-index={String(
+                    workspaceHeaderQrMeta.tutorial.currentStepIndex
+                  )}
+                  onClick={handleTriggerWorkspaceHeaderQrTutorialStepAction}
+                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-800 dark:text-emerald-200 text-xs font-semibold transition-colors whitespace-nowrap"
+                >
+                  <Camera className="w-3.5 h-3.5 shrink-0" />
+                  <span>
+                    {workspaceHeaderQrMeta.tutorial.currentStep.actionButtonLabel}
+                  </span>
+                </button>
+              </div>
+
+              {/* Previous / Next Navigation Controls */}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  id={workspaceHeaderQrMeta.tutorial.prevButtonElementId}
+                  data-testid={workspaceHeaderQrMeta.tutorial.prevButtonTestId}
+                  disabled={!workspaceHeaderQrMeta.tutorial.canGoPrev}
+                  onClick={() =>
+                    handleNavigateWorkspaceHeaderQrTutorialStep('prev')
+                  }
+                  className={`px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
+                    workspaceHeaderQrMeta.tutorial.canGoPrev
+                      ? 'border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-200'
+                      : 'border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/40 text-slate-400 dark:text-zinc-600 cursor-not-allowed opacity-60'
+                  }`}
+                >
+                  {workspaceHeaderQrMeta.tutorial.prevButtonLabel}
+                </button>
+
+                <span className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-zinc-400">
+                  Room {workspaceHeaderQrMeta.tutorial.roomCode}
+                </span>
+
+                <button
+                  type="button"
+                  id={workspaceHeaderQrMeta.tutorial.nextButtonElementId}
+                  data-testid={workspaceHeaderQrMeta.tutorial.nextButtonTestId}
+                  onClick={() =>
+                    handleNavigateWorkspaceHeaderQrTutorialStep('next')
+                  }
+                  className="px-3.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap"
+                >
+                  {workspaceHeaderQrMeta.tutorial.nextButtonLabel}
+                </button>
+              </div>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
 
       {/* Temporary Toast Notification in #workspace-shell after a Successful QR Scan */}
       <AnimatePresence initial={false}>

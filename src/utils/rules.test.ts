@@ -490,6 +490,24 @@ import {
   clampWorkspaceQrVibrationPulseDurationMs,
   normalizeOptionalWorkspaceQrVibrationPulseDurationMs,
   evaluateWorkspaceQrVibrationPulseDurationControlSpec,
+  WORKSPACE_QR_TUTORIAL_STORAGE_KEY,
+  WORKSPACE_QR_TUTORIAL_OVERLAY_ID,
+  WORKSPACE_QR_TUTORIAL_CARD_ID,
+  WORKSPACE_QR_TUTORIAL_HIGHLIGHT_RING_ID,
+  WORKSPACE_QR_TUTORIAL_HIGHLIGHT_BADGE_ID,
+  WORKSPACE_QR_TUTORIAL_TRIGGER_BTN_ID,
+  WORKSPACE_QR_TUTORIAL_POPOVER_BTN_ID,
+  WORKSPACE_QR_TUTORIAL_PREV_BTN_ID,
+  WORKSPACE_QR_TUTORIAL_NEXT_BTN_ID,
+  WORKSPACE_QR_TUTORIAL_ACTION_BTN_ID,
+  WORKSPACE_QR_TUTORIAL_SKIP_BTN_ID,
+  WORKSPACE_QR_TUTORIAL_PROGRESS_BAR_ID,
+  WORKSPACE_QR_TUTORIAL_TOTAL_STEPS,
+  WORKSPACE_QR_TUTORIAL_STEPS,
+  clampWorkspaceQrTutorialStepIndex,
+  resolveInitialWorkspaceQrTutorialState,
+  advanceWorkspaceQrTutorialStep,
+  evaluateWorkspaceQrScannerTutorialSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -11024,10 +11042,148 @@ test('QR vibration Pulse Duration slider (#workspace-header-qr-vibration-pulse-d
   assert.equal(sliderSpec.valueLabel, '65ms / pulse (Custom)');
 });
 
+test('Interactive step-by-step QR scanner tutorial overlay guides new users and renders a translucent highlight effect over the scanner button', () => {
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_STORAGE_KEY,
+    'mr_stranger_qr_scanner_tutorial_completed_v1'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_OVERLAY_ID,
+    'workspace-header-qr-tutorial-overlay'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_CARD_ID,
+    'workspace-header-qr-tutorial-card'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_HIGHLIGHT_RING_ID,
+    'workspace-header-qr-scanner-highlight-ring'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_HIGHLIGHT_BADGE_ID,
+    'workspace-header-qr-scanner-highlight-badge'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_TRIGGER_BTN_ID,
+    'workspace-header-qr-tutorial-trigger-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_POPOVER_BTN_ID,
+    'workspace-header-qr-popover-tutorial-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_PREV_BTN_ID,
+    'workspace-header-qr-tutorial-prev-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_NEXT_BTN_ID,
+    'workspace-header-qr-tutorial-next-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_ACTION_BTN_ID,
+    'workspace-header-qr-tutorial-action-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_SKIP_BTN_ID,
+    'workspace-header-qr-tutorial-skip-btn'
+  );
+  assert.equal(
+    WORKSPACE_QR_TUTORIAL_PROGRESS_BAR_ID,
+    'workspace-header-qr-tutorial-progress-bar'
+  );
+  assert.equal(WORKSPACE_QR_TUTORIAL_TOTAL_STEPS, 4);
+  assert.equal(WORKSPACE_QR_TUTORIAL_STEPS.length, 4);
 
+  // Step clamping
+  assert.equal(clampWorkspaceQrTutorialStepIndex(-5), 0);
+  assert.equal(clampWorkspaceQrTutorialStepIndex(2), 2);
+  assert.equal(clampWorkspaceQrTutorialStepIndex(99), 3);
 
+  // Initial state resolution for new users vs returning users vs URL param
+  const newUserInit = resolveInitialWorkspaceQrTutorialState({
+    storedCompletedValue: null,
+  });
+  assert.equal(newUserInit.isActive, true);
+  assert.equal(newUserInit.currentStepIndex, 0);
+  assert.equal(newUserInit.isCompleted, false);
+  assert.equal(newUserInit.isNewUser, true);
+  assert.equal(newUserInit.triggerSource, 'new_user_auto');
 
+  const returningUserInit = resolveInitialWorkspaceQrTutorialState({
+    storedCompletedValue: 'true',
+  });
+  assert.equal(returningUserInit.isActive, false);
+  assert.equal(returningUserInit.isCompleted, true);
+  assert.equal(returningUserInit.triggerSource, 'completed');
 
+  const urlParamInit = resolveInitialWorkspaceQrTutorialState({
+    storedCompletedValue: 'true',
+    urlSearch: '?qrTutorial=1&qrTutorialStep=3',
+  });
+  assert.equal(urlParamInit.isActive, true);
+  assert.equal(urlParamInit.currentStepIndex, 2);
+  assert.equal(urlParamInit.triggerSource, 'url_param');
 
+  // Step navigation transitions
+  const step1To2 = advanceWorkspaceQrTutorialStep(0, 'next');
+  assert.equal(step1To2.nextStepIndex, 1);
+  assert.equal(step1To2.didComplete, false);
+  assert.equal(step1To2.isActive, true);
+  assert.equal(step1To2.shouldOpenPopover, true);
+  assert.equal(step1To2.stepSpec.id, 'start_camera_or_frame_scan');
 
+  const step4Finish = advanceWorkspaceQrTutorialStep(3, 'next');
+  assert.equal(step4Finish.nextStepIndex, 3);
+  assert.equal(step4Finish.didComplete, true);
+  assert.equal(step4Finish.isActive, false);
 
+  const jumpToStep3 = advanceWorkspaceQrTutorialStep(0, 'jump', 2);
+  assert.equal(jumpToStep3.nextStepIndex, 2);
+  assert.equal(jumpToStep3.stepSpec.id, 'confirm_detection_feedback');
+
+  // Evaluated spec and translucent highlight over the scanner button
+  const activeStep1Spec = evaluateWorkspaceQrScannerTutorialSpec({
+    isActive: true,
+    currentStepIndex: 0,
+    isCompleted: false,
+    isScannerPopoverOpen: false,
+    roomCode: 'STUDY-204',
+  });
+  assert.equal(activeStep1Spec.isActive, true);
+  assert.equal(activeStep1Spec.currentStepNumber, 1);
+  assert.equal(activeStep1Spec.progressPercent, 25);
+  assert.equal(activeStep1Spec.stepCounterLabel, 'Step 1 of 4');
+  assert.equal(activeStep1Spec.canGoPrev, false);
+  assert.equal(activeStep1Spec.isLastStep, false);
+  assert.equal(activeStep1Spec.nextButtonLabel, 'Next Step');
+  assert.equal(
+    activeStep1Spec.translucentHighlight.isScannerButtonHighlighted,
+    true
+  );
+  assert.equal(activeStep1Spec.translucentHighlight.highlightOpacity, 0.22);
+  assert.equal(
+    activeStep1Spec.translucentHighlight.targetElementId,
+    'workspace-header-qr-camera-scan-btn'
+  );
+  assert.equal(
+    activeStep1Spec.translucentHighlight.ringClassName.includes(
+      'bg-emerald-500/20'
+    ),
+    true
+  );
+
+  // Integration inside getWorkspaceHeaderQrCodeMeta
+  const qrMeta = getWorkspaceHeaderQrCodeMeta({
+    currentHref: 'https://example.com/?room=STUDY-204',
+    isOpen: true,
+    isTutorialActive: true,
+    tutorialStepIndex: 3,
+    isTutorialCompleted: false,
+    roomCode: 'STUDY-204',
+  });
+  assert.equal(qrMeta.tutorial.isActive, true);
+  assert.equal(qrMeta.tutorial.currentStepNumber, 4);
+  assert.equal(qrMeta.tutorial.progressPercent, 100);
+  assert.equal(qrMeta.tutorial.isLastStep, true);
+  assert.equal(qrMeta.tutorial.nextButtonLabel, 'Finish Tutorial');
+});

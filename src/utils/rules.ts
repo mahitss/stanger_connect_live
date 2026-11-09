@@ -18480,6 +18480,7 @@ export interface WorkspaceHeaderQrCodeMeta {
   scanCameraAriaLabel: string;
   scanCameraTitle: string;
   qrMatrix: WorkspaceHeaderQrMatrixSpec;
+  tutorial: WorkspaceQrScannerTutorialSpec;
 }
 
 export function getWorkspaceHeaderQrCodeMeta(input?: {
@@ -18524,6 +18525,9 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
   isVibrationPreviewAnimating?: boolean;
   vibrationPreviewCount?: number;
   isVibrationSupported?: boolean;
+  isTutorialActive?: boolean;
+  tutorialStepIndex?: number | null;
+  isTutorialCompleted?: boolean;
   generationCount?: number;
   downloadCount?: number;
   roomCode?: string | null;
@@ -18631,6 +18635,15 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
         ? 'No camera feed detected on this device. Capture or select a QR code image below to join.'
         : 'Point your camera at another device’s workspace QR code to join their workspace automatically.';
 
+  const tutorial = evaluateWorkspaceQrScannerTutorialSpec({
+    isActive: input?.isTutorialActive,
+    currentStepIndex: input?.tutorialStepIndex,
+    isCompleted: input?.isTutorialCompleted,
+    isScannerPopoverOpen: isOpen,
+    isCameraScanning,
+    roomCode: lastJoinedWorkspaceRoomCode || roomCode,
+  });
+
   return {
     shellSelector: '#workspace-shell',
     headerElementId: 'workspace-top-header',
@@ -18651,6 +18664,7 @@ export function getWorkspaceHeaderQrCodeMeta(input?: {
     successfulScanChimeToggle,
     scanConfirmationChime,
     scanChimePlayedCount,
+    tutorial,
     detectionFlash: evaluateWorkspaceQrDetectionFlashSpec({
       isFlashActive: Boolean(input?.isDetectionFlashActive),
       flashTriggerCount: input?.detectionFlashCount ?? 0,
@@ -26838,6 +26852,459 @@ export function triggerWorkspaceQrDetectionHardwareVibration(options?: {
     };
   }
 }
+
+// ============================================================================
+// INTERACTIVE STEP-BY-STEP QR SCANNER TUTORIAL OVERLAY & TRANSLUCENT SPOTLIGHT
+// ============================================================================
+
+export const WORKSPACE_QR_TUTORIAL_STORAGE_KEY =
+  'mr_stranger_qr_scanner_tutorial_completed_v1' as const;
+export const WORKSPACE_QR_TUTORIAL_OVERLAY_ID =
+  'workspace-header-qr-tutorial-overlay' as const;
+export const WORKSPACE_QR_TUTORIAL_CARD_ID =
+  'workspace-header-qr-tutorial-card' as const;
+export const WORKSPACE_QR_TUTORIAL_HIGHLIGHT_RING_ID =
+  'workspace-header-qr-scanner-highlight-ring' as const;
+export const WORKSPACE_QR_TUTORIAL_HIGHLIGHT_BADGE_ID =
+  'workspace-header-qr-scanner-highlight-badge' as const;
+export const WORKSPACE_QR_TUTORIAL_TRIGGER_BTN_ID =
+  'workspace-header-qr-tutorial-trigger-btn' as const;
+export const WORKSPACE_QR_TUTORIAL_POPOVER_BTN_ID =
+  'workspace-header-qr-popover-tutorial-btn' as const;
+export const WORKSPACE_QR_TUTORIAL_PREV_BTN_ID =
+  'workspace-header-qr-tutorial-prev-btn' as const;
+export const WORKSPACE_QR_TUTORIAL_NEXT_BTN_ID =
+  'workspace-header-qr-tutorial-next-btn' as const;
+export const WORKSPACE_QR_TUTORIAL_ACTION_BTN_ID =
+  'workspace-header-qr-tutorial-action-btn' as const;
+export const WORKSPACE_QR_TUTORIAL_SKIP_BTN_ID =
+  'workspace-header-qr-tutorial-skip-btn' as const;
+export const WORKSPACE_QR_TUTORIAL_PROGRESS_BAR_ID =
+  'workspace-header-qr-tutorial-progress-bar' as const;
+export const WORKSPACE_QR_TUTORIAL_TOTAL_STEPS = 4 as const;
+
+export type WorkspaceQrTutorialStepId =
+  | 'locate_scanner_button'
+  | 'start_camera_or_frame_scan'
+  | 'confirm_detection_feedback'
+  | 'join_workspace_room_and_history';
+
+export type WorkspaceQrTutorialHighlightZone =
+  | 'header_scanner_button'
+  | 'popover_camera_button'
+  | 'popover_viewport_and_test'
+  | 'popover_history_entries';
+
+export interface WorkspaceQrTutorialStepDefinition {
+  index: 0 | 1 | 2 | 3;
+  stepNumber: 1 | 2 | 3 | 4;
+  id: WorkspaceQrTutorialStepId;
+  shortLabel: string;
+  title: string;
+  description: string;
+  tipText: string;
+  targetElementId: string;
+  secondaryTargetElementId: string;
+  highlightZone: WorkspaceQrTutorialHighlightZone;
+  actionButtonLabel: string;
+  requiresPopoverOpen: boolean;
+  stepTabElementId: string;
+  stepTabTestId: string;
+}
+
+export const WORKSPACE_QR_TUTORIAL_STEPS: readonly WorkspaceQrTutorialStepDefinition[] =
+  [
+    {
+      index: 0,
+      stepNumber: 1,
+      id: 'locate_scanner_button',
+      shortLabel: '01. Button',
+      title: '01. Locate the Header QR Scanner Button',
+      description:
+        'Click the illuminated camera scanner button next to QR Code in the top workspace bar to open the room scanner.',
+      tipText:
+        'The translucent emerald highlight marks the scanner button in your top bar.',
+      targetElementId: 'workspace-header-qr-camera-scan-btn',
+      secondaryTargetElementId: 'workspace-header-qr-btn',
+      highlightZone: 'header_scanner_button',
+      actionButtonLabel: 'Open QR Scanner',
+      requiresPopoverOpen: false,
+      stepTabElementId: 'workspace-header-qr-tutorial-step-tab-1',
+      stepTabTestId: 'workspace-header-qr-tutorial-step-tab-1',
+    },
+    {
+      index: 1,
+      stepNumber: 2,
+      id: 'start_camera_or_frame_scan',
+      shortLabel: '02. Camera',
+      title: '02. Start Camera Scan or Upload a QR Frame',
+      description:
+        'Use Scan QR with Camera to point your lens at a peer room code, or upload a saved QR screenshot frame.',
+      tipText:
+        'Supports live webcams, mobile rear cameras, and saved PNG/JPG room codes.',
+      targetElementId: 'workspace-header-qr-scan-camera-btn',
+      secondaryTargetElementId: 'workspace-header-qr-camera-scanner',
+      highlightZone: 'popover_camera_button',
+      actionButtonLabel: 'Open Scanner View',
+      requiresPopoverOpen: true,
+      stepTabElementId: 'workspace-header-qr-tutorial-step-tab-2',
+      stepTabTestId: 'workspace-header-qr-tutorial-step-tab-2',
+    },
+    {
+      index: 2,
+      stepNumber: 3,
+      id: 'confirm_detection_feedback',
+      shortLabel: '03. Flash',
+      title: '03. Instant Visual Flash, Chime & Haptic Confirmation',
+      description:
+        'When a workspace QR code is recognized, the viewport flashes emerald, plays a chime, and triggers tactile haptics.',
+      tipText:
+        'Click Simulate Room Scan below to test the live detection flash and join flow right now.',
+      targetElementId: 'workspace-header-qr-simulate-detect-btn',
+      secondaryTargetElementId: 'workspace-header-qr-scan-viewport-card',
+      highlightZone: 'popover_viewport_and_test',
+      actionButtonLabel: 'Simulate Room Scan',
+      requiresPopoverOpen: true,
+      stepTabElementId: 'workspace-header-qr-tutorial-step-tab-3',
+      stepTabTestId: 'workspace-header-qr-tutorial-step-tab-3',
+    },
+    {
+      index: 3,
+      stepNumber: 4,
+      id: 'join_workspace_room_and_history',
+      shortLabel: '04. Join',
+      title: '04. Auto-Join Workspace Room & Categorized History',
+      description:
+        'Your active study room switches immediately to the scanned room code and records the entry in your categorized scan history.',
+      tipText:
+        'Rename room categories inline or export a PDF Quick Report anytime from your QR history.',
+      targetElementId: 'workspace-header-qr-viewport-scan-entries',
+      secondaryTargetElementId: 'workspace-header-qr-popover',
+      highlightZone: 'popover_history_entries',
+      actionButtonLabel: 'Complete & Save Guide',
+      requiresPopoverOpen: true,
+      stepTabElementId: 'workspace-header-qr-tutorial-step-tab-4',
+      stepTabTestId: 'workspace-header-qr-tutorial-step-tab-4',
+    },
+  ] as const;
+
+export function clampWorkspaceQrTutorialStepIndex(
+  stepIndex?: unknown
+): 0 | 1 | 2 | 3 {
+  const num = Number(stepIndex);
+  if (!Number.isFinite(num)) return 0;
+  const clamped = Math.max(
+    0,
+    Math.min(WORKSPACE_QR_TUTORIAL_TOTAL_STEPS - 1, Math.floor(num))
+  );
+  return clamped as 0 | 1 | 2 | 3;
+}
+
+export interface InitialWorkspaceQrTutorialState {
+  isActive: boolean;
+  currentStepIndex: 0 | 1 | 2 | 3;
+  isCompleted: boolean;
+  isNewUser: boolean;
+  triggerSource: 'url_param' | 'new_user_auto' | 'completed';
+}
+
+export function resolveInitialWorkspaceQrTutorialState(input?: {
+  storedCompletedValue?: string | null;
+  urlSearch?: string | null;
+  defaultOpenForNewUsers?: boolean;
+}): InitialWorkspaceQrTutorialState {
+  const rawCompleted = String(input?.storedCompletedValue ?? '')
+    .trim()
+    .toLowerCase();
+  const isCompleted = rawCompleted === 'true' || rawCompleted === '1';
+  const rawSearch = String(input?.urlSearch ?? '').trim();
+
+  if (rawSearch) {
+    try {
+      const normalizedQuery = rawSearch.startsWith('?')
+        ? rawSearch.slice(1)
+        : rawSearch;
+      const params = new URLSearchParams(normalizedQuery);
+      const qrTutorialParam = (
+        params.get('qrTutorial') ||
+        params.get('tutorial') ||
+        ''
+      )
+        .trim()
+        .toLowerCase();
+      const stepParam = params.get('qrTutorialStep');
+      if (
+        qrTutorialParam === '1' ||
+        qrTutorialParam === 'true' ||
+        qrTutorialParam === 'qr'
+      ) {
+        return {
+          isActive: true,
+          currentStepIndex:
+            stepParam !== null
+              ? clampWorkspaceQrTutorialStepIndex(Number(stepParam) - 1)
+              : 0,
+          isCompleted,
+          isNewUser: !isCompleted,
+          triggerSource: 'url_param',
+        };
+      }
+    } catch {
+      // ignore malformed URLSearchParams
+    }
+  }
+
+  const defaultOpenForNewUsers = input?.defaultOpenForNewUsers !== false;
+  if (!isCompleted && defaultOpenForNewUsers) {
+    return {
+      isActive: true,
+      currentStepIndex: 0,
+      isCompleted: false,
+      isNewUser: true,
+      triggerSource: 'new_user_auto',
+    };
+  }
+
+  return {
+    isActive: false,
+    currentStepIndex: 0,
+    isCompleted,
+    isNewUser: !isCompleted,
+    triggerSource: 'completed',
+  };
+}
+
+export interface WorkspaceQrTutorialStepTransitionResult {
+  nextStepIndex: 0 | 1 | 2 | 3;
+  didComplete: boolean;
+  isActive: boolean;
+  shouldOpenPopover: boolean;
+  stepSpec: WorkspaceQrTutorialStepDefinition;
+}
+
+export function advanceWorkspaceQrTutorialStep(
+  currentStepIndex: number,
+  direction: 'next' | 'prev' | 'jump',
+  targetStepIndex?: number
+): WorkspaceQrTutorialStepTransitionResult {
+  const safeCurrent = clampWorkspaceQrTutorialStepIndex(currentStepIndex);
+
+  if (direction === 'jump') {
+    const nextIdx = clampWorkspaceQrTutorialStepIndex(targetStepIndex ?? 0);
+    const stepSpec = WORKSPACE_QR_TUTORIAL_STEPS[nextIdx];
+    return {
+      nextStepIndex: nextIdx,
+      didComplete: false,
+      isActive: true,
+      shouldOpenPopover: stepSpec.requiresPopoverOpen,
+      stepSpec,
+    };
+  }
+
+  if (direction === 'prev') {
+    const nextIdx = clampWorkspaceQrTutorialStepIndex(safeCurrent - 1);
+    const stepSpec = WORKSPACE_QR_TUTORIAL_STEPS[nextIdx];
+    return {
+      nextStepIndex: nextIdx,
+      didComplete: false,
+      isActive: true,
+      shouldOpenPopover: stepSpec.requiresPopoverOpen,
+      stepSpec,
+    };
+  }
+
+  // direction === 'next'
+  if (safeCurrent >= WORKSPACE_QR_TUTORIAL_TOTAL_STEPS - 1) {
+    const finalStep =
+      WORKSPACE_QR_TUTORIAL_STEPS[WORKSPACE_QR_TUTORIAL_TOTAL_STEPS - 1];
+    return {
+      nextStepIndex: finalStep.index,
+      didComplete: true,
+      isActive: false,
+      shouldOpenPopover: false,
+      stepSpec: finalStep,
+    };
+  }
+
+  const nextIdx = clampWorkspaceQrTutorialStepIndex(safeCurrent + 1);
+  const stepSpec = WORKSPACE_QR_TUTORIAL_STEPS[nextIdx];
+  return {
+    nextStepIndex: nextIdx,
+    didComplete: false,
+    isActive: true,
+    shouldOpenPopover: stepSpec.requiresPopoverOpen,
+    stepSpec,
+  };
+}
+
+export interface WorkspaceQrTutorialEvaluatedStepItem
+  extends WorkspaceQrTutorialStepDefinition {
+  isCurrent: boolean;
+  isCompletedStep: boolean;
+}
+
+export interface WorkspaceQrScannerTranslucentHighlightSpec {
+  ringElementId: typeof WORKSPACE_QR_TUTORIAL_HIGHLIGHT_RING_ID;
+  ringTestId: typeof WORKSPACE_QR_TUTORIAL_HIGHLIGHT_RING_ID;
+  badgeElementId: typeof WORKSPACE_QR_TUTORIAL_HIGHLIGHT_BADGE_ID;
+  badgeTestId: typeof WORKSPACE_QR_TUTORIAL_HIGHLIGHT_BADGE_ID;
+  isScannerButtonHighlighted: boolean;
+  highlightOpacity: number;
+  highlightZone: WorkspaceQrTutorialHighlightZone;
+  targetElementId: string;
+  secondaryTargetElementId: string;
+  spotlightBadgeLabel: string;
+  ringClassName: string;
+  scannerButtonHighlightClassName: string;
+  popoverTargetHighlightClassName: string;
+}
+
+export interface WorkspaceQrScannerTutorialSpec {
+  overlayElementId: typeof WORKSPACE_QR_TUTORIAL_OVERLAY_ID;
+  overlayTestId: typeof WORKSPACE_QR_TUTORIAL_OVERLAY_ID;
+  cardElementId: typeof WORKSPACE_QR_TUTORIAL_CARD_ID;
+  cardTestId: typeof WORKSPACE_QR_TUTORIAL_CARD_ID;
+  triggerButtonElementId: typeof WORKSPACE_QR_TUTORIAL_TRIGGER_BTN_ID;
+  triggerButtonTestId: typeof WORKSPACE_QR_TUTORIAL_TRIGGER_BTN_ID;
+  popoverTriggerButtonElementId: typeof WORKSPACE_QR_TUTORIAL_POPOVER_BTN_ID;
+  popoverTriggerButtonTestId: typeof WORKSPACE_QR_TUTORIAL_POPOVER_BTN_ID;
+  prevButtonElementId: typeof WORKSPACE_QR_TUTORIAL_PREV_BTN_ID;
+  prevButtonTestId: typeof WORKSPACE_QR_TUTORIAL_PREV_BTN_ID;
+  nextButtonElementId: typeof WORKSPACE_QR_TUTORIAL_NEXT_BTN_ID;
+  nextButtonTestId: typeof WORKSPACE_QR_TUTORIAL_NEXT_BTN_ID;
+  actionButtonElementId: typeof WORKSPACE_QR_TUTORIAL_ACTION_BTN_ID;
+  actionButtonTestId: typeof WORKSPACE_QR_TUTORIAL_ACTION_BTN_ID;
+  skipButtonElementId: typeof WORKSPACE_QR_TUTORIAL_SKIP_BTN_ID;
+  skipButtonTestId: typeof WORKSPACE_QR_TUTORIAL_SKIP_BTN_ID;
+  progressBarElementId: typeof WORKSPACE_QR_TUTORIAL_PROGRESS_BAR_ID;
+  progressBarTestId: typeof WORKSPACE_QR_TUTORIAL_PROGRESS_BAR_ID;
+  storageKey: typeof WORKSPACE_QR_TUTORIAL_STORAGE_KEY;
+  isActive: boolean;
+  isCompleted: boolean;
+  isScannerPopoverOpen: boolean;
+  isCameraScanning: boolean;
+  roomCode: string;
+  currentStepIndex: 0 | 1 | 2 | 3;
+  currentStepNumber: 1 | 2 | 3 | 4;
+  totalSteps: typeof WORKSPACE_QR_TUTORIAL_TOTAL_STEPS;
+  progressPercent: 25 | 50 | 75 | 100;
+  stepCounterLabel: string;
+  compactStepCounterLabel: string;
+  headerBadgeLabel: string;
+  triggerButtonLabel: string;
+  triggerButtonAriaLabel: string;
+  prevButtonLabel: 'Previous';
+  nextButtonLabel: 'Next Step' | 'Finish Tutorial';
+  skipButtonLabel: 'Skip Tutorial';
+  canGoPrev: boolean;
+  canGoNext: boolean;
+  isLastStep: boolean;
+  currentStep: WorkspaceQrTutorialStepDefinition;
+  steps: WorkspaceQrTutorialEvaluatedStepItem[];
+  translucentHighlight: WorkspaceQrScannerTranslucentHighlightSpec;
+}
+
+export function evaluateWorkspaceQrScannerTutorialSpec(input?: {
+  isActive?: boolean;
+  currentStepIndex?: number | null;
+  isCompleted?: boolean;
+  isScannerPopoverOpen?: boolean;
+  isCameraScanning?: boolean;
+  roomCode?: string | null;
+}): WorkspaceQrScannerTutorialSpec {
+  const isActive = Boolean(input?.isActive);
+  const isCompleted = Boolean(input?.isCompleted);
+  const isScannerPopoverOpen = Boolean(input?.isScannerPopoverOpen);
+  const isCameraScanning = Boolean(input?.isCameraScanning);
+  const roomCode = String(input?.roomCode || '').trim() || 'STUDY-204';
+  const currentStepIndex = clampWorkspaceQrTutorialStepIndex(
+    input?.currentStepIndex
+  );
+  const currentStep = WORKSPACE_QR_TUTORIAL_STEPS[currentStepIndex];
+  const currentStepNumber = currentStep.stepNumber;
+  const progressPercent = (currentStepNumber * 25) as 25 | 50 | 75 | 100;
+  const isLastStep =
+    currentStepIndex === WORKSPACE_QR_TUTORIAL_TOTAL_STEPS - 1;
+
+  const steps: WorkspaceQrTutorialEvaluatedStepItem[] =
+    WORKSPACE_QR_TUTORIAL_STEPS.map((step) => ({
+      ...step,
+      isCurrent: step.index === currentStepIndex,
+      isCompletedStep: isCompleted || step.index < currentStepIndex,
+    }));
+
+  const spotlightBadgeLabel = `Step ${currentStepNumber}/${WORKSPACE_QR_TUTORIAL_TOTAL_STEPS} · ${currentStep.shortLabel}`;
+
+  const translucentHighlight: WorkspaceQrScannerTranslucentHighlightSpec = {
+    ringElementId: WORKSPACE_QR_TUTORIAL_HIGHLIGHT_RING_ID,
+    ringTestId: WORKSPACE_QR_TUTORIAL_HIGHLIGHT_RING_ID,
+    badgeElementId: WORKSPACE_QR_TUTORIAL_HIGHLIGHT_BADGE_ID,
+    badgeTestId: WORKSPACE_QR_TUTORIAL_HIGHLIGHT_BADGE_ID,
+    isScannerButtonHighlighted: isActive,
+    highlightOpacity: isActive ? 0.22 : 0,
+    highlightZone: currentStep.highlightZone,
+    targetElementId: currentStep.targetElementId,
+    secondaryTargetElementId: currentStep.secondaryTargetElementId,
+    spotlightBadgeLabel,
+    ringClassName: isActive
+      ? 'pointer-events-none absolute -inset-1.5 z-30 rounded-lg bg-emerald-500/20 dark:bg-emerald-400/20 border-2 border-emerald-400/90 ring-4 ring-emerald-500/25 transition-opacity duration-200'
+      : 'hidden',
+    scannerButtonHighlightClassName: isActive
+      ? 'ring-2 ring-emerald-400/90 bg-emerald-500/20 dark:bg-emerald-500/25 border-emerald-400 text-emerald-800 dark:text-emerald-200'
+      : '',
+    popoverTargetHighlightClassName: isActive
+      ? 'ring-2 ring-emerald-400/90 border-emerald-400 bg-emerald-500/15'
+      : '',
+  };
+
+  return {
+    overlayElementId: WORKSPACE_QR_TUTORIAL_OVERLAY_ID,
+    overlayTestId: WORKSPACE_QR_TUTORIAL_OVERLAY_ID,
+    cardElementId: WORKSPACE_QR_TUTORIAL_CARD_ID,
+    cardTestId: WORKSPACE_QR_TUTORIAL_CARD_ID,
+    triggerButtonElementId: WORKSPACE_QR_TUTORIAL_TRIGGER_BTN_ID,
+    triggerButtonTestId: WORKSPACE_QR_TUTORIAL_TRIGGER_BTN_ID,
+    popoverTriggerButtonElementId: WORKSPACE_QR_TUTORIAL_POPOVER_BTN_ID,
+    popoverTriggerButtonTestId: WORKSPACE_QR_TUTORIAL_POPOVER_BTN_ID,
+    prevButtonElementId: WORKSPACE_QR_TUTORIAL_PREV_BTN_ID,
+    prevButtonTestId: WORKSPACE_QR_TUTORIAL_PREV_BTN_ID,
+    nextButtonElementId: WORKSPACE_QR_TUTORIAL_NEXT_BTN_ID,
+    nextButtonTestId: WORKSPACE_QR_TUTORIAL_NEXT_BTN_ID,
+    actionButtonElementId: WORKSPACE_QR_TUTORIAL_ACTION_BTN_ID,
+    actionButtonTestId: WORKSPACE_QR_TUTORIAL_ACTION_BTN_ID,
+    skipButtonElementId: WORKSPACE_QR_TUTORIAL_SKIP_BTN_ID,
+    skipButtonTestId: WORKSPACE_QR_TUTORIAL_SKIP_BTN_ID,
+    progressBarElementId: WORKSPACE_QR_TUTORIAL_PROGRESS_BAR_ID,
+    progressBarTestId: WORKSPACE_QR_TUTORIAL_PROGRESS_BAR_ID,
+    storageKey: WORKSPACE_QR_TUTORIAL_STORAGE_KEY,
+    isActive,
+    isCompleted,
+    isScannerPopoverOpen,
+    isCameraScanning,
+    roomCode,
+    currentStepIndex,
+    currentStepNumber,
+    totalSteps: WORKSPACE_QR_TUTORIAL_TOTAL_STEPS,
+    progressPercent,
+    stepCounterLabel: `Step ${currentStepNumber} of ${WORKSPACE_QR_TUTORIAL_TOTAL_STEPS}`,
+    compactStepCounterLabel: `${currentStepNumber}/${WORKSPACE_QR_TUTORIAL_TOTAL_STEPS}`,
+    headerBadgeLabel: isCompleted ? 'QR Guide · Completed' : 'QR Scanner Guide',
+    triggerButtonLabel: isActive ? 'Guide On' : 'QR Guide',
+    triggerButtonAriaLabel: isActive
+      ? 'Close interactive QR scanner tutorial overlay'
+      : 'Open interactive step-by-step QR scanner tutorial overlay',
+    prevButtonLabel: 'Previous',
+    nextButtonLabel: isLastStep ? 'Finish Tutorial' : 'Next Step',
+    skipButtonLabel: 'Skip Tutorial',
+    canGoPrev: currentStepIndex > 0,
+    canGoNext: true,
+    isLastStep,
+    currentStep,
+    steps,
+    translucentHighlight,
+  };
+}
+
 
 
 
