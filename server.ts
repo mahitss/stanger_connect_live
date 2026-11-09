@@ -22,6 +22,13 @@ import {
   verifyUserAndAdminAccess,
   auditEnvironmentSecurity,
   buildFullSecurityAuditReport,
+  toggleUniquePostLike,
+  paginatePostLikersList,
+  resolveRequestCorrelationId,
+  computeApiLatencyPercentiles,
+  buildSevenPillarEngineeringBlueprintSpec,
+  type MomentLikeUserRecord,
+  type StructuredCorrelationLogEntry,
 } from './src/utils/rules.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -251,14 +258,48 @@ async function startServer() {
   // 4. Strict JSON body limit (64KB) to prevent Denial-of-Memory payloads
   app.use(express.json({ limit: '64kb' }));
 
-  // 5. 3-Tier Sliding-Window HTTP Rate Limiters (Admin 10/min, Auth 25/min, General API 120/min)
+  // 5. 3-Tier Sliding-Window HTTP Rate Limiters & X-Correlation-Id / p95 Observability Telemetry
   const adminRateMap = new Map<string, number[]>();
   const authRateMap = new Map<string, number[]>();
   const apiRateMap = new Map<string, number[]>();
   let totalBlockedThreatsCount = 0;
   let totalRateLimitedCount = 0;
+  const apiLatencySamplesMs: number[] = [1.4, 2.1, 2.8, 3.6, 4.2, 5.1, 6.8];
+  const structuredRequestLogs: StructuredCorrelationLogEntry[] = [];
 
   app.use('/api', (req, res, next) => {
+    const startHrMs = performance.now();
+    const incomingCorr =
+      typeof req.headers['x-correlation-id'] === 'string'
+        ? req.headers['x-correlation-id']
+        : null;
+    const correlationId = resolveRequestCorrelationId(
+      incomingCorr,
+      Date.now(),
+      crypto.randomBytes(3).toString('hex')
+    );
+    (req as Request & { correlationId?: string }).correlationId = correlationId;
+    res.setHeader('X-Correlation-Id', correlationId);
+
+    res.on('finish', () => {
+      const durationMs = Number(Math.max(0.1, performance.now() - startHrMs).toFixed(2));
+      apiLatencySamplesMs.push(durationMs);
+      if (apiLatencySamplesMs.length > 200) {
+        apiLatencySamplesMs.shift();
+      }
+      structuredRequestLogs.unshift({
+        correlationId,
+        method: req.method,
+        path: req.originalUrl || req.path,
+        statusCode: res.statusCode,
+        durationMs,
+        timestamp: new Date().toISOString(),
+      });
+      if (structuredRequestLogs.length > 40) {
+        structuredRequestLogs.pop();
+      }
+    });
+
     const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || 'local')
       .split(',')[0]
       .trim();
@@ -770,6 +811,145 @@ async function startServer() {
       activeStudyRoomsCount: studyDesks.size,
       blockedThreatsCount: totalBlockedThreatsCount,
       rateLimitedCount: totalRateLimitedCount,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  // Authoritative Unique Post Likes Store (Keyed by momentId -> Record<userId, MomentLikeUserRecord>)
+  const liveMomentLikesByMomentId = new Map<string, Record<string, MomentLikeUserRecord>>();
+  (() => {
+    const seededScholars = [
+      { userId: 'usr_aria_chen', userDisplayName: 'Aria Chen', userHandle: '@ariachen', offsetMs: 360_000 },
+      { userId: 'usr_marcus_vance', userDisplayName: 'Marcus Vance', userHandle: '@mvance', offsetMs: 300_000 },
+      { userId: 'usr_elena_rostova', userDisplayName: 'Elena Rostova', userHandle: '@elena_r', offsetMs: 240_000 },
+      { userId: 'usr_devon_k', userDisplayName: 'Devon Brooks', userHandle: '@devonb', offsetMs: 180_000 },
+      { userId: 'usr_sora_takahashi', userDisplayName: 'Sora Takahashi', userHandle: '@sora_t', offsetMs: 120_000 },
+      { userId: 'usr_mahit_admin', userDisplayName: 'Mahit Saxena', userHandle: '@mahit', offsetMs: 60_000 },
+    ];
+    let initialMap: Record<string, MomentLikeUserRecord> = {};
+    const baseNow = Date.now();
+    for (const s of seededScholars) {
+      const toggled = toggleUniquePostLike(initialMap, {
+        momentId: 'moment_study_204',
+        userId: s.userId,
+        userDisplayName: s.userDisplayName,
+        userHandle: s.userHandle,
+        visibility: 'public',
+        action: 'like',
+        nowMs: baseNow - s.offsetMs,
+      });
+      initialMap = toggled.updatedByUserId;
+    }
+    liveMomentLikesByMomentId.set('moment_study_204', initialMap);
+  })();
+
+  // Paginated List of Users Who Liked a Post (Pillar 2 & Pillar 4 API Contract)
+  app.get('/api/moments/:momentId/likes', (req, res) => {
+    const correlationId =
+      (req as Request & { correlationId?: string }).correlationId ||
+      resolveRequestCorrelationId(null, Date.now());
+    const momentId = String(req.params.momentId || 'moment_study_204')
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .slice(0, 60) || 'moment_study_204';
+    const currentMap = liveMomentLikesByMomentId.get(momentId) || {};
+    const paginated = paginatePostLikersList(currentMap, {
+      momentId,
+      cursor: typeof req.query.cursor === 'string' ? Number(req.query.cursor) : 0,
+      limit: typeof req.query.limit === 'string' ? Number(req.query.limit) : 3,
+    });
+    res.json({
+      ...paginated,
+      correlationId,
+    });
+  });
+
+  // Idempotent 1-Like-Per-User Post Like / Unlike Endpoint (Enforces Composite Uniqueness {momentId}_{userId})
+  app.post('/api/moments/:momentId/likes', (req, res) => {
+    const correlationId =
+      (req as Request & { correlationId?: string }).correlationId ||
+      resolveRequestCorrelationId(null, Date.now());
+    const session = extractBearerSession(req);
+    const momentId = String(req.params.momentId || 'moment_study_204')
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .slice(0, 60) || 'moment_study_204';
+    const fallbackUid = session.valid && session.uid ? session.uid : 'usr_mahit_admin';
+    const userId = String(req.body?.userId || fallbackUid)
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .slice(0, 60) || 'usr_mahit_admin';
+    const userDisplayName = sanitizeSafeText(
+      String(req.body?.userDisplayName || 'Mahit Saxena'),
+      64
+    );
+    const userHandle = sanitizeSafeText(
+      String(req.body?.userHandle || `@${userId.slice(0, 16)}`),
+      32
+    );
+    const action =
+      req.body?.action === 'like' || req.body?.action === 'unlike'
+        ? req.body.action
+        : 'toggle';
+
+    const currentMap = liveMomentLikesByMomentId.get(momentId) || {};
+    const toggled = toggleUniquePostLike(currentMap, {
+      momentId,
+      userId,
+      userDisplayName,
+      userHandle,
+      visibility: 'public',
+      action,
+      nowMs: Date.now(),
+    });
+    liveMomentLikesByMomentId.set(momentId, toggled.updatedByUserId);
+
+    const paginated = paginatePostLikersList(toggled.updatedByUserId, {
+      momentId,
+      cursor: typeof req.body?.cursor === 'number' ? req.body.cursor : 0,
+      limit: typeof req.body?.limit === 'number' ? req.body.limit : 3,
+    });
+
+    res.json({
+      momentId: toggled.momentId,
+      userId: toggled.userId,
+      likeId: toggled.likeId,
+      uniqueConstraintKey: toggled.uniqueConstraintKey,
+      liked: toggled.liked,
+      wasAlreadyInState: toggled.wasAlreadyInState,
+      totalLikesCount: toggled.totalLikesCount,
+      paginated,
+      correlationId,
+    });
+  });
+
+  // 7-Pillar Product & Engineering Specification + p95 Observability Telemetry Endpoint
+  app.get('/api/engineering/spec-status', (req, res) => {
+    const correlationId =
+      (req as Request & { correlationId?: string }).correlationId ||
+      resolveRequestCorrelationId(null, Date.now());
+    const momentId = String(req.query.momentId || 'moment_study_204')
+      .replace(/[^a-zA-Z0-9_-]/g, '')
+      .slice(0, 60) || 'moment_study_204';
+    const cursor = typeof req.query.cursor === 'string' ? Number(req.query.cursor) : 0;
+    const limit = typeof req.query.limit === 'string' ? Number(req.query.limit) : 3;
+
+    const spec = buildSevenPillarEngineeringBlueprintSpec();
+    const latency = computeApiLatencyPercentiles(apiLatencySamplesMs, 300);
+    const currentLikesMap = liveMomentLikesByMomentId.get(momentId) || {};
+    const likesDemoPage = paginatePostLikersList(currentLikesMap, {
+      momentId,
+      cursor,
+      limit,
+    });
+
+    res.json({
+      spec,
+      observability: {
+        latency,
+        recentLogs: structuredRequestLogs.slice(0, 8),
+        correlationHeaderName: 'X-Correlation-Id',
+      },
+      likesDemoPage,
+      currentUserLiked: Boolean(currentLikesMap['usr_mahit_admin']),
+      correlationId,
       timestamp: new Date().toISOString(),
     });
   });

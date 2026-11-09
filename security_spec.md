@@ -23,6 +23,10 @@
 6. **Administrator RBAC (`admins/{adminId}`)**:
    - Only a verified administrator (`isAdmin()`)—backed by `/admins/$(request.auth.uid)` or the bootstrapped admin email `mahitsaxena44@gmail.com` with `email_verified == true`—can read, create, update, or delete `/admins/{adminId}`.
    - Regular users cannot read or enumerate `/admins/{adminId}` or escalate privileges.
+7. **Post Like Uniqueness & Pagination (`momentLikes/{likeId}`)**:
+   - Enforces one like per authenticated user per Moment at the database level via deterministic composite document ID `likeId == incoming().momentId + '_' + request.auth.uid`.
+   - Only `userId == request.auth.uid` can create or delete (unlike) their own like record; updates are forbidden (immutable creation record).
+   - Queries (`list`) support cursor/offset pagination for public Moments or the user's own likes.
 
 ## 2. The "Dirty Dozen" Payloads (Designed to Break Identity, Integrity & State)
 

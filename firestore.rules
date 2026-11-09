@@ -189,6 +189,22 @@ service cloud.firestore {
       data.createdAt is timestamp;
     }
 
+    function isValidMomentLike(data) {
+      return data.keys().hasAll([
+        'momentId', 'userId', 'userDisplayName', 'userHandle', 'visibility', 'createdAt'
+      ]) &&
+      data.keys().hasOnly([
+        'momentId', 'userId', 'userDisplayName', 'userHandle', 'visibility', 'createdAt'
+      ]) &&
+      data.momentId is string && data.momentId.size() >= 1 && data.momentId.size() <= 60 && data.momentId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.userId is string && data.userId.size() >= 1 && data.userId.size() <= 60 && data.userId.matches('^[a-zA-Z0-9_\\-]+$') &&
+      data.userId == request.auth.uid &&
+      data.userDisplayName is string && data.userDisplayName.size() >= 1 && data.userDisplayName.size() <= 64 &&
+      data.userHandle is string && data.userHandle.size() >= 2 && data.userHandle.size() <= 32 &&
+      data.visibility is string && data.visibility.size() <= 16 && (data.visibility == 'public' || data.visibility == 'connections') &&
+      data.createdAt is timestamp;
+    }
+
     // 1. Public User Profiles (No PII stored here)
     match /profiles/{userId} {
       allow get: if isSignedIn() && isValidId(userId) && (resource == null || existing().uid == userId);
@@ -345,6 +361,23 @@ service cloud.firestore {
         incoming().createdAt == request.time;
       allow update: if false;
       allow delete: if isAdmin() && isValidId(adminId);
+    }
+
+    // 10. Composite-Key Unique Post Likes (Database-Enforced 1-Like-Per-User + Paginated List Queries)
+    match /momentLikes/{likeId} {
+      allow get: if isSignedIn() && isValidId(likeId) &&
+        (resource == null || existing().visibility == 'public' || existing().userId == request.auth.uid);
+      allow list: if isSignedIn() &&
+        (existing().visibility == 'public' || existing().userId == request.auth.uid);
+      allow create: if isVerifiedUser() &&
+        isValidId(likeId) &&
+        isValidMomentLike(incoming()) &&
+        likeId == incoming().momentId + '_' + request.auth.uid &&
+        incoming().createdAt == request.time;
+      allow update: if false;
+      allow delete: if isVerifiedUser() &&
+        isValidId(likeId) &&
+        existing().userId == request.auth.uid;
     }
   }
 }

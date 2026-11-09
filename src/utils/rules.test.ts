@@ -11187,3 +11187,122 @@ test('Interactive step-by-step QR scanner tutorial overlay guides new users and 
   assert.equal(qrMeta.tutorial.isLastStep, true);
   assert.equal(qrMeta.tutorial.nextButtonLabel, 'Finish Tutorial');
 });
+
+import {
+  buildCompositeMomentLikeId,
+  toggleUniquePostLike,
+  paginatePostLikersList,
+  resolveRequestCorrelationId,
+  computeApiLatencyPercentiles,
+  buildSevenPillarEngineeringBlueprintSpec,
+} from './rules.ts';
+
+test('7-Pillar Engineering Spec: unique post likes, cursor pagination of likers, correlation IDs, and p95 < 300ms SLA', () => {
+  // 1. Composite primary key uniqueness for post likes
+  const compositeId = buildCompositeMomentLikeId('moment_study_204', 'usr_mahit_admin');
+  assert.equal(compositeId, 'moment_study_204_usr_mahit_admin');
+
+  // 2. Authenticated user can like/unlike a post once with database-enforced uniqueness
+  let likesMap = {};
+  const firstLike = toggleUniquePostLike(likesMap, {
+    momentId: 'moment_study_204',
+    userId: 'usr_mahit_admin',
+    userDisplayName: 'Mahit Saxena',
+    userHandle: '@mahit',
+    action: 'like',
+    nowMs: 1000,
+  });
+  assert.equal(firstLike.liked, true);
+  assert.equal(firstLike.wasAlreadyInState, false);
+  assert.equal(firstLike.totalLikesCount, 1);
+  assert.equal(firstLike.likeId, 'moment_study_204_usr_mahit_admin');
+  likesMap = firstLike.updatedByUserId;
+
+  // Duplicate 'like' call by the same user is idempotent and never creates a duplicate
+  const duplicateLike = toggleUniquePostLike(likesMap, {
+    momentId: 'moment_study_204',
+    userId: 'usr_mahit_admin',
+    userDisplayName: 'Mahit Saxena',
+    userHandle: '@mahit',
+    action: 'like',
+    nowMs: 2000,
+  });
+  assert.equal(duplicateLike.liked, true);
+  assert.equal(duplicateLike.wasAlreadyInState, true);
+  assert.equal(duplicateLike.totalLikesCount, 1);
+
+  // Add 5 more unique scholars to verify deterministic pagination of users who liked the post
+  for (let i = 1; i <= 5; i++) {
+    const res = toggleUniquePostLike(likesMap, {
+      momentId: 'moment_study_204',
+      userId: `usr_scholar_${i}`,
+      userDisplayName: `Scholar ${i}`,
+      userHandle: `@scholar${i}`,
+      action: 'like',
+      nowMs: 1000 + i * 100,
+    });
+    likesMap = res.updatedByUserId;
+  }
+  assert.equal(Object.keys(likesMap).length, 6);
+
+  // Page 1 (cursor=0, limit=3)
+  const page1 = paginatePostLikersList(likesMap, {
+    momentId: 'moment_study_204',
+    cursor: 0,
+    limit: 3,
+  });
+  assert.equal(page1.totalCount, 6);
+  assert.equal(page1.items.length, 3);
+  assert.equal(page1.hasMore, true);
+  assert.equal(page1.nextCursor, 3);
+  assert.equal(page1.prevCursor, null);
+  assert.equal(page1.pageIndex, 1);
+  assert.equal(page1.totalPages, 2);
+  assert.equal(page1.uniqueConstraintEnforced, true);
+  assert.equal(page1.items[0].userId, 'usr_scholar_5'); // newest first
+
+  // Page 2 (cursor=3, limit=3)
+  const page2 = paginatePostLikersList(likesMap, {
+    momentId: 'moment_study_204',
+    cursor: page1.nextCursor,
+    limit: 3,
+  });
+  assert.equal(page2.items.length, 3);
+  assert.equal(page2.hasMore, false);
+  assert.equal(page2.nextCursor, null);
+  assert.equal(page2.prevCursor, 0);
+  assert.equal(page2.pageIndex, 2);
+
+  // Unlike removes the user's like record cleanly
+  const unliked = toggleUniquePostLike(likesMap, {
+    momentId: 'moment_study_204',
+    userId: 'usr_mahit_admin',
+    action: 'unlike',
+  });
+  assert.equal(unliked.liked, false);
+  assert.equal(unliked.totalLikesCount, 5);
+
+  // 3. Request correlation ID & p95 < 300ms latency SLA
+  assert.equal(
+    resolveRequestCorrelationId('corr_client_2026_01', 1700000000000),
+    'corr_client_2026_01'
+  );
+  const generatedCorr = resolveRequestCorrelationId('', 1700000000000, 'ff00aa');
+  assert.equal(generatedCorr.startsWith('req_'), true);
+
+  const latency = computeApiLatencyPercentiles([1.8, 2.4, 3.1, 4.5, 6.2, 9.8, 14.0], 300);
+  assert.equal(latency.sampleCount, 7);
+  assert.equal(latency.withinSlaTarget, true);
+  assert.equal(latency.p95Ms < 300, true);
+
+  // 4. 7-Pillar Engineering Blueprint SSOT
+  const blueprint = buildSevenPillarEngineeringBlueprintSpec();
+  assert.equal(blueprint.pillars.length, 7);
+  assert.equal(blueprint.screenStates.length, 9);
+  assert.equal(blueprint.qualityGates.length, 6);
+  assert.equal(
+    blueprint.qualityGates.every((g) => g.passed),
+    true
+  );
+});
+

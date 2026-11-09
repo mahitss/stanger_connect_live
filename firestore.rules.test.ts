@@ -39,4 +39,8 @@ test('Dirty Dozen Security Invariants in firestore.rules', () => {
   assert.ok(rulesText.includes("request.auth.token.email == 'mahitsaxena44@gmail.com'"));
   assert.ok(rulesText.includes('match /admins/{adminId}'));
   assert.ok(!rulesText.includes('incoming().createdAt == existing().createdAt || incoming().createdAt == request.time'));
+  // 15. Composite-key unique post likes (/momentLikes/{likeId})
+  assert.ok(rulesText.includes('function isValidMomentLike(data)'));
+  assert.ok(rulesText.includes('match /momentLikes/{likeId}'));
+  assert.ok(rulesText.includes("likeId == incoming().momentId + '_' + request.auth.uid"));
 });

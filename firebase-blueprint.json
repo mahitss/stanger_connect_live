@@ -437,6 +437,49 @@
         }
       },
       "required": ["uid", "email", "role", "createdAt"]
+    },
+    "MomentLike": {
+      "title": "MomentLike",
+      "description": "Unique like record on a Moment post enforced via composite document ID {momentId}_{userId} supporting paginated liker queries.",
+      "type": "object",
+      "properties": {
+        "momentId": {
+          "type": "string",
+          "maxLength": 60,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userId": {
+          "type": "string",
+          "maxLength": 60,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "userDisplayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "userHandle": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 32
+        },
+        "visibility": {
+          "type": "string",
+          "enum": ["public", "connections"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "momentId",
+        "userId",
+        "userDisplayName",
+        "userHandle",
+        "visibility",
+        "createdAt"
+      ]
     }
   },
   "firestore": {
@@ -475,6 +518,10 @@
     "/admins/{adminId}": {
       "schema": { "$ref": "#/entities/AdminRoleRecord" },
       "description": "RBAC administrator role assignments (readable and writable only by verified admins)."
+    },
+    "/momentLikes/{likeId}": {
+      "schema": { "$ref": "#/entities/MomentLike" },
+      "description": "Composite-key unique likes ({momentId}_{userId}) on Moment posts supporting paginated liker lists."
     }
   }
 }
