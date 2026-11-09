@@ -320,6 +320,13 @@ import {
   toggleUniquePostLike,
   paginatePostLikersList,
   computeApiLatencyPercentiles,
+  WORKSPACE_GET_STARTED_TOUR_STORAGE_KEY,
+  resolveInitialWorkspaceGetStartedTourState,
+  updateWorkspaceGetStartedTourProgress,
+  evaluateWorkspaceGetStartedTourSpec,
+  type WorkspaceGetStartedTourStepId,
+  type WorkspaceGetStartedTourPersistedState,
+  type WorkspaceGetStartedTourAction,
   type ScreenUiStateSpecItem,
   type MomentLikeUserRecord,
   type StructuredCorrelationLogEntry,
@@ -1206,6 +1213,36 @@ export default function App() {
     workspaceHeaderQrVibrationPreviewCount,
     setWorkspaceHeaderQrVibrationPreviewCount,
   ] = useState<number>(0);
+  const initialGetStartedTourState = (() => {
+    try {
+      const storedRaw =
+        typeof window !== 'undefined' && window.localStorage
+          ? window.localStorage.getItem(WORKSPACE_GET_STARTED_TOUR_STORAGE_KEY)
+          : null;
+      const searchStr =
+        typeof window !== 'undefined' && window.location?.search
+          ? window.location.search
+          : '';
+      const hasSpecParam =
+        searchStr.includes('spec=1') || searchStr.includes('page=privacy');
+      const resolved = resolveInitialWorkspaceGetStartedTourState({
+        storedStateRaw: storedRaw,
+        searchParamsRaw: searchStr,
+      });
+      if (hasSpecParam && !searchStr.includes('getStarted=1') && !searchStr.includes('tour=1')) {
+        return { ...resolved, isActive: false };
+      }
+      return resolved;
+    } catch {
+      return resolveInitialWorkspaceGetStartedTourState({
+        storedStateRaw: null,
+        searchParamsRaw: '',
+      });
+    }
+  })();
+  const [getStartedTourState, setGetStartedTourState] =
+    useState<WorkspaceGetStartedTourPersistedState>(initialGetStartedTourState);
+
   const initialQrTutorialState = (() => {
     try {
       const storedCompleted =
@@ -1221,13 +1258,14 @@ export default function App() {
       return resolveInitialWorkspaceQrTutorialState({
         storedCompletedValue: storedCompleted,
         urlSearch: searchStr,
-        defaultOpenForNewUsers: !hasSpecParam,
+        defaultOpenForNewUsers:
+          !hasSpecParam && !initialGetStartedTourState.isActive,
       });
     } catch {
       return resolveInitialWorkspaceQrTutorialState({
         storedCompletedValue: null,
         urlSearch: '',
-        defaultOpenForNewUsers: true,
+        defaultOpenForNewUsers: false,
       });
     }
   })();
@@ -1323,7 +1361,10 @@ export default function App() {
       if (
         targetEl?.closest?.('#workspace-qr-scan-toast') ||
         targetEl?.closest?.('#workspace-header-qr-tutorial-overlay') ||
-        targetEl?.closest?.('#workspace-header-qr-tutorial-trigger-btn')
+        targetEl?.closest?.('#workspace-header-qr-tutorial-trigger-btn') ||
+        targetEl?.closest?.('#workspace-get-started-tour-overlay') ||
+        targetEl?.closest?.('#workspace-get-started-checklist-card') ||
+        targetEl?.closest?.('#workspace-get-started-tour-trigger-btn')
       ) {
         return;
       }
@@ -5589,6 +5630,116 @@ export default function App() {
     setLastSoundFeedback(action.joinedFeedbackMessage);
   };
 
+  const getStartedTourSpec = evaluateWorkspaceGetStartedTourSpec(
+    getStartedTourState
+  );
+
+  const applyGetStartedTourUpdate = (
+    action: WorkspaceGetStartedTourAction,
+    targetStepIndex?: number,
+    targetStepId?: WorkspaceGetStartedTourStepId
+  ) => {
+    setGetStartedTourState((prev) => {
+      const updated = updateWorkspaceGetStartedTourProgress({
+        currentState: prev,
+        action,
+        targetStepIndex,
+        targetStepId,
+      });
+      const persisted: WorkspaceGetStartedTourPersistedState = {
+        isActive: updated.isActive,
+        currentStepIndex: updated.currentStepIndex,
+        completedStepIds: updated.completedStepIds,
+        isDismissed: updated.isDismissed,
+      };
+      try {
+        localStorage.setItem(
+          WORKSPACE_GET_STARTED_TOUR_STORAGE_KEY,
+          JSON.stringify(persisted)
+        );
+      } catch {
+        // ignore localStorage write error
+      }
+      return persisted;
+    });
+  };
+
+  const handleToggleGetStartedTour = () => {
+    setGetStartedTourState((prev) => {
+      const nextActive = !prev.isActive;
+      if (nextActive) {
+        setIsWorkspaceHeaderQrTutorialActive(false);
+      }
+      const persisted: WorkspaceGetStartedTourPersistedState = {
+        ...prev,
+        isActive: nextActive,
+        isDismissed: !nextActive,
+      };
+      try {
+        localStorage.setItem(
+          WORKSPACE_GET_STARTED_TOUR_STORAGE_KEY,
+          JSON.stringify(persisted)
+        );
+      } catch {
+        // ignore localStorage write error
+      }
+      return persisted;
+    });
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+  };
+
+  const handleTriggerGetStartedStepAction = (
+    explicitStepId?: WorkspaceGetStartedTourStepId,
+    advanceAfterComplete = true
+  ) => {
+    const activeId =
+      explicitStepId || getStartedTourSpec.currentStep.id;
+
+    if (activeId === 'qr_scanner') {
+      const resolvedHref = resolveWorkspaceHeaderShareUrl(
+        typeof window !== 'undefined' && window.location?.href
+          ? window.location.href
+          : 'https://mrstranger.app/'
+      );
+      setWorkspaceHeaderQrHref(resolvedHref);
+      if (!isWorkspaceHeaderQrOpen) {
+        setWorkspaceHeaderQrGenerationCount((c) => c + 1);
+        setIsWorkspaceHeaderQrOpen(true);
+      }
+    } else if (activeId === 'profile_settings') {
+      setIsWorkspaceHeaderQrOpen(false);
+      setActivePage('privacy');
+      if (typeof document !== 'undefined') {
+        const cardEl = document.getElementById('sidebar-profile-settings-card');
+        cardEl?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+      }
+    } else if (activeId === 'study_focus') {
+      setIsWorkspaceHeaderQrOpen(false);
+      setActivePage('hub');
+      setCozyHubTab('sanctuary');
+      handleLogFocusMinutes(25);
+    } else if (activeId === 'peer_directory') {
+      setIsWorkspaceHeaderQrOpen(false);
+      setActivePage('hub');
+      setCozyHubTab('sanctuary');
+      if (typeof document !== 'undefined') {
+        const dirEl = document.getElementById('hub-online-directory');
+        dirEl?.scrollIntoView?.({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
+
+    applyGetStartedTourUpdate(
+      advanceAfterComplete ? 'complete_and_advance' : 'complete_step',
+      undefined,
+      activeId
+    );
+    if (uiSoundPrefs.enabled) {
+      playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
+    }
+  };
+
   const handleToggleWorkspaceHeaderQrCode = () => {
     const resolvedHref = resolveWorkspaceHeaderShareUrl(
       typeof window !== 'undefined' && window.location?.href
@@ -5604,6 +5755,7 @@ export default function App() {
       ) {
         setWorkspaceHeaderQrTutorialStepIndex(1);
       }
+      applyGetStartedTourUpdate('complete_step', undefined, 'qr_scanner');
     }
     setIsWorkspaceHeaderQrOpen((prev) => {
       const next = !prev;
@@ -5631,6 +5783,7 @@ export default function App() {
     ) {
       setWorkspaceHeaderQrTutorialStepIndex(1);
     }
+    applyGetStartedTourUpdate('complete_step', undefined, 'qr_scanner');
     void handleToggleWorkspaceHeaderQrCameraScanner();
   };
 
@@ -5639,6 +5792,7 @@ export default function App() {
       const next = !prev;
       if (next) {
         setWorkspaceHeaderQrTutorialStepIndex(0);
+        setGetStartedTourState((curr) => ({ ...curr, isActive: false }));
       }
       if (uiSoundPrefs.enabled) {
         playSubtleUiChime('ui_chime', uiSoundPrefs.volumePercent);
@@ -6992,11 +7146,27 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => setActivePage('privacy')}
+              id="sidebar-privacy-security-btn"
+              data-testid="sidebar-privacy-security-btn"
+              data-tour-highlighted={
+                getStartedTourSpec.spotlight.isProfileSettingsHighlighted
+                  ? 'true'
+                  : 'false'
+              }
+              onClick={() => {
+                setActivePage('privacy');
+                applyGetStartedTourUpdate(
+                  'complete_step',
+                  undefined,
+                  'profile_settings'
+                );
+              }}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'privacy'
                   ? 'bg-white text-black'
-                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
+                  : getStartedTourSpec.spotlight.isProfileSettingsHighlighted
+                    ? 'bg-emerald-500/20 text-emerald-200 ring-2 ring-emerald-400/80'
+                    : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
               }`}
             >
               <span className="flex items-center gap-2.5">
@@ -7132,11 +7302,52 @@ export default function App() {
           </div>
         </div>
 
-          {/* Bottom Sidebar Account Card & Sign-Out Page Trigger */}
-          <div className="p-4 border-t border-slate-200 dark:border-zinc-800/80 bg-slate-50 dark:bg-[#050505] space-y-3 shrink-0">
+          {/* Bottom Sidebar Account Card & Profile Settings Trigger */}
+          <div
+            id="sidebar-profile-settings-card"
+            data-testid="sidebar-profile-settings-card"
+            data-tour-highlighted={
+              getStartedTourSpec.spotlight.isProfileSettingsHighlighted
+                ? 'true'
+                : 'false'
+            }
+            className={`relative p-4 border-t border-slate-200 dark:border-zinc-800/80 bg-slate-50 dark:bg-[#050505] space-y-3 shrink-0 ${
+              getStartedTourSpec.spotlight.isProfileSettingsHighlighted
+                ? getStartedTourSpec.spotlight.profileSettingsHighlightRingClassName
+                : ''
+            }`}
+          >
+            {getStartedTourSpec.spotlight.isProfileSettingsHighlighted && (
+              <div
+                id="workspace-get-started-profile-highlight-badge"
+                data-testid="workspace-get-started-profile-highlight-badge"
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-950/95 border border-emerald-400/90 text-[10px] font-mono font-bold text-emerald-200"
+              >
+                <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
+                <span>Step 2 Spotlight · Profile Settings</span>
+              </div>
+            )}
             <div className="min-w-0 space-y-1.5">
-              <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                {currentIdentity.displayName}
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                  {currentIdentity.displayName}
+                </div>
+                <button
+                  type="button"
+                  id="sidebar-open-profile-settings-btn"
+                  data-testid="sidebar-open-profile-settings-btn"
+                  onClick={() => {
+                    setActivePage('privacy');
+                    applyGetStartedTourUpdate(
+                      'complete_step',
+                      undefined,
+                      'profile_settings'
+                    );
+                  }}
+                  className="px-2 py-0.5 rounded border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-[10px] font-mono font-semibold text-emerald-600 dark:text-emerald-300 transition-colors shrink-0"
+                >
+                  Profile Settings
+                </button>
               </div>
               <div className="text-[11px] text-slate-500 dark:text-zinc-500 font-mono truncate">
                 {currentIdentity.email}
@@ -7190,30 +7401,55 @@ export default function App() {
           data-testid={workspaceHeaderShareMeta.headerElementId}
           className="flex items-center justify-between gap-4 px-5 py-3 border-b border-slate-200 dark:border-zinc-800/80 bg-[#FDFCFA]/95 dark:bg-[#0C0C0E]/95 backdrop-blur-sm"
         >
-          <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400 min-w-0 truncate">
+          <div className="flex items-center gap-2 text-xs text-slate-600 dark:text-zinc-400 min-w-0 shrink-0">
             <img
               src={APP_LOGO_URL}
               alt="Mr. Stranger"
               data-testid="workspace-topbar-logo"
               className="w-4 h-4 rounded-sm object-cover border border-slate-300 dark:border-zinc-800 shrink-0"
             />
-            <span className="font-semibold text-slate-900 dark:text-[#F4F2ED] capitalize truncate">
+            <span className="font-semibold text-slate-900 dark:text-[#F4F2ED] capitalize whitespace-nowrap">
               {activePage.replace('_', ' ')}
             </span>
             <span aria-hidden="true">·</span>
-            <span className="font-mono tabular-nums text-slate-500 dark:text-zinc-400">
+            <span className="font-mono tabular-nums text-slate-500 dark:text-zinc-400 whitespace-nowrap">
               {activeStudyRoomCode}
             </span>
-            <span aria-hidden="true" className="hidden xl:inline">
+            <span aria-hidden="true" className="hidden 2xl:inline">
               ·
             </span>
-            <span className="hidden xl:inline font-mono tabular-nums text-slate-500 dark:text-zinc-400">
+            <span className="hidden 2xl:inline font-mono tabular-nums text-slate-500 dark:text-zinc-400 whitespace-nowrap">
               {currentIdentity.streakCount}d streak · {currentIdentity.participationPoints} pts
             </span>
           </div>
 
           <div className="flex items-center gap-1.5 text-xs font-mono tabular-nums shrink-0">
             <div className="inline-flex items-center gap-1.5">
+              {/* Get Started New-User Tour Trigger & Live Completion Progress Indicator */}
+              <button
+                type="button"
+                id={getStartedTourSpec.triggerButtonId}
+                data-testid={getStartedTourSpec.triggerButtonId}
+                data-tour-active={getStartedTourSpec.isActive ? 'true' : 'false'}
+                data-completed-count={String(getStartedTourSpec.completedCount)}
+                data-total-steps={String(getStartedTourSpec.totalSteps)}
+                data-completion-percent={String(getStartedTourSpec.completionPercent)}
+                aria-expanded={getStartedTourSpec.isActive}
+                aria-controls={getStartedTourSpec.overlayElementId}
+                onClick={handleToggleGetStartedTour}
+                title={`Get Started Tour (${getStartedTourSpec.progressStatusLabel})`}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 ${
+                  getStartedTourSpec.isActive
+                    ? 'border-emerald-400 bg-emerald-500/20 text-emerald-700 dark:text-emerald-200'
+                    : getStartedTourSpec.isFullyCompleted
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
+                      : 'border-amber-500/45 bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300'
+                }`}
+              >
+                <Sparkles className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                <span>{getStartedTourSpec.headerBadgeText}</span>
+              </button>
+
               <button
                 type="button"
                 data-testid="switch-to-3d-glass-landing-btn"
@@ -7221,7 +7457,7 @@ export default function App() {
                   setIsGlass3dLandingMode(true);
                   window.scrollTo({ top: 0, behavior: 'smooth' });
                 }}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-slate-300 dark:border-zinc-800 bg-transparent hover:bg-slate-100 dark:hover:bg-zinc-900 text-slate-700 dark:text-zinc-300 text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0"
+                className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-slate-300 dark:border-zinc-800 bg-transparent hover:bg-slate-100 dark:hover:bg-zinc-900 text-slate-700 dark:text-zinc-300 text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0"
               >
                 <BookOpen className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
                 <span>Guidebook</span>
@@ -7232,7 +7468,7 @@ export default function App() {
                 data-testid="workspace-header-engineering-spec-btn"
                 onClick={handleOpenEngineeringSpecCenter}
                 title="Open 7-Pillar Product & Engineering Specification, API Contracts & Quality Gates"
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-emerald-500/45 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0"
+                className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-emerald-500/45 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0"
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
                 <span>7-Pillar Spec</span>
@@ -7292,8 +7528,9 @@ export default function App() {
                 ref={workspaceHeaderQrContainerRef}
                 className="relative inline-flex items-center gap-1"
               >
-                {/* Translucent Highlight Effect Over the QR Scanner Button Group */}
-                {workspaceHeaderQrMeta.tutorial.isActive && (
+                {/* Translucent Highlight Effect Over the QR Scanner Button Group (Active during QR Tutorial OR Get Started Tour Step 1) */}
+                {(workspaceHeaderQrMeta.tutorial.isActive ||
+                  getStartedTourSpec.spotlight.isQrScannerHighlighted) && (
                   <div
                     id={
                       workspaceHeaderQrMeta.tutorial.translucentHighlight
@@ -7304,7 +7541,9 @@ export default function App() {
                         .ringTestId
                     }
                     data-tutorial-step={String(
-                      workspaceHeaderQrMeta.tutorial.currentStepNumber
+                      getStartedTourSpec.spotlight.isQrScannerHighlighted
+                        ? getStartedTourSpec.currentStepNumber
+                        : workspaceHeaderQrMeta.tutorial.currentStepNumber
                     )}
                     data-highlight-zone={
                       workspaceHeaderQrMeta.tutorial.translucentHighlight
@@ -7337,10 +7576,10 @@ export default function App() {
                         workspaceHeaderQrMeta.isOpen ? 'opacity-0' : 'opacity-100'
                       }`}
                     >
-                      {
-                        workspaceHeaderQrMeta.tutorial.translucentHighlight
-                          .spotlightBadgeLabel
-                      }
+                      {getStartedTourSpec.spotlight.isQrScannerHighlighted
+                        ? 'Step 1 Spotlight · QR Scanner'
+                        : workspaceHeaderQrMeta.tutorial.translucentHighlight
+                            .spotlightBadgeLabel}
                     </span>
                   </div>
                 )}
@@ -7363,7 +7602,10 @@ export default function App() {
                   data-qr-url={workspaceHeaderQrMeta.workspaceUrl}
                   data-includes-scanner="true"
                   data-tutorial-highlighted={
-                    workspaceHeaderQrMeta.tutorial.isActive ? 'true' : 'false'
+                    workspaceHeaderQrMeta.tutorial.isActive ||
+                    getStartedTourSpec.spotlight.isQrScannerHighlighted
+                      ? 'true'
+                      : 'false'
                   }
                   data-generation-count={String(
                     workspaceHeaderQrMeta.generationCount
@@ -7377,7 +7619,8 @@ export default function App() {
                   className={`relative z-20 inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 ${
                     workspaceHeaderQrMeta.isOpen
                       ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
-                      : workspaceHeaderQrMeta.tutorial.isActive
+                      : workspaceHeaderQrMeta.tutorial.isActive ||
+                          getStartedTourSpec.spotlight.isQrScannerHighlighted
                         ? 'bg-emerald-500/15 border-emerald-400 text-emerald-800 dark:bg-emerald-500/20 dark:border-emerald-400 dark:text-emerald-200'
                         : 'bg-slate-100 border-slate-300 text-slate-800 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-zinc-100 dark:hover:border-zinc-500'
                   }`}
@@ -7385,7 +7628,8 @@ export default function App() {
                   <QrCode
                     className={`w-3.5 h-3.5 shrink-0 ${
                       workspaceHeaderQrMeta.isOpen ||
-                      workspaceHeaderQrMeta.tutorial.isActive
+                      workspaceHeaderQrMeta.tutorial.isActive ||
+                      getStartedTourSpec.spotlight.isQrScannerHighlighted
                         ? 'text-emerald-600 dark:text-emerald-400'
                         : 'text-slate-600 dark:text-zinc-300'
                     }`}
@@ -7407,10 +7651,15 @@ export default function App() {
                   }
                   data-includes-qr-scanner="true"
                   data-tutorial-highlighted={
-                    workspaceHeaderQrMeta.tutorial.isActive ? 'true' : 'false'
+                    workspaceHeaderQrMeta.tutorial.isActive ||
+                    getStartedTourSpec.spotlight.isQrScannerHighlighted
+                      ? 'true'
+                      : 'false'
                   }
                   data-tutorial-step={String(
-                    workspaceHeaderQrMeta.tutorial.currentStepNumber
+                    getStartedTourSpec.spotlight.isQrScannerHighlighted
+                      ? getStartedTourSpec.currentStepNumber
+                      : workspaceHeaderQrMeta.tutorial.currentStepNumber
                   )}
                   aria-expanded={
                     workspaceHeaderQrMeta.isOpen &&
@@ -7424,7 +7673,8 @@ export default function App() {
                     workspaceHeaderQrMeta.isOpen &&
                     workspaceHeaderQrMeta.isCameraScanning
                       ? 'bg-emerald-50 border-emerald-400 text-emerald-700 dark:bg-emerald-950/60 dark:border-emerald-500/80 dark:text-emerald-300'
-                      : workspaceHeaderQrMeta.tutorial.isActive
+                      : workspaceHeaderQrMeta.tutorial.isActive ||
+                          getStartedTourSpec.spotlight.isQrScannerHighlighted
                         ? workspaceHeaderQrMeta.tutorial.translucentHighlight
                             .scannerButtonHighlightClassName
                         : 'bg-slate-100 border-slate-300 text-slate-700 hover:bg-slate-200 dark:bg-[#0A0A0C] dark:border-zinc-700 dark:text-emerald-400 dark:hover:border-emerald-500/60'
@@ -12120,6 +12370,184 @@ export default function App() {
 
         {/* Main Scrollable Page Content */}
         <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-6">
+          {/* Get Started New-User Onboarding Progress Indicator & Feature Checklist */}
+          <section
+            id={getStartedTourSpec.checklistCardId}
+            data-testid={getStartedTourSpec.checklistCardId}
+            data-completed-count={String(getStartedTourSpec.completedCount)}
+            data-total-steps={String(getStartedTourSpec.totalSteps)}
+            data-completion-percent={String(getStartedTourSpec.completionPercent)}
+            data-tour-active={getStartedTourSpec.isActive ? 'true' : 'false'}
+            aria-label="Get Started Workspace Tour & Progress Indicator"
+            className="mb-6 p-4 sm:p-5 tactile-editorial-surface border border-emerald-500/35 bg-[#161513] space-y-3.5"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="space-y-1 min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/35 text-[11px] font-mono font-semibold text-emerald-300">
+                    <Sparkles className="w-3 h-3 text-emerald-400 shrink-0" />
+                    <span>GET STARTED TOUR</span>
+                  </span>
+                  <span
+                    data-testid="workspace-get-started-checklist-status-label"
+                    className="text-xs font-mono font-bold text-white tabular-nums"
+                  >
+                    {getStartedTourSpec.progressStatusLabel}
+                  </span>
+                  {getStartedTourSpec.isFullyCompleted && (
+                    <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/40 text-[10px] font-mono font-bold text-emerald-300">
+                      All Features Explored ✓
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-zinc-400">
+                  Step-by-step tour highlighting the QR Room Scanner, Profile &amp; Privacy Settings, Daily Focus Goal, and Live Peers Directory.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  data-testid="workspace-get-started-checklist-launch-btn"
+                  onClick={() => {
+                    setIsWorkspaceHeaderQrTutorialActive(false);
+                    applyGetStartedTourUpdate('reopen');
+                  }}
+                  className="px-3 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap"
+                >
+                  {getStartedTourSpec.isActive
+                    ? `Tour Open (Step ${getStartedTourSpec.currentStepNumber}/4)`
+                    : getStartedTourSpec.isFullyCompleted
+                      ? 'Review Tour Steps'
+                      : 'Resume Guided Tour'}
+                </button>
+                {getStartedTourSpec.completedCount > 0 && (
+                  <button
+                    type="button"
+                    data-testid="workspace-get-started-checklist-reset-btn"
+                    onClick={() => applyGetStartedTourUpdate('restart')}
+                    className="px-2.5 py-1.5 rounded-md border border-zinc-700 bg-zinc-900 hover:bg-zinc-800 text-zinc-300 text-xs font-mono transition-colors whitespace-nowrap"
+                  >
+                    Reset (0%)
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Visual Completion Progress Bar */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-zinc-400">
+                <span>Workspace Onboarding Progress</span>
+                <span className="text-emerald-300 font-semibold">
+                  {getStartedTourSpec.completionPercent}% ({getStartedTourSpec.completedCount}/{getStartedTourSpec.totalSteps} steps)
+                </span>
+              </div>
+              <div
+                id={getStartedTourSpec.checklistProgressBarId}
+                data-testid={getStartedTourSpec.checklistProgressBarId}
+                data-completion-percent={String(getStartedTourSpec.completionPercent)}
+                role="progressbar"
+                aria-valuenow={getStartedTourSpec.completionPercent}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-label="Get Started tour overall completion progress"
+                className="w-full h-2 rounded-full bg-zinc-900 border border-zinc-800 overflow-hidden"
+              >
+                <div
+                  style={{ width: `${getStartedTourSpec.completionPercent}%` }}
+                  className="h-full bg-emerald-500 transition-all duration-300"
+                />
+              </div>
+            </div>
+
+            {/* 4 Key Workspace Feature Step Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+              {getStartedTourSpec.steps.map((step) => (
+                <div
+                  key={step.id}
+                  data-testid={`workspace-get-started-checklist-step-${step.id}`}
+                  data-step-completed={step.isCompleted ? 'true' : 'false'}
+                  data-step-current={step.isCurrent ? 'true' : 'false'}
+                  className={`p-3 rounded-lg border transition-all flex flex-col justify-between gap-2 ${
+                    step.isCurrent && getStartedTourSpec.isActive
+                      ? 'border-emerald-400 bg-emerald-950/35 ring-1 ring-emerald-400/50'
+                      : step.isCompleted
+                        ? 'border-emerald-500/40 bg-emerald-950/15'
+                        : 'border-zinc-800 bg-[#0E0E11] hover:border-zinc-700'
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <span className="text-[11px] font-mono font-bold text-emerald-300">
+                        {step.shortLabel}
+                      </span>
+                      <button
+                        type="button"
+                        data-testid={`workspace-get-started-step-toggle-${step.id}`}
+                        onClick={() =>
+                          applyGetStartedTourUpdate(
+                            'toggle_step',
+                            step.stepIndex,
+                            step.id
+                          )
+                        }
+                        aria-label={
+                          step.isCompleted
+                            ? `Mark ${step.featureCategory} incomplete`
+                            : `Mark ${step.featureCategory} complete`
+                        }
+                        className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold border transition-colors ${
+                          step.isCompleted
+                            ? 'bg-emerald-500/20 border-emerald-400/50 text-emerald-300'
+                            : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        {step.isCompleted ? (
+                          <>
+                            <Check className="w-2.5 h-2.5 text-emerald-400 shrink-0" />
+                            <span>Done</span>
+                          </>
+                        ) : (
+                          <span>Todo</span>
+                        )}
+                      </button>
+                    </div>
+                    <div className="text-xs font-bold text-white leading-snug">
+                      {step.featureCategory}
+                    </div>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">
+                      {step.title}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-zinc-800/80">
+                    <button
+                      type="button"
+                      data-testid={`workspace-get-started-step-highlight-btn-${step.id}`}
+                      onClick={() => {
+                        setIsWorkspaceHeaderQrTutorialActive(false);
+                        applyGetStartedTourUpdate('goto', step.stepIndex, step.id);
+                      }}
+                      className="text-[11px] font-mono font-semibold text-emerald-400 hover:text-emerald-300 transition-colors"
+                    >
+                      Spotlight →
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`workspace-get-started-step-try-btn-${step.id}`}
+                      onClick={() =>
+                        handleTriggerGetStartedStepAction(step.id, false)
+                      }
+                      className="px-2 py-0.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-[10px] font-mono font-semibold text-zinc-200 transition-colors"
+                    >
+                      {step.isCompleted ? 'Re-open' : 'Try Feature'}
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
           {/* Warm Cozy Study Sanctuary Welcome Header & Progressive View Switcher */}
           <div
             data-testid="cozy-sanctuary-welcome-banner"
@@ -19325,6 +19753,277 @@ export default function App() {
                   className="px-3.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap"
                 >
                   {workspaceHeaderQrMeta.tutorial.nextButtonLabel}
+                </button>
+              </div>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* Interactive 'Get Started' New-User Tour Overlay (Highlights QR Scanner, Profile Settings, Focus Goal & Live Peers with Progress Indicator) */}
+      <AnimatePresence initial={false}>
+        {getStartedTourSpec.isActive && (
+          <motion.aside
+            key="workspace-get-started-tour-overlay"
+            id={getStartedTourSpec.overlayElementId}
+            data-testid={getStartedTourSpec.overlayElementId}
+            data-tour-active="true"
+            data-current-step={String(getStartedTourSpec.currentStepNumber)}
+            data-total-steps={String(getStartedTourSpec.totalSteps)}
+            data-step-id={getStartedTourSpec.currentStep.id}
+            data-completed-count={String(getStartedTourSpec.completedCount)}
+            data-completion-percent={String(getStartedTourSpec.completionPercent)}
+            data-target-element={
+              getStartedTourSpec.spotlight.activeTargetElementId
+            }
+            data-qr-scanner-highlighted={
+              getStartedTourSpec.spotlight.isQrScannerHighlighted
+                ? 'true'
+                : 'false'
+            }
+            data-profile-settings-highlighted={
+              getStartedTourSpec.spotlight.isProfileSettingsHighlighted
+                ? 'true'
+                : 'false'
+            }
+            role="dialog"
+            aria-modal="false"
+            aria-label="Get Started Workspace Feature Tour"
+            initial={{ opacity: 0, y: 8, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.98 }}
+            transition={{ duration: 0.18, ease: 'easeOut' }}
+            className="fixed bottom-5 right-4 sm:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[27rem] rounded-xl border border-emerald-500/55 bg-[#FDFBF7] dark:bg-[#191715] p-4 text-left font-sans shadow-2xl transition-all duration-200"
+          >
+            <div
+              id={getStartedTourSpec.cardElementId}
+              data-testid={getStartedTourSpec.cardElementId}
+              className="space-y-3"
+            >
+              {/* Header Row: Tour Kicker, Current Step Badge & Dismiss Button */}
+              <div className="flex items-start justify-between gap-2">
+                <div className="space-y-0.5 min-w-0">
+                  <div className="flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                    <span className="font-semibold">Get Started Tour</span>
+                    <span aria-hidden="true">·</span>
+                    <span
+                      data-testid="workspace-get-started-tour-step-badge"
+                      className="font-bold"
+                    >
+                      {getStartedTourSpec.currentStep.badgeLabel}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-zinc-400">
+                    Spotlight:{' '}
+                    <span className="font-mono text-slate-800 dark:text-zinc-200">
+                      #{getStartedTourSpec.spotlight.activeTargetElementId}
+                    </span>
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  id={getStartedTourSpec.dismissButtonId}
+                  data-testid={getStartedTourSpec.dismissButtonId}
+                  onClick={() => applyGetStartedTourUpdate('dismiss')}
+                  aria-label="Dismiss Get Started tour"
+                  className="px-2 py-1 rounded border border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-[11px] font-medium text-slate-700 dark:text-zinc-300 transition-colors whitespace-nowrap shrink-0"
+                >
+                  Dismiss
+                </button>
+              </div>
+
+              {/* Completion Progress Indicator Bar */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-600 dark:text-zinc-300">
+                  <span>Completion Progress</span>
+                  <span
+                    id={getStartedTourSpec.progressLabelElementId}
+                    data-testid={getStartedTourSpec.progressLabelElementId}
+                    className="font-bold text-emerald-700 dark:text-emerald-300"
+                  >
+                    {getStartedTourSpec.progressStatusLabel}
+                  </span>
+                </div>
+                <div
+                  id={getStartedTourSpec.progressBarElementId}
+                  data-testid={getStartedTourSpec.progressBarElementId}
+                  data-completed-count={String(getStartedTourSpec.completedCount)}
+                  data-total-steps={String(getStartedTourSpec.totalSteps)}
+                  data-completion-percent={String(getStartedTourSpec.completionPercent)}
+                  role="progressbar"
+                  aria-valuenow={getStartedTourSpec.completionPercent}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                  aria-label="Get Started tour completion progress indicator"
+                  className="w-full h-2 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden"
+                >
+                  <div
+                    style={{
+                      width: `${Math.max(
+                        getStartedTourSpec.completionPercent,
+                        getStartedTourSpec.isActive ? 8 : 0
+                      )}%`,
+                    }}
+                    className="h-full bg-emerald-600 dark:bg-emerald-500 transition-all duration-300"
+                  />
+                </div>
+              </div>
+
+              {/* 4-Step Selector Tabs */}
+              <div
+                role="tablist"
+                aria-label="Get Started Tour Feature Steps"
+                className="grid grid-cols-4 gap-1"
+              >
+                {getStartedTourSpec.steps.map((step) => (
+                  <button
+                    key={step.id}
+                    type="button"
+                    role="tab"
+                    id={`workspace-get-started-tour-tab-${step.id}`}
+                    data-testid={`workspace-get-started-tour-tab-${step.id}`}
+                    data-step-completed={step.isCompleted ? 'true' : 'false'}
+                    aria-selected={step.isCurrent}
+                    onClick={() =>
+                      applyGetStartedTourUpdate('goto', step.stepIndex, step.id)
+                    }
+                    className={`px-1.5 py-1 rounded border text-[10px] font-mono tabular-nums font-semibold transition-colors whitespace-nowrap truncate flex items-center justify-center gap-1 ${
+                      step.isCurrent
+                        ? 'bg-emerald-600 border-emerald-500 text-white'
+                        : step.isCompleted
+                          ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-800 dark:text-emerald-300'
+                          : 'bg-slate-100 dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
+                    }`}
+                  >
+                    {step.isCompleted && (
+                      <Check className="w-2.5 h-2.5 shrink-0" />
+                    )}
+                    <span className="truncate">{step.shortLabel}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Active Feature Step Details & Live Action Trigger */}
+              <div className="p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50/90 dark:bg-[#121110] space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <h3
+                    data-testid="workspace-get-started-tour-step-title"
+                    className="text-sm font-bold text-slate-900 dark:text-[#F5F2EB]"
+                  >
+                    {getStartedTourSpec.currentStep.title}
+                  </h3>
+                  <span
+                    data-testid="workspace-get-started-tour-step-status-pill"
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold shrink-0 ${
+                      getStartedTourSpec.currentStep.isCompleted
+                        ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/40'
+                        : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/35'
+                    }`}
+                  >
+                    {getStartedTourSpec.currentStep.isCompleted
+                      ? 'Completed ✓'
+                      : 'In Progress'}
+                  </span>
+                </div>
+
+                <p
+                  data-testid="workspace-get-started-tour-step-description"
+                  className="text-xs leading-relaxed text-slate-700 dark:text-zinc-300"
+                >
+                  {getStartedTourSpec.currentStep.description}
+                </p>
+
+                <p
+                  data-testid="workspace-get-started-tour-step-hint"
+                  className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300"
+                >
+                  Guide: {getStartedTourSpec.currentStep.actionHint}
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    id={getStartedTourSpec.actionButtonId}
+                    data-testid={getStartedTourSpec.actionButtonId}
+                    data-step-id={getStartedTourSpec.currentStep.id}
+                    onClick={() =>
+                      handleTriggerGetStartedStepAction(
+                        getStartedTourSpec.currentStep.id,
+                        true
+                      )
+                    }
+                    className="sm:col-span-2 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-emerald-500/55 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap"
+                  >
+                    <Sparkles className="w-3.5 h-3.5 shrink-0" />
+                    <span className="truncate">
+                      {getStartedTourSpec.currentStep.isCompleted
+                        ? getStartedTourSpec.currentStep.completedActionLabel
+                        : getStartedTourSpec.currentStep.actionButtonLabel}
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    id="workspace-get-started-tour-toggle-complete-btn"
+                    data-testid="workspace-get-started-tour-toggle-complete-btn"
+                    onClick={() =>
+                      applyGetStartedTourUpdate(
+                        'toggle_step',
+                        getStartedTourSpec.currentStepIndex,
+                        getStartedTourSpec.currentStep.id
+                      )
+                    }
+                    className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-md border border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-xs font-mono font-semibold text-slate-700 dark:text-zinc-200 transition-colors whitespace-nowrap"
+                  >
+                    <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span>
+                      {getStartedTourSpec.currentStep.isCompleted
+                        ? 'Unmark'
+                        : 'Mark Done'}
+                    </span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Footer Navigation Controls */}
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  id={getStartedTourSpec.prevButtonId}
+                  data-testid={getStartedTourSpec.prevButtonId}
+                  disabled={!getStartedTourSpec.canGoPrev}
+                  onClick={() => applyGetStartedTourUpdate('prev')}
+                  className={`px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
+                    getStartedTourSpec.canGoPrev
+                      ? 'border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-200'
+                      : 'border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/40 text-slate-400 dark:text-zinc-600 cursor-not-allowed opacity-60'
+                  }`}
+                >
+                  Previous
+                </button>
+
+                <button
+                  type="button"
+                  id={getStartedTourSpec.restartButtonId}
+                  data-testid={getStartedTourSpec.restartButtonId}
+                  onClick={() => applyGetStartedTourUpdate('restart')}
+                  className="text-[11px] font-mono text-slate-500 hover:text-slate-800 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors whitespace-nowrap"
+                >
+                  Reset Progress
+                </button>
+
+                <button
+                  type="button"
+                  id={getStartedTourSpec.nextButtonId}
+                  data-testid={getStartedTourSpec.nextButtonId}
+                  onClick={() =>
+                    applyGetStartedTourUpdate('complete_and_advance')
+                  }
+                  className="px-3.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap"
+                >
+                  {getStartedTourSpec.nextButtonLabel}
                 </button>
               </div>
             </div>

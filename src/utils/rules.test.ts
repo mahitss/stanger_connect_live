@@ -11306,3 +11306,131 @@ test('7-Pillar Engineering Spec: unique post likes, cursor pagination of likers,
   );
 });
 
+import {
+  WORKSPACE_GET_STARTED_TOUR_STORAGE_KEY,
+  WORKSPACE_GET_STARTED_TOUR_STEPS,
+  resolveInitialWorkspaceGetStartedTourState,
+  updateWorkspaceGetStartedTourProgress,
+  evaluateWorkspaceGetStartedTourSpec,
+} from './rules.ts';
+
+test('Get Started new-user tour highlights QR scanner and profile settings and tracks completion progress indicator (0% to 100%)', () => {
+  assert.equal(
+    WORKSPACE_GET_STARTED_TOUR_STORAGE_KEY,
+    'mr_stranger_get_started_tour_state_v1'
+  );
+  assert.equal(WORKSPACE_GET_STARTED_TOUR_STEPS.length, 4);
+  assert.equal(WORKSPACE_GET_STARTED_TOUR_STEPS[0].id, 'qr_scanner');
+  assert.equal(
+    WORKSPACE_GET_STARTED_TOUR_STEPS[0].targetElementId,
+    'workspace-header-qr-camera-scan-btn'
+  );
+  assert.equal(WORKSPACE_GET_STARTED_TOUR_STEPS[1].id, 'profile_settings');
+  assert.equal(
+    WORKSPACE_GET_STARTED_TOUR_STEPS[1].targetElementId,
+    'sidebar-profile-settings-card'
+  );
+  assert.equal(WORKSPACE_GET_STARTED_TOUR_STEPS[2].id, 'study_focus');
+  assert.equal(WORKSPACE_GET_STARTED_TOUR_STEPS[3].id, 'peer_directory');
+
+  // 1. Brand-new user state auto-launches on Step 1 (QR Scanner) with 0% completion
+  const initialNewUser = resolveInitialWorkspaceGetStartedTourState({
+    storedStateRaw: null,
+    searchParamsRaw: '',
+  });
+  assert.equal(initialNewUser.isActive, true);
+  assert.equal(initialNewUser.currentStepIndex, 0);
+  assert.deepEqual(initialNewUser.completedStepIds, []);
+  assert.equal(initialNewUser.isDismissed, false);
+
+  // 2. Step 1 (QR Scanner) spec highlights #workspace-header-qr-camera-scan-btn
+  const step1Spec = evaluateWorkspaceGetStartedTourSpec(initialNewUser);
+  assert.equal(step1Spec.isActive, true);
+  assert.equal(step1Spec.currentStepNumber, 1);
+  assert.equal(step1Spec.completedCount, 0);
+  assert.equal(step1Spec.completionPercent, 0);
+  assert.equal(step1Spec.progressStatusLabel, '0 of 4 completed (0%)');
+  assert.equal(step1Spec.headerBadgeText, 'Get Started · 0/4 (0%)');
+  assert.equal(step1Spec.spotlight.isQrScannerHighlighted, true);
+  assert.equal(step1Spec.spotlight.isProfileSettingsHighlighted, false);
+  assert.equal(
+    step1Spec.spotlight.activeTargetElementId,
+    'workspace-header-qr-camera-scan-btn'
+  );
+  assert.equal(
+    step1Spec.spotlight.qrScannerHighlightRingClassName.includes('bg-emerald-500/20'),
+    true
+  );
+
+  // 3. Complete Step 1 (QR Scanner) and advance to Step 2 (Profile Settings) -> 25% progress
+  const afterStep1 = updateWorkspaceGetStartedTourProgress({
+    currentState: initialNewUser,
+    action: 'complete_and_advance',
+  });
+  assert.equal(afterStep1.currentStepIndex, 1);
+  assert.deepEqual(afterStep1.completedStepIds, ['qr_scanner']);
+  assert.equal(afterStep1.completedCount, 1);
+  assert.equal(afterStep1.completionPercent, 25);
+  assert.equal(afterStep1.isFullyCompleted, false);
+
+  const step2Spec = evaluateWorkspaceGetStartedTourSpec(afterStep1);
+  assert.equal(step2Spec.currentStep.id, 'profile_settings');
+  assert.equal(step2Spec.completedCount, 1);
+  assert.equal(step2Spec.completionPercent, 25);
+  assert.equal(step2Spec.progressStatusLabel, '1 of 4 completed (25%)');
+  assert.equal(step2Spec.headerBadgeText, 'Get Started · 1/4 (25%)');
+  assert.equal(step2Spec.spotlight.isQrScannerHighlighted, false);
+  assert.equal(step2Spec.spotlight.isProfileSettingsHighlighted, true);
+  assert.equal(
+    step2Spec.spotlight.activeTargetElementId,
+    'sidebar-profile-settings-card'
+  );
+  assert.equal(
+    step2Spec.spotlight.profileSettingsHighlightRingClassName.includes(
+      'ring-emerald-400/75'
+    ),
+    true
+  );
+
+  // 4. Complete Step 2 (Profile Settings) and advance to Step 3 (Focus) -> 50% progress
+  const afterStep2 = updateWorkspaceGetStartedTourProgress({
+    currentState: afterStep1,
+    action: 'complete_and_advance',
+  });
+  assert.equal(afterStep2.currentStepIndex, 2);
+  assert.deepEqual(afterStep2.completedStepIds, ['qr_scanner', 'profile_settings']);
+  assert.equal(afterStep2.completionPercent, 50);
+
+  // 5. Complete Step 3 and Step 4 -> 100% completion and tour overlay closes
+  const afterStep3 = updateWorkspaceGetStartedTourProgress({
+    currentState: afterStep2,
+    action: 'complete_and_advance',
+  });
+  assert.equal(afterStep3.completionPercent, 75);
+  assert.equal(afterStep3.currentStepIndex, 3);
+
+  const afterStep4 = updateWorkspaceGetStartedTourProgress({
+    currentState: afterStep3,
+    action: 'complete_and_advance',
+  });
+  assert.equal(afterStep4.completedCount, 4);
+  assert.equal(afterStep4.completionPercent, 100);
+  assert.equal(afterStep4.isFullyCompleted, true);
+  assert.equal(afterStep4.isActive, false);
+
+  const finishedSpec = evaluateWorkspaceGetStartedTourSpec(afterStep4);
+  assert.equal(finishedSpec.isFullyCompleted, true);
+  assert.equal(finishedSpec.progressStatusLabel, '4 of 4 completed (100%)');
+  assert.equal(finishedSpec.headerBadgeText, 'Get Started · 4/4 (100%)');
+
+  // 6. URL query parameter ?getStarted=1&getStartedStep=2 overrides and opens Step 2
+  const urlOverrideState = resolveInitialWorkspaceGetStartedTourState({
+    storedStateRaw: JSON.stringify(afterStep4),
+    searchParamsRaw: '?getStarted=1&getStartedStep=2',
+  });
+  assert.equal(urlOverrideState.isActive, true);
+  assert.equal(urlOverrideState.currentStepIndex, 1);
+  assert.equal(urlOverrideState.completedStepIds.length, 4);
+});
+
+

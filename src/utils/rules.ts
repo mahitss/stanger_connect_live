@@ -27999,6 +27999,542 @@ export function buildSevenPillarEngineeringBlueprintSpec(): SevenPillarEngineeri
   };
 }
 
+// ============================================================================
+// WORKSPACE 'GET STARTED' NEW-USER TOUR & PROGRESS INDICATOR SPECIFICATION
+// ============================================================================
+
+export const WORKSPACE_GET_STARTED_TOUR_STORAGE_KEY =
+  'mr_stranger_get_started_tour_state_v1';
+
+export type WorkspaceGetStartedTourStepId =
+  | 'qr_scanner'
+  | 'profile_settings'
+  | 'study_focus'
+  | 'peer_directory';
+
+export interface WorkspaceGetStartedTourStepDefinition {
+  id: WorkspaceGetStartedTourStepId;
+  stepIndex: number;
+  stepNumber: number;
+  shortLabel: string;
+  badgeLabel: string;
+  featureCategory: string;
+  title: string;
+  description: string;
+  actionHint: string;
+  actionButtonLabel: string;
+  completedActionLabel: string;
+  targetElementId: string;
+  secondaryTargetElementId: string;
+  highlightAriaLabel: string;
+}
+
+export const WORKSPACE_GET_STARTED_TOUR_STEPS: ReadonlyArray<WorkspaceGetStartedTourStepDefinition> = [
+  {
+    id: 'qr_scanner',
+    stepIndex: 0,
+    stepNumber: 1,
+    shortLabel: '01. QR Scan',
+    badgeLabel: 'Step 1 of 4 · QR Scanner',
+    featureCategory: 'QR Room Scanner',
+    title: 'Scan & Share Workspace Room QR Codes',
+    description:
+      'Use the top-header QR Code & Camera Scanner control to generate an ISO/IEC 18004 room QR code or scan a peer room code with your device camera for instant workspace handoff.',
+    actionHint:
+      'Click the highlighted camera scanner icon in the top header or trigger the action below to open the QR scanner popover.',
+    actionButtonLabel: 'Open QR Scanner & Complete Step',
+    completedActionLabel: 'QR Scanner Explored ✓',
+    targetElementId: 'workspace-header-qr-camera-scan-btn',
+    secondaryTargetElementId: 'workspace-header-qr-btn',
+    highlightAriaLabel:
+      'Get Started Tour Spotlight: QR Scanner button in workspace header',
+  },
+  {
+    id: 'profile_settings',
+    stepIndex: 1,
+    stepNumber: 2,
+    shortLabel: '02. Profile',
+    badgeLabel: 'Step 2 of 4 · Profile Settings',
+    featureCategory: 'Profile & Privacy Settings',
+    title: 'Customize Your Profile, Focus Mood & Privacy',
+    description:
+      'Configure your scholar display identity, active focus mood, achievement badges, and zero-trust privacy/visibility controls from the sidebar Profile & Privacy settings.',
+    actionHint:
+      'Inspect your highlighted Sidebar Profile Card or open Privacy & Profile Settings to personalize how peers see your status.',
+    actionButtonLabel: 'Open Profile Settings & Complete Step',
+    completedActionLabel: 'Profile Settings Configured ✓',
+    targetElementId: 'sidebar-profile-settings-card',
+    secondaryTargetElementId: 'sidebar-privacy-security-btn',
+    highlightAriaLabel:
+      'Get Started Tour Spotlight: Profile Settings & Privacy controls in sidebar',
+  },
+  {
+    id: 'study_focus',
+    stepIndex: 2,
+    stepNumber: 3,
+    shortLabel: '03. Focus',
+    badgeLabel: 'Step 3 of 4 · Focus & Pomodoro',
+    featureCategory: 'Study Focus Goal',
+    title: 'Track Daily Focus Targets & Study Sprints',
+    description:
+      'Set your daily focus target in minutes, log Pomodoro study sprints (+25m), and layer ambient rainfall or lo-fi soundscapes to protect your streak.',
+    actionHint:
+      'Log a +25m focus session or open the Study Room desk to advance your daily focus progress.',
+    actionButtonLabel: 'Log +25m Focus Sprint & Complete Step',
+    completedActionLabel: 'Focus Sprint Logged ✓',
+    targetElementId: 'daily-productivity-goal-card',
+    secondaryTargetElementId: 'sidebar-study-room-btn',
+    highlightAriaLabel:
+      'Get Started Tour Spotlight: Daily Productivity Goal & Study Room controls',
+  },
+  {
+    id: 'peer_directory',
+    stepIndex: 3,
+    stepNumber: 4,
+    shortLabel: '04. Peers',
+    badgeLabel: 'Step 4 of 4 · Live Directory',
+    featureCategory: 'Peers & Moments',
+    title: 'Filter Live Study Peers & Share Moments',
+    description:
+      'Filter online scholars by mood category (Productive, Social, Away), send invite-first connection requests, and share verified study notes.',
+    actionHint:
+      'Review the Live Online Directory filter bar below and mark this final step complete to reach 100% onboarding.',
+    actionButtonLabel: 'Explore Live Peers & Finish Tour',
+    completedActionLabel: 'Peer Directory Mastered ✓',
+    targetElementId: 'hub-online-directory',
+    secondaryTargetElementId: 'online-directory-mood-filter',
+    highlightAriaLabel:
+      'Get Started Tour Spotlight: Live Online Peers Directory & Mood Filter',
+  },
+];
+
+export interface WorkspaceGetStartedTourPersistedState {
+  isActive: boolean;
+  currentStepIndex: number;
+  completedStepIds: WorkspaceGetStartedTourStepId[];
+  isDismissed: boolean;
+}
+
+const VALID_GET_STARTED_STEP_IDS: ReadonlyArray<WorkspaceGetStartedTourStepId> = [
+  'qr_scanner',
+  'profile_settings',
+  'study_focus',
+  'peer_directory',
+];
+
+export function sanitizeCompletedGetStartedSteps(
+  rawIds?: ReadonlyArray<string> | null
+): WorkspaceGetStartedTourStepId[] {
+  if (!Array.isArray(rawIds)) return [];
+  const unique = new Set<WorkspaceGetStartedTourStepId>();
+  for (const item of rawIds) {
+    const clean = String(item || '').trim() as WorkspaceGetStartedTourStepId;
+    if (VALID_GET_STARTED_STEP_IDS.includes(clean)) {
+      unique.add(clean);
+    }
+  }
+  return VALID_GET_STARTED_STEP_IDS.filter((id) => unique.has(id));
+}
+
+export function resolveInitialWorkspaceGetStartedTourState(params?: {
+  storedStateRaw?: string | null;
+  searchParamsRaw?: string | null;
+}): WorkspaceGetStartedTourPersistedState {
+  const totalSteps = WORKSPACE_GET_STARTED_TOUR_STEPS.length;
+  let storedParsed: Partial<WorkspaceGetStartedTourPersistedState> | null = null;
+  const rawStored =
+    typeof params?.storedStateRaw === 'string'
+      ? params.storedStateRaw.trim()
+      : '';
+
+  if (rawStored) {
+    try {
+      const parsed = JSON.parse(rawStored);
+      if (parsed && typeof parsed === 'object') {
+        storedParsed = parsed;
+      }
+    } catch {
+      storedParsed = null;
+    }
+  }
+
+  const completedStepIds = sanitizeCompletedGetStartedSteps(
+    storedParsed?.completedStepIds
+  );
+  const allDone = completedStepIds.length >= totalSteps;
+
+  let currentStepIndex =
+    typeof storedParsed?.currentStepIndex === 'number' &&
+    Number.isFinite(storedParsed.currentStepIndex)
+      ? Math.max(0, Math.min(totalSteps - 1, Math.floor(storedParsed.currentStepIndex)))
+      : 0;
+
+  let isDismissed = Boolean(storedParsed?.isDismissed);
+  // Default: active for brand-new users who haven't dismissed or finished all 4 steps
+  let isActive =
+    storedParsed === null
+      ? true
+      : typeof storedParsed.isActive === 'boolean'
+        ? storedParsed.isActive && !allDone && !isDismissed
+        : !allDone && !isDismissed;
+
+  const rawSearch =
+    typeof params?.searchParamsRaw === 'string'
+      ? params.searchParamsRaw.trim()
+      : '';
+
+  if (rawSearch) {
+    const cleanSearch = rawSearch.startsWith('?') ? rawSearch.slice(1) : rawSearch;
+    const sp = new URLSearchParams(cleanSearch);
+    const getStartedFlag = sp.get('getStarted') ?? sp.get('tour');
+    const stepParam = sp.get('getStartedStep') ?? sp.get('tourStep');
+    const qrTutorialFlag = sp.get('qrTutorial');
+
+    if (stepParam !== null) {
+      const parsedNum = Number(stepParam);
+      if (Number.isFinite(parsedNum)) {
+        const idx =
+          parsedNum >= 1 && parsedNum <= totalSteps
+            ? Math.floor(parsedNum) - 1
+            : Math.floor(parsedNum);
+        currentStepIndex = Math.max(0, Math.min(totalSteps - 1, idx));
+      }
+    }
+
+    if (getStartedFlag === '1' || getStartedFlag === 'true') {
+      isActive = true;
+      isDismissed = false;
+    } else if (getStartedFlag === '0' || getStartedFlag === 'false') {
+      isActive = false;
+      isDismissed = true;
+    } else if (qrTutorialFlag === '1' || qrTutorialFlag === 'true') {
+      // Avoid overlapping the standalone QR sub-tutorial when explicitly requested via URL
+      isActive = false;
+    }
+  }
+
+  return {
+    isActive,
+    currentStepIndex,
+    completedStepIds,
+    isDismissed,
+  };
+}
+
+export type WorkspaceGetStartedTourAction =
+  | 'next'
+  | 'prev'
+  | 'goto'
+  | 'complete_step'
+  | 'toggle_step'
+  | 'complete_and_advance'
+  | 'finish_all'
+  | 'dismiss'
+  | 'reopen'
+  | 'restart';
+
+export function updateWorkspaceGetStartedTourProgress(params: {
+  currentState: WorkspaceGetStartedTourPersistedState;
+  action: WorkspaceGetStartedTourAction;
+  targetStepIndex?: number;
+  targetStepId?: WorkspaceGetStartedTourStepId;
+}): WorkspaceGetStartedTourPersistedState & {
+  completedCount: number;
+  totalSteps: number;
+  completionPercent: number;
+  isFullyCompleted: boolean;
+} {
+  const totalSteps = WORKSPACE_GET_STARTED_TOUR_STEPS.length;
+  const safeCurrentIdx = Math.max(
+    0,
+    Math.min(
+      totalSteps - 1,
+      Math.floor(Number(params.currentState.currentStepIndex) || 0)
+    )
+  );
+  let nextActive = Boolean(params.currentState.isActive);
+  let nextIdx = safeCurrentIdx;
+  let nextDismissed = Boolean(params.currentState.isDismissed);
+  let nextCompleted = sanitizeCompletedGetStartedSteps(
+    params.currentState.completedStepIds
+  );
+
+  const resolvedStepId: WorkspaceGetStartedTourStepId =
+    params.targetStepId && VALID_GET_STARTED_STEP_IDS.includes(params.targetStepId)
+      ? params.targetStepId
+      : WORKSPACE_GET_STARTED_TOUR_STEPS[safeCurrentIdx].id;
+
+  switch (params.action) {
+    case 'next': {
+      if (safeCurrentIdx + 1 < totalSteps) {
+        nextIdx = safeCurrentIdx + 1;
+        nextActive = true;
+      } else {
+        // On last step, clicking Next/Finish marks the current step completed and closes overlay
+        if (!nextCompleted.includes(resolvedStepId)) {
+          nextCompleted = sanitizeCompletedGetStartedSteps([
+            ...nextCompleted,
+            resolvedStepId,
+          ]);
+        }
+        nextActive = false;
+      }
+      break;
+    }
+    case 'prev': {
+      nextIdx = Math.max(0, safeCurrentIdx - 1);
+      nextActive = true;
+      break;
+    }
+    case 'goto': {
+      const target =
+        typeof params.targetStepIndex === 'number' &&
+        Number.isFinite(params.targetStepIndex)
+          ? Math.max(0, Math.min(totalSteps - 1, Math.floor(params.targetStepIndex)))
+          : params.targetStepId
+            ? Math.max(
+                0,
+                WORKSPACE_GET_STARTED_TOUR_STEPS.findIndex(
+                  (s) => s.id === params.targetStepId
+                )
+              )
+            : safeCurrentIdx;
+      nextIdx = target;
+      nextActive = true;
+      nextDismissed = false;
+      break;
+    }
+    case 'complete_step': {
+      if (!nextCompleted.includes(resolvedStepId)) {
+        nextCompleted = sanitizeCompletedGetStartedSteps([
+          ...nextCompleted,
+          resolvedStepId,
+        ]);
+      }
+      break;
+    }
+    case 'toggle_step': {
+      if (nextCompleted.includes(resolvedStepId)) {
+        nextCompleted = nextCompleted.filter((id) => id !== resolvedStepId);
+      } else {
+        nextCompleted = sanitizeCompletedGetStartedSteps([
+          ...nextCompleted,
+          resolvedStepId,
+        ]);
+      }
+      break;
+    }
+    case 'complete_and_advance': {
+      if (!nextCompleted.includes(resolvedStepId)) {
+        nextCompleted = sanitizeCompletedGetStartedSteps([
+          ...nextCompleted,
+          resolvedStepId,
+        ]);
+      }
+      if (safeCurrentIdx + 1 < totalSteps) {
+        nextIdx = safeCurrentIdx + 1;
+        nextActive = true;
+      } else if (nextCompleted.length >= totalSteps) {
+        nextActive = false;
+      }
+      break;
+    }
+    case 'finish_all': {
+      nextCompleted = [...VALID_GET_STARTED_STEP_IDS];
+      nextActive = false;
+      nextDismissed = false;
+      break;
+    }
+    case 'dismiss': {
+      nextActive = false;
+      nextDismissed = true;
+      break;
+    }
+    case 'reopen': {
+      nextActive = true;
+      nextDismissed = false;
+      break;
+    }
+    case 'restart': {
+      nextActive = true;
+      nextDismissed = false;
+      nextIdx = 0;
+      nextCompleted = [];
+      break;
+    }
+  }
+
+  const completedCount = nextCompleted.length;
+  const completionPercent = Math.round((completedCount / totalSteps) * 100);
+  const isFullyCompleted = completedCount >= totalSteps;
+
+  return {
+    isActive: nextActive,
+    currentStepIndex: nextIdx,
+    completedStepIds: nextCompleted,
+    isDismissed: nextDismissed,
+    completedCount,
+    totalSteps,
+    completionPercent,
+    isFullyCompleted,
+  };
+}
+
+export interface EvaluatedWorkspaceGetStartedTourStep
+  extends WorkspaceGetStartedTourStepDefinition {
+  isCompleted: boolean;
+  isCurrent: boolean;
+}
+
+export interface WorkspaceGetStartedTourSpec {
+  storageKey: string;
+  triggerButtonId: string;
+  checklistCardId: string;
+  checklistProgressBarId: string;
+  overlayElementId: string;
+  cardElementId: string;
+  progressBarElementId: string;
+  progressLabelElementId: string;
+  actionButtonId: string;
+  prevButtonId: string;
+  nextButtonId: string;
+  dismissButtonId: string;
+  restartButtonId: string;
+  isActive: boolean;
+  isDismissed: boolean;
+  currentStepIndex: number;
+  currentStepNumber: number;
+  totalSteps: number;
+  completedStepIds: WorkspaceGetStartedTourStepId[];
+  completedCount: number;
+  completionPercent: number;
+  stepPositionPercent: number;
+  isFullyCompleted: boolean;
+  currentStep: EvaluatedWorkspaceGetStartedTourStep;
+  steps: EvaluatedWorkspaceGetStartedTourStep[];
+  canGoPrev: boolean;
+  isLastStep: boolean;
+  nextButtonLabel: string;
+  progressStatusLabel: string;
+  headerBadgeText: string;
+  spotlight: {
+    activeTargetElementId: string;
+    secondaryTargetElementId: string;
+    isQrScannerHighlighted: boolean;
+    isProfileSettingsHighlighted: boolean;
+    isStudyFocusHighlighted: boolean;
+    isPeerDirectoryHighlighted: boolean;
+    qrScannerHighlightRingClassName: string;
+    profileSettingsHighlightRingClassName: string;
+    studyFocusHighlightRingClassName: string;
+    peerDirectoryHighlightRingClassName: string;
+  };
+}
+
+export function evaluateWorkspaceGetStartedTourSpec(params?: {
+  isActive?: boolean;
+  currentStepIndex?: number;
+  completedStepIds?: ReadonlyArray<string>;
+  isDismissed?: boolean;
+}): WorkspaceGetStartedTourSpec {
+  const totalSteps = WORKSPACE_GET_STARTED_TOUR_STEPS.length;
+  const isActive = Boolean(params?.isActive);
+  const isDismissed = Boolean(params?.isDismissed);
+  const currentStepIndex =
+    typeof params?.currentStepIndex === 'number' &&
+    Number.isFinite(params.currentStepIndex)
+      ? Math.max(0, Math.min(totalSteps - 1, Math.floor(params.currentStepIndex)))
+      : 0;
+  const completedStepIds = sanitizeCompletedGetStartedSteps(
+    params?.completedStepIds
+  );
+  const completedCount = completedStepIds.length;
+  const completionPercent = Math.round((completedCount / totalSteps) * 100);
+  const currentStepNumber = currentStepIndex + 1;
+  const stepPositionPercent = Math.round((currentStepNumber / totalSteps) * 100);
+  const isFullyCompleted = completedCount >= totalSteps;
+
+  const steps: EvaluatedWorkspaceGetStartedTourStep[] =
+    WORKSPACE_GET_STARTED_TOUR_STEPS.map((step, idx) => ({
+      ...step,
+      isCompleted: completedStepIds.includes(step.id),
+      isCurrent: idx === currentStepIndex,
+    }));
+
+  const currentStep = steps[currentStepIndex] || steps[0];
+  const canGoPrev = currentStepIndex > 0;
+  const isLastStep = currentStepIndex === totalSteps - 1;
+  const nextButtonLabel = isLastStep ? 'Finish Tour' : 'Next Step';
+  const progressStatusLabel = `${completedCount} of ${totalSteps} completed (${completionPercent}%)`;
+  const headerBadgeText = isFullyCompleted
+    ? `Get Started · 4/4 (100%)`
+    : `Get Started · ${completedCount}/${totalSteps} (${completionPercent}%)`;
+
+  const isQrScannerHighlighted = isActive && currentStep.id === 'qr_scanner';
+  const isProfileSettingsHighlighted =
+    isActive && currentStep.id === 'profile_settings';
+  const isStudyFocusHighlighted = isActive && currentStep.id === 'study_focus';
+  const isPeerDirectoryHighlighted =
+    isActive && currentStep.id === 'peer_directory';
+
+  const activeSpotlightClass =
+    'ring-4 ring-emerald-400/75 bg-emerald-500/20 shadow-[0_0_28px_rgba(16,185,129,0.5)] transition-all duration-300';
+
+  return {
+    storageKey: WORKSPACE_GET_STARTED_TOUR_STORAGE_KEY,
+    triggerButtonId: 'workspace-get-started-tour-trigger-btn',
+    checklistCardId: 'workspace-get-started-checklist-card',
+    checklistProgressBarId: 'workspace-get-started-checklist-progress-bar',
+    overlayElementId: 'workspace-get-started-tour-overlay',
+    cardElementId: 'workspace-get-started-tour-card',
+    progressBarElementId: 'workspace-get-started-tour-progress-bar',
+    progressLabelElementId: 'workspace-get-started-tour-progress-label',
+    actionButtonId: 'workspace-get-started-tour-action-btn',
+    prevButtonId: 'workspace-get-started-tour-prev-btn',
+    nextButtonId: 'workspace-get-started-tour-next-btn',
+    dismissButtonId: 'workspace-get-started-tour-dismiss-btn',
+    restartButtonId: 'workspace-get-started-tour-restart-btn',
+    isActive,
+    isDismissed,
+    currentStepIndex,
+    currentStepNumber,
+    totalSteps,
+    completedStepIds,
+    completedCount,
+    completionPercent,
+    stepPositionPercent,
+    isFullyCompleted,
+    currentStep,
+    steps,
+    canGoPrev,
+    isLastStep,
+    nextButtonLabel,
+    progressStatusLabel,
+    headerBadgeText,
+    spotlight: {
+      activeTargetElementId: currentStep.targetElementId,
+      secondaryTargetElementId: currentStep.secondaryTargetElementId,
+      isQrScannerHighlighted,
+      isProfileSettingsHighlighted,
+      isStudyFocusHighlighted,
+      isPeerDirectoryHighlighted,
+      qrScannerHighlightRingClassName: isQrScannerHighlighted
+        ? activeSpotlightClass
+        : '',
+      profileSettingsHighlightRingClassName: isProfileSettingsHighlighted
+        ? activeSpotlightClass
+        : '',
+      studyFocusHighlightRingClassName: isStudyFocusHighlighted
+        ? activeSpotlightClass
+        : '',
+      peerDirectoryHighlightRingClassName: isPeerDirectoryHighlighted
+        ? activeSpotlightClass
+        : '',
+    },
+  };
+}
+
+
 
 
 
