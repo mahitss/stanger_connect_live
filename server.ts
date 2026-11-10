@@ -282,7 +282,7 @@ async function startServer() {
   const apiRateMap = new Map<string, number[]>();
   let totalBlockedThreatsCount = 0;
   let totalRateLimitedCount = 0;
-  const apiLatencySamplesMs: number[] = [1.4, 2.1, 2.8, 3.6, 4.2, 5.1, 6.8];
+  const apiLatencySamplesMs: number[] = [];
   const structuredRequestLogs: StructuredCorrelationLogEntry[] = [];
 
   app.use('/api', (req, res, next) => {
@@ -385,27 +385,16 @@ async function startServer() {
     uid: 'usr_mahit_admin',
     email: defaultAdminEmail,
     displayName: 'Mahit Saxena',
-    bio: 'Principal Systems Architect · Auto-Configured Deep Work Sanctuary',
+    bio: 'Workspace Member',
     salt: defaultAdminSalt,
     passwordHash: hashPassword('MrStranger@2026!', defaultAdminSalt),
-    streakCount: 7,
+    streakCount: 1,
     lastLoginDate: getTodayDateString(),
-    participationPoints: 185,
+    participationPoints: 0,
     privacyVisibility: 'everyone',
     readReceiptsEnabled: true,
     allowCallsFromConnectionsOnly: true,
     createdAt: new Date().toISOString(),
-  });
-
-  studyDesks.set('usr_mahit_admin', {
-    uid: 'usr_mahit_admin',
-    displayName: 'Mahit Saxena',
-    roomCode: 'STUDY-204',
-    roomName: 'Study Room STUDY-204',
-    subject: 'System Architecture & Deep Work',
-    positiveNote: 'Locked in for 120m daily target — join STUDY-204 for silent Pomodoro sprints.',
-    timerMinutes: 25,
-    startedAt: Date.now() - 1_800_000,
   });
 
   const liveGameState = new Map<string, GameScoreEntry>();
@@ -835,31 +824,6 @@ async function startServer() {
 
   // Authoritative Unique Post Likes Store (Keyed by momentId -> Record<userId, MomentLikeUserRecord>)
   const liveMomentLikesByMomentId = new Map<string, Record<string, MomentLikeUserRecord>>();
-  (() => {
-    const seededScholars = [
-      { userId: 'usr_aria_chen', userDisplayName: 'Aria Chen', userHandle: '@ariachen', offsetMs: 360_000 },
-      { userId: 'usr_marcus_vance', userDisplayName: 'Marcus Vance', userHandle: '@mvance', offsetMs: 300_000 },
-      { userId: 'usr_elena_rostova', userDisplayName: 'Elena Rostova', userHandle: '@elena_r', offsetMs: 240_000 },
-      { userId: 'usr_devon_k', userDisplayName: 'Devon Brooks', userHandle: '@devonb', offsetMs: 180_000 },
-      { userId: 'usr_sora_takahashi', userDisplayName: 'Sora Takahashi', userHandle: '@sora_t', offsetMs: 120_000 },
-      { userId: 'usr_mahit_admin', userDisplayName: 'Mahit Saxena', userHandle: '@mahit', offsetMs: 60_000 },
-    ];
-    let initialMap: Record<string, MomentLikeUserRecord> = {};
-    const baseNow = Date.now();
-    for (const s of seededScholars) {
-      const toggled = toggleUniquePostLike(initialMap, {
-        momentId: 'moment_study_204',
-        userId: s.userId,
-        userDisplayName: s.userDisplayName,
-        userHandle: s.userHandle,
-        visibility: 'public',
-        action: 'like',
-        nowMs: baseNow - s.offsetMs,
-      });
-      initialMap = toggled.updatedByUserId;
-    }
-    liveMomentLikesByMomentId.set('moment_study_204', initialMap);
-  })();
 
   // Paginated List of Users Who Liked a Post (Pillar 2 & Pillar 4 API Contract)
   app.get('/api/moments/:momentId/likes', (req, res) => {

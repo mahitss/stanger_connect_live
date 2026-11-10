@@ -90,6 +90,7 @@ import {
   sanitizeSafeText,
   LeaderboardCandidate,
   buildWeeklyActivityOverview,
+  filterLiveRecordedWeeklyActivityOverview,
   StoredDailyActivityRecord,
   UiSoundEffectPreferences,
   UiSoundAlertEvent,
@@ -456,8 +457,14 @@ export default function App() {
     return params.get('view') === 'guidebook' || params.get('view') === '3d';
   });
 
-  // Persistent Authenticated Account State (Auto-Set by default unless explicitly signed out)
+  // Persistent Authenticated Account State
   const [accountSession, setAccountSession] = useState<AccountIdentity | null>(() => {
+    const cleanDefaultIdentity: AccountIdentity = {
+      ...initialAutoPreset.identity,
+      bio: 'Workspace Member',
+      streakCount: 1,
+      participationPoints: 0,
+    };
     try {
       const saved = localStorage.getItem('mr_stranger_account_v2');
       if (saved) return JSON.parse(saved);
@@ -466,13 +473,13 @@ export default function App() {
       }
       localStorage.setItem(
         'mr_stranger_account_v2',
-        JSON.stringify(initialAutoPreset.identity)
+        JSON.stringify(cleanDefaultIdentity)
       );
       localStorage.setItem(AUTO_CONFIGURED_WORKSPACE_STORAGE_KEY, 'true');
     } catch {
       // ignore
     }
-    return initialAutoPreset.identity;
+    return cleanDefaultIdentity;
   });
 
   useEffect(() => {
@@ -576,38 +583,25 @@ export default function App() {
     return false;
   });
 
-  // Sign-In / Create Account Form State (Pre-populated with Bootstrapped Admin Values)
+  // Sign-In / Create Account Form State (No pre-filled credentials)
   const [authTab, setAuthTab] = useState<'signup' | 'signin'>('signin');
-  const [emailInput, setEmailInput] = useState(BOOTSTRAPPED_ADMIN_EMAIL);
-  const [passwordInput, setPasswordInput] = useState('MrStranger@2026!');
-  const [accountNameInput, setAccountNameInput] = useState('Mahit Saxena');
-  const [accountBioInput, setAccountBioInput] = useState(
-    'Principal Systems Architect · Auto-Configured Deep Work Sanctuary'
-  );
+  const [emailInput, setEmailInput] = useState('');
+  const [passwordInput, setPasswordInput] = useState('');
+  const [accountNameInput, setAccountNameInput] = useState('');
+  const [accountBioInput, setAccountBioInput] = useState('');
   const [authFormError, setAuthFormError] = useState('');
   const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
 
-  // Sign-Out Verification State (Pre-populated with Bootstrapped Admin Values)
-  const [signOutEmailConfirm, setSignOutEmailConfirm] = useState(BOOTSTRAPPED_ADMIN_EMAIL);
-  const [signOutPasswordConfirm, setSignOutPasswordConfirm] = useState('MrStranger@2026!');
+  // Sign-Out Verification State (No pre-filled credentials)
+  const [signOutEmailConfirm, setSignOutEmailConfirm] = useState('');
+  const [signOutPasswordConfirm, setSignOutPasswordConfirm] = useState('');
   const [signOutError, setSignOutError] = useState('');
 
   // Authoritative Real-Time WebSocket State
   const wsRef = useRef<WebSocket | null>(null);
   const [wsConnected, setWsConnected] = useState(false);
   const [onlinePeers, setOnlinePeers] = useState<OnlinePeer[]>([]);
-  const [studyDesks, setStudyDesks] = useState<StudyDeskItem[]>(() => [
-    {
-      uid: initialAutoPreset.identity.uid,
-      displayName: initialAutoPreset.identity.displayName,
-      roomCode: initialAutoPreset.productivity.studyRoomCode,
-      roomName: initialAutoPreset.productivity.studyRoomName,
-      subject: initialAutoPreset.productivity.deskSubject,
-      positiveNote: initialAutoPreset.productivity.deskPositiveNote,
-      timerMinutes: initialAutoPreset.productivity.pomodoroTimerMinutes,
-      startedAt: Date.now() - 1_800_000,
-    },
-  ]);
+  const [studyDesks, setStudyDesks] = useState<StudyDeskItem[]>([]);
   const [gameScores, setGameScores] = useState<MultiplayerScore[]>([]);
   const [studyChat, setStudyChat] = useState<StudyChatMessage[]>([]);
   const [incomingCallSignal, setIncomingCallSignal] = useState<{
@@ -743,31 +737,19 @@ export default function App() {
     } catch {
       // ignore
     }
-    return ['tw_elenavostok'];
+    return [];
   });
   const [twitterChats, setTwitterChats] = useState<TwitterChatMessage[]>(() => {
     try {
       const saved = localStorage.getItem('mr_stranger_twitter_chats_v1');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed)) return parsed;
       }
     } catch {
       // ignore
     }
-    return [
-      {
-        id: 'twchat_seed_1',
-        channelId: 'global_townsquare',
-        senderUid: 'tw_elenavostok',
-        senderName: 'Elena Rostova',
-        senderHandle: '@elena_rostova',
-        recipientUid: null,
-        text: 'Welcome to Twitter / X inside Mr. Stranger! Drop your study setups, #DeepWork updates, or chat live here.',
-        photoDataUrl: null,
-        createdAtMs: Date.now() - 180_000,
-      },
-    ];
+    return [];
   });
 
   useEffect(() => {
@@ -826,20 +808,11 @@ export default function App() {
         if (parsed.dateKey === formatDateKey(new Date())) {
           return Math.max(0, Number(parsed.completedMinutes) || 0);
         }
-      } else {
-        localStorage.setItem(
-          'mr_stranger_daily_goal_v1',
-          JSON.stringify({
-            dateKey: formatDateKey(new Date()),
-            targetMinutes: initialAutoPreset.productivity.dailyTargetMinutes,
-            completedMinutes: initialAutoPreset.productivity.dailyCompletedMinutes,
-          })
-        );
       }
     } catch {
       // ignore
     }
-    return initialAutoPreset.productivity.dailyCompletedMinutes;
+    return 0;
   });
   const prevCompletedMinutesRef = useRef<number | null>(null);
   const [lastCompletedMinutesSnapshot, setLastCompletedMinutesSnapshot] = useState<
@@ -887,13 +860,13 @@ export default function App() {
         const parsed = JSON.parse(saved);
         const todayRec = parsed?.[formatDateKey(new Date())];
         if (todayRec && typeof todayRec.pointsEarned === 'number') {
-          return Math.max(25, Math.round(todayRec.pointsEarned));
+          return Math.max(0, Math.round(todayRec.pointsEarned));
         }
       }
     } catch {
       // ignore
     }
-    return 25;
+    return 0;
   });
   const [dailyGoalToastDismissedKey, setDailyGoalToastDismissedKey] = useState<
     string | null
@@ -928,7 +901,10 @@ export default function App() {
       } catch {
         // ignore
       }
-      return DEFAULT_STREAK_REMINDER_PREFERENCES;
+      return {
+        ...DEFAULT_STREAK_REMINDER_PREFERENCES,
+        enabled: false,
+      };
     });
   const [clockHoursMinutes, setClockHoursMinutes] = useState<{
     hours: number;
@@ -1036,28 +1012,12 @@ export default function App() {
           JSON.parse(raw),
           WORKSPACE_QR_QUICK_REPORT_MAX_ITEMS
         );
-        localStorage.setItem(
-          WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
-          JSON.stringify(normalized)
-        );
-        localStorage.setItem(
-          WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
-          JSON.stringify(normalized)
-        );
         return normalized;
       }
-      localStorage.setItem(
-        WORKSPACE_QR_SEARCH_HISTORY_STORAGE_KEY,
-        JSON.stringify(initialAutoPreset.seededQrScans)
-      );
-      localStorage.setItem(
-        WORKSPACE_QR_RECENT_SCANS_STORAGE_KEY,
-        JSON.stringify(initialAutoPreset.seededQrScans)
-      );
     } catch {
       // ignore localStorage read error
     }
-    return initialAutoPreset.seededQrScans;
+    return [];
   });
   const [isWorkspaceHeaderQrScanToastVisible, setIsWorkspaceHeaderQrScanToastVisible] =
     useState<boolean>(false);
@@ -1259,35 +1219,16 @@ export default function App() {
     useState<WorkspaceGetStartedTourPersistedState>(initialGetStartedTourState);
 
   const initialQrTutorialState = (() => {
-    try {
-      const storedCompleted =
-        typeof window !== 'undefined' && window.localStorage
-          ? window.localStorage.getItem(WORKSPACE_QR_TUTORIAL_STORAGE_KEY)
-          : null;
-      const searchStr =
-        typeof window !== 'undefined' && window.location?.search
-          ? window.location.search
-          : '';
-      const hasSpecParam =
-        searchStr.includes('spec=1') || searchStr.includes('page=privacy');
-      return resolveInitialWorkspaceQrTutorialState({
-        storedCompletedValue: storedCompleted,
-        urlSearch: searchStr,
-        defaultOpenForNewUsers:
-          !hasSpecParam && !initialGetStartedTourState.isActive,
-      });
-    } catch {
-      return resolveInitialWorkspaceQrTutorialState({
-        storedCompletedValue: null,
-        urlSearch: '',
-        defaultOpenForNewUsers: false,
-      });
-    }
+    return resolveInitialWorkspaceQrTutorialState({
+      storedCompletedValue: 'true',
+      urlSearch: '',
+      defaultOpenForNewUsers: false,
+    });
   })();
   const [
     isWorkspaceHeaderQrTutorialActive,
     setIsWorkspaceHeaderQrTutorialActive,
-  ] = useState<boolean>(initialQrTutorialState.isActive);
+  ] = useState<boolean>(false);
   const [
     workspaceHeaderQrTutorialStepIndex,
     setWorkspaceHeaderQrTutorialStepIndex,
@@ -2966,7 +2907,7 @@ export default function App() {
       setAccountSession(newSession);
       localStorage.setItem('mr_stranger_account_v2', JSON.stringify(newSession));
       localStorage.removeItem(EXPLICIT_SIGNOUT_STORAGE_KEY);
-      setPasswordInput('MrStranger@2026!');
+      setPasswordInput('');
       setActivePage(initialRoomParam ? 'study' : initialMomentParam ? 'moments' : 'hub');
     } catch {
       setAuthFormError('Network error while contacting authentication server.');
@@ -3112,35 +3053,14 @@ export default function App() {
     useState<ScreenUiStateSpecItem['stateId']>('default');
   const [engineeringLikesMap, setEngineeringLikesMap] = useState<
     Record<string, MomentLikeUserRecord>
-  >(() => {
-    const seedScholars = [
-      { userId: 'usr_aria_chen', userDisplayName: 'Aria Chen', userHandle: '@ariachen', nowMs: 1700000100000 },
-      { userId: 'usr_marcus_vance', userDisplayName: 'Marcus Vance', userHandle: '@mvance', nowMs: 1700000200000 },
-      { userId: 'usr_elena_rostova', userDisplayName: 'Elena Rostova', userHandle: '@elena_r', nowMs: 1700000300000 },
-      { userId: 'usr_devon_k', userDisplayName: 'Devon Brooks', userHandle: '@devonb', nowMs: 1700000400000 },
-      { userId: 'usr_sora_takahashi', userDisplayName: 'Sora Takahashi', userHandle: '@sora_t', nowMs: 1700000500000 },
-      { userId: 'usr_mahit_admin', userDisplayName: 'Mahit Saxena', userHandle: '@mahit', nowMs: 1700000600000 },
-    ];
-    let map: Record<string, MomentLikeUserRecord> = {};
-    for (const s of seedScholars) {
-      map = toggleUniquePostLike(map, {
-        momentId: 'moment_study_204',
-        userId: s.userId,
-        userDisplayName: s.userDisplayName,
-        userHandle: s.userHandle,
-        action: 'like',
-        nowMs: s.nowMs,
-      }).updatedByUserId;
-    }
-    return map;
-  });
+  >({});
   const [engineeringLikesCursor, setEngineeringLikesCursor] = useState<number>(0);
   const [engineeringLikesLimit, setEngineeringLikesLimit] = useState<number>(3);
   const [engineeringLikesServerPage, setEngineeringLikesServerPage] = useState<
     ReturnType<typeof paginatePostLikersList> | null
   >(null);
   const [engineeringLatencyMetrics, setEngineeringLatencyMetrics] = useState(() =>
-    computeApiLatencyPercentiles([1.4, 2.1, 2.8, 3.6, 4.2, 5.1, 6.8], 300)
+    computeApiLatencyPercentiles([], 300)
   );
   const [engineeringCorrelationLogs, setEngineeringCorrelationLogs] = useState<
     StructuredCorrelationLogEntry[]
@@ -4388,24 +4308,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="p-3.5 rounded-lg border border-emerald-500/35 bg-emerald-500/10 flex flex-wrap items-center justify-between gap-3">
-                <div className="space-y-0.5 min-w-0">
-                  <div className="text-xs font-bold text-emerald-300">
-                    Instant Zero-Friction Setup
-                  </div>
-                  <div className="text-[11px] text-zinc-300">
-                    Auto-configure profile, 120m daily goal, STUDY-204 desk & enter immediately.
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  data-testid="auth-auto-setup-btn"
-                  onClick={handleApplyAutoConfiguredWorkspacePreset}
-                  className="px-3 py-1.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-black text-xs font-bold transition-colors whitespace-nowrap shrink-0"
-                >
-                  Auto-Set & Enter Workspace
-                </button>
-              </div>
+              {/* Clean Sign-In / Registration Form without Demo Presets */}
 
               <form onSubmit={handleEmailPasswordSubmit} className="space-y-4">
                 <div className="space-y-1.5">
@@ -4560,13 +4463,18 @@ export default function App() {
         ? prevCompletedMinutesRef.current
         : lastCompletedMinutesSnapshot,
   });
-  const weeklyActivitySummary = buildWeeklyActivityOverview({
-    todayDateKey: todayDateStr,
-    todayFocusMinutes: dailyCompletedMinutes,
-    dailyTargetMinutes,
-    todayPointsEarned,
-    streakCount: currentIdentity.streakCount,
+  const weeklyActivitySummary = filterLiveRecordedWeeklyActivityOverview({
+    summary: buildWeeklyActivityOverview({
+      todayDateKey: todayDateStr,
+      todayFocusMinutes: dailyCompletedMinutes,
+      dailyTargetMinutes,
+      todayPointsEarned,
+      streakCount: currentIdentity.streakCount,
+      storedHistory: weeklyActivityHistory,
+    }),
     storedHistory: weeklyActivityHistory,
+    todayFocusMinutes: dailyCompletedMinutes,
+    todayPointsEarned,
   });
   const filteredMoments = moments.filter((m) => {
     if (momentFilter === 'public') return m.visibility === 'public';
@@ -7450,30 +7358,6 @@ export default function App() {
 
           <div className="flex items-center gap-1.5 text-xs font-mono tabular-nums shrink-0">
             <div className="inline-flex items-center gap-1.5">
-
-              <button
-                type="button"
-                data-testid="switch-to-3d-glass-landing-btn"
-                onClick={() => {
-                  setIsGlass3dLandingMode(true);
-                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                }}
-                className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-slate-300 dark:border-zinc-800 bg-transparent hover:bg-slate-100 dark:hover:bg-zinc-900 text-slate-700 dark:text-zinc-300 text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0"
-              >
-                <BookOpen className="w-3.5 h-3.5 text-zinc-400 shrink-0" />
-                <span>Guidebook</span>
-              </button>
-              <button
-                type="button"
-                id="workspace-header-engineering-spec-btn"
-                data-testid="workspace-header-engineering-spec-btn"
-                onClick={handleOpenEngineeringSpecCenter}
-                title="Open 7-Pillar Product & Engineering Specification, API Contracts & Quality Gates"
-                className="hidden xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border border-emerald-500/45 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
-                <span>7-Pillar Spec</span>
-              </button>
               <button
                 type="button"
                 id={workspaceHeaderShareMeta.buttonElementId}
@@ -7529,61 +7413,6 @@ export default function App() {
                 ref={workspaceHeaderQrContainerRef}
                 className="relative inline-flex items-center gap-1"
               >
-                {/* Translucent Highlight Effect Over the QR Scanner Button Group (Active during QR Tutorial OR Get Started Tour Step 1) */}
-                {(workspaceHeaderQrMeta.tutorial.isActive ||
-                  getStartedTourSpec.spotlight.isQrScannerHighlighted) && (
-                  <div
-                    id={
-                      workspaceHeaderQrMeta.tutorial.translucentHighlight
-                        .ringElementId
-                    }
-                    data-testid={
-                      workspaceHeaderQrMeta.tutorial.translucentHighlight
-                        .ringTestId
-                    }
-                    data-tutorial-step={String(
-                      getStartedTourSpec.spotlight.isQrScannerHighlighted
-                        ? getStartedTourSpec.currentStepNumber
-                        : workspaceHeaderQrMeta.tutorial.currentStepNumber
-                    )}
-                    data-highlight-zone={
-                      workspaceHeaderQrMeta.tutorial.translucentHighlight
-                        .highlightZone
-                    }
-                    data-target-element={
-                      workspaceHeaderQrMeta.tutorial.translucentHighlight
-                        .targetElementId
-                    }
-                    data-highlight-opacity={String(
-                      workspaceHeaderQrMeta.tutorial.translucentHighlight
-                        .highlightOpacity
-                    )}
-                    aria-hidden="true"
-                    className={
-                      workspaceHeaderQrMeta.tutorial.translucentHighlight
-                        .ringClassName
-                    }
-                  >
-                    <span
-                      id={
-                        workspaceHeaderQrMeta.tutorial.translucentHighlight
-                          .badgeElementId
-                      }
-                      data-testid={
-                        workspaceHeaderQrMeta.tutorial.translucentHighlight
-                          .badgeTestId
-                      }
-                      className={`pointer-events-none absolute -bottom-5 left-1/2 -translate-x-1/2 px-1.5 py-0.5 rounded bg-emerald-950/95 border border-emerald-400/90 text-[9px] font-mono font-bold text-emerald-200 whitespace-nowrap ${
-                        workspaceHeaderQrMeta.isOpen ? 'opacity-0' : 'opacity-100'
-                      }`}
-                    >
-                      {getStartedTourSpec.spotlight.isQrScannerHighlighted
-                        ? 'Step 1 Spotlight · QR Scanner'
-                        : workspaceHeaderQrMeta.tutorial.translucentHighlight
-                            .spotlightBadgeLabel}
-                    </span>
-                  </div>
-                )}
 
                 <input
                   type="hidden"
@@ -7712,45 +7541,6 @@ export default function App() {
                       workspaceHeaderQrMeta.headerCameraStatusDot.dotClassName
                     }
                   />
-                </button>
-
-                {/* Header Trigger Button for Interactive QR Scanner Step-by-Step Tutorial */}
-                <button
-                  type="button"
-                  id={workspaceHeaderQrMeta.tutorial.triggerButtonElementId}
-                  data-testid={
-                    workspaceHeaderQrMeta.tutorial.triggerButtonTestId
-                  }
-                  data-tutorial-active={
-                    workspaceHeaderQrMeta.tutorial.isActive ? 'true' : 'false'
-                  }
-                  data-tutorial-completed={
-                    workspaceHeaderQrMeta.tutorial.isCompleted
-                      ? 'true'
-                      : 'false'
-                  }
-                  data-tutorial-step={String(
-                    workspaceHeaderQrMeta.tutorial.currentStepNumber
-                  )}
-                  aria-expanded={workspaceHeaderQrMeta.tutorial.isActive}
-                  aria-controls={
-                    workspaceHeaderQrMeta.tutorial.overlayElementId
-                  }
-                  aria-label={
-                    workspaceHeaderQrMeta.tutorial.triggerButtonAriaLabel
-                  }
-                  title="Interactive step-by-step tutorial on using the QR scanner to join workspace rooms"
-                  onClick={handleToggleWorkspaceHeaderQrTutorial}
-                  className={`inline-flex items-center gap-1 px-2 py-1.5 rounded-md border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 ${
-                    workspaceHeaderQrMeta.tutorial.isActive
-                      ? 'bg-emerald-500/20 border-emerald-400 text-emerald-700 dark:text-emerald-300'
-                      : 'border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900'
-                  }`}
-                >
-                  <Info className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400 shrink-0" />
-                  <span>
-                    {workspaceHeaderQrMeta.tutorial.triggerButtonLabel}
-                  </span>
                 </button>
 
                 <AnimatePresence initial={false}>
@@ -12298,25 +12088,6 @@ export default function App() {
               <kbd className="px-1 py-0.2 rounded bg-slate-200/70 dark:bg-zinc-900 border border-slate-300 dark:border-zinc-800 text-[10px] font-mono text-slate-600 dark:text-zinc-400 tabular-nums">
                 ⌘K
               </kbd>
-            </button>
-
-            <button
-              type="button"
-              id="workspace-auto-configure-btn"
-              data-testid="workspace-auto-configure-btn"
-              data-applied-count={String(autoConfigureAppliedCount)}
-              data-status-label={autoConfigureStatusLabel}
-              onClick={handleApplyAutoConfiguredWorkspacePreset}
-              title={autoConfigureStatusLabel}
-              className="hidden 2xl:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded border text-xs font-sans font-medium transition-colors whitespace-nowrap shrink-0 border-slate-300 text-slate-700 hover:bg-slate-100 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-900"
-            >
-              <span>Preset</span>
-              <span
-                data-testid="workspace-auto-configure-status"
-                className="text-[10px] font-mono text-zinc-400 tabular-nums"
-              >
-                120m · {activeStudyRoomCode}
-              </span>
             </button>
 
             <button
@@ -18503,12 +18274,12 @@ export default function App() {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono text-zinc-300">
                       <div>Admin Email: {BOOTSTRAPPED_ADMIN_EMAIL}</div>
-                      <div>Admin Password: MrStranger@2026!</div>
-                      <div>Display Name: Mahit Saxena</div>
-                      <div>Admin UID: usr_mahit_admin</div>
-                      <div>Study Room: STUDY-204 (25m Pomodoro)</div>
-                      <div>Daily Focus Goal: 120m Target (60m Logged)</div>
-                      <div>Streak & Points: 7 Days · 185 pts</div>
+                      <div>Password Storage: scrypt Salted Hash (64B)</div>
+                      <div>Display Name: {currentIdentity.displayName}</div>
+                      <div>Account UID: {currentIdentity.uid}</div>
+                      <div>Active Room: {activeStudyRoomCode}</div>
+                      <div>Daily Focus Goal: {dailyTargetMinutes}m Target ({dailyCompletedMinutes}m Logged)</div>
+                      <div>Streak & Points: {currentIdentity.streakCount} Days · {currentIdentity.participationPoints} pts</div>
                       <div>Session Token: HMAC-SHA256 (12h TTL)</div>
                     </div>
                   </div>
@@ -19158,8 +18929,8 @@ export default function App() {
                     className="px-2.5 py-1 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900/60 border border-zinc-800"
                   >
                     {cozySanctuaryHubSpec.showWorkspaceFooterDetails
-                      ? 'Hide Terms, Privacy & Quick Room Switcher'
-                      : 'Terms, Privacy & Quick Room Switcher'}
+                      ? 'Hide Terms & Privacy Policy'
+                      : 'Terms & Privacy Policy'}
                   </button>
                 </div>
 
@@ -19170,69 +18941,8 @@ export default function App() {
                       : 'hidden'
                   }
                 >
-                  {/* Minimal Live Room Switcher & Skeleton Strip */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    <div
-                      data-testid={liveDemoSpec.containerTestId}
-                      className="border border-zinc-800 bg-[#121215] p-4 space-y-2.5"
-                    >
-                      <CurvedSectionHeading
-                        id="workspace-demo-curve"
-                        title={`ACTIVE ROOM / ${liveDemoSpec.activeRoomCode}`}
-                        meta={`${liveDemoSpec.completedMinutesToday}/${liveDemoSpec.dailyTargetMinutes}m`}
-                      />
-                      <div className="flex flex-wrap items-center gap-2">
-                        {liveDemoSpec.availableRooms.map((roomCode) => (
-                          <button
-                            key={roomCode}
-                            type="button"
-                            onClick={() => setActiveStudyRoomCode(roomCode)}
-                            className={`px-2.5 py-1 text-xs font-mono border cursor-pointer ${
-                              activeStudyRoomCode === roomCode
-                                ? 'border-zinc-500 bg-zinc-800 text-white font-semibold'
-                                : 'border-zinc-800 bg-[#0C0C0E] text-zinc-400'
-                            }`}
-                          >
-                            {roomCode}
-                          </button>
-                        ))}
-                        <button
-                          type="button"
-                          onClick={() => handleLogFocusMinutes(25)}
-                          className="px-3 py-1 text-xs font-semibold bg-[#E6E2D8] text-[#141413] font-mono cursor-pointer"
-                        >
-                          +25m Focus
-                        </button>
-                      </div>
-                    </div>
-
-                    <div
-                      data-testid={skeletonSpec.containerTestId}
-                      className="border border-zinc-800 bg-[#121215] p-4 space-y-2"
-                    >
-                      <CurvedSectionHeading
-                        id="workspace-skeleton-curve"
-                        title="SKELETON STATE"
-                        meta="READY"
-                      />
-                      <div className="space-y-1.5">
-                        {skeletonSpec.rows.map((row) => (
-                          <div key={row.rowId} className="flex items-center gap-3">
-                            <span className="font-mono text-[10px] text-zinc-500">
-                              {row.indexCode}
-                            </span>
-                            <div
-                              className="h-2 bg-zinc-800"
-                              style={{ width: `${row.primaryWidthPercent}%` }}
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-
                   {/* Minimal Terms of Service & Privacy Policy Bar */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 border border-zinc-800 bg-[#121215] divide-y lg:divide-y-0 lg:divide-x divide-zinc-800">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 border border-zinc-800 bg-[#14171D] divide-y lg:divide-y-0 lg:divide-x divide-zinc-800">
                     <article
                       id={legalSpec.tosElementId}
                       data-testid={legalSpec.tosElementId}
@@ -19443,223 +19153,6 @@ export default function App() {
           </div>
         </div>
       )}
-
-      {/* Interactive Step-by-Step QR Scanner Tutorial Overlay with Translucent Scanner Button Highlight */}
-      <AnimatePresence initial={false}>
-        {workspaceHeaderQrMeta.tutorial.isActive && (
-          <motion.aside
-            key="workspace-header-qr-tutorial-overlay"
-            id={workspaceHeaderQrMeta.tutorial.overlayElementId}
-            data-testid={workspaceHeaderQrMeta.tutorial.overlayTestId}
-            data-tutorial-active="true"
-            data-current-step={String(
-              workspaceHeaderQrMeta.tutorial.currentStepNumber
-            )}
-            data-total-steps={String(workspaceHeaderQrMeta.tutorial.totalSteps)}
-            data-step-id={workspaceHeaderQrMeta.tutorial.currentStep.id}
-            data-target-element={
-              workspaceHeaderQrMeta.tutorial.currentStep.targetElementId
-            }
-            data-highlight-zone={
-              workspaceHeaderQrMeta.tutorial.currentStep.highlightZone
-            }
-            data-scanner-button-highlighted="true"
-            role="dialog"
-            aria-modal="false"
-            aria-label="Interactive Step-by-Step QR Scanner Tutorial"
-            initial={{ opacity: 0, y: -8, scale: 0.98 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -8, scale: 0.98 }}
-            transition={{ duration: 0.18, ease: 'easeOut' }}
-            className={`fixed z-50 w-[calc(100vw-2rem)] sm:w-[24.5rem] rounded-xl border border-emerald-500/50 bg-[#FDFBF7] dark:bg-[#191715] p-4 text-left font-sans transition-all duration-200 ${
-              workspaceHeaderQrMeta.isOpen
-                ? 'top-14 left-4 sm:left-[16.25rem]'
-                : 'top-14 right-4 sm:right-6'
-            }`}
-          >
-            <div
-              id={workspaceHeaderQrMeta.tutorial.cardElementId}
-              data-testid={workspaceHeaderQrMeta.tutorial.cardTestId}
-              className="space-y-3"
-            >
-              {/* Header row: Kicker, Step Counter & Skip Button */}
-              <div className="flex items-start justify-between gap-2">
-                <div className="space-y-0.5 min-w-0">
-                  <div className="flex items-center gap-1.5 text-[11px] font-mono tabular-nums text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
-                    <QrCode className="w-3.5 h-3.5 shrink-0" />
-                    <span className="font-semibold">
-                      {workspaceHeaderQrMeta.tutorial.headerBadgeLabel}
-                    </span>
-                    <span aria-hidden="true">·</span>
-                    <span
-                      data-testid="workspace-header-qr-tutorial-step-counter"
-                      className="font-bold"
-                    >
-                      {workspaceHeaderQrMeta.tutorial.stepCounterLabel}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-600 dark:text-zinc-400 truncate">
-                    Highlight:{' '}
-                    <span className="font-mono text-slate-800 dark:text-zinc-200">
-                      #{workspaceHeaderQrMeta.tutorial.currentStep.targetElementId}
-                    </span>
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  id={workspaceHeaderQrMeta.tutorial.skipButtonElementId}
-                  data-testid={workspaceHeaderQrMeta.tutorial.skipButtonTestId}
-                  onClick={handleCompleteOrSkipWorkspaceHeaderQrTutorial}
-                  aria-label="Skip and close QR scanner tutorial"
-                  className="px-2 py-1 rounded border border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-[11px] font-medium text-slate-700 dark:text-zinc-300 transition-colors whitespace-nowrap shrink-0"
-                >
-                  {workspaceHeaderQrMeta.tutorial.skipButtonLabel}
-                </button>
-              </div>
-
-              {/* Progress Bar */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between text-[11px] font-mono tabular-nums text-slate-600 dark:text-zinc-400">
-                  <span>Onboarding Progress</span>
-                  <span>
-                    {workspaceHeaderQrMeta.tutorial.progressPercent}% (
-                    {workspaceHeaderQrMeta.tutorial.compactStepCounterLabel})
-                  </span>
-                </div>
-                <div
-                  id={workspaceHeaderQrMeta.tutorial.progressBarElementId}
-                  data-testid={workspaceHeaderQrMeta.tutorial.progressBarTestId}
-                  data-progress-percent={String(
-                    workspaceHeaderQrMeta.tutorial.progressPercent
-                  )}
-                  role="progressbar"
-                  aria-valuenow={workspaceHeaderQrMeta.tutorial.progressPercent}
-                  aria-valuemin={0}
-                  aria-valuemax={100}
-                  aria-label="QR scanner tutorial completion progress"
-                  className="w-full h-1.5 rounded-full bg-slate-200 dark:bg-zinc-800 overflow-hidden"
-                >
-                  <div
-                    style={{
-                      width: `${workspaceHeaderQrMeta.tutorial.progressPercent}%`,
-                    }}
-                    className="h-full bg-emerald-600 dark:bg-emerald-500 transition-all duration-200"
-                  />
-                </div>
-              </div>
-
-              {/* Step Selector Tabs */}
-              <div
-                role="tablist"
-                aria-label="QR Scanner Tutorial Steps"
-                className="grid grid-cols-4 gap-1"
-              >
-                {workspaceHeaderQrMeta.tutorial.steps.map((stepItem) => (
-                  <button
-                    key={stepItem.id}
-                    type="button"
-                    role="tab"
-                    id={stepItem.stepTabElementId}
-                    data-testid={stepItem.stepTabTestId}
-                    aria-selected={stepItem.isCurrent}
-                    onClick={() =>
-                      handleNavigateWorkspaceHeaderQrTutorialStep(
-                        'jump',
-                        stepItem.index
-                      )
-                    }
-                    className={`px-1.5 py-1 rounded border text-[10px] font-mono tabular-nums font-semibold transition-colors whitespace-nowrap truncate ${
-                      stepItem.isCurrent
-                        ? 'bg-emerald-600 border-emerald-500 text-white'
-                        : stepItem.isCompletedStep
-                          ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-800 dark:text-emerald-300'
-                          : 'bg-slate-100 dark:bg-zinc-900 border-slate-300 dark:border-zinc-800 text-slate-600 dark:text-zinc-400 hover:text-slate-900 dark:hover:text-zinc-200'
-                    }`}
-                  >
-                    {stepItem.shortLabel}
-                  </button>
-                ))}
-              </div>
-
-              {/* Current Step Content */}
-              <div className="p-3 rounded-lg border border-slate-200 dark:border-zinc-800 bg-slate-50/90 dark:bg-[#121110] space-y-2">
-                <h3
-                  data-testid="workspace-header-qr-tutorial-step-title"
-                  className="text-sm font-bold text-slate-900 dark:text-[#F5F2EB]"
-                >
-                  {workspaceHeaderQrMeta.tutorial.currentStep.title}
-                </h3>
-                <p
-                  data-testid="workspace-header-qr-tutorial-step-description"
-                  className="text-xs leading-relaxed text-slate-700 dark:text-zinc-300"
-                >
-                  {workspaceHeaderQrMeta.tutorial.currentStep.description}
-                </p>
-                <p
-                  data-testid="workspace-header-qr-tutorial-step-tip"
-                  className="text-[11px] font-mono text-emerald-700 dark:text-emerald-300"
-                >
-                  Tip: {workspaceHeaderQrMeta.tutorial.currentStep.tipText}
-                </p>
-
-                {/* Interactive Live Step Action Button */}
-                <button
-                  type="button"
-                  id={workspaceHeaderQrMeta.tutorial.actionButtonElementId}
-                  data-testid={workspaceHeaderQrMeta.tutorial.actionButtonTestId}
-                  data-step-index={String(
-                    workspaceHeaderQrMeta.tutorial.currentStepIndex
-                  )}
-                  onClick={handleTriggerWorkspaceHeaderQrTutorialStepAction}
-                  className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-md border border-emerald-500/50 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-800 dark:text-emerald-200 text-xs font-semibold transition-colors whitespace-nowrap"
-                >
-                  <Camera className="w-3.5 h-3.5 shrink-0" />
-                  <span>
-                    {workspaceHeaderQrMeta.tutorial.currentStep.actionButtonLabel}
-                  </span>
-                </button>
-              </div>
-
-              {/* Previous / Next Navigation Controls */}
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <button
-                  type="button"
-                  id={workspaceHeaderQrMeta.tutorial.prevButtonElementId}
-                  data-testid={workspaceHeaderQrMeta.tutorial.prevButtonTestId}
-                  disabled={!workspaceHeaderQrMeta.tutorial.canGoPrev}
-                  onClick={() =>
-                    handleNavigateWorkspaceHeaderQrTutorialStep('prev')
-                  }
-                  className={`px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
-                    workspaceHeaderQrMeta.tutorial.canGoPrev
-                      ? 'border-slate-300 dark:border-zinc-700 bg-slate-100 hover:bg-slate-200 dark:bg-zinc-900 dark:hover:bg-zinc-800 text-slate-800 dark:text-zinc-200'
-                      : 'border-slate-200 dark:border-zinc-800 bg-slate-50 dark:bg-zinc-900/40 text-slate-400 dark:text-zinc-600 cursor-not-allowed opacity-60'
-                  }`}
-                >
-                  {workspaceHeaderQrMeta.tutorial.prevButtonLabel}
-                </button>
-
-                <span className="text-[11px] font-mono tabular-nums text-slate-500 dark:text-zinc-400">
-                  Room {workspaceHeaderQrMeta.tutorial.roomCode}
-                </span>
-
-                <button
-                  type="button"
-                  id={workspaceHeaderQrMeta.tutorial.nextButtonElementId}
-                  data-testid={workspaceHeaderQrMeta.tutorial.nextButtonTestId}
-                  onClick={() =>
-                    handleNavigateWorkspaceHeaderQrTutorialStep('next')
-                  }
-                  className="px-3.5 py-1.5 rounded-md bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition-colors whitespace-nowrap"
-                >
-                  {workspaceHeaderQrMeta.tutorial.nextButtonLabel}
-                </button>
-              </div>
-            </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
 
       {/* Temporary Toast Notification in #workspace-shell after a Successful QR Scan */}
       <AnimatePresence initial={false}>
