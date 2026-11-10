@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import express, { Request, Response, NextFunction } from 'express';
+import express, { type Request, type Response, type NextFunction } from 'express';
 import { createServer } from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import crypto from 'crypto';
@@ -12,7 +12,7 @@ import {
   checkSlidingWindowRateLimit,
   normalizeAndValidatePeerMood,
   MOOD_POPULARITY_WINDOW_MS,
-  PeerMoodHistoryEvent,
+  type PeerMoodHistoryEvent,
   BOOTSTRAPPED_ADMIN_EMAIL,
   DEFAULT_ALLOWED_CORS_ORIGINS,
   isBlockedSensitiveFilePath,
@@ -203,32 +203,45 @@ async function startServer() {
   const app = express();
   const allowedOrigins = getConfiguredAllowedOrigins();
 
-  // 1. Enterprise HTTP Security Headers (CSP, HSTS, CORP, COOP, Nosniff, Frame-Ancestors)
+  // 1. Enterprise HTTP Security Headers (Applied to API routes; non-API SPA/Vite routes omit frame-blocking headers for AI Studio Preview iframe)
   app.disable('x-powered-by');
   app.use((req, res, next) => {
     const isApiRoute = req.path.startsWith('/api');
-    const headers = buildEnterpriseSecurityHeadersSpec({ isApiRoute });
-    for (const [key, value] of Object.entries(headers)) {
-      res.setHeader(key, value);
+    if (isApiRoute) {
+      const headers = buildEnterpriseSecurityHeadersSpec({ isApiRoute: true });
+      for (const [key, value] of Object.entries(headers)) {
+        res.setHeader(key, value);
+      }
+    } else {
+      res.setHeader('X-Content-Type-Options', 'nosniff');
     }
     next();
   });
 
-  // 2. Strict CORS Origin Allowlist Enforcement
+  // 2. Strict CORS Origin Allowlist Enforcement on API routes & Permissive Asset/Module CORS for AI Studio Preview
   app.use((req, res, next) => {
+    const isApiRoute = req.path.startsWith('/api');
     const originHeader = typeof req.headers.origin === 'string' ? req.headers.origin : undefined;
-    const corsCheck = validateCorsOrigin(originHeader, allowedOrigins);
+    const hostHeader = String(req.headers['x-forwarded-host'] || req.headers.host || '').trim();
+    const dynamicAllowed = hostHeader
+      ? [...allowedOrigins, `https://${hostHeader}`, `http://${hostHeader}`]
+      : allowedOrigins;
+    const corsCheck = validateCorsOrigin(originHeader, dynamicAllowed);
     res.setHeader('Vary', 'Origin');
 
-    if (!corsCheck.allowed) {
+    if (isApiRoute && !corsCheck.allowed) {
       res.status(403).json({
         error: corsCheck.reason || 'Cross-Origin Request Blocked by Zero-Trust CORS Policy.',
       });
       return;
     }
 
-    if (corsCheck.allowOriginHeader) {
-      res.setHeader('Access-Control-Allow-Origin', corsCheck.allowOriginHeader);
+    const effectiveAllowOrigin =
+      corsCheck.allowOriginHeader ||
+      (!isApiRoute && originHeader && originHeader !== 'null' ? originHeader : null);
+
+    if (effectiveAllowOrigin) {
+      res.setHeader('Access-Control-Allow-Origin', effectiveAllowOrigin);
       res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       res.setHeader('Access-Control-Max-Age', '600');

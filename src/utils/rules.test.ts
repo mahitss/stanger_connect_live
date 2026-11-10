@@ -8063,6 +8063,18 @@ test('Enterprise Zero-Trust Security Audit & Hardening Suite: exposed file block
   const cloudRunCors = validateCorsOrigin(DEFAULT_ALLOWED_CORS_ORIGINS[2]);
   assert.equal(cloudRunCors.allowed, true);
 
+  const currentDevCloudRunCors = validateCorsOrigin(
+    'https://ais-dev-owfs45ffc27rbxfrihojff-895889429216.asia-southeast1.run.app'
+  );
+  assert.equal(currentDevCloudRunCors.allowed, true);
+  assert.equal(
+    currentDevCloudRunCors.allowOriginHeader,
+    'https://ais-dev-owfs45ffc27rbxfrihojff-895889429216.asia-southeast1.run.app'
+  );
+
+  const aiStudioCors = validateCorsOrigin('https://aistudio.google.com');
+  assert.equal(aiStudioCors.allowed, true);
+
   const untrustedCors = validateCorsOrigin('https://evil-attacker.example.com');
   assert.equal(untrustedCors.allowed, false);
   assert.equal(untrustedCors.allowOriginHeader, null);

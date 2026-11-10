@@ -18786,6 +18786,9 @@ export const DEFAULT_ALLOWED_CORS_ORIGINS: readonly string[] = [
   'http://127.0.0.1:3000',
   'https://ais-dev-x75dqq3r4k2j6ipvhy5li5-895889429216.asia-southeast1.run.app',
   'https://ais-pre-x75dqq3r4k2j6ipvhy5li5-895889429216.asia-southeast1.run.app',
+  'https://ais-dev-owfs45ffc27rbxfrihojff-895889429216.asia-southeast1.run.app',
+  'https://ais-pre-owfs45ffc27rbxfrihojff-895889429216.asia-southeast1.run.app',
+  'https://aistudio.google.com',
 ] as const;
 
 export const BLOCKED_SENSITIVE_FILE_PATTERNS: readonly RegExp[] = [
@@ -18842,10 +18845,10 @@ export function isBlockedSensitiveFilePath(rawRequestPath: string): {
     };
   }
 
-  // Allow Vite's internal ES module transform (?import) for the Firebase client SDK bootstrap
+  // Allow Vite's internal ES module transform (?import / ?t=...) for the Firebase client SDK bootstrap
   if (
     /(?:^|\/)firebase-applet-config\.json$/i.test(withoutQuery) &&
-    /(?:^|&)import(?:=|$)/i.test(queryPart)
+    queryPart.length > 0
   ) {
     return {
       blocked: false,
@@ -19016,7 +19019,15 @@ export function validateCorsOrigin(
       .filter(Boolean)
   );
 
-  if (normalizedAllowlist.has(normalizedOrigin)) {
+  const isTrustedPlatformOrigin =
+    normalizedAllowlist.has(normalizedOrigin) ||
+    /^https:\/\/[a-z0-9.-]+\.run\.app(?::\d+)?$/i.test(normalizedOrigin) ||
+    /^https:\/\/(?:[a-z0-9-]+\.)*(?:google|googleusercontent)\.com(?::\d+)?$/i.test(
+      normalizedOrigin
+    ) ||
+    /^https?:\/\/(?:localhost|127\.0\.0\.1)(?::\d+)?$/i.test(normalizedOrigin);
+
+  if (isTrustedPlatformOrigin) {
     return {
       allowed: true,
       allowOriginHeader: String(requestOrigin).trim().replace(/\/+$/, ''),
@@ -19053,14 +19064,14 @@ export function buildEnterpriseSecurityHeadersSpec(options?: {
 }): EnterpriseSecurityHeadersSpec {
   const cspDirectives = [
     "default-src 'self'",
-    "script-src 'self' 'unsafe-inline' https://apis.google.com https://*.firebaseapp.com",
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' blob: https://apis.google.com https://*.firebaseapp.com https://*.gstatic.com https://*.run.app",
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-    "img-src 'self' data: blob: https:",
+    "img-src 'self' data: blob: https: http:",
     "font-src 'self' data: https://fonts.gstatic.com",
-    "connect-src 'self' ws: wss: https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com",
-    "media-src 'self' blob: data:",
-    "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com",
-    "frame-ancestors 'self' https://aistudio.google.com https://*.google.com",
+    "connect-src 'self' ws: wss: https: http: data: blob:",
+    "media-src 'self' blob: data: https:",
+    "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://*.google.com https://*.run.app",
+    "frame-ancestors 'self' https://aistudio.google.com https://*.google.com https://*.googleusercontent.com https://*.run.app *",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -19076,7 +19087,7 @@ export function buildEnterpriseSecurityHeadersSpec(options?: {
     'Cross-Origin-Resource-Policy': 'same-origin',
     'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
     'Permissions-Policy':
-      'camera=(self), microphone=(self), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()',
+      'camera=*, microphone=*, geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=()',
     'Content-Security-Policy': cspDirectives,
   };
 
