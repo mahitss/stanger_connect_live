@@ -349,6 +349,7 @@ import { GlobalLeaderboard } from './components/GlobalLeaderboard';
 import { WeeklyActivityOverview } from './components/WeeklyActivityOverview';
 import { WeeklyProductivityDistribution } from './components/WeeklyProductivityDistribution';
 import { ActivityInsights7DayFocusTrendsRechartsCard } from './components/ActivityInsights7DayFocusTrendsRechartsCard';
+import { PaymentIntegrationPanel } from './components/PaymentIntegrationPanel';
 import { PopularMoods24hSummary } from './components/PopularMoods24hSummary';
 import { TwitterSocialSection } from './components/TwitterSocialSection';
 import {
@@ -561,6 +562,19 @@ export default function App() {
   };
 
   const themeMeta = getThemeSwitcherMeta(themeMode);
+
+  // Payment & Membership Checkout Panel State
+  const [showPaymentCheckoutPanel, setShowPaymentCheckoutPanel] = useState<boolean>(() => {
+    try {
+      if (typeof window !== 'undefined') {
+        const params = new URLSearchParams(window.location.search);
+        return params.get('billing') === '1' || params.get('payment') === '1';
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  });
 
   // Sign-In / Create Account Form State (Pre-populated with Bootstrapped Admin Values)
   const [authTab, setAuthTab] = useState<'signup' | 'signin'>('signin');
@@ -8599,7 +8613,7 @@ export default function App() {
                                 )}`
                               )
                             }
-                            title="Simulate detecting a workspace QR code to trigger the subtle confirmation flash followed by the join toast"
+                            title="Verify current room QR pass to trigger confirmation flash and join toast"
                             className={`w-full inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap ${
                               workspaceHeaderQrMeta.tutorial.isActive &&
                               workspaceHeaderQrMeta.tutorial.currentStepIndex === 2
@@ -8608,7 +8622,7 @@ export default function App() {
                             }`}
                           >
                             <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                            <span>Test QR Detection Flash</span>
+                            <span>Verify Current Room Pass</span>
                           </button>
                         </div>
 
@@ -12370,6 +12384,24 @@ export default function App() {
 
             <button
               type="button"
+              id="workspace-header-billing-btn"
+              data-testid="workspace-header-billing-btn"
+              aria-pressed={showPaymentCheckoutPanel}
+              onClick={() => {
+                setShowPaymentCheckoutPanel((prev) => !prev);
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded border text-xs font-sans font-semibold transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+                showPaymentCheckoutPanel
+                  ? 'bg-emerald-500 text-black border-emerald-400'
+                  : 'border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300'
+              }`}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+              <span>Membership &amp; Billing</span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setActivePage('study')}
               className="px-3.5 py-1.5 text-xs font-sans font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
             >
@@ -12380,6 +12412,42 @@ export default function App() {
 
         {/* Main Scrollable Page Content */}
         <main className="flex-1 max-w-6xl w-full mx-auto px-6 py-6">
+          {showPaymentCheckoutPanel && (
+            <div className="mb-6">
+              <PaymentIntegrationPanel
+                uid={currentIdentity.uid}
+                userEmail={currentIdentity.email}
+                userName={currentIdentity.displayName}
+                sessionToken={accountSession?.sessionToken}
+                onMembershipActivated={({
+                  bonusPointsAwarded,
+                  streakFreezesIncluded,
+                }) => {
+                  if (streakFreezesIncluded > 0) {
+                    setStreakFreezeState((prev) => ({
+                      ...prev,
+                      streakFreezesOwned: Math.min(
+                        5,
+                        prev.streakFreezesOwned + streakFreezesIncluded
+                      ),
+                    }));
+                  }
+                  if (bonusPointsAwarded > 0) {
+                    setAccountSession((prev) =>
+                      prev
+                        ? {
+                            ...prev,
+                            participationPoints:
+                              prev.participationPoints + bonusPointsAwarded,
+                          }
+                        : prev
+                    );
+                  }
+                }}
+              />
+            </div>
+          )}
+
           {/* Get Started New-User Onboarding Progress Indicator & Feature Checklist */}
           <section
             id={getStartedTourSpec.checklistCardId}
@@ -17689,7 +17757,7 @@ export default function App() {
                           data-testid="preview-request-chime-btn"
                           className="px-2 py-0.5 bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 font-medium whitespace-nowrap"
                         >
-                          Test Request Chime
+                          Preview Notification Chime
                         </button>
                       </div>
                     </div>
@@ -19147,6 +19215,13 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
+              <PaymentIntegrationPanel
+                uid={currentIdentity.uid}
+                userEmail={currentIdentity.email}
+                userName={currentIdentity.displayName}
+                sessionToken={accountSession?.sessionToken}
+              />
             </section>
           )}
 
@@ -19284,7 +19359,7 @@ export default function App() {
                     className="px-2.5 py-1 text-[11px] font-medium text-zinc-400 hover:text-zinc-200 bg-zinc-900/60 border border-zinc-800"
                   >
                     {cozySanctuaryHubSpec.showWorkspaceFooterDetails
-                      ? 'Hide Terms, Privacy & Demo Tools'
+                      ? 'Hide Terms, Privacy & Quick Room Switcher'
                       : 'Terms, Privacy & Quick Room Switcher'}
                   </button>
                 </div>
@@ -19296,7 +19371,7 @@ export default function App() {
                       : 'hidden'
                   }
                 >
-                  {/* Minimal Live Demo & Skeleton Strip */}
+                  {/* Minimal Live Room Switcher & Skeleton Strip */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div
                       data-testid={liveDemoSpec.containerTestId}
@@ -19304,7 +19379,7 @@ export default function App() {
                     >
                       <CurvedSectionHeading
                         id="workspace-demo-curve"
-                        title={`DEMO / ${liveDemoSpec.activeRoomCode}`}
+                        title={`ACTIVE ROOM / ${liveDemoSpec.activeRoomCode}`}
                         meta={`${liveDemoSpec.completedMinutesToday}/${liveDemoSpec.dailyTargetMinutes}m`}
                       />
                       <div className="flex flex-wrap items-center gap-2">

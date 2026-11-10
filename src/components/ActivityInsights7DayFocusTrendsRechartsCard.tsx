@@ -28,6 +28,7 @@ import {
   ActivityInsightsFocusTrendUnit,
   ActivityInsightsFocusTrendDayPoint,
   buildActivityInsights7DayFocusTrendSummary,
+  filterLiveRecordedWeeklyActivityOverview,
 } from '../utils/rules';
 
 interface ActivityInsights7DayFocusTrendsRechartsCardProps {
@@ -129,17 +130,28 @@ export const ActivityInsights7DayFocusTrendsRechartsCard: React.FC<
   const [chartMode, setChartMode] =
     useState<ActivityInsightsFocusTrendChartMode>('area_trend');
   const [unit, setUnit] = useState<ActivityInsightsFocusTrendUnit>('minutes');
+  const [liveRecordedOnly, setLiveRecordedOnly] = useState<boolean>(false);
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
   const [customMinutesInput, setCustomMinutesInput] = useState<string>('25');
   const [loggedFeedback, setLoggedFeedback] = useState<string | null>(null);
 
+  const effectiveSummary = useMemo(() => {
+    if (!liveRecordedOnly) return summary;
+    const todayEntry = summary.days.find((d) => d.isToday);
+    return filterLiveRecordedWeeklyActivityOverview({
+      summary,
+      todayFocusMinutes: todayEntry?.focusMinutes ?? 0,
+      todayPointsEarned: todayEntry?.pointsEarned ?? 0,
+    });
+  }, [summary, liveRecordedOnly]);
+
   const trendSummary = useMemo(
     () =>
       buildActivityInsights7DayFocusTrendSummary({
-        summary,
+        summary: effectiveSummary,
         dailyTargetMinutes,
       }),
-    [summary, dailyTargetMinutes]
+    [effectiveSummary, dailyTargetMinutes]
   );
 
   const selectedDayPoint = useMemo(() => {
@@ -291,6 +303,20 @@ export const ActivityInsights7DayFocusTrendsRechartsCard: React.FC<
               Hours (h)
             </button>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setLiveRecordedOnly((prev) => !prev)}
+            data-testid="focus-trend-live-recorded-toggle-btn"
+            aria-pressed={liveRecordedOnly}
+            className={`px-3 py-1.5 text-xs font-mono font-semibold rounded border transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              liveRecordedOnly
+                ? 'bg-emerald-500/20 border-emerald-400 text-emerald-300'
+                : 'bg-[#050505] border-zinc-800 text-zinc-400 hover:text-white'
+            }`}
+          >
+            {liveRecordedOnly ? 'Recorded Only: ON' : 'Recorded Only'}
+          </button>
         </div>
       </div>
 

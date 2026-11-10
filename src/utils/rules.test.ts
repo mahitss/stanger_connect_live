@@ -511,6 +511,14 @@ import {
   normalizeActivityInsightsFocusTrendChartMode,
   normalizeActivityInsightsFocusTrendUnit,
   buildActivityInsights7DayFocusTrendSummary,
+  filterLiveRecordedWeeklyActivityOverview,
+  PAYMENT_MEMBERSHIP_PLANS,
+  resolvePaymentMembershipPlan,
+  validateLuhnCardNumber,
+  validateCardExpiryAndCvv,
+  validateUpiVpaAddress,
+  validatePaymentCheckoutRequest,
+  buildPaymentInvoicePdfSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -11498,3 +11506,107 @@ test('Activity Insights 7-day focus time trends summary computes rolling 3-day a
   assert.equal(trendSummary.trendDirection, 'upward');
   assert.ok(trendSummary.trendSummaryBadge.includes('Upward Trend'));
 });
+
+test('Payment integration & Live-Recorded-Only activity filter validate ISO/IEC 7812 Luhn Mod-10 checksums, card expiry/CVV, UPI VPAs, PDF tax invoices, and zero-estimation focus records', () => {
+  // 1. Live-Recorded-Only filter zeroes out unrecorded historical baseline estimates
+  const baselineSummary = buildWeeklyActivityOverview({
+    todayDateKey: '2026-11-10',
+    todayFocusMinutes: 90,
+    dailyTargetMinutes: 60,
+    todayPointsEarned: 45,
+    streakCount: 5,
+  });
+  const recordedOnlySummary = filterLiveRecordedWeeklyActivityOverview({
+    summary: baselineSummary,
+    todayFocusMinutes: 90,
+    todayPointsEarned: 45,
+  });
+  assert.equal(recordedOnlySummary.days.length, 7);
+  for (let i = 0; i < 6; i++) {
+    assert.equal(recordedOnlySummary.days[i].focusMinutes, 0);
+    assert.equal(recordedOnlySummary.days[i].goalReached, false);
+  }
+  assert.equal(recordedOnlySummary.days[6].isToday, true);
+  assert.equal(recordedOnlySummary.days[6].focusMinutes, 90);
+  assert.equal(recordedOnlySummary.totalFocusMinutes, 90);
+
+  // 2. Membership plans resolution
+  assert.equal(PAYMENT_MEMBERSHIP_PLANS.length, 3);
+  const annualPlan = resolvePaymentMembershipPlan('plan_scholar_pro_annual');
+  assert.equal(annualPlan.id, 'plan_scholar_pro_annual');
+  assert.equal(annualPlan.priceUsdCents, 7900);
+
+  // 3. ISO/IEC 7812 Luhn Mod-10 card validation
+  const validVisa = validateLuhnCardNumber('4532 0151 1283 0366');
+  assert.equal(validVisa.valid, true);
+  assert.equal(validVisa.cardBrand, 'Visa');
+  assert.equal(validVisa.last4, '0366');
+
+  const invalidLuhn = validateLuhnCardNumber('4532 0151 1283 0367');
+  assert.equal(invalidLuhn.valid, false);
+  assert.match(invalidLuhn.reason, /Luhn Mod-10 checksum/i);
+
+  // 4. Card Expiry & CVV validation
+  const validExpiry = validateCardExpiryAndCvv({
+    expiryRaw: '12/28',
+    cvvRaw: '482',
+    cardBrand: 'Visa',
+    currentYear: 2026,
+    currentMonth: 11,
+  });
+  assert.equal(validExpiry.valid, true);
+
+  const expiredCard = validateCardExpiryAndCvv({
+    expiryRaw: '05/24',
+    cvvRaw: '482',
+    cardBrand: 'Visa',
+    currentYear: 2026,
+    currentMonth: 11,
+  });
+  assert.equal(expiredCard.valid, false);
+  assert.match(expiredCard.reason, /expired/i);
+
+  // 5. UPI VPA validation
+  const validUpi = validateUpiVpaAddress('mahit.saxena@okicici');
+  assert.equal(validUpi.valid, true);
+  assert.equal(validUpi.normalizedVpa, 'mahit.saxena@okicici');
+  assert.equal(validUpi.handleProvider, '@okicici');
+
+  const invalidUpi = validateUpiVpaAddress('invalid-upi-without-at');
+  assert.equal(invalidUpi.valid, false);
+
+  // 6. Full checkout request validation & PDF Invoice spec
+  const validCheckout = validatePaymentCheckoutRequest({
+    planId: 'plan_scholar_pro_monthly',
+    paymentMethod: 'upi',
+    currency: 'INR',
+    billingEmail: 'mahit@stranger.app',
+    upiVpa: 'mahit@okaxis',
+  });
+  assert.equal(validCheckout.valid, true);
+  assert.equal(validCheckout.formattedAmount, '₹749');
+
+  const pdfSpec = buildPaymentInvoicePdfSpec({
+    transactionId: 'tx_live_9001',
+    invoiceNumber: 'INV-2026-9001',
+    uid: 'usr_mahit',
+    userEmail: 'mahit@stranger.app',
+    userName: 'Mahit Saxena',
+    planId: 'plan_scholar_pro_monthly',
+    planName: 'Scholar Pro Monthly',
+    billingCycle: 'monthly',
+    amountMinor: 74900,
+    currency: 'INR',
+    formattedAmount: '₹749',
+    paymentMethod: 'upi',
+    paymentInstrumentSummary: 'UPI VPA (mahit@okaxis)',
+    status: 'succeeded',
+    receiptSignatureHmac: 'a1b2c3d4e5f60718293a4b5c6d7e8f90',
+    bonusPointsAwarded: 150,
+    paidAtIso: '2026-11-10T09:00:00.000Z',
+  });
+  assert.ok(pdfSpec.pdfContent.startsWith('%PDF-1.4'));
+  assert.match(pdfSpec.filename, /mr-stranger-invoice-INV-2026-9001\.pdf/);
+});
+
+

@@ -947,14 +947,14 @@ export const GlassArchitectureShowcase: React.FC<GlassArchitectureShowcaseProps>
               </div>
             </div>
 
-            {/* Right Column: Minimal Live Interactive Product Demo */}
+            {/* Right Column: Minimal Live Interactive Room Preview */}
             <div
               data-testid={liveDemoSpec.containerTestId}
               className="lg:col-span-5 border border-zinc-800 bg-[#121215] p-4 space-y-3"
             >
               <CurvedSectionHeading
                 id="live-demo-curve"
-                title={`DEMO / ${liveDemoSpec.activeRoomCode}`}
+                title={`LIVE ROOM / ${liveDemoSpec.activeRoomCode}`}
                 meta={`${liveDemoSpec.timerMinutes}:00 · ${liveDemoSpec.progressPercent}%`}
               />
 

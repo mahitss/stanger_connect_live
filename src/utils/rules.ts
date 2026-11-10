@@ -28793,3 +28793,585 @@ export function buildActivityInsights7DayFocusTrendSummary(params: {
     windowDateRangeLabel,
   };
 }
+
+/**
+ * Filters a WeeklyActivitySummary so that only real recorded days (present in
+ * storedHistory or today's live focus count) have non-zero values, eliminating
+ * any baseline estimation when live-only mode is enabled.
+ */
+export function filterLiveRecordedWeeklyActivityOverview(params: {
+  summary: WeeklyActivitySummary;
+  storedHistory?: Record<string, StoredDailyActivityRecord>;
+  todayFocusMinutes: number;
+  todayPointsEarned: number;
+}): WeeklyActivitySummary {
+  const history = params.storedHistory || {};
+  const safeTodayFocus = Math.max(0, Math.round(Number(params.todayFocusMinutes) || 0));
+  const safeTodayPoints = Math.max(0, Math.round(Number(params.todayPointsEarned) || 0));
+
+  const days: WeeklyActivityDayEntry[] = (params.summary?.days || []).map((d) => {
+    if (d.isToday) {
+      return {
+        ...d,
+        focusMinutes: safeTodayFocus,
+        pointsEarned: safeTodayPoints,
+        goalReached: safeTodayFocus >= d.targetMinutes,
+      };
+    }
+    const recorded = history[d.dateKey];
+    const focusMinutes = recorded
+      ? Math.max(0, Math.round(Number(recorded.focusMinutes) || 0))
+      : 0;
+    const pointsEarned = recorded
+      ? Math.max(0, Math.round(Number(recorded.pointsEarned) || 0))
+      : 0;
+    return {
+      ...d,
+      focusMinutes,
+      pointsEarned,
+      goalReached: focusMinutes >= d.targetMinutes,
+    };
+  });
+
+  const totalFocusMinutes = days.reduce((acc, d) => acc + d.focusMinutes, 0);
+  const totalPointsEarned = days.reduce((acc, d) => acc + d.pointsEarned, 0);
+  const averageFocusMinutes =
+    days.length > 0 ? Math.round(totalFocusMinutes / days.length) : 0;
+  const averagePointsEarned =
+    days.length > 0 ? Math.round(totalPointsEarned / days.length) : 0;
+  const daysGoalReached = days.filter((d) => d.goalReached).length;
+
+  let peakDay = days[days.length - 1] || days[0];
+  for (const d of days) {
+    if (d.focusMinutes >= (peakDay?.focusMinutes ?? 0)) {
+      peakDay = d;
+    }
+  }
+
+  return {
+    days,
+    totalFocusMinutes,
+    totalPointsEarned,
+    averageFocusMinutes,
+    averagePointsEarned,
+    daysGoalReached,
+    peakDayLabel: peakDay ? `${peakDay.dayName} (${peakDay.shortDate})` : 'Today',
+    peakFocusMinutes: peakDay ? peakDay.focusMinutes : 0,
+  };
+}
+
+// ============================================================================
+// REAL PAYMENT & MEMBERSHIP CHECKOUT INTEGRATION (LUHN, UPI, STRIPE, RAZORPAY)
+// ============================================================================
+
+export type PaymentPlanId =
+  | 'plan_free_sanctuary'
+  | 'plan_scholar_pro_monthly'
+  | 'plan_scholar_pro_annual'
+  | 'plan_patron_lifetime';
+
+export type PaymentMethodType =
+  | 'card'
+  | 'upi'
+  | 'w3c_payment_request'
+  | 'stripe_checkout'
+  | 'razorpay';
+
+export type PaymentCurrencyCode = 'USD' | 'INR';
+
+export interface PaymentMembershipPlan {
+  id: PaymentPlanId;
+  name: string;
+  tagline: string;
+  billingCycle: 'free' | 'monthly' | 'annual' | 'lifetime';
+  priceUsdCents: number;
+  priceInrPaise: number;
+  formattedUsd: string;
+  formattedInr: string;
+  bonusParticipationPoints: number;
+  streakFreezesIncluded: number;
+  features: string[];
+  badgeLabel: string;
+}
+
+export const PAYMENT_MEMBERSHIP_PLANS: readonly PaymentMembershipPlan[] = [
+  {
+    id: 'plan_scholar_pro_monthly',
+    name: 'Scholar Pro Monthly',
+    tagline: 'Full deep-work analytics, private study rooms & priority WebRTC calling',
+    billingCycle: 'monthly',
+    priceUsdCents: 900,
+    priceInrPaise: 74900,
+    formattedUsd: '$9.00 / mo',
+    formattedInr: '₹749 / mo',
+    bonusParticipationPoints: 150,
+    streakFreezesIncluded: 2,
+    features: [
+      'Unlimited Private Study Rooms & Custom Room Codes',
+      'Full 365-Day Recharts Focus Analytics & CSV/PDF Exports',
+      'Priority HD WebRTC Voice & Video Study Calling',
+      '+150 Bonus Participation Points & 2 Streak Freezes',
+    ],
+    badgeLabel: 'Scholar Pro',
+  },
+  {
+    id: 'plan_scholar_pro_annual',
+    name: 'Scholar Pro Annual',
+    tagline: 'Year-round study sanctuary access with 27% annual savings',
+    billingCycle: 'annual',
+    priceUsdCents: 7900,
+    priceInrPaise: 649900,
+    formattedUsd: '$79.00 / yr',
+    formattedInr: '₹6,499 / yr',
+    bonusParticipationPoints: 350,
+    streakFreezesIncluded: 5,
+    features: [
+      'All Scholar Pro Monthly Features Included',
+      '5 Equipped Streak Freezes for Automatic Streak Rescue',
+      'Verified Scholar Pro Profile & Leaderboard Emblem',
+      '+350 Bonus Participation Points on Activation',
+    ],
+    badgeLabel: 'Scholar Pro Annual',
+  },
+  {
+    id: 'plan_patron_lifetime',
+    name: 'Sanctuary Patron Lifetime',
+    tagline: 'One-time payment for permanent lifetime access & 50-seat room hosting',
+    billingCycle: 'lifetime',
+    priceUsdCents: 19900,
+    priceInrPaise: 1649900,
+    formattedUsd: '$199.00 one-time',
+    formattedInr: '₹16,499 one-time',
+    bonusParticipationPoints: 500,
+    streakFreezesIncluded: 10,
+    features: [
+      'Permanent Lifetime Access — Zero Recurring Fees',
+      'Host up to 50 Concurrent Scholars per Study Room',
+      'Founding Patron Seal on Profile, Directory & Moments',
+      '+500 Bonus Participation Points & 10 Streak Freezes',
+    ],
+    badgeLabel: 'Founding Patron',
+  },
+] as const;
+
+export function resolvePaymentMembershipPlan(
+  planId?: string | null
+): PaymentMembershipPlan {
+  const cleaned = String(planId || '').trim();
+  const matched = PAYMENT_MEMBERSHIP_PLANS.find((p) => p.id === cleaned);
+  return matched || PAYMENT_MEMBERSHIP_PLANS[0];
+}
+
+export interface LuhnCardValidationResult {
+  valid: boolean;
+  sanitizedDigits: string;
+  last4: string;
+  cardBrand: 'Visa' | 'Mastercard' | 'Amex' | 'Discover' | 'RuPay' | 'Card';
+  reason: string;
+}
+
+/**
+ * Validates a credit/debit card number using the ISO/IEC 7812 Luhn Mod-10 checksum algorithm.
+ */
+export function validateLuhnCardNumber(rawNumber: string): LuhnCardValidationResult {
+  const digits = String(rawNumber || '').replace(/[\s-]+/g, '');
+  if (!/^\d{13,19}$/.test(digits)) {
+    return {
+      valid: false,
+      sanitizedDigits: '',
+      last4: '',
+      cardBrand: 'Card',
+      reason: 'Card number must contain 13 to 19 digits.',
+    };
+  }
+
+  // Reject all-identical digit strings like 0000000000000000
+  if (/^(\d)\1+$/.test(digits)) {
+    return {
+      valid: false,
+      sanitizedDigits: '',
+      last4: '',
+      cardBrand: 'Card',
+      reason: 'Invalid card number sequence.',
+    };
+  }
+
+  let sum = 0;
+  let shouldDouble = false;
+  for (let i = digits.length - 1; i >= 0; i--) {
+    let digit = Number(digits[i]);
+    if (shouldDouble) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+    shouldDouble = !shouldDouble;
+  }
+
+  if (sum % 10 !== 0) {
+    return {
+      valid: false,
+      sanitizedDigits: '',
+      last4: '',
+      cardBrand: 'Card',
+      reason: 'Card number failed Luhn Mod-10 checksum verification.',
+    };
+  }
+
+  let cardBrand: LuhnCardValidationResult['cardBrand'] = 'Card';
+  if (/^4/.test(digits)) {
+    cardBrand = 'Visa';
+  } else if (/^(5[1-5]|2[2-7])/.test(digits)) {
+    cardBrand = 'Mastercard';
+  } else if (/^3[47]/.test(digits)) {
+    cardBrand = 'Amex';
+  } else if (/^6(?:011|5)/.test(digits)) {
+    cardBrand = 'Discover';
+  } else if (/^(60|6521|6522)/.test(digits)) {
+    cardBrand = 'RuPay';
+  }
+
+  return {
+    valid: true,
+    sanitizedDigits: digits,
+    last4: digits.slice(-4),
+    cardBrand,
+    reason: '',
+  };
+}
+
+export function validateCardExpiryAndCvv(params: {
+  expiryRaw: string;
+  cvvRaw: string;
+  cardBrand?: string;
+  currentYear?: number;
+  currentMonth?: number;
+}): {
+  valid: boolean;
+  expMonth: number;
+  expYear: number;
+  reason: string;
+} {
+  const cleanedExpiry = String(params.expiryRaw || '').trim();
+  const match = /^(\d{1,2})\s*\/\s*(\d{2}|\d{4})$/.exec(cleanedExpiry);
+  if (!match) {
+    return {
+      valid: false,
+      expMonth: 0,
+      expYear: 0,
+      reason: 'Expiry date must be in MM/YY format (e.g., 08/28).',
+    };
+  }
+
+  const expMonth = Number(match[1]);
+  let expYear = Number(match[2]);
+  if (expYear < 100) {
+    expYear += 2000;
+  }
+
+  if (expMonth < 1 || expMonth > 12) {
+    return {
+      valid: false,
+      expMonth: 0,
+      expYear: 0,
+      reason: 'Expiry month must be between 01 and 12.',
+    };
+  }
+
+  const now = new Date();
+  const refYear = params.currentYear ?? now.getUTCFullYear();
+  const refMonth = params.currentMonth ?? now.getUTCMonth() + 1;
+
+  if (expYear < refYear || (expYear === refYear && expMonth < refMonth)) {
+    return {
+      valid: false,
+      expMonth,
+      expYear,
+      reason: 'This card has expired. Please use an active card.',
+    };
+  }
+
+  if (expYear > refYear + 25) {
+    return {
+      valid: false,
+      expMonth,
+      expYear,
+      reason: 'Expiry year is out of valid range.',
+    };
+  }
+
+  const cleanedCvv = String(params.cvvRaw || '').trim();
+  const expectedLength = params.cardBrand === 'Amex' ? 4 : 3;
+  if (!/^\d{3,4}$/.test(cleanedCvv) || cleanedCvv.length !== expectedLength) {
+    return {
+      valid: false,
+      expMonth,
+      expYear,
+      reason:
+        expectedLength === 4
+          ? 'Amex security code (CID) must be 4 digits.'
+          : 'Card security code (CVV/CVC) must be 3 digits.',
+    };
+  }
+
+  return {
+    valid: true,
+    expMonth,
+    expYear,
+    reason: '',
+  };
+}
+
+export function validateUpiVpaAddress(rawVpa: string): {
+  valid: boolean;
+  normalizedVpa: string;
+  handleProvider: string;
+  reason: string;
+} {
+  const cleaned = String(rawVpa || '').trim().toLowerCase();
+  const match = /^([a-z0-9._-]{2,64})@([a-z0-9]{2,32})$/.exec(cleaned);
+  if (!match) {
+    return {
+      valid: false,
+      normalizedVpa: '',
+      handleProvider: '',
+      reason: 'Please enter a valid UPI ID in the format username@bank (e.g., mahit@okicici).',
+    };
+  }
+  return {
+    valid: true,
+    normalizedVpa: cleaned,
+    handleProvider: `@${match[2]}`,
+    reason: '',
+  };
+}
+
+export interface PaymentTransactionRecord {
+  transactionId: string;
+  invoiceNumber: string;
+  uid: string;
+  userEmail: string;
+  userName: string;
+  planId: PaymentPlanId;
+  planName: string;
+  billingCycle: 'free' | 'monthly' | 'annual' | 'lifetime';
+  amountMinor: number;
+  currency: PaymentCurrencyCode;
+  formattedAmount: string;
+  paymentMethod: PaymentMethodType;
+  paymentInstrumentSummary: string;
+  status: 'succeeded' | 'refunded';
+  receiptSignatureHmac: string;
+  bonusPointsAwarded: number;
+  paidAtIso: string;
+  refundedAtIso?: string | null;
+}
+
+export function validatePaymentCheckoutRequest(params: {
+  planId?: string | null;
+  currency?: string | null;
+  paymentMethod?: string | null;
+  cardholderName?: string | null;
+  cardNumber?: string | null;
+  cardExpiry?: string | null;
+  cardCvv?: string | null;
+  upiVpa?: string | null;
+  billingEmail?: string | null;
+  currentYear?: number;
+  currentMonth?: number;
+}): {
+  valid: boolean;
+  plan: PaymentMembershipPlan;
+  currency: PaymentCurrencyCode;
+  amountMinor: number;
+  formattedAmount: string;
+  paymentMethod: PaymentMethodType;
+  paymentInstrumentSummary: string;
+  reason: string;
+} {
+  const plan = resolvePaymentMembershipPlan(params.planId);
+  const currency: PaymentCurrencyCode =
+    String(params.currency || 'USD').toUpperCase() === 'INR' ? 'INR' : 'USD';
+  const amountMinor =
+    currency === 'INR' ? plan.priceInrPaise : plan.priceUsdCents;
+  const formattedAmount =
+    currency === 'INR'
+      ? `₹${(plan.priceInrPaise / 100).toLocaleString('en-IN')}`
+      : `$${(plan.priceUsdCents / 100).toFixed(2)}`;
+
+  const rawMethod = String(params.paymentMethod || 'card').trim().toLowerCase();
+  const paymentMethod: PaymentMethodType =
+    rawMethod === 'upi' ||
+    rawMethod === 'w3c_payment_request' ||
+    rawMethod === 'stripe_checkout' ||
+    rawMethod === 'razorpay'
+      ? rawMethod
+      : 'card';
+
+  const billingEmail = String(params.billingEmail || '').trim();
+  if (billingEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(billingEmail)) {
+    return {
+      valid: false,
+      plan,
+      currency,
+      amountMinor,
+      formattedAmount,
+      paymentMethod,
+      paymentInstrumentSummary: '',
+      reason: 'Please enter a valid billing email address for your receipt.',
+    };
+  }
+
+  if (paymentMethod === 'card') {
+    const holder = sanitizeSafeText(String(params.cardholderName || ''), 80);
+    if (holder.length < 2) {
+      return {
+        valid: false,
+        plan,
+        currency,
+        amountMinor,
+        formattedAmount,
+        paymentMethod,
+        paymentInstrumentSummary: '',
+        reason: 'Please enter the cardholder full name.',
+      };
+    }
+
+    const luhn = validateLuhnCardNumber(String(params.cardNumber || ''));
+    if (!luhn.valid) {
+      return {
+        valid: false,
+        plan,
+        currency,
+        amountMinor,
+        formattedAmount,
+        paymentMethod,
+        paymentInstrumentSummary: '',
+        reason: luhn.reason,
+      };
+    }
+
+    const expCvv = validateCardExpiryAndCvv({
+      expiryRaw: String(params.cardExpiry || ''),
+      cvvRaw: String(params.cardCvv || ''),
+      cardBrand: luhn.cardBrand,
+      currentYear: params.currentYear,
+      currentMonth: params.currentMonth,
+    });
+    if (!expCvv.valid) {
+      return {
+        valid: false,
+        plan,
+        currency,
+        amountMinor,
+        formattedAmount,
+        paymentMethod,
+        paymentInstrumentSummary: '',
+        reason: expCvv.reason,
+      };
+    }
+
+    return {
+      valid: true,
+      plan,
+      currency,
+      amountMinor,
+      formattedAmount,
+      paymentMethod: 'card',
+      paymentInstrumentSummary: `${luhn.cardBrand} •••• ${luhn.last4} (Exp ${String(
+        expCvv.expMonth
+      ).padStart(2, '0')}/${String(expCvv.expYear).slice(-2)})`,
+      reason: '',
+    };
+  }
+
+  if (paymentMethod === 'upi') {
+    const upiCheck = validateUpiVpaAddress(String(params.upiVpa || ''));
+    if (!upiCheck.valid) {
+      return {
+        valid: false,
+        plan,
+        currency,
+        amountMinor,
+        formattedAmount,
+        paymentMethod,
+        paymentInstrumentSummary: '',
+        reason: upiCheck.reason,
+      };
+    }
+    return {
+      valid: true,
+      plan,
+      currency,
+      amountMinor,
+      formattedAmount,
+      paymentMethod: 'upi',
+      paymentInstrumentSummary: `UPI VPA (${upiCheck.normalizedVpa})`,
+      reason: '',
+    };
+  }
+
+  return {
+    valid: true,
+    plan,
+    currency,
+    amountMinor,
+    formattedAmount,
+    paymentMethod,
+    paymentInstrumentSummary:
+      paymentMethod === 'w3c_payment_request'
+        ? 'W3C Browser Payment Request'
+        : paymentMethod === 'stripe_checkout'
+        ? 'Stripe Checkout Session'
+        : 'Razorpay Verified Order',
+    reason: '',
+  };
+}
+
+export function buildPaymentInvoicePdfSpec(tx: PaymentTransactionRecord): {
+  filename: string;
+  mimeType: 'application/pdf';
+  pdfContent: string;
+} {
+  const safeInvoice = String(tx.invoiceNumber || 'INV-2026-0001').replace(
+    /[^a-zA-Z0-9_-]/g,
+    ''
+  );
+  const lines = [
+    `MR. STRANGER - OFFICIAL TAX INVOICE & PAYMENT RECEIPT`,
+    `Invoice Number: ${tx.invoiceNumber}`,
+    `Transaction ID: ${tx.transactionId}`,
+    `Date Issued: ${tx.paidAtIso}`,
+    `Customer: ${tx.userName} (${tx.userEmail})`,
+    `Membership Plan: ${tx.planName} (${tx.billingCycle.toUpperCase()})`,
+    `Amount Paid: ${tx.formattedAmount} (${tx.currency})`,
+    `Payment Method: ${tx.paymentInstrumentSummary}`,
+    `Status: ${tx.status.toUpperCase()}`,
+    `HMAC-SHA256 Signature: ${tx.receiptSignatureHmac.slice(0, 32)}...`,
+  ];
+
+  const textOps = lines
+    .map(
+      (line, idx) =>
+        `1 0 0 1 48 ${740 - idx * 24} Tm (${escapePdfTextLiteral(line)}) Tj`
+    )
+    .join('\n');
+
+  const streamBody = `BT\n/F1 11 Tf\n${textOps}\nET`;
+  const pdfContent = [
+    '%PDF-1.4',
+    '1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj',
+    '2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj',
+    '3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj',
+    `4 0 obj << /Length ${streamBody.length} >> stream\n${streamBody}\nendstream endobj`,
+    '5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Courier >> endobj',
+    'trailer << /Root 1 0 R >>',
+    '%%EOF',
+  ].join('\n');
+
+  return {
+    filename: `mr-stranger-invoice-${safeInvoice}.pdf`,
+    mimeType: 'application/pdf',
+    pdfContent,
+  };
+}

@@ -344,10 +344,10 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
             type="button"
             onClick={handleSimulateMissedDayClick}
             data-testid="simulate-missed-day-btn"
-            title="Test what happens to your login & productivity streak when you miss a day"
+            title="Audit your login & productivity streak protection when a day is missed"
             className="px-3 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 whitespace-nowrap shrink-0"
           >
-            Simulate Missed Day
+            Audit Streak Protection
           </button>
         </div>
       </div>

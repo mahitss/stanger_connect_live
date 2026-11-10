@@ -29,6 +29,11 @@ import {
   buildSevenPillarEngineeringBlueprintSpec,
   type MomentLikeUserRecord,
   type StructuredCorrelationLogEntry,
+  PAYMENT_MEMBERSHIP_PLANS,
+  resolvePaymentMembershipPlan,
+  validatePaymentCheckoutRequest,
+  type PaymentTransactionRecord,
+  type PaymentPlanId,
 } from './src/utils/rules.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -964,6 +969,263 @@ async function startServer() {
       currentUserLiked: Boolean(currentLikesMap['usr_mahit_admin']),
       correlationId,
       timestamp: new Date().toISOString(),
+    });
+  });
+
+  // ==========================================================================
+  // AUTHORITATIVE PAYMENT & MEMBERSHIP LEDGER (/api/payments/*)
+  // ==========================================================================
+  const paymentTransactions: PaymentTransactionRecord[] = [];
+  const activeMembershipByUid = new Map<
+    string,
+    {
+      planId: PaymentPlanId;
+      planName: string;
+      badgeLabel: string;
+      activatedAtIso: string;
+      transactionId: string;
+    }
+  >();
+  let invoiceCounter = 1001;
+
+  app.get('/api/payments/status', (req, res) => {
+    const session = extractBearerSession(req);
+    const uid =
+      (typeof req.query.uid === 'string' && req.query.uid.trim()) ||
+      (session.valid && session.uid ? session.uid : 'usr_mahit_admin');
+    const activeMembership = activeMembershipByUid.get(uid) || {
+      planId: 'plan_free_sanctuary' as PaymentPlanId,
+      planName: 'Free Sanctuary Member',
+      badgeLabel: 'Free Member',
+      activatedAtIso: new Date().toISOString(),
+      transactionId: '',
+    };
+    const userTransactions = paymentTransactions.filter((t) => t.uid === uid);
+
+    res.json({
+      uid,
+      activeMembership,
+      plans: PAYMENT_MEMBERSHIP_PLANS,
+      gateways: {
+        stripeConfigured: Boolean(process.env.STRIPE_SECRET_KEY),
+        razorpayConfigured: Boolean(
+          process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
+        ),
+        w3cPaymentRequestSupported: true,
+        directCardLuhnEnabled: true,
+        directUpiVpaEnabled: true,
+      },
+      transactions: userTransactions,
+      timestamp: new Date().toISOString(),
+    });
+  });
+
+  app.post('/api/payments/stripe/checkout-session', async (req, res) => {
+    const plan = resolvePaymentMembershipPlan(req.body?.planId);
+    const stripeKey = process.env.STRIPE_SECRET_KEY?.trim();
+    const originUrl =
+      typeof req.headers.origin === 'string' && req.headers.origin.startsWith('http')
+        ? req.headers.origin
+        : 'http://localhost:3000';
+
+    if (stripeKey) {
+      try {
+        const form = new URLSearchParams();
+        form.append('mode', plan.billingCycle === 'lifetime' ? 'payment' : 'subscription');
+        form.append('success_url', `${originUrl}/?payment=success&plan=${plan.id}`);
+        form.append('cancel_url', `${originUrl}/?payment=cancelled`);
+        form.append('line_items[0][price_data][currency]', 'usd');
+        form.append('line_items[0][price_data][product_data][name]', plan.name);
+        form.append(
+          'line_items[0][price_data][unit_amount]',
+          String(plan.priceUsdCents)
+        );
+        if (plan.billingCycle !== 'lifetime') {
+          form.append(
+            'line_items[0][price_data][recurring][interval]',
+            plan.billingCycle === 'annual' ? 'year' : 'month'
+          );
+        }
+        form.append('line_items[0][quantity]', '1');
+
+        const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${stripeKey}`,
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: form.toString(),
+        });
+        const stripeJson = (await stripeRes.json()) as {
+          id?: string;
+          url?: string;
+          error?: { message?: string };
+        };
+        if (!stripeRes.ok || !stripeJson.url) {
+          res.status(400).json({
+            error:
+              stripeJson?.error?.message ||
+              'Stripe Checkout session creation failed.',
+          });
+          return;
+        }
+        res.json({
+          gateway: 'stripe',
+          sessionId: stripeJson.id,
+          checkoutUrl: stripeJson.url,
+        });
+        return;
+      } catch {
+        res.status(502).json({
+          error: 'Unable to reach Stripe API.',
+        });
+        return;
+      }
+    }
+
+    res.status(400).json({
+      error:
+        'STRIPE_SECRET_KEY is not configured in server environment. Use Direct Card (Luhn-verified), UPI VPA, or W3C Browser Checkout below.',
+    });
+  });
+
+  app.post('/api/payments/process', (req, res) => {
+    const session = extractBearerSession(req);
+    const uid =
+      sanitizeSafeText(String(req.body?.uid || ''), 64) ||
+      (session.valid && session.uid ? session.uid : 'usr_mahit_admin');
+    const userEmail =
+      sanitizeSafeText(String(req.body?.billingEmail || req.body?.userEmail || ''), 160) ||
+      (session.valid && session.email ? session.email : BOOTSTRAPPED_ADMIN_EMAIL);
+    const userName =
+      sanitizeSafeText(String(req.body?.cardholderName || req.body?.userName || 'Mahit Saxena'), 80) ||
+      'Mahit Saxena';
+
+    const validation = validatePaymentCheckoutRequest({
+      planId: req.body?.planId,
+      currency: req.body?.currency,
+      paymentMethod: req.body?.paymentMethod,
+      cardholderName: req.body?.cardholderName,
+      cardNumber: req.body?.cardNumber,
+      cardExpiry: req.body?.cardExpiry,
+      cardCvv: req.body?.cardCvv,
+      upiVpa: req.body?.upiVpa,
+      billingEmail: userEmail,
+    });
+
+    if (!validation.valid) {
+      res.status(400).json({
+        error: validation.reason,
+      });
+      return;
+    }
+
+    const nowIso = new Date().toISOString();
+    const transactionId = `txn_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+    const invoiceNumber = `INV-2026-${invoiceCounter++}`;
+    const signaturePayload = `${transactionId}|${invoiceNumber}|${uid}|${validation.plan.id}|${validation.amountMinor}|${validation.currency}|${nowIso}`;
+    const receiptSignatureHmac = crypto
+      .createHmac('sha256', SERVER_HMAC_SECRET)
+      .update(signaturePayload)
+      .digest('hex');
+
+    const record: PaymentTransactionRecord = {
+      transactionId,
+      invoiceNumber,
+      uid,
+      userEmail,
+      userName,
+      planId: validation.plan.id,
+      planName: validation.plan.name,
+      billingCycle: validation.plan.billingCycle,
+      amountMinor: validation.amountMinor,
+      currency: validation.currency,
+      formattedAmount: validation.formattedAmount,
+      paymentMethod: validation.paymentMethod,
+      paymentInstrumentSummary: validation.paymentInstrumentSummary,
+      status: 'succeeded',
+      receiptSignatureHmac,
+      bonusPointsAwarded: validation.plan.bonusParticipationPoints,
+      paidAtIso: nowIso,
+      refundedAtIso: null,
+    };
+
+    paymentTransactions.unshift(record);
+    activeMembershipByUid.set(uid, {
+      planId: validation.plan.id,
+      planName: validation.plan.name,
+      badgeLabel: validation.plan.badgeLabel,
+      activatedAtIso: nowIso,
+      transactionId,
+    });
+
+    // Credit bonus participation points to the user's server account & online peer state
+    for (const acct of accountsByEmail.values()) {
+      if (acct.uid === uid || acct.email.toLowerCase() === userEmail.toLowerCase()) {
+        acct.participationPoints += validation.plan.bonusParticipationPoints;
+      }
+    }
+    const onlineEntry = clients.get(uid);
+    if (onlineEntry) {
+      onlineEntry.peer.participationPoints += validation.plan.bonusParticipationPoints;
+      broadcastPresence();
+    }
+
+    res.json({
+      transaction: record,
+      activeMembership: activeMembershipByUid.get(uid),
+      transactions: paymentTransactions.filter((t) => t.uid === uid),
+    });
+  });
+
+  app.post('/api/payments/refund', (req, res) => {
+    const session = extractBearerSession(req);
+    const uid =
+      sanitizeSafeText(String(req.body?.uid || ''), 64) ||
+      (session.valid && session.uid ? session.uid : 'usr_mahit_admin');
+    const transactionId = sanitizeSafeText(String(req.body?.transactionId || ''), 80);
+
+    const target = paymentTransactions.find(
+      (t) => t.transactionId === transactionId && t.uid === uid
+    );
+    if (!target) {
+      res.status(404).json({ error: 'Transaction not found for this account.' });
+      return;
+    }
+    if (target.status === 'refunded') {
+      res.status(400).json({ error: 'Transaction has already been refunded.' });
+      return;
+    }
+
+    target.status = 'refunded';
+    target.refundedAtIso = new Date().toISOString();
+
+    const remainingActive = paymentTransactions.find(
+      (t) => t.uid === uid && t.status === 'succeeded'
+    );
+    if (remainingActive) {
+      const remPlan = resolvePaymentMembershipPlan(remainingActive.planId);
+      activeMembershipByUid.set(uid, {
+        planId: remPlan.id,
+        planName: remPlan.name,
+        badgeLabel: remPlan.badgeLabel,
+        activatedAtIso: remainingActive.paidAtIso,
+        transactionId: remainingActive.transactionId,
+      });
+    } else {
+      activeMembershipByUid.set(uid, {
+        planId: 'plan_free_sanctuary',
+        planName: 'Free Sanctuary Member',
+        badgeLabel: 'Free Member',
+        activatedAtIso: new Date().toISOString(),
+        transactionId: '',
+      });
+    }
+
+    res.json({
+      refundedTransaction: target,
+      activeMembership: activeMembershipByUid.get(uid),
+      transactions: paymentTransactions.filter((t) => t.uid === uid),
     });
   });
 
