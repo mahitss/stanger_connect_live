@@ -348,6 +348,7 @@ import { TalkingRoomView } from './components/TalkingRoomView';
 import { GlobalLeaderboard } from './components/GlobalLeaderboard';
 import { WeeklyActivityOverview } from './components/WeeklyActivityOverview';
 import { WeeklyProductivityDistribution } from './components/WeeklyProductivityDistribution';
+import { ActivityInsights7DayFocusTrendsRechartsCard } from './components/ActivityInsights7DayFocusTrendsRechartsCard';
 import { PopularMoods24hSummary } from './components/PopularMoods24hSummary';
 import { TwitterSocialSection } from './components/TwitterSocialSection';
 import {
@@ -1652,7 +1653,16 @@ export default function App() {
   const [lastFocusDeskChime, setLastFocusDeskChime] = useState<'start' | 'end' | null>(
     null
   );
-  const [cozyHubTab, setCozyHubTab] = useState<CozySanctuaryHubTab>('sanctuary');
+  const [cozyHubTab, setCozyHubTab] = useState<CozySanctuaryHubTab>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const rawTab = params.get('hubTab') || params.get('tab');
+      if (rawTab) {
+        return normalizeCozySanctuaryHubTab(rawTab);
+      }
+    }
+    return 'sanctuary';
+  });
   const [showGoalSettingsDrawer, setShowGoalSettingsDrawer] = useState<boolean>(false);
   const [showAdvancedDirectoryTools, setShowAdvancedDirectoryTools] =
     useState<boolean>(false);
@@ -12785,6 +12795,15 @@ export default function App() {
                       </button>
                       <button
                         type="button"
+                        onClick={() => setCozyHubTab('insights')}
+                        data-testid="open-activity-insights-7d-trends-btn"
+                        className="px-3 py-1.5 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-emerald-300 border border-emerald-500/40 rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
+                      >
+                        <BarChart3 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span>7-Day Focus Trends</span>
+                      </button>
+                      <button
+                        type="button"
                         onClick={() => setShowGoalSettingsDrawer((prev) => !prev)}
                         aria-expanded={cozySanctuaryHubSpec.showGoalSettingsDrawer}
                         data-testid="toggle-goal-settings-drawer-btn"
@@ -17732,11 +17751,19 @@ export default function App() {
 
               {/* TAB 2: WEEKLY ACTIVITY INSIGHTS & TOPIC DISTRIBUTION */}
               <div
+                id="cozy-hub-insights-panel"
                 data-testid="cozy-hub-insights-panel"
+                aria-label="Activity Insights Panel"
                 className={
                   cozySanctuaryHubSpec.showActivityInsights ? 'space-y-6' : 'hidden'
                 }
               >
+                <ActivityInsights7DayFocusTrendsRechartsCard
+                  summary={weeklyActivitySummary}
+                  dailyTargetMinutes={dailyTargetMinutes}
+                  onLogQuickFocus={handleLogFocusMinutes}
+                />
+
                 <WeeklyActivityOverview
                   summary={weeklyActivitySummary}
                   dailyTargetMinutes={dailyTargetMinutes}

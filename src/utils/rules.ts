@@ -24804,7 +24804,15 @@ export function normalizeCozySanctuaryHubTab(
   const cleaned = String(rawTab || '')
     .trim()
     .toLowerCase();
-  if (cleaned === 'insights' || cleaned === 'analytics' || cleaned === 'charts') {
+  if (
+    cleaned === 'insights' ||
+    cleaned === 'activity' ||
+    cleaned === 'activity_insights' ||
+    cleaned === 'activity-insights' ||
+    cleaned === 'analytics' ||
+    cleaned === 'charts' ||
+    cleaned === 'trends'
+  ) {
     return 'insights';
   }
   if (cleaned === 'milestones' || cleaned === 'badges' || cleaned === 'ranks') {
@@ -24865,8 +24873,8 @@ export function buildCozySanctuaryHubLayoutSpec(params?: {
     },
     {
       id: 'insights',
-      label: 'Weekly Insights',
-      subtitle: '7-day trends & topics',
+      label: 'Activity Insights',
+      subtitle: '7-day focus trends & topics',
       badgeText: `${completedFocusMinutes}/${dailyTargetMinutes}m`,
       isActive: activeTab === 'insights',
     },
@@ -28545,8 +28553,243 @@ export function evaluateWorkspaceGetStartedTourSpec(params?: {
   };
 }
 
+// ============================================================================
+// ACTIVITY INSIGHTS 7-DAY FOCUS TIME TRENDS RECHARTS VISUALIZATION
+// ============================================================================
 
+export type ActivityInsightsFocusTrendChartMode =
+  | 'area_trend'
+  | 'bar_comparison'
+  | 'cumulative';
 
+export type ActivityInsightsFocusTrendUnit = 'minutes' | 'hours';
 
+export interface ActivityInsightsFocusTrendDayPoint {
+  dateKey: string;
+  dayIndex: number;
+  dayName: string;
+  dayLabel: string;
+  shortDate: string;
+  focusMinutes: number;
+  focusHours: number;
+  targetMinutes: number;
+  targetHours: number;
+  rollingAvgMinutes: number;
+  rollingAvgHours: number;
+  cumulativeMinutes: number;
+  cumulativeHours: number;
+  cumulativeTargetMinutes: number;
+  deltaVsTargetMinutes: number;
+  completionPercent: number;
+  goalReached: boolean;
+  isToday: boolean;
+  isPeakDay: boolean;
+  pointsEarned: number;
+}
 
+export interface ActivityInsights7DayFocusTrendSummary {
+  days: ActivityInsightsFocusTrendDayPoint[];
+  totalFocusMinutes: number;
+  totalFocusHours: number;
+  averageFocusMinutes: number;
+  averageFocusHours: number;
+  dailyTargetMinutes: number;
+  dailyTargetHours: number;
+  daysGoalReached: number;
+  goalHitRatePercent: number;
+  peakDayDateKey: string;
+  peakDayLabel: string;
+  peakFocusMinutes: number;
+  latestRollingAvgMinutes: number;
+  firstHalfAvgMinutes: number;
+  secondHalfAvgMinutes: number;
+  trendDeltaMinutes: number;
+  trendDeltaPercent: number;
+  trendDirection: 'upward' | 'steady' | 'downward';
+  trendSummaryBadge: string;
+  windowDateRangeLabel: string;
+}
 
+export function normalizeActivityInsightsFocusTrendChartMode(
+  rawMode?: string | null
+): ActivityInsightsFocusTrendChartMode {
+  const cleaned = String(rawMode || '')
+    .trim()
+    .toLowerCase();
+  if (cleaned === 'bar' || cleaned === 'bar_comparison' || cleaned === 'bars') {
+    return 'bar_comparison';
+  }
+  if (cleaned === 'cumulative' || cleaned === 'trajectory') {
+    return 'cumulative';
+  }
+  return 'area_trend';
+}
+
+export function normalizeActivityInsightsFocusTrendUnit(
+  rawUnit?: string | null
+): ActivityInsightsFocusTrendUnit {
+  const cleaned = String(rawUnit || '')
+    .trim()
+    .toLowerCase();
+  if (cleaned === 'hours' || cleaned === 'hrs' || cleaned === 'h') {
+    return 'hours';
+  }
+  return 'minutes';
+}
+
+export function buildActivityInsights7DayFocusTrendSummary(params: {
+  summary: WeeklyActivitySummary;
+  dailyTargetMinutes?: number;
+}): ActivityInsights7DayFocusTrendSummary {
+  const rawDays = Array.isArray(params.summary?.days) ? params.summary.days : [];
+  const safeDailyTarget = clampProductivityTarget(
+    params.dailyTargetMinutes ?? rawDays[rawDays.length - 1]?.targetMinutes ?? 120
+  );
+
+  let peakFocusMinutes = 0;
+  let peakDayDateKey = rawDays[0]?.dateKey || '';
+  let peakDayLabel = rawDays[0]
+    ? `${rawDays[0].dayName} (${rawDays[0].shortDate})`
+    : 'Today';
+
+  for (const d of rawDays) {
+    const mins = Math.max(0, Math.round(Number(d.focusMinutes) || 0));
+    if (mins >= peakFocusMinutes) {
+      peakFocusMinutes = mins;
+      peakDayDateKey = d.dateKey;
+      peakDayLabel = `${d.dayName} (${d.shortDate})`;
+    }
+  }
+
+  let runningCumulativeMinutes = 0;
+  let runningCumulativeTarget = 0;
+
+  const days: ActivityInsightsFocusTrendDayPoint[] = rawDays.map((d, idx) => {
+    const focusMinutes = Math.max(0, Math.round(Number(d.focusMinutes) || 0));
+    const targetMinutes = clampProductivityTarget(
+      Number(d.targetMinutes) || safeDailyTarget
+    );
+    runningCumulativeMinutes += focusMinutes;
+    runningCumulativeTarget += targetMinutes;
+
+    // 3-day trailing rolling average (uses up to 3 most recent days up to idx)
+    const windowStart = Math.max(0, idx - 2);
+    const windowSlice = rawDays.slice(windowStart, idx + 1);
+    const windowSum = windowSlice.reduce(
+      (sum, item) => sum + Math.max(0, Math.round(Number(item.focusMinutes) || 0)),
+      0
+    );
+    const rollingAvgMinutes =
+      windowSlice.length > 0 ? Math.round(windowSum / windowSlice.length) : focusMinutes;
+
+    const focusHours = Number((focusMinutes / 60).toFixed(2));
+    const targetHours = Number((targetMinutes / 60).toFixed(2));
+    const rollingAvgHours = Number((rollingAvgMinutes / 60).toFixed(2));
+    const cumulativeHours = Number((runningCumulativeMinutes / 60).toFixed(2));
+    const deltaVsTargetMinutes = focusMinutes - targetMinutes;
+    const completionPercent =
+      targetMinutes > 0 ? Math.round((focusMinutes / targetMinutes) * 100) : 0;
+
+    return {
+      dateKey: d.dateKey,
+      dayIndex: idx,
+      dayName: d.dayName,
+      dayLabel: d.dayLabel,
+      shortDate: d.shortDate,
+      focusMinutes,
+      focusHours,
+      targetMinutes,
+      targetHours,
+      rollingAvgMinutes,
+      rollingAvgHours,
+      cumulativeMinutes: runningCumulativeMinutes,
+      cumulativeHours,
+      cumulativeTargetMinutes: runningCumulativeTarget,
+      deltaVsTargetMinutes,
+      completionPercent,
+      goalReached: focusMinutes >= targetMinutes,
+      isToday: Boolean(d.isToday),
+      isPeakDay: d.dateKey === peakDayDateKey && peakFocusMinutes > 0,
+      pointsEarned: Math.max(0, Math.round(Number(d.pointsEarned) || 0)),
+    };
+  });
+
+  const totalFocusMinutes = days.reduce((acc, d) => acc + d.focusMinutes, 0);
+  const totalFocusHours = Number((totalFocusMinutes / 60).toFixed(1));
+  const averageFocusMinutes =
+    days.length > 0 ? Math.round(totalFocusMinutes / days.length) : 0;
+  const averageFocusHours = Number((averageFocusMinutes / 60).toFixed(2));
+  const dailyTargetHours = Number((safeDailyTarget / 60).toFixed(2));
+  const daysGoalReached = days.filter((d) => d.goalReached).length;
+  const goalHitRatePercent =
+    days.length > 0 ? Math.round((daysGoalReached / days.length) * 100) : 0;
+
+  const latestRollingAvgMinutes =
+    days.length > 0 ? days[days.length - 1].rollingAvgMinutes : 0;
+
+  // Compare first 3 days vs last 4 days to compute 7-day focus momentum
+  const firstHalf = days.slice(0, Math.min(3, days.length));
+  const secondHalf = days.slice(Math.min(3, days.length));
+  const firstHalfAvgMinutes =
+    firstHalf.length > 0
+      ? Math.round(
+          firstHalf.reduce((acc, d) => acc + d.focusMinutes, 0) / firstHalf.length
+        )
+      : 0;
+  const secondHalfAvgMinutes =
+    secondHalf.length > 0
+      ? Math.round(
+          secondHalf.reduce((acc, d) => acc + d.focusMinutes, 0) / secondHalf.length
+        )
+      : firstHalfAvgMinutes;
+
+  const trendDeltaMinutes = secondHalfAvgMinutes - firstHalfAvgMinutes;
+  const trendDeltaPercent =
+    firstHalfAvgMinutes > 0
+      ? Math.round((trendDeltaMinutes / firstHalfAvgMinutes) * 100)
+      : secondHalfAvgMinutes > 0
+      ? 100
+      : 0;
+
+  let trendDirection: 'upward' | 'steady' | 'downward' = 'steady';
+  if (trendDeltaPercent >= 5) {
+    trendDirection = 'upward';
+  } else if (trendDeltaPercent <= -5) {
+    trendDirection = 'downward';
+  }
+
+  const signPrefix = trendDeltaPercent > 0 ? '+' : '';
+  const trendSummaryBadge =
+    trendDirection === 'upward'
+      ? `Upward Trend (${signPrefix}${trendDeltaPercent}% vs early week)`
+      : trendDirection === 'downward'
+      ? `Pacing Dip (${trendDeltaPercent}% vs early week)`
+      : `Steady Pace (${signPrefix}${trendDeltaPercent}% vs early week)`;
+
+  const firstShortDate = days[0]?.shortDate || 'Day 1';
+  const lastShortDate = days[days.length - 1]?.shortDate || 'Today';
+  const windowDateRangeLabel = `${firstShortDate} – ${lastShortDate}`;
+
+  return {
+    days,
+    totalFocusMinutes,
+    totalFocusHours,
+    averageFocusMinutes,
+    averageFocusHours,
+    dailyTargetMinutes: safeDailyTarget,
+    dailyTargetHours,
+    daysGoalReached,
+    goalHitRatePercent,
+    peakDayDateKey,
+    peakDayLabel,
+    peakFocusMinutes,
+    latestRollingAvgMinutes,
+    firstHalfAvgMinutes,
+    secondHalfAvgMinutes,
+    trendDeltaMinutes,
+    trendDeltaPercent,
+    trendDirection,
+    trendSummaryBadge,
+    windowDateRangeLabel,
+  };
+}

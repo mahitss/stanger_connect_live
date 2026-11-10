@@ -508,6 +508,9 @@ import {
   resolveInitialWorkspaceQrTutorialState,
   advanceWorkspaceQrTutorialStep,
   evaluateWorkspaceQrScannerTutorialSpec,
+  normalizeActivityInsightsFocusTrendChartMode,
+  normalizeActivityInsightsFocusTrendUnit,
+  buildActivityInsights7DayFocusTrendSummary,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -11445,4 +11448,53 @@ test('Get Started new-user tour highlights QR scanner and profile settings and t
   assert.equal(urlOverrideState.completedStepIds.length, 4);
 });
 
+test('Activity Insights 7-day focus time trends summary computes rolling 3-day averages, cumulative trajectory, peak day, and momentum vs early week', () => {
+  assert.equal(normalizeActivityInsightsFocusTrendChartMode('bar'), 'bar_comparison');
+  assert.equal(normalizeActivityInsightsFocusTrendChartMode('cumulative'), 'cumulative');
+  assert.equal(normalizeActivityInsightsFocusTrendChartMode('default'), 'area_trend');
+  assert.equal(normalizeActivityInsightsFocusTrendUnit('hours'), 'hours');
+  assert.equal(normalizeActivityInsightsFocusTrendUnit('minutes'), 'minutes');
 
+  const weeklySummary = buildWeeklyActivityOverview({
+    todayDateKey: '2026-11-10',
+    todayFocusMinutes: 135,
+    dailyTargetMinutes: 120,
+    todayPointsEarned: 95,
+    streakCount: 7,
+  });
+
+  const trendSummary = buildActivityInsights7DayFocusTrendSummary({
+    summary: weeklySummary,
+    dailyTargetMinutes: 120,
+  });
+
+  assert.equal(trendSummary.days.length, 7);
+  assert.equal(trendSummary.dailyTargetMinutes, 120);
+  assert.equal(trendSummary.dailyTargetHours, 2);
+
+  // Verify chronological cumulative accumulation
+  let expectedCumulative = 0;
+  for (const day of trendSummary.days) {
+    expectedCumulative += day.focusMinutes;
+    assert.equal(day.cumulativeMinutes, expectedCumulative);
+  }
+  assert.equal(trendSummary.totalFocusMinutes, expectedCumulative);
+
+  // Verify 3-day rolling average on day index 2 (days 0, 1, 2)
+  const expectedDay2Rolling = Math.round(
+    (trendSummary.days[0].focusMinutes +
+      trendSummary.days[1].focusMinutes +
+      trendSummary.days[2].focusMinutes) /
+      3
+  );
+  assert.equal(trendSummary.days[2].rollingAvgMinutes, expectedDay2Rolling);
+
+  // Verify today (index 6) reflects 135m and upward trend vs early week
+  const todayPoint = trendSummary.days[6];
+  assert.equal(todayPoint.isToday, true);
+  assert.equal(todayPoint.focusMinutes, 135);
+  assert.equal(todayPoint.goalReached, true);
+  assert.equal(todayPoint.deltaVsTargetMinutes, 15);
+  assert.equal(trendSummary.trendDirection, 'upward');
+  assert.ok(trendSummary.trendSummaryBadge.includes('Upward Trend'));
+});
