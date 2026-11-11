@@ -372,29 +372,6 @@ export const TwitterSocialSection: React.FC<TwitterSocialSectionProps> = ({
         isOnline: false,
       });
     }
-    const defaults = [
-      {
-        uid: 'tw_elenavostok',
-        displayName: 'Elena Rostova',
-        bio: 'Systems Architect · Tweeting #SystemsDesign & #DeepWork notes',
-        isOnline: true,
-      },
-      {
-        uid: 'tw_marcuschen',
-        displayName: 'Marcus Chen',
-        bio: 'Compiler Engineer · Late-night #BuildInPublic & #StudyWithMe',
-        isOnline: true,
-      },
-      {
-        uid: 'tw_aria_lin',
-        displayName: 'Aria Lin',
-        bio: 'ML Researcher · Pomodoro sprinter & visual study notes',
-        isOnline: false,
-      },
-    ];
-    for (const d of defaults) {
-      tryAdd(d);
-    }
     return Array.from(map.values()).slice(0, 6);
   })();
 

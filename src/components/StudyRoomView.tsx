@@ -230,7 +230,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
   weeklyActivitySummary,
   topicFocusSessions,
   dailyTargetMinutes = 120,
-  todayFocusMinutes = 65,
+  todayFocusMinutes = 0,
   onLogTopicFocusSession,
   onUpdateDailyTargetMinutes,
   uiSoundPrefs,
@@ -346,17 +346,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     } catch {
       // ignore
     }
-    return {
-      book_ddia: {
-        bookId: 'book_ddia',
-        currentPage: 42,
-        completedChapterNumbers: [1],
-        verifiedSecondsStudied: 3600,
-        personalNotes:
-          'Chapter 1 synthesis: Tail latency (p99) governs perceived reliability in multi-tier services.',
-        lastStudiedAtMs: Date.now() - 86400_000,
-      },
-    };
+    return {};
   });
 
   const activeBook =
@@ -1601,13 +1591,24 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     topic: string;
     cadenceLabel?: string;
   }) => {
+    const unrecordedSeconds = Math.max(
+      0,
+      elapsedSessionSeconds - alreadyRecordedSeconds
+    );
+    const verifiedMinutesAvailable = Math.floor(unrecordedSeconds / 60);
+    if (verifiedMinutesAvailable < 1) {
+      setCustomDurationStatusToast(
+        'Run the live Study Room timer for at least 1 minute (00:01:00) before recording a focus slot.'
+      );
+      return;
+    }
     const cleanRoom = normalizeStudyRoomCode(params.roomCode || activeRoomCode);
     const cleanTopic =
       sanitizeSafeText(params.topic || 'System Design & Deep Focus Sprint', 80) ||
       'System Design & Deep Focus Sprint';
     const clampedFocus = Math.min(
-      180,
-      Math.max(5, Math.round(Number(params.focusMinutes) || 25))
+      verifiedMinutesAvailable,
+      Math.max(1, Math.round(Number(params.focusMinutes) || verifiedMinutesAvailable))
     );
     const clampedBreak = Math.min(
       90,
@@ -1641,6 +1642,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       return next;
     });
 
+    setAlreadyRecordedSeconds((prev) => prev + clampedFocus * 60);
     setLocalAddedTodayMinutes((prev) => prev + clampedFocus);
     if (onLogTopicFocusSession) {
       onLogTopicFocusSession(cleanTopic, cleanRoom, clampedFocus);
@@ -1654,11 +1656,25 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     topic: string,
     minutes: number
   ) => {
+    const unrecordedSeconds = Math.max(
+      0,
+      elapsedSessionSeconds - alreadyRecordedSeconds
+    );
+    const verifiedMinutesAvailable = Math.floor(unrecordedSeconds / 60);
+    if (verifiedMinutesAvailable < 1) {
+      setCustomDurationStatusToast(
+        'Run the live Study Room timer for at least 1 minute (00:01:00) before recording room focus time.'
+      );
+      return;
+    }
     const cleanRoom = normalizeStudyRoomCode(roomCode || activeRoomCode);
     const cleanTopic =
       sanitizeSafeText(topic || 'System Architecture & Deep Work', 80) ||
       'System Architecture & Deep Work';
-    const clampedMins = Math.min(240, Math.max(1, Math.round(Number(minutes) || 25)));
+    const clampedMins = Math.min(
+      verifiedMinutesAvailable,
+      Math.max(1, Math.round(Number(minutes) || verifiedMinutesAvailable))
+    );
     const todayKey = formatDateKey(new Date());
 
     const newSession: TopicFocusSessionRecord = {
@@ -1680,6 +1696,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       }
       return next;
     });
+    setAlreadyRecordedSeconds((prev) => prev + clampedMins * 60);
     setLocalAddedTodayMinutes((prev) => prev + clampedMins);
 
     if (onLogTopicFocusSession) {
@@ -1695,16 +1712,27 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     topic: string;
     minutes: number;
   }) => {
+    const unrecordedSeconds = Math.max(
+      0,
+      elapsedSessionSeconds - alreadyRecordedSeconds
+    );
+    const verifiedMinutesAvailable = Math.floor(unrecordedSeconds / 60);
+    if (verifiedMinutesAvailable < 1) {
+      setCustomDurationStatusToast(
+        'Run the live Study Room timer for at least 1 minute (00:01:00) before recording daily focus history.'
+      );
+      return;
+    }
     const cleanRoom = normalizeStudyRoomCode(params.roomCode || activeRoomCode);
     const cleanTopic =
       sanitizeSafeText(params.topic || 'Deep Focus Architecture & Synthesis', 80) ||
       'Deep Focus Architecture & Synthesis';
     const clampedMins = Math.min(
-      360,
-      Math.max(1, Math.round(Number(params.minutes) || 30))
+      verifiedMinutesAvailable,
+      Math.max(1, Math.round(Number(params.minutes) || verifiedMinutesAvailable))
     );
     const todayKey = formatDateKey(new Date());
-    const targetDateKey = params.dateKey || todayKey;
+    const targetDateKey = todayKey;
 
     const newSession: TopicFocusSessionRecord = {
       id: `focus_hist_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
@@ -1726,13 +1754,12 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       return next;
     });
 
-    if (targetDateKey === todayKey) {
-      setLocalAddedTodayMinutes((prev) => prev + clampedMins);
-      if (onLogTopicFocusSession) {
-        onLogTopicFocusSession(cleanTopic, cleanRoom, clampedMins);
-      } else {
-        onFocusMinutesLogged?.(clampedMins);
-      }
+    setAlreadyRecordedSeconds((prev) => prev + clampedMins * 60);
+    setLocalAddedTodayMinutes((prev) => prev + clampedMins);
+    if (onLogTopicFocusSession) {
+      onLogTopicFocusSession(cleanTopic, cleanRoom, clampedMins);
+    } else {
+      onFocusMinutesLogged?.(clampedMins);
     }
   };
 
@@ -1901,9 +1928,11 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               <div className="flex items-center gap-2">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
                 <span className="font-mono font-semibold text-white tabular-nums">
-                  {studyTogetherLobby.totalLiveScholarsOnline.toLocaleString()}
+                  {desksInCurrentRoom.length}
                 </span>
-                <span>scholars studying right now</span>
+                <span>
+                  {desksInCurrentRoom.length === 1 ? 'scholar' : 'scholars'} seated in this room right now
+                </span>
               </div>
               <span aria-hidden="true" className="text-zinc-700">
                 ·
@@ -2081,9 +2110,9 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 <Users className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>
                   <strong className="text-white font-mono tabular-nums">
-                    {studyTogetherLobby.activeRoomPreset.liveParticipantCount}
+                    {desksInCurrentRoom.length}
                   </strong>{' '}
-                  students studying in {studyTogetherLobby.activeRoomPreset.shortTitle}
+                  {desksInCurrentRoom.length === 1 ? 'student' : 'students'} seated in {studyTogetherLobby.activeRoomPreset.shortTitle}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -2398,36 +2427,6 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           </div>
         )}
 
-        {/* MR. STRANGER GLOBAL COMMUNITY STATS STRIP (+1M Members, +16M Sessions, +183 Countries) */}
-        <div
-          data-testid="mr-stranger-community-stats-strip"
-          className="pt-4 border-t border-zinc-800/80 space-y-4"
-        >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-xs font-mono uppercase tracking-wider text-zinc-400">
-              Our Mr. Stranger student community is more than one million strong
-            </h2>
-            <span className="text-xs font-mono text-emerald-400">
-              Verified 24/7 Global Study Telemetry
-            </span>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            {MR_STRANGER_COMMUNITY_IMPACT_STATS.map((stat) => (
-              <div
-                key={stat.id}
-                className="p-3.5 rounded-lg bg-[#050507] border border-zinc-800/80 space-y-1"
-              >
-                <div className="text-2xl font-extrabold font-mono text-white tabular-nums">
-                  {stat.value}
-                </div>
-                <div className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">
-                  {stat.label}
-                </div>
-                <p className="text-[11px] text-zinc-400 leading-snug">{stat.detail}</p>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
 
       {/* "EASY AS ABC" : 24/7 MR. STRANGER LIVE STUDY ROOMS LOBBY */}
@@ -2503,7 +2502,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                       {room.badgeLabel}
                     </span>
                     <span className="px-2 py-0.5 rounded bg-black/80 border border-white/10 text-[11px] font-mono text-zinc-200 tabular-nums">
-                      {room.liveParticipantCount} online
+                      {studyDesks.filter((d) => d.roomCode === room.roomCode).length} seated
                     </span>
                   </div>
 
@@ -3656,14 +3655,6 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                   className="flex-1 py-2 px-3 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded transition-colors whitespace-nowrap"
                 >
                   Verify & Record Claimed Time
-                </button>
-                <button
-                  type="button"
-                  onClick={handleCheck2HoursVs3HoursRule}
-                  data-testid="study-check-2h-vs-3h-rule-btn"
-                  className="py-2 px-3 text-xs font-mono font-semibold bg-zinc-900 hover:bg-zinc-800 text-amber-300 border border-zinc-800 rounded transition-colors whitespace-nowrap"
-                >
-                  Test 2:00:00 vs 3:00:00 Rule
                 </button>
               </div>
             </form>

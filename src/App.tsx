@@ -2722,31 +2722,22 @@ export default function App() {
   };
 
   const handleQuickStartPomodoro = () => {
-    const result = applyQuickStartPomodoroBlock({
-      targetMinutes: dailyTargetMinutes,
-      currentCompletedMinutes: dailyCompletedMinutes,
-      currentParticipationPoints: currentIdentity?.participationPoints ?? 25,
-    });
-    const crossedNow =
-      dailyCompletedMinutes < dailyTargetMinutes &&
-      result.nextCompletedMinutes >= dailyTargetMinutes;
-    setLastSessionPointsAwarded(
-      result.pointsAwarded + (crossedNow ? DAILY_GOAL_REACHED_BONUS_POINTS : 0)
+    setActivePage('study');
+    setQuickStartFeedback(
+      'Study Room opened — start the live timer for at least 1 minute (00:01:00) to record verified focus time.'
     );
-    persistProductivityGoal(dailyTargetMinutes, result.nextCompletedMinutes);
-    markFocusSessionStartedToday();
-    awardParticipation(result.pointsAwarded);
-    setQuickStartFeedback(result.feedbackMessage);
   };
 
   const handleCompleteDailyGoalNow = () => {
-    const remaining = Math.max(0, dailyTargetMinutes - dailyCompletedMinutes);
-    if (remaining > 0) {
-      handleLogFocusMinutes(remaining);
-    } else {
+    if (dailyCompletedMinutes >= dailyTargetMinutes) {
       setDailyGoalToastDismissedKey(null);
       setDailyGoalToastForceVisible(true);
+      return;
     }
+    setActivePage('study');
+    setQuickStartFeedback(
+      'Focus minutes can only be earned via the verified live Study Room timer.'
+    );
   };
 
   const handleLogTopicFocusSession = (
@@ -3550,6 +3541,10 @@ export default function App() {
       setMomentError('Please enter a caption describing your real photo moment.');
       return;
     }
+    if (!momentPhotoDataUrl && !selectedMomentPlaceholderId) {
+      setMomentError('Please upload a real photo or select a study snapshot before publishing your moment.');
+      return;
+    }
     const threat = detectSecurityThreat(trimmedCaption);
     if (!threat.safe) {
       setMomentError(threat.reason);
@@ -3624,6 +3619,12 @@ export default function App() {
 
   const handleShareDailyGoalToFeed = async () => {
     if (!currentIdentity) return;
+    if (dailyCompletedMinutes <= 0) {
+      setQuickStartFeedback(
+        'Complete at least 1 minute of verified Study Room timer focus today before sharing your progress to the Moments feed.'
+      );
+      return;
+    }
 
     const summary = buildDailyGoalShareSummary({
       displayName: currentIdentity.displayName,
@@ -5652,7 +5653,6 @@ export default function App() {
       setIsWorkspaceHeaderQrOpen(false);
       setActivePage('hub');
       setCozyHubTab('sanctuary');
-      handleLogFocusMinutes(25);
     } else if (activeId === 'peer_directory') {
       setIsWorkspaceHeaderQrOpen(false);
       setActivePage('hub');
@@ -12411,15 +12411,13 @@ export default function App() {
                     <div className="flex flex-wrap items-center gap-2">
                       <button
                         type="button"
-                        onClick={handleQuickStartPomodoro}
+                        onClick={() => setActivePage('study')}
                         data-testid="daily-goal-quick-start-btn"
-                        title={`Instantly log a ${QUICK_START_POMODORO_MINUTES}-minute Pomodoro block and earn +${QUICK_START_PARTICIPATION_POINTS} participation points`}
+                        title="Open the live Study Room timer to record verified focus minutes"
                         className="px-3.5 py-1.5 text-xs font-semibold bg-amber-400 hover:bg-amber-300 text-black rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
                       >
                         <Zap className="w-3.5 h-3.5 shrink-0" />
-                        <span>
-                          Quick Start (+{QUICK_START_POMODORO_MINUTES}m)
-                        </span>
+                        <span>Open Study Timer</span>
                       </button>
                       <button
                         type="button"
@@ -12763,38 +12761,18 @@ export default function App() {
                       : 'hidden'
                   }
                 >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-medium text-zinc-400">
-                      Quick Focus Blocks:
+                  <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-md bg-zinc-900/70 border border-zinc-800 text-xs text-zinc-300">
+                    <span>
+                      Focus minutes are strictly verified through the live Study Room timer (minimum 00:01:00 elapsed).
                     </span>
                     <button
                       type="button"
-                      onClick={() => handleLogFocusMinutes(15)}
-                      data-testid="log-focus-15m-btn"
-                      className="px-3 py-1 text-xs font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
-                    >
-                      +15m Focus Block
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleLogFocusMinutes(25)}
-                      data-testid="log-focus-25m-btn"
-                      className="px-3 py-1 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
-                    >
-                      +25m Pomodoro
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleCompleteDailyGoalNow}
-                      data-testid="daily-goal-complete-or-toast-btn"
+                      onClick={() => setActivePage('study')}
+                      data-testid="open-verified-study-room-btn"
                       className="px-3 py-1 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-black rounded-md inline-flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
                     >
-                      <Trophy className="w-3.5 h-3.5 shrink-0" />
-                      <span>
-                        {goalProgress.isGoalReached
-                          ? 'Show Goal Reached Toast'
-                          : `Complete Goal (+${goalProgress.remainingMinutes}m)`}
-                      </span>
+                      <Clock className="w-3.5 h-3.5 shrink-0" />
+                      <span>Go to Study Room Timer</span>
                     </button>
                   </div>
 
@@ -17399,18 +17377,34 @@ export default function App() {
                 <ActivityInsights7DayFocusTrendsRechartsCard
                   summary={weeklyActivitySummary}
                   dailyTargetMinutes={dailyTargetMinutes}
-                  onLogQuickFocus={handleLogFocusMinutes}
+                  onLogQuickFocus={() => {
+                    setActivePage('study');
+                    setQuickStartFeedback(
+                      'Study Room opened — start the live timer to record verified focus minutes.'
+                    );
+                  }}
                 />
 
                 <WeeklyActivityOverview
                   summary={weeklyActivitySummary}
                   dailyTargetMinutes={dailyTargetMinutes}
-                  onLogQuickFocus={handleLogFocusMinutes}
+                  onLogQuickFocus={() => {
+                    setActivePage('study');
+                    setQuickStartFeedback(
+                      'Study Room opened — start the live timer to record verified focus minutes.'
+                    );
+                  }}
                 />
 
                 <WeeklyProductivityDistribution
                   distribution={weeklyTopicDistribution}
-                  onLogTopicFocusSession={handleLogTopicFocusSession}
+                  onLogTopicFocusSession={(topic, roomCode) => {
+                    setActiveStudyRoomCode(roomCode);
+                    setActivePage('study');
+                    setQuickStartFeedback(
+                      `Opened Study Room (${roomCode}) for "${topic}" — run the live timer to record verified focus minutes.`
+                    );
+                  }}
                   onOpenStudyRoomWithTopic={(roomCode) => {
                     setActiveStudyRoomCode(roomCode);
                     setActivePage('study');
@@ -19361,10 +19355,13 @@ export default function App() {
                 <button
                   type="button"
                   data-testid="daily-goal-toast-bonus-15m-btn"
-                  onClick={() => handleLogFocusMinutes(15)}
+                  onClick={() => {
+                    handleDismissDailyGoalReachedToast();
+                    setActivePage('study');
+                  }}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs font-mono font-semibold transition-colors whitespace-nowrap shrink-0"
                 >
-                  <span>+15m Bonus</span>
+                  <span>Start Bonus Session</span>
                 </button>
               </div>
 
@@ -19452,10 +19449,13 @@ export default function App() {
               <button
                 type="button"
                 data-testid="streak-reminder-log-15m-btn"
-                onClick={() => handleLogFocusMinutes(15)}
+                onClick={() => {
+                  handleDismissStreakReminderToday();
+                  setActivePage('study');
+                }}
                 className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-100 text-xs font-mono font-semibold transition-colors whitespace-nowrap shrink-0"
               >
-                <span>+15m Focus</span>
+                <span>Open Study Timer</span>
               </button>
             </div>
 
