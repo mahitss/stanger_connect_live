@@ -93,44 +93,11 @@ export const StudyRoomWeeklyRoomFocusRechartsCard: React.FC<
   const [metricUnit, setMetricUnit] =
     useState<WeeklyRoomFocusMetricUnit>('minutes');
   const [quickRoomInput, setQuickRoomInput] = useState<string>(activeRoomCode);
-  const [quickTopicInput, setQuickTopicInput] = useState<string>(
-    'System Architecture & Deep Work'
-  );
-  const [quickMinutesInput, setQuickMinutesInput] = useState<string>('25');
-  const [recentLoggedToast, setRecentLoggedToast] = useState<string | null>(
-    null
-  );
 
-  const handleQuickLogSubmit = (e: React.FormEvent) => {
+  const handleSwitchRoomSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanRoom = normalizeStudyRoomCode(quickRoomInput || activeRoomCode);
-    const cleanTopic =
-      sanitizeSafeText(quickTopicInput, 80) ||
-      'System Architecture & Deep Work';
-    const clampedMinutes = Math.min(
-      240,
-      Math.max(5, Math.round(Number(quickMinutesInput) || 25))
-    );
-
-    onLogRoomFocusMinutes(cleanRoom, cleanTopic, clampedMinutes);
-    setRecentLoggedToast(
-      `+${clampedMinutes}m logged to ${cleanRoom} (${cleanTopic})`
-    );
-    window.setTimeout(() => {
-      setRecentLoggedToast(null);
-    }, 3500);
-  };
-
-  const handleQuickPresetLog = (
-    roomCode: string,
-    topic: string,
-    minutes: number
-  ) => {
-    onLogRoomFocusMinutes(roomCode, topic, minutes);
-    setRecentLoggedToast(`+${minutes}m logged to ${roomCode}`);
-    window.setTimeout(() => {
-      setRecentLoggedToast(null);
-    }, 3500);
+    onSelectRoomCode(cleanRoom, `${cleanRoom} · Study Room`);
   };
 
   const dataKey = metricUnit === 'hours' ? 'focusHours' : 'focusMinutes';
@@ -466,22 +433,6 @@ export const StudyRoomWeeklyRoomFocusRechartsCard: React.FC<
                       </div>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() =>
-                        handleQuickPresetLog(
-                          entry.roomCode,
-                          entry.primaryTopic,
-                          25
-                        )
-                      }
-                      data-testid={`weekly-room-quick-add-25m-${entry.roomCode}`}
-                      aria-label={`Log 25m focus session in ${entry.roomCode}`}
-                      className="px-2 py-1 text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-emerald-300 border border-zinc-800 rounded transition-colors cursor-pointer whitespace-nowrap"
-                    >
-                      +25m
-                    </button>
-
                     {!entry.isActiveRoom && (
                       <button
                         type="button"
@@ -499,100 +450,50 @@ export const StudyRoomWeeklyRoomFocusRechartsCard: React.FC<
                   </div>
                 </div>
               ))}
+              {summary.entries.length === 0 && (
+                <div className="p-3 rounded-lg bg-[#050507] border border-zinc-800/80 text-xs font-mono text-zinc-400">
+                  0m recorded across all rooms this week. Run the Study Room timer for at least 1 minute and click &ldquo;Record Real Conducted Time&rdquo; to populate room totals.
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Quick Log Focus Time to Any Room Code Form */}
+          {/* Switch Active Study Room Code Form */}
           <form
-            onSubmit={handleQuickLogSubmit}
+            onSubmit={handleSwitchRoomSubmit}
             className="p-4 rounded-lg bg-[#050507] border border-zinc-800/80 space-y-3"
             data-testid="weekly-room-quick-log-form"
           >
             <div className="flex items-center justify-between text-xs">
               <span className="font-semibold text-white">
-                Log Focus Session to Room Code
+                Verified Timer Room Attribution
               </span>
-              <span className="font-mono text-[11px] text-zinc-400">
-                Updates Chart Live
+              <span className="font-mono text-[11px] text-emerald-400">
+                Real Elapsed Time Only
               </span>
             </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <div>
-                <label
-                  htmlFor="weekly-chart-room-code-input"
-                  className="block text-[10px] font-mono text-zinc-400 mb-1"
-                >
-                  Room Code
-                </label>
-                <input
-                  id="weekly-chart-room-code-input"
-                  type="text"
-                  value={quickRoomInput}
-                  onChange={(e) => setQuickRoomInput(e.target.value)}
-                  placeholder="STUDY-204"
-                  data-testid="weekly-room-log-code-input"
-                  className="w-full px-2.5 py-1.5 text-xs font-mono uppercase bg-[#0A0A0C] border border-zinc-800 rounded text-white focus:outline-none focus:border-zinc-500"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="weekly-chart-topic-input"
-                  className="block text-[10px] font-mono text-zinc-400 mb-1"
-                >
-                  Study Topic
-                </label>
-                <input
-                  id="weekly-chart-topic-input"
-                  type="text"
-                  value={quickTopicInput}
-                  onChange={(e) => setQuickTopicInput(e.target.value)}
-                  placeholder="Deep Work..."
-                  data-testid="weekly-room-log-topic-input"
-                  className="w-full px-2.5 py-1.5 text-xs bg-[#0A0A0C] border border-zinc-800 rounded text-white focus:outline-none focus:border-zinc-500"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="weekly-chart-minutes-input"
-                  className="block text-[10px] font-mono text-zinc-400 mb-1"
-                >
-                  Minutes (5–240)
-                </label>
-                <input
-                  id="weekly-chart-minutes-input"
-                  type="number"
-                  min={5}
-                  max={240}
-                  value={quickMinutesInput}
-                  onChange={(e) => setQuickMinutesInput(e.target.value)}
-                  data-testid="weekly-room-log-minutes-input"
-                  className="w-full px-2.5 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white focus:outline-none focus:border-zinc-500"
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              data-testid="weekly-room-log-submit-btn"
-              className="w-full py-2 px-3 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-            >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Add Focus Session to Weekly Room Chart</span>
-            </button>
-
-            {recentLoggedToast && (
-              <div
-                role="status"
-                data-testid="weekly-room-log-toast"
-                className="p-2 rounded bg-emerald-950/40 border border-emerald-500/40 text-emerald-300 text-xs font-mono flex items-center gap-1.5"
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Focus minutes are attributed to your active room code automatically when you run the Study Room timer and record conducted time.
+            </p>
+            <div className="flex items-center gap-2">
+              <input
+                id="weekly-chart-room-code-input"
+                type="text"
+                value={quickRoomInput}
+                onChange={(e) => setQuickRoomInput(e.target.value)}
+                placeholder="STUDY-204"
+                data-testid="weekly-room-log-code-input"
+                className="flex-1 px-2.5 py-1.5 text-xs font-mono uppercase bg-[#0A0A0C] border border-zinc-800 rounded text-white focus:outline-none focus:border-zinc-500"
+              />
+              <button
+                type="submit"
+                data-testid="weekly-room-log-submit-btn"
+                className="py-1.5 px-3 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded transition-colors flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                <span>{recentLoggedToast}</span>
-              </div>
-            )}
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                <span>Switch Active Room</span>
+              </button>
+            </div>
           </form>
         </div>
       </div>

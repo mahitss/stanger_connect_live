@@ -79,15 +79,16 @@ export function WeeklyProductivityDistribution({
   const [selectedTopic, setSelectedTopic] = useState<string>(
     DEFAULT_STUDY_ROOM_TOPICS[0].topic
   );
-  const [selectedMinutes, setSelectedMinutes] = useState<number>(25);
 
-  const handleQuickLogSubmit = (e: React.FormEvent) => {
+  const handleOpenSelectedTopicInRoom = (e: React.FormEvent) => {
     e.preventDefault();
     const matchedPreset = DEFAULT_STUDY_ROOM_TOPICS.find(
       (p) => p.topic.toLowerCase() === selectedTopic.toLowerCase()
     );
     const roomCode = matchedPreset ? matchedPreset.roomCode : 'STUDY-GLOBAL';
-    onLogTopicFocusSession(selectedTopic, roomCode, selectedMinutes);
+    if (onOpenStudyRoomWithTopic) {
+      onOpenStudyRoomWithTopic(selectedTopic, roomCode);
+    }
   };
 
   return (
@@ -396,12 +397,17 @@ export function WeeklyProductivityDistribution({
                   </div>
                 </div>
               ))}
+              {distribution.topics.length === 0 && (
+                <div className="p-3 rounded bg-[#0A0A0C] border border-zinc-800/70 text-xs text-zinc-400 font-mono">
+                  0 mins studied across 0 topics so far. Run the Study Room timer for at least 1 minute to record verified topic time.
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Quick Log Topic Focus Session Form */}
+          {/* Open Topic in Live Study Room Timer Form */}
           <form
-            onSubmit={handleQuickLogSubmit}
+            onSubmit={handleOpenSelectedTopicInRoom}
             className="pt-3 border-t border-zinc-900 space-y-2"
             data-testid="log-topic-focus-form"
           >
@@ -409,7 +415,7 @@ export function WeeklyProductivityDistribution({
               htmlFor="quick-topic-select"
               className="block text-[11px] font-mono text-zinc-400"
             >
-              Log Focus Session by Study Room Topic
+              Select Topic to Study in Live Timer Room
             </label>
             <div className="flex flex-col sm:flex-row gap-2">
               <select
@@ -427,28 +433,14 @@ export function WeeklyProductivityDistribution({
                 ))}
               </select>
 
-              <div className="flex items-center gap-1.5 shrink-0">
-                <select
-                  aria-label="Focus session duration in minutes"
-                  data-testid="quick-topic-minutes-select"
-                  value={selectedMinutes}
-                  onChange={(e) => setSelectedMinutes(Number(e.target.value) || 25)}
-                  className="px-2 py-1.5 text-xs font-mono bg-[#0A0A0C] border border-zinc-800 rounded text-white focus:outline-none focus:border-zinc-500"
-                >
-                  <option value={25}>+25m</option>
-                  <option value={45}>+45m</option>
-                  <option value={60}>+60m</option>
-                </select>
-
-                <button
-                  type="submit"
-                  data-testid="log-topic-session-btn"
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded whitespace-nowrap shrink-0"
-                >
-                  <PlusCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>Log Topic</span>
-                </button>
-              </div>
+              <button
+                type="submit"
+                data-testid="log-topic-session-btn"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded whitespace-nowrap shrink-0 cursor-pointer"
+              >
+                <ArrowUpRight className="w-3.5 h-3.5 shrink-0" />
+                <span>Start Timer for Topic</span>
+              </button>
             </div>
           </form>
         </div>

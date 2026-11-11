@@ -130,10 +130,8 @@ export const ActivityInsights7DayFocusTrendsRechartsCard: React.FC<
   const [chartMode, setChartMode] =
     useState<ActivityInsightsFocusTrendChartMode>('area_trend');
   const [unit, setUnit] = useState<ActivityInsightsFocusTrendUnit>('minutes');
-  const [liveRecordedOnly, setLiveRecordedOnly] = useState<boolean>(false);
+  const [liveRecordedOnly, setLiveRecordedOnly] = useState<boolean>(true);
   const [selectedDayKey, setSelectedDayKey] = useState<string | null>(null);
-  const [customMinutesInput, setCustomMinutesInput] = useState<string>('25');
-  const [loggedFeedback, setLoggedFeedback] = useState<string | null>(null);
 
   const effectiveSummary = useMemo(() => {
     if (!liveRecordedOnly) return summary;
@@ -163,20 +161,10 @@ export const ActivityInsights7DayFocusTrendsRechartsCard: React.FC<
     return trendSummary.days[trendSummary.days.length - 1];
   }, [trendSummary.days, selectedDayKey]);
 
-  const handleLogFocus = (minutesToLog: number) => {
-    const safeMins = Math.min(240, Math.max(5, Math.round(Number(minutesToLog) || 25)));
+  const handleOpenStudyRoomTimer = () => {
     if (onLogQuickFocus) {
-      onLogQuickFocus(safeMins);
+      onLogQuickFocus(0);
     }
-    setLoggedFeedback(
-      `+${safeMins}m focus logged to Today — 7-day trend chart updated.`
-    );
-  };
-
-  const handleCustomSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const parsed = Math.min(240, Math.max(5, Math.round(Number(customMinutesInput) || 25)));
-    handleLogFocus(parsed);
   };
 
   const primaryDataKey = unit === 'hours' ? 'focusHours' : 'focusMinutes';
@@ -774,65 +762,32 @@ export const ActivityInsights7DayFocusTrendsRechartsCard: React.FC<
             )}
           </div>
 
-          {/* Live Focus Sprint Logger (Updates Today & 7-Day Trend Chart Immediately) */}
-          <form
-            onSubmit={handleCustomSubmit}
+          {/* Verified Timer Accounting Notice + Study Room Launcher */}
+          <div
             className="pt-3 border-t border-zinc-900 space-y-2.5"
             data-testid="activity-insights-7d-focus-log-form"
           >
             <div className="flex items-center justify-between text-xs">
               <span className="font-semibold text-white">
-                Log Focus Sprint to Today&apos;s Trend
+                Verified Timer-Only Accounting
               </span>
-              <div className="flex items-center gap-1">
-                {[15, 25, 45].map((presetMins) => (
-                  <button
-                    key={presetMins}
-                    type="button"
-                    onClick={() => handleLogFocus(presetMins)}
-                    data-testid={`focus-trend-quick-add-${presetMins}m-btn`}
-                    className="px-2 py-0.5 text-[11px] font-mono rounded bg-zinc-900 hover:bg-zinc-800 text-emerald-300 border border-zinc-800 transition-colors cursor-pointer"
-                  >
-                    +{presetMins}m
-                  </button>
-                ))}
-              </div>
+              <span className="font-mono text-[11px] text-emerald-400 tabular-nums">
+                7d Verified: {trendSummary.totalFocusMinutes}m
+              </span>
             </div>
-
-            <div className="flex items-center gap-2">
-              <label htmlFor="focus-trend-custom-mins-input" className="sr-only">
-                Custom focus minutes to log
-              </label>
-              <input
-                id="focus-trend-custom-mins-input"
-                type="number"
-                min={5}
-                max={240}
-                value={customMinutesInput}
-                onChange={(e) => setCustomMinutesInput(e.target.value)}
-                data-testid="focus-trend-custom-mins-input"
-                className="w-24 px-2.5 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white focus:outline-none focus:border-zinc-500"
-              />
-              <button
-                type="submit"
-                data-testid="focus-trend-log-submit-btn"
-                className="flex-1 py-1.5 px-3 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Log Focus Time</span>
-              </button>
-            </div>
-
-            {loggedFeedback && (
-              <div
-                role="status"
-                data-testid="focus-trend-log-status"
-                className="text-[11px] font-mono text-emerald-400"
-              >
-                {loggedFeedback}
-              </div>
-            )}
-          </form>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Focus minutes are counted strictly from real elapsed time in the Study Room timer. Quick-add buttons are disabled so your study history reflects 100% genuine work.
+            </p>
+            <button
+              type="button"
+              onClick={handleOpenStudyRoomTimer}
+              data-testid="focus-trend-log-submit-btn"
+              className="w-full py-2 px-3 text-xs font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 rounded transition-colors inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              <span>Start Live Study Room Timer</span>
+            </button>
+          </div>
         </div>
       </div>
     </section>

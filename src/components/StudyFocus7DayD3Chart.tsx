@@ -225,41 +225,6 @@ export const StudyFocus7DayD3Chart: React.FC<StudyFocus7DayD3ChartProps> = ({
               Individual Session Growth ({allSessions.length})
             </button>
           </div>
-
-          {onLogStudySession && (
-            <div className="flex flex-wrap items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() =>
-                  onLogStudySession(15, `Active Recall Sprint (${activeRoomCode})`)
-                }
-                data-testid="study-d3-log-15m"
-                className="px-2.5 py-1.5 text-xs font-mono font-semibold bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
-              >
-                +15m Session
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  onLogStudySession(25, `Pomodoro Focus Block (${activeRoomCode})`)
-                }
-                data-testid="study-d3-log-25m"
-                className="px-2.5 py-1.5 text-xs font-mono font-semibold bg-zinc-900 hover:bg-zinc-800 text-emerald-400 border border-zinc-800 rounded-md whitespace-nowrap shrink-0"
-              >
-                +25m Pomodoro
-              </button>
-              <button
-                type="button"
-                onClick={() =>
-                  onLogStudySession(50, `Deep Work Synthesis (${activeRoomCode})`)
-                }
-                data-testid="study-d3-log-50m"
-                className="px-3 py-1.5 text-xs font-mono font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
-              >
-                +50m Deep Session
-              </button>
-            </div>
-          )}
         </div>
       </div>
 

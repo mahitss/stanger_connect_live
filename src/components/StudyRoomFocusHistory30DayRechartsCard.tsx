@@ -112,55 +112,6 @@ export const StudyRoomFocusHistory30DayRechartsCard: React.FC<
     summary.points.find((p) => p.dateKey === selectedDateKey) ||
     summary.todayPoint;
 
-  const handleLogFormSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clampedMins = Math.min(
-      360,
-      Math.max(5, Math.round(Number(logMinutesInput) || 30))
-    );
-    const targetRoom =
-      selectedRoomFilter !== 'ALL'
-        ? normalizeStudyRoomCode(selectedRoomFilter)
-        : normalizeStudyRoomCode(activeRoomCode);
-    const cleanTopic =
-      sanitizeSafeText(logTopicInput, 80) ||
-      'Deep Focus Architecture & Synthesis';
-
-    onLogDailyFocusMinutes({
-      dateKey: inspectedPoint.dateKey,
-      roomCode: targetRoom,
-      topic: cleanTopic,
-      minutes: clampedMins,
-    });
-
-    setRecentLogToast(
-      `+${clampedMins}m logged on ${inspectedPoint.shortDateLabel} (${targetRoom})`
-    );
-    window.setTimeout(() => {
-      setRecentLogToast(null);
-    }, 3500);
-  };
-
-  const handleQuickPresetLog = (minutes: number) => {
-    const targetRoom =
-      selectedRoomFilter !== 'ALL'
-        ? normalizeStudyRoomCode(selectedRoomFilter)
-        : normalizeStudyRoomCode(activeRoomCode);
-    onLogDailyFocusMinutes({
-      dateKey: summary.todayPoint.dateKey,
-      roomCode: targetRoom,
-      topic: `Focused Study Block in ${targetRoom}`,
-      minutes,
-    });
-    setSelectedDateKey(summary.todayPoint.dateKey);
-    setRecentLogToast(
-      `+${minutes}m logged to Today (${summary.todayPoint.shortDateLabel})`
-    );
-    window.setTimeout(() => {
-      setRecentLogToast(null);
-    }, 3500);
-  };
-
   return (
     <section
       id="study-room-focus-history-section"
@@ -558,123 +509,47 @@ export const StudyRoomFocusHistory30DayRechartsCard: React.FC<
           </div>
         </div>
 
-        {/* Right 5 Cols: Log Focus Minutes to History */}
-        <form
-          onSubmit={handleLogFormSubmit}
+        {/* Right 5 Cols: Verified 30-Day History Inspector */}
+        <div
           className="lg:col-span-5 p-4 rounded-lg bg-[#050507] border border-zinc-800/80 flex flex-col justify-between space-y-3"
           data-testid="focus-history-log-form"
         >
           <div className="flex items-center justify-between gap-2">
             <span className="text-xs font-semibold text-white whitespace-nowrap">
-              Quick Log (30d)
+              30-Day Verified Ledger
             </span>
-            <div className="flex items-center gap-1 shrink-0">
-              {[25, 45, 60].map((presetMins) => (
-                <button
-                  key={presetMins}
-                  type="button"
-                  onClick={() => handleQuickPresetLog(presetMins)}
-                  data-testid={`focus-history-quick-log-${presetMins}m-btn`}
-                  className="px-2 py-0.5 text-[11px] font-mono bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  +{presetMins}m Today
-                </button>
-              ))}
-            </div>
+            <span className="text-[11px] font-mono text-emerald-400">
+              Total: {summary.total30DayFocusMinutes}m
+            </span>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <div>
-              <label
-                htmlFor="focus-history-date-select"
-                className="block text-[10px] font-mono text-zinc-400 mb-1"
-              >
-                Date (Past 30d)
-              </label>
-              <select
-                id="focus-history-date-select"
-                value={selectedDateKey}
-                onChange={(e) => setSelectedDateKey(e.target.value)}
-                data-testid="focus-history-date-select"
-                className="w-full px-2.5 py-1.5 text-xs font-mono bg-[#0A0A0C] border border-zinc-800 rounded text-white"
-              >
-                {summary.points
-                  .slice()
-                  .reverse()
-                  .map((pt) => (
-                    <option key={pt.dateKey} value={pt.dateKey}>
-                      {pt.shortDateLabel} ({pt.focusMinutes}m)
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="focus-history-minutes-input"
-                className="block text-[10px] font-mono text-zinc-400 mb-1"
-              >
-                Focus Minutes
-              </label>
-              <input
-                id="focus-history-minutes-input"
-                type="number"
-                min={5}
-                max={360}
-                value={logMinutesInput}
-                onChange={(e) => setLogMinutesInput(e.target.value)}
-                data-testid="focus-history-minutes-input"
-                className="w-full px-2.5 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="focus-history-topic-input"
-                className="block text-[10px] font-mono text-zinc-400 mb-1"
-              >
-                Study Subject
-              </label>
-              <input
-                id="focus-history-topic-input"
-                type="text"
-                value={logTopicInput}
-                onChange={(e) => setLogTopicInput(e.target.value)}
-                data-testid="focus-history-topic-input"
-                placeholder="Subject or book..."
-                className="w-full px-2.5 py-1.5 text-xs bg-[#0A0A0C] border border-zinc-800 rounded text-white"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-2 pt-1">
-            {recentLogToast ? (
-              <span
-                className="text-[11px] font-mono text-emerald-400 flex items-center gap-1 truncate"
-                data-testid="focus-history-log-toast"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{recentLogToast}</span>
-              </span>
-            ) : (
-              <span className="text-[11px] font-mono text-zinc-400 truncate">
-                Logs into {inspectedPoint.shortDateLabel} (
-                {selectedRoomFilter === 'ALL'
-                  ? activeRoomCode
-                  : selectedRoomFilter}
-                )
-              </span>
-            )}
-            <button
-              type="submit"
-              data-testid="focus-history-log-submit-btn"
-              className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            Daily focus totals are recorded strictly from verified Study Room timer sessions. Select any date below to inspect its verified study duration.
+          </p>
+          <div className="flex items-center justify-between gap-2 pt-1 border-t border-zinc-900">
+            <label
+              htmlFor="focus-history-date-select"
+              className="text-[11px] font-mono text-zinc-300"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Log Focus Minutes</span>
-            </button>
+              Inspect Date (Past 30d):
+            </label>
+            <select
+              id="focus-history-date-select"
+              value={selectedDateKey}
+              onChange={(e) => setSelectedDateKey(e.target.value)}
+              data-testid="focus-history-date-select"
+              className="px-2.5 py-1 text-xs font-mono bg-[#0A0A0C] border border-zinc-800 rounded text-white"
+            >
+              {summary.points
+                .slice()
+                .reverse()
+                .map((pt) => (
+                  <option key={pt.dateKey} value={pt.dateKey}>
+                    {pt.shortDateLabel} ({pt.focusMinutes}m)
+                  </option>
+                ))}
+            </select>
           </div>
-        </form>
+        </div>
       </div>
     </section>
   );

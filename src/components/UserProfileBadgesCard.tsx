@@ -339,16 +339,6 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
                 : `Buy Streak Freeze (${streakFreezeStatus.costPoints} pts)`}
             </span>
           </button>
-
-          <button
-            type="button"
-            onClick={handleSimulateMissedDayClick}
-            data-testid="simulate-missed-day-btn"
-            title="Audit your login & productivity streak protection when a day is missed"
-            className="px-3 py-1.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 whitespace-nowrap shrink-0"
-          >
-            Audit Streak Protection
-          </button>
         </div>
       </div>
 
@@ -427,52 +417,6 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
                   />
                 </div>
 
-                {badge.id === 'streak_5_day' && (
-                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => onAdvanceStreak()}
-                      data-testid="badge-action-advance-streak"
-                      className="flex-1 py-1.5 px-2.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 whitespace-nowrap"
-                    >
-                      Check In (+1 Day Streak)
-                    </button>
-                    {!isUnlocked && (
-                      <button
-                        type="button"
-                        onClick={() => onAdvanceStreak(5)}
-                        data-testid="badge-action-complete-5d-streak"
-                        className="py-1.5 px-2.5 text-xs font-semibold bg-[#E6E2D8] text-[#141413] whitespace-nowrap"
-                      >
-                        Reach 5-Day Streak
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {badge.id === 'goal_3_day' && (
-                  <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                    <button
-                      type="button"
-                      onClick={() => onRecordConsecutiveGoalDay()}
-                      data-testid="badge-action-log-goal-day"
-                      className="flex-1 py-1.5 px-2.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 whitespace-nowrap"
-                    >
-                      Log Daily Goal Hit (+1d)
-                    </button>
-                    {!isUnlocked && (
-                      <button
-                        type="button"
-                        onClick={() => onRecordConsecutiveGoalDay(3)}
-                        data-testid="badge-action-complete-3d-goal"
-                        className="py-1.5 px-2.5 text-xs font-semibold bg-[#E6E2D8] text-[#141413] whitespace-nowrap"
-                      >
-                        Hit 3-Day Goal Streak
-                      </button>
-                    )}
-                  </div>
-                )}
-
                 {badge.id === 'helpful_notes' && (
                   <div className="flex flex-wrap items-center gap-2 pt-0.5">
                     <button
@@ -482,14 +426,6 @@ export const UserProfileBadgesCard: React.FC<UserProfileBadgesCardProps> = ({
                       className="flex-1 py-1.5 px-2.5 text-xs font-medium bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-800 inline-flex items-center justify-center gap-1 whitespace-nowrap"
                     >
                       <span>Write Helpful Note</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleQuickHelpfulNote}
-                      data-testid="badge-action-quick-helpful-note"
-                      className="py-1.5 px-2.5 text-xs font-semibold bg-[#E6E2D8] text-[#141413] whitespace-nowrap"
-                    >
-                      +1 Helpful Note
                     </button>
                   </div>
                 )}

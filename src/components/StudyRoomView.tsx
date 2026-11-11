@@ -1360,7 +1360,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       activeRoomCode,
       safeSub,
       safeNote,
-      elapsedSessionSeconds >= 60 ? verifiedMinutesSoFar : durationMinutes
+      elapsedSessionSeconds >= 60 ? verifiedMinutesSoFar : 0
     );
     if (!isRunning) {
       setIsRunning(true);
@@ -1771,10 +1771,11 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     dailyTargetMinutes,
     weeklyActivity: weeklyActivitySummary,
     storedSessions: mergedSessions,
-    studyNotes,
-    deskTimersMap: individualDeskTimersMap,
+    studyNotes: [],
+    deskTimersMap: undefined,
     currentUid,
     sortBy: weeklyRoomSortBy,
+    strictRealOnly: true,
   });
 
   const currentDayFocusBreakSummary = buildCurrentDayFocusVsBreakSummary({
@@ -1785,10 +1786,11 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       todayFocusMinutes + (onLogTopicFocusSession ? 0 : localAddedTodayMinutes),
     storedSessions: mergedSessions,
     intradayFocusBreakLogs,
-    deskTimersMap: individualDeskTimersMap,
+    deskTimersMap: undefined,
     liveRoomTimerElapsedSeconds: elapsedSessionSeconds,
     liveRoomTimerRunning: isRunning,
     currentUid,
+    strictRealOnly: true,
   });
 
   const focusHistory30DaySummary = buildFocusHistory30DaySummary({
@@ -1800,9 +1802,10 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     roomFilter: focusHistoryRoomFilter,
     weeklyActivity: weeklyActivitySummary,
     storedSessions: mergedSessions,
-    studyNotes,
-    deskTimersMap: individualDeskTimersMap,
+    studyNotes: [],
+    deskTimersMap: undefined,
     currentUid,
+    strictRealOnly: true,
   });
 
   const studyFocus7DayTrend = buildStudyFocus7DaySessionTrend({
@@ -1811,7 +1814,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     dailyTargetMinutes,
     weeklyActivity: weeklyActivitySummary,
     storedSessions: mergedSessions,
-    studyNotes,
+    studyNotes: [],
     activeRoomCode,
   });
 
@@ -1944,6 +1947,57 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 </strong>
               </div>
             </div>
+
+            {/* Verified Worked / Studied Time Ledger */}
+            <div
+              data-testid="study-room-verified-time-ledger"
+              className="p-3.5 rounded-lg bg-zinc-950/90 border border-emerald-500/30 grid grid-cols-2 sm:grid-cols-4 gap-3"
+            >
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                  Live Timer Elapsed
+                </div>
+                <div
+                  data-testid="study-room-ledger-live-elapsed"
+                  className="text-sm font-mono font-bold text-amber-300 tabular-nums mt-0.5"
+                >
+                  {formatStudyTimerHMS(elapsedSessionSeconds, true)}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                  Studied Today
+                </div>
+                <div
+                  data-testid="study-room-ledger-studied-today"
+                  className="text-sm font-mono font-bold text-emerald-400 tabular-nums mt-0.5"
+                >
+                  {todayFocusMinutes} mins ({Math.floor(todayFocusMinutes / 60)}h {todayFocusMinutes % 60}m)
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                  7-Day Studied Total
+                </div>
+                <div
+                  data-testid="study-room-ledger-7day-total"
+                  className="text-sm font-mono font-bold text-sky-400 tabular-nums mt-0.5"
+                >
+                  {weeklyActivitySummary?.totalFocusMinutes ?? todayFocusMinutes} mins
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                  Verified Sessions
+                </div>
+                <div
+                  data-testid="study-room-ledger-sessions-count"
+                  className="text-sm font-mono font-bold text-white tabular-nums mt-0.5"
+                >
+                  {mergedSessions.length} completed
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Right Live Multi-Scholar Video/Avatar Focus Grid Stage (7 cols) */}
@@ -1987,122 +2041,63 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
               </div>
             </div>
 
-            {/* 4-Tile Live Scholar Camera / Avatar Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {studyTogetherLobby.activeRoomPreset.activeScholarsPreview
-                .slice(0, 4)
-                .map((scholar) => {
-                  const currentUserDeskState =
-                    individualDeskTimersMap[currentUid] ||
-                    createIndividualStudyDeskPomodoroState({
-                      deskUid: currentUid,
-                      displayName: currentName,
-                      roomCode: activeRoomCode,
-                      subject: subject || `Studying: ${activeBook.title}`,
-                      initialMinutes: durationMinutes,
-                    });
-                  const currentUserPulseSpec =
-                    evaluateActiveStudyDeskPulseAnimationSpec({
-                      deskState: currentUserDeskState,
-                      isCurrentUserDesk: true,
-                      isRoomTimerRunning: isRunning,
-                      roomTimerRemainingSeconds: secondsLeft,
-                      roomTimerTotalSeconds: targetTotalSeconds,
-                    });
-                  const isCurrentUserPulsing =
-                    scholar.isCurrentUser && currentUserPulseSpec.isPulsing;
+            {/* Live Scholar Camera / Avatar Grid (Real Seated Users Only) */}
+            {desksInCurrentRoom.length === 0 ? (
+              <div className="p-8 rounded-lg border border-zinc-800/80 bg-zinc-950/80 text-center space-y-2">
+                <p className="text-sm font-semibold text-white">
+                  No scholars seated in {activeRoomCode} yet
+                </p>
+                <p className="text-xs text-zinc-400">
+                  Click &ldquo;+ Take Your Seat in Grid&rdquo; or &ldquo;Study Together now&rdquo; to sit at your desk and start your live verified study timer.
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {desksInCurrentRoom.slice(0, 4).map((desk) => {
+                  const isCurrentUser = desk.uid === currentUid;
                   return (
-                  <div
-                    key={scholar.id}
-                    data-testid={
-                      scholar.isCurrentUser
-                        ? 'live-grid-tile-current-user'
-                        : `live-grid-tile-${scholar.id}`
-                    }
-                    data-active-focus-pulse={
-                      isCurrentUserPulsing ? 'true' : 'false'
-                    }
-                    data-urgency-level={
-                      scholar.isCurrentUser
-                        ? currentUserPulseSpec.dataUrgencyLevel
-                        : 'none'
-                    }
-                    data-color-intensity={
-                      scholar.isCurrentUser
-                        ? String(currentUserPulseSpec.colorIntensityPercent)
-                        : '0'
-                    }
-                    className={`group relative rounded-lg overflow-hidden border aspect-[16/10] bg-zinc-950 flex flex-col justify-between p-3 transition-all ${
-                      scholar.isCurrentUser
-                        ? isCurrentUserPulsing
-                          ? `${
-                              currentUserPulseSpec.urgencyLevel === 'critical'
-                                ? 'border-rose-500/90 ring-1 ring-rose-500/40'
-                                : currentUserPulseSpec.urgencyLevel === 'warming'
-                                ? 'border-amber-400/90 ring-1 ring-amber-400/40'
-                                : 'border-emerald-400/90 ring-1 ring-emerald-400/40'
-                            } ${currentUserPulseSpec.cardPulseClassName}`
-                          : 'border-emerald-500/70 ring-1 ring-emerald-500/30'
-                        : 'border-zinc-800/90 hover:border-zinc-700'
-                    }`}
-                  >
-                    {/* Background Scholar Camera Stream or Curated Study Desk Feed */}
-                    <img
-                      src={scholar.videoThumbUrl}
-                      alt={`${scholar.displayName} studying in ${studyTogetherLobby.activeRoomPreset.shortTitle}`}
-                      className="absolute inset-0 w-full h-full object-cover opacity-55 group-hover:opacity-65 transition-opacity"
-                      loading="lazy"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-black/65" />
-
-                    {/* Top Row: Scholar Name + Flag + Individual Timer */}
-                    <div className="relative z-10 flex items-center justify-between gap-2">
-                      <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/75 border border-white/10 text-xs font-semibold text-white truncate">
-                        <span>{scholar.countryFlag}</span>
-                        <span className="truncate">{scholar.displayName}</span>
-                      </div>
-                      <span className="px-2 py-0.5 rounded bg-black/75 border border-white/10 text-[11px] font-mono text-emerald-300 tabular-nums shrink-0">
-                        {scholar.timerDisplay}
-                      </span>
-                    </div>
-
-                    {/* Bottom Row: Current Study Goal + Camera/Mic Indicators */}
-                    <div className="relative z-10 space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300/90">
-                          {scholar.statusLabel}
+                    <div
+                      key={desk.uid}
+                      data-testid={
+                        isCurrentUser
+                          ? 'live-grid-tile-current-user'
+                          : `live-grid-tile-${desk.uid}`
+                      }
+                      className={`group relative rounded-lg overflow-hidden border aspect-[16/10] bg-zinc-950 flex flex-col justify-between p-3 transition-all ${
+                        isCurrentUser
+                          ? 'border-emerald-500/70 ring-1 ring-emerald-500/30'
+                          : 'border-zinc-800/90 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="relative z-10 flex items-center justify-between gap-2">
+                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/75 border border-white/10 text-xs font-semibold text-white truncate">
+                          <span className="truncate">{desk.displayName}</span>
+                        </div>
+                        <span className="px-2 py-0.5 rounded bg-black/75 border border-white/10 text-[11px] font-mono text-emerald-300 tabular-nums shrink-0">
+                          {isCurrentUser
+                            ? formatStudyTimerHMS(elapsedSessionSeconds, true)
+                            : `${desk.timerMinutes}m target`}
                         </span>
-                        <div className="flex items-center gap-1">
-                          <span
-                            title={scholar.micMuted ? 'Microphone Muted for Silent Focus' : 'Mic On'}
-                            className="p-1 rounded bg-black/70 text-zinc-300"
-                          >
-                            {scholar.micMuted ? (
-                              <MicOff className="w-3 h-3 text-rose-400" />
-                            ) : (
-                              <Mic className="w-3 h-3 text-emerald-400" />
-                            )}
-                          </span>
-                          <span
-                            title={scholar.cameraActive ? 'Camera Desk Active' : 'Avatar Mode'}
-                            className="p-1 rounded bg-black/70 text-zinc-300"
-                          >
-                            {scholar.cameraActive ? (
-                              <Video className="w-3 h-3 text-emerald-400" />
-                            ) : (
-                              <VideoOff className="w-3 h-3 text-zinc-400" />
-                            )}
+                      </div>
+                      <div className="relative z-10 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300/90">
+                            {isCurrentUser
+                              ? isRunning
+                                ? 'Live Timer Running'
+                                : 'Seated · Timer Paused'
+                              : 'Seated in Room'}
                           </span>
                         </div>
+                        <p className="text-xs font-medium text-zinc-100 truncate">
+                          {desk.subject}
+                        </p>
                       </div>
-                      <p className="text-xs font-medium text-zinc-100 truncate">
-                        {scholar.subject}
-                      </p>
                     </div>
-                  </div>
                   );
                 })}
-            </div>
+              </div>
+            )}
 
             {/* Stage Footer Bar: Quick Seat Status + Room Participants */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-zinc-400">
@@ -2263,7 +2258,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                     }`}
                     className="px-2.5 py-1 text-xs font-mono bg-[#0A0A0C] hover:bg-zinc-900 text-zinc-200 border border-zinc-800 rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
                   >
-                    {delta > 0 ? `+${delta}m` : `${delta}m`}
+                    Target {delta > 0 ? `+${delta}m` : `${delta}m`}
                   </button>
                 ))}
               </div>
@@ -3223,7 +3218,6 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         onStartPauseDesk={handleStartPauseIndividualDeskPomodoro}
         onResetDesk={handleResetIndividualDeskPomodoro}
         onApplyDeskCustomDuration={handleApplyIndividualDeskCustomDuration}
-        onSelectDeskUrgencyStage={handleSelectIndividualDeskUrgencyStage}
         onStartAllDesks={handleStartAllIndividualDesks}
         onPauseAllDesks={handlePauseAllIndividualDesks}
         onResetAllDesks={handleResetAllIndividualDesks}
@@ -4256,7 +4250,6 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                       onStartPause={handleStartPauseIndividualDeskPomodoro}
                       onReset={handleResetIndividualDeskPomodoro}
                       onApplyCustomDuration={handleApplyIndividualDeskCustomDuration}
-                      onSelectUrgencyStage={handleSelectIndividualDeskUrgencyStage}
                       compact={true}
                     />
                   );

@@ -136,70 +136,6 @@ export const StudyRoomCurrentDayFocusBreakRechartsCard: React.FC<
       ? 'cumulativeBreakMinutes'
       : 'breakMinutes';
 
-  const handleQuickPresetClick = (
-    focusMins: number,
-    breakMins: number,
-    cadenceLabel: string
-  ) => {
-    const targetRoom =
-      selectedRoomFilter !== 'ALL'
-        ? normalizeStudyRoomCode(selectedRoomFilter)
-        : normalizeStudyRoomCode(activeRoomCode);
-
-    onLogIntradayFocusBreakSession({
-      slotKey: inspectedPoint.slotKey,
-      focusMinutes: focusMins,
-      breakMinutes: breakMins,
-      roomCode: targetRoom,
-      topic:
-        sanitizeSafeText(topicInput, 80) ||
-        `Focused Sprint in ${targetRoom}`,
-      cadenceLabel,
-    });
-
-    setRecentToast(
-      `Logged +${focusMins}m Focus / +${breakMins}m Break at ${inspectedPoint.slotLabel} (${targetRoom})`
-    );
-    window.setTimeout(() => {
-      setRecentToast(null);
-    }, 3500);
-  };
-
-  const handleCustomSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const clampedFocus = Math.min(
-      180,
-      Math.max(5, Math.round(Number(focusMinutesInput) || 25))
-    );
-    const clampedBreak = Math.min(
-      90,
-      Math.max(0, Math.round(Number(breakMinutesInput) || 5))
-    );
-    const targetRoom =
-      selectedRoomFilter !== 'ALL'
-        ? normalizeStudyRoomCode(selectedRoomFilter)
-        : normalizeStudyRoomCode(activeRoomCode);
-    const cleanTopic =
-      sanitizeSafeText(topicInput, 80) ||
-      'System Design & Deep Focus Sprint';
-
-    onLogIntradayFocusBreakSession({
-      slotKey: inspectedPoint.slotKey,
-      focusMinutes: clampedFocus,
-      breakMinutes: clampedBreak,
-      roomCode: targetRoom,
-      topic: cleanTopic,
-      cadenceLabel: `${clampedFocus}m Focus · ${clampedBreak}m Break`,
-    });
-
-    setRecentToast(
-      `+${clampedFocus}m Focus & +${clampedBreak}m Break logged at ${inspectedPoint.slotLabel}`
-    );
-    window.setTimeout(() => {
-      setRecentToast(null);
-    }, 3500);
-  };
-
   return (
     <section
       id="study-room-current-day-focus-vs-break-section"
@@ -637,146 +573,39 @@ export const StudyRoomCurrentDayFocusBreakRechartsCard: React.FC<
           </div>
         </div>
 
-        {/* Right 5 Cols: Quick Intraday Focus vs. Break Logger */}
-        <form
-          onSubmit={handleCustomSubmit}
+        {/* Right 5 Cols: Verified Intraday Focus Accounting Notice */}
+        <div
           className="lg:col-span-5 p-4 rounded-lg bg-[#050507] border border-zinc-800/80 flex flex-col justify-between space-y-3"
           data-testid="current-day-focus-break-log-form"
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-white flex items-center gap-1.5 whitespace-nowrap">
-              <Coffee className="w-3.5 h-3.5 text-amber-300 shrink-0" />
-              <span>Log Focus &amp; Break Block</span>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-white">
+              Verified Intraday Timer Sync
             </span>
-            <div className="flex flex-wrap items-center gap-1">
-              {CURRENT_DAY_FOCUS_BREAK_QUICK_PRESETS.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() =>
-                    handleQuickPresetClick(
-                      preset.focusMinutes,
-                      preset.breakMinutes,
-                      preset.cadenceLabel
-                    )
-                  }
-                  data-testid={`current-day-quick-preset-${preset.id}-btn`}
-                  className="px-2 py-0.5 text-[11px] font-mono bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-300 border border-emerald-500/40 rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                >
-                  {preset.shortLabel}
-                </button>
-              ))}
-            </div>
+            <span className="text-[11px] font-mono text-emerald-400">
+              Today: {summary.totalFocusMinutes}m Focus
+            </span>
           </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            <div>
-              <label
-                htmlFor="current-day-slot-select"
-                className="block text-[10px] font-mono text-zinc-400 mb-1"
-              >
-                Time Slot
-              </label>
-              <select
-                id="current-day-slot-select"
-                value={selectedSlotKey}
-                onChange={(e) => setSelectedSlotKey(e.target.value)}
-                data-testid="current-day-slot-select"
-                className="w-full px-2 py-1.5 text-xs font-mono bg-[#0A0A0C] border border-zinc-800 rounded text-white"
-              >
-                {INTRADAY_FOCUS_BREAK_TIME_SLOTS.map((slot) => (
-                  <option key={slot.slotKey} value={slot.slotKey}>
-                    {slot.slotLabel}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label
-                htmlFor="current-day-focus-minutes-input"
-                className="block text-[10px] font-mono text-emerald-400 mb-1"
-              >
-                Focus (m)
-              </label>
-              <input
-                id="current-day-focus-minutes-input"
-                type="number"
-                min={5}
-                max={180}
-                value={focusMinutesInput}
-                onChange={(e) => setFocusMinutesInput(e.target.value)}
-                data-testid="current-day-focus-minutes-input"
-                className="w-full px-2 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="current-day-break-minutes-input"
-                className="block text-[10px] font-mono text-amber-300 mb-1"
-              >
-                Break (m)
-              </label>
-              <input
-                id="current-day-break-minutes-input"
-                type="number"
-                min={0}
-                max={90}
-                value={breakMinutesInput}
-                onChange={(e) => setBreakMinutesInput(e.target.value)}
-                data-testid="current-day-break-minutes-input"
-                className="w-full px-2 py-1.5 text-xs font-mono tabular-nums bg-[#0A0A0C] border border-zinc-800 rounded text-white"
-              />
-            </div>
-
-            <div>
-              <label
-                htmlFor="current-day-topic-input"
-                className="block text-[10px] font-mono text-zinc-400 mb-1"
-              >
-                Subject
-              </label>
-              <input
-                id="current-day-topic-input"
-                type="text"
-                value={topicInput}
-                onChange={(e) => setTopicInput(e.target.value)}
-                data-testid="current-day-topic-input"
-                placeholder="Study topic..."
-                className="w-full px-2 py-1.5 text-xs bg-[#0A0A0C] border border-zinc-800 rounded text-white"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between gap-2 pt-1">
-            {recentToast ? (
-              <span
-                className="text-[11px] font-mono text-emerald-400 flex items-center gap-1 truncate"
-                data-testid="current-day-focus-break-toast"
-              >
-                <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                <span className="truncate">{recentToast}</span>
-              </span>
-            ) : (
-              <span className="text-[11px] font-mono text-zinc-400 truncate">
-                Adds session into {inspectedPoint.slotLabel} (
-                {selectedRoomFilter === 'ALL'
-                  ? activeRoomCode
-                  : selectedRoomFilter}
-                )
-              </span>
-            )}
-            <button
-              type="submit"
-              data-testid="current-day-focus-break-submit-btn"
-              className="px-3.5 py-1.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0"
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            Intraday time slots update automatically from your live Study Room timer. Quick-add buttons are disabled so nobody can click repeatedly to inflate focus minutes without studying.
+          </p>
+          <div className="flex items-center justify-between gap-2 pt-1 text-[11px] font-mono text-zinc-300 border-t border-zinc-900">
+            <span>Inspect Time Slot:</span>
+            <select
+              id="current-day-slot-select"
+              value={selectedSlotKey}
+              onChange={(e) => setSelectedSlotKey(e.target.value)}
+              data-testid="current-day-slot-select"
+              className="px-2 py-1 text-xs font-mono bg-[#0A0A0C] border border-zinc-800 rounded text-white"
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>Log Session &amp; Break</span>
-            </button>
+              {INTRADAY_FOCUS_BREAK_TIME_SLOTS.map((slot) => (
+                <option key={slot.slotKey} value={slot.slotKey}>
+                  {slot.slotLabel}
+                </option>
+              ))}
+            </select>
           </div>
-        </form>
+        </div>
       </div>
     </section>
   );

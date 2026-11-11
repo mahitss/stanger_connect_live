@@ -3255,6 +3255,7 @@ export function buildWeeklyProductivityDistribution(params: {
   activeDeskSubject?: string;
   activeRoomCode?: string;
   currentUid?: string;
+  strictRealOnly?: boolean;
 }): WeeklyTopicDistributionSummary {
   const validDateKeys = new Set<string>();
   for (let i = 0; i < 7; i++) {
@@ -3336,7 +3337,7 @@ export function buildWeeklyProductivityDistribution(params: {
   }
 
   // 3. If user is currently at a live Study Desk with a subject, ensure that topic is represented
-  if (params.activeDeskSubject && params.activeDeskSubject.trim()) {
+  if (!params.strictRealOnly && params.activeDeskSubject && params.activeDeskSubject.trim()) {
     const activeKey = normalizeStudyTopicName(params.activeDeskSubject).toLowerCase();
     if (!byTopic.has(activeKey)) {
       addTopicEntry(
@@ -3360,19 +3361,28 @@ export function buildWeeklyProductivityDistribution(params: {
   const unallocatedMinutes = Math.max(0, targetTotal - explicitSum);
 
   if (unallocatedMinutes > 0) {
-    let allocatedSoFar = 0;
-    DEFAULT_STUDY_ROOM_TOPICS.forEach((preset, idx) => {
-      const isLast = idx === DEFAULT_STUDY_ROOM_TOPICS.length - 1;
-      const chunk = isLast
-        ? Math.max(5, unallocatedMinutes - allocatedSoFar)
-        : Math.max(
-            5,
-            Math.round((unallocatedMinutes * preset.defaultShareWeight) / 5) * 5
-          );
-      allocatedSoFar += chunk;
-      const estimatedSessions = Math.max(1, Math.round(chunk / 30));
-      addTopicEntry(preset.topic, chunk, preset.roomCode, estimatedSessions);
-    });
+    if (params.strictRealOnly) {
+      addTopicEntry(
+        params.activeDeskSubject || 'Verified Study Session',
+        unallocatedMinutes,
+        params.activeRoomCode || 'STUDY-GLOBAL',
+        1
+      );
+    } else {
+      let allocatedSoFar = 0;
+      DEFAULT_STUDY_ROOM_TOPICS.forEach((preset, idx) => {
+        const isLast = idx === DEFAULT_STUDY_ROOM_TOPICS.length - 1;
+        const chunk = isLast
+          ? Math.max(5, unallocatedMinutes - allocatedSoFar)
+          : Math.max(
+              5,
+              Math.round((unallocatedMinutes * preset.defaultShareWeight) / 5) * 5
+            );
+        allocatedSoFar += chunk;
+        const estimatedSessions = Math.max(1, Math.round(chunk / 30));
+        addTopicEntry(preset.topic, chunk, preset.roomCode, estimatedSessions);
+      });
+    }
   }
 
   const sortedRaw = Array.from(byTopic.values()).sort((a, b) => {
@@ -20852,6 +20862,7 @@ export function buildWeeklyFocusTimeByRoomCodeSummary(params: {
   deskTimersMap?: Record<string, IndividualStudyDeskPomodoroState>;
   currentUid?: string;
   sortBy?: WeeklyRoomFocusSortOrder;
+  strictRealOnly?: boolean;
 }): WeeklyFocusByRoomCodeSummary {
   const safeTodayKey =
     sanitizeSafeText(params.todayDateKey || formatDateKey(new Date()), 16) ||
@@ -20979,10 +20990,14 @@ export function buildWeeklyFocusTimeByRoomCodeSummary(params: {
   }
 
   // 4. Reconcile with weekly activity total so the current week's bar chart is populated and consistent
-  const weeklyTotalFromSummary =
-    params.weeklyActivity &&
-    typeof params.weeklyActivity.totalFocusMinutes === 'number' &&
-    params.weeklyActivity.totalFocusMinutes > 0
+  const weeklyTotalFromSummary = params.strictRealOnly
+    ? params.weeklyActivity &&
+      typeof params.weeklyActivity.totalFocusMinutes === 'number'
+      ? Math.max(0, Math.round(params.weeklyActivity.totalFocusMinutes))
+      : Math.max(0, Math.round(Number(params.todayFocusMinutes) || 0))
+    : params.weeklyActivity &&
+      typeof params.weeklyActivity.totalFocusMinutes === 'number' &&
+      params.weeklyActivity.totalFocusMinutes > 0
       ? params.weeklyActivity.totalFocusMinutes
       : Math.max(
           240,
@@ -20996,43 +21011,64 @@ export function buildWeeklyFocusTimeByRoomCodeSummary(params: {
   const unallocatedMinutes = Math.max(0, weeklyTotalFromSummary - explicitSum);
 
   if (unallocatedMinutes > 0) {
-    // Ensure the activeRoomCode is always included in the baseline distribution
-    const baselineRooms = [...DEFAULT_WEEKLY_STUDY_ROOMS_BASELINE];
-    const hasActiveInBaseline = baselineRooms.some(
-      (b) => b.roomCode === normalizedActiveRoom
-    );
-    if (!hasActiveInBaseline) {
-      baselineRooms[0] = {
-        roomCode: normalizedActiveRoom,
-        roomLabel: `${normalizedActiveRoom} · Active Study Sanctuary`,
-        defaultTopic: 'System Architecture & Deep Work',
-        defaultShareWeight: 0.34,
-      };
-    }
+    if (params.strictRealOnly) {
+      addRoomFocus(
+        normalizedActiveRoom,
+        unallocatedMinutes,
+        'Verified Focus Session',
+        1
+      );
+    } else {
+      // Ensure the activeRoomCode is always included in the baseline distribution
+      const baselineRooms = [...DEFAULT_WEEKLY_STUDY_ROOMS_BASELINE];
+      const hasActiveInBaseline = baselineRooms.some(
+        (b) => b.roomCode === normalizedActiveRoom
+      );
+      if (!hasActiveInBaseline) {
+        baselineRooms[0] = {
+          roomCode: normalizedActiveRoom,
+          roomLabel: `${normalizedActiveRoom} · Active Study Sanctuary`,
+          defaultTopic: 'System Architecture & Deep Work',
+          defaultShareWeight: 0.34,
+        };
+      }
 
-    let allocatedSoFar = 0;
-    baselineRooms.forEach((preset, idx) => {
-      const isLast = idx === baselineRooms.length - 1;
-      const chunk = isLast
-        ? Math.max(10, unallocatedMinutes - allocatedSoFar)
-        : Math.max(
-            10,
-            Math.round((unallocatedMinutes * preset.defaultShareWeight) / 5) * 5
-          );
-      allocatedSoFar += chunk;
-      const estimatedSessions = Math.max(1, Math.round(chunk / 35));
-      addRoomFocus(preset.roomCode, chunk, preset.defaultTopic, estimatedSessions);
-    });
+      let allocatedSoFar = 0;
+      baselineRooms.forEach((preset, idx) => {
+        const isLast = idx === baselineRooms.length - 1;
+        const chunk = isLast
+          ? Math.max(10, unallocatedMinutes - allocatedSoFar)
+          : Math.max(
+              10,
+              Math.round((unallocatedMinutes * preset.defaultShareWeight) / 5) * 5
+            );
+        allocatedSoFar += chunk;
+        const estimatedSessions = Math.max(1, Math.round(chunk / 35));
+        addRoomFocus(preset.roomCode, chunk, preset.defaultTopic, estimatedSessions);
+      });
+    }
   }
 
   // Ensure activeRoomCode always appears in the chart even if 0 unallocated minutes
   if (!byRoom.has(normalizedActiveRoom)) {
-    addRoomFocus(
-      normalizedActiveRoom,
-      Math.max(25, Math.round(Number(params.todayFocusMinutes) || 25)),
-      'System Architecture & Deep Work',
-      1
-    );
+    if (params.strictRealOnly) {
+      const realTodayMins = Math.max(0, Math.round(Number(params.todayFocusMinutes) || 0));
+      if (realTodayMins > 0) {
+        addRoomFocus(
+          normalizedActiveRoom,
+          realTodayMins,
+          'Verified Focus Session',
+          1
+        );
+      }
+    } else {
+      addRoomFocus(
+        normalizedActiveRoom,
+        Math.max(25, Math.round(Number(params.todayFocusMinutes) || 25)),
+        'System Architecture & Deep Work',
+        1
+      );
+    }
   }
 
   const rawList = Array.from(byRoom.values());
@@ -21571,6 +21607,7 @@ export function buildFocusHistory30DaySummary(params: {
   }>;
   deskTimersMap?: Record<string, IndividualStudyDeskPomodoroState>;
   currentUid?: string;
+  strictRealOnly?: boolean;
 }): FocusHistory30DaySummary {
   const normalizedActiveRoom =
     normalizeStudyRoomCode(params.activeRoomCode || 'STUDY-204') || 'STUDY-204';
@@ -21608,36 +21645,38 @@ export function buildFocusHistory30DaySummary(params: {
   ]);
 
   orderedDateKeys.forEach((dateKey, idx) => {
-    const blueprint =
-      FOCUS_HISTORY_SEED_BLUEPRINTS[idx % FOCUS_HISTORY_SEED_BLUEPRINTS.length];
-    const seedRoom =
-      blueprint.roomSuffix === 'ACTIVE'
-        ? normalizedActiveRoom
-        : blueprint.roomSuffix;
-    allRoomsSet.add(seedRoom);
-
     const minutesByRoom = new Map<string, number>();
     const sessionsByRoom = new Map<string, number>();
     const topicByRoom = new Map<string, string>();
 
-    minutesByRoom.set(seedRoom, blueprint.minutes);
-    sessionsByRoom.set(seedRoom, blueprint.sessions);
-    topicByRoom.set(seedRoom, blueprint.topic);
+    if (!params.strictRealOnly) {
+      const blueprint =
+        FOCUS_HISTORY_SEED_BLUEPRINTS[idx % FOCUS_HISTORY_SEED_BLUEPRINTS.length];
+      const seedRoom =
+        blueprint.roomSuffix === 'ACTIVE'
+          ? normalizedActiveRoom
+          : blueprint.roomSuffix;
+      allRoomsSet.add(seedRoom);
 
-    // Also add a secondary room on every 3rd day so room filters have multi-day depth
-    const secondaryRoom =
-      seedRoom === normalizedActiveRoom ? 'ROOM-ALGO' : normalizedActiveRoom;
-    const secondaryMins = 25 + ((idx * 7) % 30);
-    minutesByRoom.set(
-      secondaryRoom,
-      (minutesByRoom.get(secondaryRoom) || 0) + secondaryMins
-    );
-    sessionsByRoom.set(
-      secondaryRoom,
-      (sessionsByRoom.get(secondaryRoom) || 0) + 1
-    );
-    if (!topicByRoom.has(secondaryRoom)) {
-      topicByRoom.set(secondaryRoom, 'Structured Pomodoro Sprint');
+      minutesByRoom.set(seedRoom, blueprint.minutes);
+      sessionsByRoom.set(seedRoom, blueprint.sessions);
+      topicByRoom.set(seedRoom, blueprint.topic);
+
+      // Also add a secondary room on every 3rd day so room filters have multi-day depth
+      const secondaryRoom =
+        seedRoom === normalizedActiveRoom ? 'ROOM-ALGO' : normalizedActiveRoom;
+      const secondaryMins = 25 + ((idx * 7) % 30);
+      minutesByRoom.set(
+        secondaryRoom,
+        (minutesByRoom.get(secondaryRoom) || 0) + secondaryMins
+      );
+      sessionsByRoom.set(
+        secondaryRoom,
+        (sessionsByRoom.get(secondaryRoom) || 0) + 1
+      );
+      if (!topicByRoom.has(secondaryRoom)) {
+        topicByRoom.set(secondaryRoom, 'Structured Pomodoro Sprint');
+      }
     }
 
     bucketsByDate.set(dateKey, {
@@ -22905,6 +22944,7 @@ export function buildCurrentDayFocusVsBreakSummary(params: {
   liveRoomTimerElapsedSeconds?: number;
   liveRoomTimerRunning?: boolean;
   currentUid?: string;
+  strictRealOnly?: boolean;
 }): CurrentDayFocusBreakSummary {
   const normalizedActiveRoom =
     normalizeStudyRoomCode(params.activeRoomCode || 'STUDY-1') || 'STUDY-1';
@@ -23038,24 +23078,26 @@ export function buildCurrentDayFocusVsBreakSummary(params: {
     },
   ];
 
-  for (const b of baselineSlots) {
-    const bucket = bucketsBySlot.get(b.slotKey);
-    if (!bucket) continue;
-    allRoomsSet.add(b.roomCode);
-    bucket.focusByRoom.set(
-      b.roomCode,
-      (bucket.focusByRoom.get(b.roomCode) || 0) + b.focusMins
-    );
-    bucket.breakByRoom.set(
-      b.roomCode,
-      (bucket.breakByRoom.get(b.roomCode) || 0) + b.breakMins
-    );
-    bucket.sessionsByRoom.set(
-      b.roomCode,
-      (bucket.sessionsByRoom.get(b.roomCode) || 0) + b.sessions
-    );
-    bucket.topicByRoom.set(b.roomCode, b.topic);
-    bucket.cadenceByRoom.set(b.roomCode, b.cadence);
+  if (!params.strictRealOnly) {
+    for (const b of baselineSlots) {
+      const bucket = bucketsBySlot.get(b.slotKey);
+      if (!bucket) continue;
+      allRoomsSet.add(b.roomCode);
+      bucket.focusByRoom.set(
+        b.roomCode,
+        (bucket.focusByRoom.get(b.roomCode) || 0) + b.focusMins
+      );
+      bucket.breakByRoom.set(
+        b.roomCode,
+        (bucket.breakByRoom.get(b.roomCode) || 0) + b.breakMins
+      );
+      bucket.sessionsByRoom.set(
+        b.roomCode,
+        (bucket.sessionsByRoom.get(b.roomCode) || 0) + b.sessions
+      );
+      bucket.topicByRoom.set(b.roomCode, b.topic);
+      bucket.cadenceByRoom.set(b.roomCode, b.cadence);
+    }
   }
 
   // Layer in today's storedSessions

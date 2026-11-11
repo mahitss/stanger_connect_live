@@ -4096,22 +4096,14 @@ export default function App() {
 
     const nextIdentity: AccountIdentity = {
       ...preset.identity,
-      streakCount: Math.max(currentIdentity?.streakCount ?? 0, preset.identity.streakCount),
-      participationPoints: Math.max(
-        currentIdentity?.participationPoints ?? 0,
-        preset.identity.participationPoints
-      ),
+      streakCount: currentIdentity?.streakCount ?? 0,
+      participationPoints: currentIdentity?.participationPoints ?? 0,
       sessionToken: currentIdentity?.sessionToken,
     };
 
     setAccountSession(nextIdentity);
     setDailyTargetMinutes(preset.productivity.dailyTargetMinutes);
     setTargetInputMinutes(String(preset.productivity.dailyTargetMinutes));
-    const nextCompleted = Math.max(
-      dailyCompletedMinutes,
-      preset.productivity.dailyCompletedMinutes
-    );
-    setDailyCompletedMinutes(nextCompleted);
     setActiveStudyRoomCode(preset.productivity.studyRoomCode);
     setUserMood(preset.productivity.mood);
     userMoodRef.current = preset.productivity.mood;
@@ -4160,7 +4152,7 @@ export default function App() {
         JSON.stringify({
           dateKey: todayDateStr,
           targetMinutes: preset.productivity.dailyTargetMinutes,
-          completedMinutes: nextCompleted,
+          completedMinutes: dailyCompletedMinutes,
         })
       );
       localStorage.setItem('mr_stranger_user_mood_v1', preset.productivity.mood);
@@ -6261,10 +6253,11 @@ export default function App() {
     todayDateKey: todayDateStr,
     totalWeeklyFocusMinutes: weeklyActivitySummary.totalFocusMinutes,
     storedSessions: topicFocusSessions,
-    studyNotes,
+    studyNotes: [],
     activeDeskSubject: myFocusStatus.subject || undefined,
     activeRoomCode: activeStudyRoomCode,
     currentUid: currentIdentity.uid,
+    strictRealOnly: true,
   });
 
   const userBadgeSummary = evaluateUserBadges({
@@ -6541,12 +6534,16 @@ export default function App() {
     });
   };
 
-  const handleRecordConsecutiveGoalDay = (daysToEnsure?: number) => {
+  const handleRecordConsecutiveGoalDay = (_daysToEnsure?: number) => {
+    if (dailyCompletedMinutes < dailyTargetMinutes) {
+      setActivePage('study');
+      return;
+    }
     const res = recordConsecutiveGoalHitDay({
       todayDateKey: todayDateStr,
       dailyTargetMinutes,
       storedHistory: weeklyActivityHistory,
-      daysToEnsure,
+      daysToEnsure: 1,
     });
     setWeeklyActivityHistory(res.updatedHistory);
     localStorage.setItem(
@@ -6575,7 +6572,7 @@ export default function App() {
       roomCode: activeStudyRoomCode,
       subject,
       rawNote,
-      focusMinutes: 25,
+      focusMinutes: Math.max(1, dailyCompletedMinutes || 1),
     });
     if (!check.valid || !check.noteRecord) {
       return { valid: false, error: check.error };
