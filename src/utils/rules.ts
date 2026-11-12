@@ -29603,3 +29603,237 @@ export function computePomodoroVisualCountdownMetrics(params: {
   };
 }
 
+// --- Instagram-Style Request -> Accept -> Click Profile -> Open Chat Engine ---
+export interface ConnectionRequestDoc {
+  id: string;
+  fromUid: string;
+  fromName: string;
+  toUid: string;
+  toName: string;
+  status: 'pending' | 'accepted' | 'declined';
+  note: string;
+}
+
+export interface DirectMessageDoc {
+  id: string;
+  senderUid: string;
+  senderName: string;
+  receiverUid: string;
+  text: string;
+  timestamp: number;
+}
+
+export interface InstagramChatRequestItem {
+  requestId: string;
+  uid: string;
+  displayName: string;
+  handle: string;
+  avatarInitials: string;
+  note: string;
+  isOnline: boolean;
+  direction: 'incoming' | 'outgoing';
+}
+
+export interface InstagramAcceptedProfileItem {
+  uid: string;
+  displayName: string;
+  handle: string;
+  avatarInitials: string;
+  bio: string;
+  mood: string | null;
+  isOnline: boolean;
+  messageCount: number;
+  lastMessagePreview: string;
+  lastMessageTimestamp: number;
+}
+
+export interface InstagramChatModeEvaluation {
+  incomingPendingRequests: InstagramChatRequestItem[];
+  outgoingPendingRequests: InstagramChatRequestItem[];
+  acceptedProfiles: InstagramAcceptedProfileItem[];
+  isChatBoxOpen: boolean;
+  activeOpenChatProfile: InstagramAcceptedProfileItem | null;
+  activeConversationMessages: DirectMessageDoc[];
+}
+
+export function formatInstagramStyleHandle(displayName: string, fallbackUid: string): string {
+  const cleaned = String(displayName || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  if (cleaned.length >= 2) {
+    return `@${cleaned.slice(0, 24)}`;
+  }
+  const cleanUid = String(fallbackUid || 'scholar')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toLowerCase()
+    .slice(0, 10);
+  return `@${cleanUid || 'scholar'}`;
+}
+
+export function deriveAvatarInitials(displayName: string): string {
+  const parts = String(displayName || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (parts.length === 0) return 'MS';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
+
+export function evaluateInstagramStyleChatModeState(params: {
+  currentUid: string;
+  selectedProfileUid: string;
+  requests: ConnectionRequestDoc[];
+  onlinePeers: Array<{
+    uid: string;
+    displayName: string;
+    bio?: string | null;
+    mood?: string | null;
+  }>;
+  messages: DirectMessageDoc[];
+}): InstagramChatModeEvaluation {
+  const currentUid = String(params.currentUid || '').trim();
+  const selectedProfileUid = String(params.selectedProfileUid || '').trim();
+  const safeRequests = Array.isArray(params.requests) ? params.requests : [];
+  const safePeers = Array.isArray(params.onlinePeers) ? params.onlinePeers : [];
+  const safeMessages = Array.isArray(params.messages) ? params.messages : [];
+
+  const peerMap = new Map<
+    string,
+    { uid: string; displayName: string; bio?: string | null; mood?: string | null }
+  >();
+  for (const peer of safePeers) {
+    if (peer && typeof peer.uid === 'string' && peer.uid !== currentUid) {
+      peerMap.set(peer.uid, peer);
+    }
+  }
+
+  const incomingPendingRequests: InstagramChatRequestItem[] = [];
+  const outgoingPendingRequests: InstagramChatRequestItem[] = [];
+  const acceptedPartnerMap = new Map<string, { uid: string; displayName: string; note: string }>();
+
+  for (const req of safeRequests) {
+    if (!req || typeof req.fromUid !== 'string' || typeof req.toUid !== 'string') {
+      continue;
+    }
+    const involvesMe = req.fromUid === currentUid || req.toUid === currentUid;
+    if (!involvesMe) continue;
+
+    const isIncoming = req.toUid === currentUid;
+    const partnerUid = isIncoming ? req.fromUid : req.toUid;
+    if (!partnerUid || partnerUid === currentUid) continue;
+
+    const livePeer = peerMap.get(partnerUid);
+    const partnerName =
+      (isIncoming ? req.fromName : req.toName) ||
+      livePeer?.displayName ||
+      'Scholar';
+
+    if (req.status === 'accepted') {
+      acceptedPartnerMap.set(partnerUid, {
+        uid: partnerUid,
+        displayName: partnerName,
+        note: req.note || '',
+      });
+    } else if (req.status === 'pending') {
+      const item: InstagramChatRequestItem = {
+        requestId: req.id,
+        uid: partnerUid,
+        displayName: partnerName,
+        handle: formatInstagramStyleHandle(partnerName, partnerUid),
+        avatarInitials: deriveAvatarInitials(partnerName),
+        note: req.note || 'Requested to connect & chat with you.',
+        isOnline: peerMap.has(partnerUid),
+        direction: isIncoming ? 'incoming' : 'outgoing',
+      };
+      if (isIncoming) {
+        incomingPendingRequests.push(item);
+      } else {
+        outgoingPendingRequests.push(item);
+      }
+    }
+  }
+
+  const acceptedProfiles: InstagramAcceptedProfileItem[] = Array.from(
+    acceptedPartnerMap.values()
+  ).map((partner) => {
+    const livePeer = peerMap.get(partner.uid);
+    const threadMessages = safeMessages
+      .filter(
+        (m) =>
+          (m.senderUid === currentUid && m.receiverUid === partner.uid) ||
+          (m.senderUid === partner.uid && m.receiverUid === currentUid)
+      )
+      .sort((a, b) => a.timestamp - b.timestamp);
+    const lastMsg =
+      threadMessages.length > 0
+        ? threadMessages[threadMessages.length - 1]
+        : null;
+
+    return {
+      uid: partner.uid,
+      displayName: livePeer?.displayName || partner.displayName,
+      handle: formatInstagramStyleHandle(
+        livePeer?.displayName || partner.displayName,
+        partner.uid
+      ),
+      avatarInitials: deriveAvatarInitials(
+        livePeer?.displayName || partner.displayName
+      ),
+      bio:
+        livePeer?.bio?.trim() ||
+        partner.note?.trim() ||
+        'Accepted connection · Click profile to open direct chat',
+      mood: livePeer?.mood?.trim() || null,
+      isOnline: Boolean(livePeer),
+      messageCount: threadMessages.length,
+      lastMessagePreview: lastMsg
+        ? lastMsg.text
+        : 'Request accepted · Tap profile to start chatting',
+      lastMessageTimestamp: lastMsg ? lastMsg.timestamp : 0,
+    };
+  });
+
+  // Sort accepted profiles by most recent message first, then online status
+  acceptedProfiles.sort((a, b) => {
+    if (b.lastMessageTimestamp !== a.lastMessageTimestamp) {
+      return b.lastMessageTimestamp - a.lastMessageTimestamp;
+    }
+    if (a.isOnline !== b.isOnline) {
+      return a.isOnline ? -1 : 1;
+    }
+    return a.displayName.localeCompare(b.displayName);
+  });
+
+  const activeOpenChatProfile =
+    selectedProfileUid.length > 0
+      ? acceptedProfiles.find((p) => p.uid === selectedProfileUid) || null
+      : null;
+
+  const isChatBoxOpen = activeOpenChatProfile !== null;
+
+  const activeConversationMessages = isChatBoxOpen
+    ? safeMessages
+        .filter(
+          (m) =>
+            (m.senderUid === currentUid &&
+              m.receiverUid === activeOpenChatProfile.uid) ||
+            (m.senderUid === activeOpenChatProfile.uid &&
+              m.receiverUid === currentUid)
+        )
+        .sort((a, b) => a.timestamp - b.timestamp)
+    : [];
+
+  return {
+    incomingPendingRequests,
+    outgoingPendingRequests,
+    acceptedProfiles,
+    isChatBoxOpen,
+    activeOpenChatProfile,
+    activeConversationMessages,
+  };
+}
+
+

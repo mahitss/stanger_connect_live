@@ -357,6 +357,7 @@ import {
   UserProfileBadgesCard,
   AchievementBadgeChip,
 } from './components/UserProfileBadgesCard';
+import { InstagramStyleChatModeView } from './components/InstagramStyleChatModeView';
 import type { OnlinePeer } from '../server';
 
 type SidebarPage =
@@ -3384,8 +3385,9 @@ export default function App() {
     }
 
     if (decision === 'accepted') {
-      setActiveChatPeerUid(partnerUid);
       awardParticipation(10);
+    } else if (activeChatPeerUid === partnerUid) {
+      setActiveChatPeerUid('');
     }
     if (authUser) {
       try {
@@ -17468,255 +17470,29 @@ export default function App() {
           )}
 
           {/* ================================================================
-              PAGE 2: SIDEBAR CHAT MODE (STRICT INVITE-FIRST, ZERO RANDOM CHATS)
+              PAGE 2: SIDEBAR CHAT MODE (INSTAGRAM-STYLE REQUEST -> ACCEPT -> CLICK PROFILE TO CHAT)
               ================================================================ */}
           {activePage === 'chat' && (
-            <section className="space-y-6" aria-label="Real-Time Chat Mode">
-              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
-                <div>
-                  <h1 className="text-2xl font-bold tracking-tight text-white">
-                    Real-Time Chat Mode
-                  </h1>
-                  <p className="text-sm text-zinc-400">
-                    Strict invite-first messaging: send a connection invite first; once accepted, real-time encrypted chat unlocks. No random chats.
-                  </p>
-                </div>
-                <div className="flex flex-wrap items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={handleToggleUiSoundEffects}
-                    aria-pressed={uiSoundPrefs.enabled}
-                    data-testid="chat-ui-sound-toggle"
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md border text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                      uiSoundPrefs.enabled
-                        ? 'bg-[#0A0A0C] border-zinc-700 text-emerald-400 hover:border-zinc-500'
-                        : 'bg-[#050505] border-zinc-800 text-zinc-500 hover:text-zinc-300'
-                    }`}
-                  >
-                    {uiSoundPrefs.enabled ? (
-                      <Volume2 className="w-3.5 h-3.5 shrink-0" />
-                    ) : (
-                      <VolumeX className="w-3.5 h-3.5 shrink-0" />
-                    )}
-                    <span>
-                      {uiSoundPrefs.enabled
-                        ? 'Incoming Message Chime: On'
-                        : 'Incoming Message Chime: Muted'}
-                    </span>
-                  </button>
-                  <span className="text-xs font-mono text-zinc-400">
-                    Fingerprint: {e2eeFingerprint}
-                  </span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-                <div className="lg:col-span-4 p-5 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] space-y-4">
-                  <div className="border-b border-zinc-800/80 pb-3 flex items-center justify-between">
-                    <h2 className="text-base font-bold text-white">
-                      Accepted Connections ({acceptedConnections.length})
-                    </h2>
-                    <span className="text-xs font-mono text-emerald-400">Invite-Verified</span>
-                  </div>
-
-                  {acceptedConnections.length === 0 ? (
-                    <div className="p-4 rounded-md bg-[#050505] border border-zinc-800/80 space-y-3 text-xs text-zinc-400">
-                      <div className="font-semibold text-white">
-                        Invite Required Before Chatting
-                      </div>
-                      <p>
-                        Random chats are strictly disabled. First send a connection invite to an online person and wait for them to accept.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => setActivePage('hub')}
-                        className="w-full py-2 px-3 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
-                      >
-                        Browse Online Directory & Send Invite
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {acceptedConnections.map((conn) => {
-                        const isOnline = acceptedOnlinePeers.some((p) => p.uid === conn.uid);
-                        return (
-                          <button
-                            key={conn.uid}
-                            type="button"
-                            onClick={() => {
-                              setActiveChatPeerUid(conn.uid);
-                              setChatError('');
-                            }}
-                            className={`w-full text-left p-3 rounded-md border transition-colors ${
-                              activeChatPeerUid === conn.uid
-                                ? 'bg-white text-black border-white'
-                                : 'bg-[#050505] border-zinc-800/80 text-zinc-300 hover:text-white'
-                            }`}
-                          >
-                            <div className="text-sm font-semibold">{conn.displayName}</div>
-                            <div
-                              className={`text-xs font-mono ${
-                                activeChatPeerUid === conn.uid
-                                  ? 'text-zinc-800'
-                                  : isOnline
-                                  ? 'text-emerald-400'
-                                  : 'text-zinc-500'
-                              }`}
-                            >
-                              {isOnline ? 'Invite Accepted · Online now' : 'Invite Accepted'}
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {otherOnlinePeers.filter((p) => !acceptedPeerUids.has(p.uid)).length > 0 && (
-                    <div className="pt-3 border-t border-zinc-800/80 space-y-2">
-                      <div className="text-xs font-semibold text-zinc-300">
-                        Online Users (Send Invite to Unlock Chat)
-                      </div>
-                      {otherOnlinePeers
-                        .filter((p) => !acceptedPeerUids.has(p.uid))
-                        .map((peer) => {
-                          const pendingReq = requests.find(
-                            (r) =>
-                              (r.fromUid === currentIdentity.uid && r.toUid === peer.uid) ||
-                              (r.fromUid === peer.uid && r.toUid === currentIdentity.uid)
-                          );
-                          return (
-                            <div
-                              key={peer.uid}
-                              className="p-2.5 rounded bg-[#050505] border border-zinc-800/80 flex items-center justify-between gap-2 text-xs"
-                            >
-                              <span className="text-zinc-200 truncate font-medium">
-                                {peer.displayName}
-                              </span>
-                              {pendingReq ? (
-                                <span className="font-mono text-amber-400">
-                                  {pendingReq.status}
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => handleSendRequest(peer)}
-                                  className="px-2.5 py-1 text-xs font-semibold bg-white text-black rounded whitespace-nowrap shrink-0"
-                                >
-                                  Send Invite
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                    </div>
-                  )}
-                </div>
-
-                <div className="lg:col-span-8 p-6 rounded-lg border border-zinc-800/80 bg-[#0A0A0C] flex flex-col h-[520px] justify-between">
-                  <div className="border-b border-zinc-800/80 pb-3 flex items-center justify-between">
-                    <div className="text-sm font-bold text-white">
-                      {activeChatPeerUid && acceptedPeerUids.has(activeChatPeerUid)
-                        ? `Encrypted Direct Channel (${
-                            acceptedConnections.find((c) => c.uid === activeChatPeerUid)
-                              ?.displayName || 'Connected Peer'
-                          })`
-                        : 'Invite-Locked Channel (Select Accepted Connection)'}
-                    </div>
-                    <span className="text-xs text-zinc-400 font-mono tabular-nums">
-                      {
-                        messages.filter(
-                          (m) =>
-                            (m.senderUid === currentIdentity.uid &&
-                              m.receiverUid === activeChatPeerUid) ||
-                            (m.senderUid === activeChatPeerUid &&
-                              m.receiverUid === currentIdentity.uid)
-                        ).length
-                      }{' '}
-                      messages
-                    </span>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto py-4 space-y-3">
-                    {!activeChatPeerUid || !acceptedPeerUids.has(activeChatPeerUid) ? (
-                      <div className="h-full flex flex-col items-center justify-center text-center text-xs text-zinc-400 space-y-2 px-4">
-                        <p className="text-white font-semibold text-sm">
-                          Direct Chat Requires an Accepted Invite
-                        </p>
-                        <p className="max-w-md">
-                          To protect privacy and prevent unsolicited random chats, you can only message users after your connection invite has been accepted.
-                        </p>
-                      </div>
-                    ) : messages.filter(
-                        (m) =>
-                          (m.senderUid === currentIdentity.uid &&
-                            m.receiverUid === activeChatPeerUid) ||
-                          (m.senderUid === activeChatPeerUid &&
-                            m.receiverUid === currentIdentity.uid)
-                      ).length === 0 ? (
-                      <div className="h-full flex flex-col items-center justify-center text-center text-xs text-zinc-400 space-y-1">
-                        <p className="text-white font-medium">Connection Invite Accepted</p>
-                        <p>Send your first real-time message below.</p>
-                      </div>
-                    ) : (
-                      messages
-                        .filter(
-                          (m) =>
-                            (m.senderUid === currentIdentity.uid &&
-                              m.receiverUid === activeChatPeerUid) ||
-                            (m.senderUid === activeChatPeerUid &&
-                              m.receiverUid === currentIdentity.uid)
-                        )
-                        .map((msg) => {
-                          const isMine = msg.senderUid === currentIdentity.uid;
-                          return (
-                            <div
-                              key={msg.id}
-                              className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}
-                            >
-                              <div className="text-[11px] text-zinc-500 mb-1">
-                                {msg.senderName}
-                              </div>
-                              <div
-                                className={`px-4 py-2.5 rounded-md max-w-md text-sm ${
-                                  isMine
-                                    ? 'bg-white text-black font-medium'
-                                    : 'bg-[#050505] border border-zinc-800 text-zinc-100'
-                                }`}
-                              >
-                                {msg.text}
-                              </div>
-                            </div>
-                          );
-                        })
-                    )}
-                  </div>
-
-                  <form onSubmit={handleSendDirectMessage} className="pt-3 border-t border-zinc-800/80 space-y-2">
-                    {chatError && <p className="text-xs text-rose-400">{chatError}</p>}
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={chatMessageInput}
-                        onChange={(e) => setChatMessageInput(e.target.value)}
-                        placeholder={
-                          activeChatPeerUid && acceptedPeerUids.has(activeChatPeerUid)
-                            ? 'Write a real-time message to your connection...'
-                            : 'Accept or select a connection invite first to chat...'
-                        }
-                        aria-label="Direct chat message input"
-                        className="flex-1 px-4 py-2.5 text-sm bg-[#050505] border border-zinc-800 rounded-md text-white placeholder:text-zinc-600 focus:outline-none focus:border-zinc-500"
-                      />
-                      <button
-                        type="submit"
-                        className="px-5 py-2.5 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md whitespace-nowrap shrink-0"
-                      >
-                        Send Message
-                      </button>
-                    </div>
-                  </form>
-                </div>
-              </div>
-            </section>
+            <InstagramStyleChatModeView
+              currentUid={currentIdentity.uid}
+              currentDisplayName={currentIdentity.displayName}
+              e2eeFingerprint={e2eeFingerprint}
+              uiSoundPrefs={uiSoundPrefs}
+              onToggleUiSoundEffects={handleToggleUiSoundEffects}
+              requests={requests}
+              otherOnlinePeers={otherOnlinePeers}
+              messages={messages}
+              activeChatPeerUid={activeChatPeerUid}
+              onSelectChatProfileUid={(peerUid) => setActiveChatPeerUid(peerUid)}
+              onSendRequest={handleSendRequest}
+              onRespondRequest={handleRespondRequest}
+              chatMessageInput={chatMessageInput}
+              onChangeChatMessageInput={setChatMessageInput}
+              chatError={chatError}
+              onClearChatError={() => setChatError('')}
+              onSendDirectMessage={handleSendDirectMessage}
+              onNavigateToHub={() => setActivePage('hub')}
+            />
           )}
 
           {/* ================================================================

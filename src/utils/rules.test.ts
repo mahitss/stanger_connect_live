@@ -520,6 +520,7 @@ import {
   validatePaymentCheckoutRequest,
   buildPaymentInvoicePdfSpec,
   computePomodoroVisualCountdownMetrics,
+  evaluateInstagramStyleChatModeState,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -11676,4 +11677,96 @@ test('computePomodoroVisualCountdownMetrics calculates synchronized countdown ri
   assert.equal(completed.segments.filter((s) => s.reached).length, 20);
 });
 
+test('evaluateInstagramStyleChatModeState enforces Instagram-style Request -> Accept -> Click Profile -> Open Chat flow', () => {
+  // 1. No requests have arrived: chat box is strictly closed
+  const emptyState = evaluateInstagramStyleChatModeState({
+    currentUid: 'usr_mahit',
+    selectedProfileUid: '',
+    requests: [],
+    onlinePeers: [{ uid: 'usr_aarav', displayName: 'Aarav Mehta' }],
+    messages: [],
+  });
+  assert.equal(emptyState.isChatBoxOpen, false);
+  assert.equal(emptyState.activeOpenChatProfile, null);
+  assert.equal(emptyState.incomingPendingRequests.length, 0);
+  assert.equal(emptyState.acceptedProfiles.length, 0);
 
+  // 2. Incoming request arrives (pending): even if selectedProfileUid is passed, chat box remains closed until accepted
+  const pendingState = evaluateInstagramStyleChatModeState({
+    currentUid: 'usr_mahit',
+    selectedProfileUid: 'usr_aarav',
+    requests: [
+      {
+        id: 'req_aarav_mahit',
+        fromUid: 'usr_aarav',
+        fromName: 'Aarav Mehta',
+        toUid: 'usr_mahit',
+        toName: 'Mahit Saxena',
+        status: 'pending',
+        note: 'Hey! Let us study together.',
+      },
+    ],
+    onlinePeers: [{ uid: 'usr_aarav', displayName: 'Aarav Mehta' }],
+    messages: [],
+  });
+  assert.equal(pendingState.incomingPendingRequests.length, 1);
+  assert.equal(pendingState.incomingPendingRequests[0].handle, '@aarav_mehta');
+  assert.equal(pendingState.acceptedProfiles.length, 0);
+  assert.equal(pendingState.isChatBoxOpen, false);
+  assert.equal(pendingState.activeOpenChatProfile, null);
+
+  // 3. Request is accepted, but user has NOT clicked on the profile yet (selectedProfileUid === ''): chat box stays closed
+  const acceptedUnclickedState = evaluateInstagramStyleChatModeState({
+    currentUid: 'usr_mahit',
+    selectedProfileUid: '',
+    requests: [
+      {
+        id: 'req_aarav_mahit',
+        fromUid: 'usr_aarav',
+        fromName: 'Aarav Mehta',
+        toUid: 'usr_mahit',
+        toName: 'Mahit Saxena',
+        status: 'accepted',
+        note: 'Hey! Let us study together.',
+      },
+    ],
+    onlinePeers: [{ uid: 'usr_aarav', displayName: 'Aarav Mehta' }],
+    messages: [],
+  });
+  assert.equal(acceptedUnclickedState.acceptedProfiles.length, 1);
+  assert.equal(acceptedUnclickedState.acceptedProfiles[0].displayName, 'Aarav Mehta');
+  assert.equal(acceptedUnclickedState.isChatBoxOpen, false);
+  assert.equal(acceptedUnclickedState.activeOpenChatProfile, null);
+
+  // 4. User clicks on the accepted profile (selectedProfileUid === 'usr_aarav'): chat box opens for that profile
+  const clickedProfileState = evaluateInstagramStyleChatModeState({
+    currentUid: 'usr_mahit',
+    selectedProfileUid: 'usr_aarav',
+    requests: [
+      {
+        id: 'req_aarav_mahit',
+        fromUid: 'usr_aarav',
+        fromName: 'Aarav Mehta',
+        toUid: 'usr_mahit',
+        toName: 'Mahit Saxena',
+        status: 'accepted',
+        note: 'Hey! Let us study together.',
+      },
+    ],
+    onlinePeers: [{ uid: 'usr_aarav', displayName: 'Aarav Mehta' }],
+    messages: [
+      {
+        id: 'm1',
+        senderUid: 'usr_mahit',
+        senderName: 'Mahit Saxena',
+        receiverUid: 'usr_aarav',
+        text: 'Accepted your request! Ready to start.',
+        timestamp: 1000,
+      },
+    ],
+  });
+  assert.equal(clickedProfileState.isChatBoxOpen, true);
+  assert.equal(clickedProfileState.activeOpenChatProfile?.uid, 'usr_aarav');
+  assert.equal(clickedProfileState.activeOpenChatProfile?.handle, '@aarav_mehta');
+  assert.equal(clickedProfileState.activeConversationMessages.length, 1);
+});
