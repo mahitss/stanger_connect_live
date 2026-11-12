@@ -29417,3 +29417,189 @@ export function buildPaymentInvoicePdfSpec(tx: PaymentTransactionRecord): {
     pdfContent,
   };
 }
+
+// --- Study Room Live Visual Pomodoro Countdown Timer Engine ---
+export type PomodoroVisualPhaseStatus =
+  | 'idle'
+  | 'focusing'
+  | 'final_sprint'
+  | 'paused'
+  | 'completed';
+
+export interface PomodoroVisualMilestoneCheckpoint {
+  percent: 25 | 50 | 75 | 100;
+  label: string;
+  targetSecondMark: number;
+  formattedMark: string;
+  reached: boolean;
+}
+
+export interface PomodoroVisualProgressSegment {
+  index: number;
+  reached: boolean;
+  isCurrent: boolean;
+}
+
+export interface PomodoroVisualCountdownMetrics {
+  durationMinutes: number;
+  totalSeconds: number;
+  clampedSecondsLeft: number;
+  clampedElapsedSeconds: number;
+  completedSessionSeconds: number;
+  progressFraction: number;
+  progressPercent: number;
+  remainingPercent: number;
+  formattedCountdown: string;
+  formattedElapsed: string;
+  formattedTarget: string;
+  formattedCompletedInCycle: string;
+  phaseStatus: PomodoroVisualPhaseStatus;
+  phaseLabel: string;
+  phaseColorToken: 'emerald' | 'amber' | 'sky' | 'zinc';
+  svgCircle: {
+    radius: number;
+    circumference: number;
+    strokeDasharray: string;
+    strokeDashoffset: number;
+  };
+  milestones: PomodoroVisualMilestoneCheckpoint[];
+  segments: PomodoroVisualProgressSegment[];
+}
+
+export function computePomodoroVisualCountdownMetrics(params: {
+  durationMinutes: number;
+  secondsLeft: number;
+  elapsedSessionSeconds: number;
+  isRunning: boolean;
+  radius?: number;
+  segmentsCount?: number;
+}): PomodoroVisualCountdownMetrics {
+  const safeDurationMins = Math.min(
+    720,
+    Math.max(1, Math.round(Number(params.durationMinutes) || 25))
+  );
+  const totalSeconds = safeDurationMins * 60;
+  const clampedSecondsLeft = Math.max(
+    0,
+    Math.min(totalSeconds, Math.round(Number(params.secondsLeft) ?? totalSeconds))
+  );
+  const clampedElapsedSeconds = Math.max(
+    0,
+    Math.round(Number(params.elapsedSessionSeconds) || 0)
+  );
+  const completedSessionSeconds = Math.max(0, totalSeconds - clampedSecondsLeft);
+
+  const progressFraction =
+    totalSeconds > 0
+      ? Math.max(0, Math.min(1, completedSessionSeconds / totalSeconds))
+      : 0;
+  const progressPercent = Math.round(progressFraction * 100);
+  const remainingPercent = Math.max(0, 100 - progressPercent);
+
+  const formattedCountdown =
+    clampedSecondsLeft >= 3600
+      ? formatStudyTimerHMS(clampedSecondsLeft, true)
+      : formatTimerMMSS(clampedSecondsLeft);
+  const formattedElapsed = formatStudyTimerHMS(clampedElapsedSeconds, true);
+  const formattedTarget = formatStudyTimerHMS(totalSeconds, true);
+  const formattedCompletedInCycle =
+    completedSessionSeconds >= 3600
+      ? formatStudyTimerHMS(completedSessionSeconds, true)
+      : formatTimerMMSS(completedSessionSeconds);
+
+  let phaseStatus: PomodoroVisualPhaseStatus = 'idle';
+  let phaseLabel = 'Ready to Focus';
+  let phaseColorToken: 'emerald' | 'amber' | 'sky' | 'zinc' = 'zinc';
+
+  if (clampedSecondsLeft === 0) {
+    phaseStatus = 'completed';
+    phaseLabel = 'Session Target Reached';
+    phaseColorToken = 'sky';
+  } else if (params.isRunning) {
+    if (remainingPercent <= 20) {
+      phaseStatus = 'final_sprint';
+      phaseLabel = 'Final 20% Focus Sprint';
+      phaseColorToken = 'amber';
+    } else {
+      phaseStatus = 'focusing';
+      phaseLabel = 'Live Pomodoro Countdown Active';
+      phaseColorToken = 'emerald';
+    }
+  } else if (completedSessionSeconds > 0 || clampedElapsedSeconds > 0) {
+    phaseStatus = 'paused';
+    phaseLabel = 'Countdown Paused';
+    phaseColorToken = 'amber';
+  }
+
+  const radius = Math.max(40, Math.round(Number(params.radius) || 88));
+  const circumference = Number((2 * Math.PI * radius).toFixed(2));
+  const strokeDashoffset = Number(
+    (circumference * (1 - progressFraction)).toFixed(2)
+  );
+
+  const milestoneDefinitions: Array<{ percent: 25 | 50 | 75 | 100; label: string }> = [
+    { percent: 25, label: '25% Warmup' },
+    { percent: 50, label: '50% Halfway' },
+    { percent: 75, label: '75% Deep Flow' },
+    { percent: 100, label: '100% Complete' },
+  ];
+
+  const milestones: PomodoroVisualMilestoneCheckpoint[] =
+    milestoneDefinitions.map((m) => {
+      const targetSecondMark = Math.round((totalSeconds * m.percent) / 100);
+      return {
+        percent: m.percent,
+        label: m.label,
+        targetSecondMark,
+        formattedMark:
+          targetSecondMark >= 3600
+            ? formatStudyTimerHMS(targetSecondMark, true)
+            : formatTimerMMSS(targetSecondMark),
+        reached: completedSessionSeconds >= targetSecondMark,
+      };
+    });
+
+  const segmentsCount = Math.min(
+    40,
+    Math.max(4, Math.round(Number(params.segmentsCount) || 20))
+  );
+  const activeSegmentCount = Math.floor(progressFraction * segmentsCount);
+  const segments: PomodoroVisualProgressSegment[] = Array.from(
+    { length: segmentsCount },
+    (_, idx) => ({
+      index: idx,
+      reached: idx < activeSegmentCount || progressFraction >= 1,
+      isCurrent:
+        Boolean(params.isRunning) &&
+        progressFraction < 1 &&
+        idx === activeSegmentCount,
+    })
+  );
+
+  return {
+    durationMinutes: safeDurationMins,
+    totalSeconds,
+    clampedSecondsLeft,
+    clampedElapsedSeconds,
+    completedSessionSeconds,
+    progressFraction,
+    progressPercent,
+    remainingPercent,
+    formattedCountdown,
+    formattedElapsed,
+    formattedTarget,
+    formattedCompletedInCycle,
+    phaseStatus,
+    phaseLabel,
+    phaseColorToken,
+    svgCircle: {
+      radius,
+      circumference,
+      strokeDasharray: `${circumference} ${circumference}`,
+      strokeDashoffset,
+    },
+    milestones,
+    segments,
+  };
+}
+

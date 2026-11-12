@@ -97,6 +97,7 @@ import {
 import { StudyRoomWeeklyRoomFocusRechartsCard } from './StudyRoomWeeklyRoomFocusRechartsCard';
 import { StudyRoomFocusHistory30DayRechartsCard } from './StudyRoomFocusHistory30DayRechartsCard';
 import { StudyRoomCurrentDayFocusBreakRechartsCard } from './StudyRoomCurrentDayFocusBreakRechartsCard';
+import { StudyRoomVisualCountdownTimer } from './StudyRoomVisualCountdownTimer';
 import {
   Volume2,
   VolumeX,
@@ -2423,6 +2424,27 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         )}
 
       </div>
+
+      {/* LIVE VISUAL POMODORO COUNTDOWN TIMER (SYNCHRONIZED WITH ACTIVE SESSION) */}
+      <StudyRoomVisualCountdownTimer
+        activeRoomCode={activeRoomCode}
+        activeSubject={subject || `Studying: ${activeBook.title}`}
+        durationMinutes={durationMinutes}
+        secondsLeft={secondsLeft}
+        elapsedSessionSeconds={elapsedSessionSeconds}
+        unrecordedElapsedSeconds={unrecordedElapsedSeconds}
+        isRunning={isRunning}
+        onToggleStartPause={() => setIsRunning((prev) => !prev)}
+        onResetTimer={() => {
+          setIsRunning(false);
+          setSecondsLeft(durationMinutes * 60);
+          setElapsedSessionSeconds(0);
+          setAlreadyRecordedSeconds(0);
+          setVerificationFeedback(null);
+        }}
+        onSelectDurationMinutes={(mins) => handleSelectDuration(mins)}
+        onRecordConductedTime={handleRecordRealElapsedTime}
+      />
 
       {/* "EASY AS ABC" : 24/7 MR. STRANGER LIVE STUDY ROOMS LOBBY */}
       <div

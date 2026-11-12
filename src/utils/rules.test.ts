@@ -519,6 +519,7 @@ import {
   validateUpiVpaAddress,
   validatePaymentCheckoutRequest,
   buildPaymentInvoicePdfSpec,
+  computePomodoroVisualCountdownMetrics,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -11607,6 +11608,72 @@ test('Payment integration & Live-Recorded-Only activity filter validate ISO/IEC 
   });
   assert.ok(pdfSpec.pdfContent.startsWith('%PDF-1.4'));
   assert.match(pdfSpec.filename, /mr-stranger-invoice-INV-2026-9001\.pdf/);
+});
+
+test('computePomodoroVisualCountdownMetrics calculates synchronized countdown ring geometry, 20-segment progress, and quarter milestones', () => {
+  // 1. Idle 25-minute Pomodoro (1500s left of 1500s)
+  const idle = computePomodoroVisualCountdownMetrics({
+    durationMinutes: 25,
+    secondsLeft: 1500,
+    elapsedSessionSeconds: 0,
+    isRunning: false,
+    radius: 88,
+  });
+  assert.equal(idle.totalSeconds, 1500);
+  assert.equal(idle.clampedSecondsLeft, 1500);
+  assert.equal(idle.completedSessionSeconds, 0);
+  assert.equal(idle.progressPercent, 0);
+  assert.equal(idle.phaseStatus, 'idle');
+  assert.equal(idle.formattedCountdown, '25:00');
+  assert.equal(idle.formattedElapsed, '0:00:00');
+  assert.equal(idle.formattedCompletedInCycle, '00:00');
+  assert.equal(idle.milestones.filter((m) => m.reached).length, 0);
+  assert.equal(idle.segments.filter((s) => s.reached).length, 0);
+  assert.equal(idle.svgCircle.strokeDashoffset, idle.svgCircle.circumference);
+
+  // 2. Active 50% halfway state (750s left of 1500s while running)
+  const halfway = computePomodoroVisualCountdownMetrics({
+    durationMinutes: 25,
+    secondsLeft: 750,
+    elapsedSessionSeconds: 750,
+    isRunning: true,
+    radius: 88,
+  });
+  assert.equal(halfway.progressPercent, 50);
+  assert.equal(halfway.phaseStatus, 'focusing');
+  assert.equal(halfway.formattedCountdown, '12:30');
+  assert.equal(halfway.formattedElapsed, '0:12:30');
+  assert.equal(halfway.formattedCompletedInCycle, '12:30');
+  assert.deepEqual(
+    halfway.milestones.map((m) => m.reached),
+    [true, true, false, false]
+  );
+  assert.equal(halfway.segments.filter((s) => s.reached).length, 10);
+
+  // 3. Final sprint state (200s left of 1500s while running)
+  const finalSprint = computePomodoroVisualCountdownMetrics({
+    durationMinutes: 25,
+    secondsLeft: 200,
+    elapsedSessionSeconds: 1300,
+    isRunning: true,
+    radius: 88,
+  });
+  assert.equal(finalSprint.phaseStatus, 'final_sprint');
+  assert.equal(finalSprint.formattedCountdown, '03:20');
+
+  // 4. Completed session (0s left of 1500s)
+  const completed = computePomodoroVisualCountdownMetrics({
+    durationMinutes: 25,
+    secondsLeft: 0,
+    elapsedSessionSeconds: 1500,
+    isRunning: false,
+    radius: 88,
+  });
+  assert.equal(completed.progressPercent, 100);
+  assert.equal(completed.phaseStatus, 'completed');
+  assert.equal(completed.svgCircle.strokeDashoffset, 0);
+  assert.equal(completed.milestones.filter((m) => m.reached).length, 4);
+  assert.equal(completed.segments.filter((s) => s.reached).length, 20);
 });
 
 
