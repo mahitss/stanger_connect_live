@@ -20656,11 +20656,16 @@ export function syncIndividualDeskPomodoroMapWithDesks(params: {
   currentUid: string;
   currentName: string;
   nowMs?: number;
+  strictRealOnly?: boolean;
 }): Record<string, IndividualStudyDeskPomodoroState> {
   const nowMs = typeof params.nowMs === 'number' ? params.nowMs : Date.now();
-  const nextMap: Record<string, IndividualStudyDeskPomodoroState> = {
-    ...params.currentMap,
-  };
+  const nextMap: Record<string, IndividualStudyDeskPomodoroState> = {};
+  for (const [k, v] of Object.entries(params.currentMap || {})) {
+    if (params.strictRealOnly && k.startsWith('desk_peer_')) {
+      continue;
+    }
+    nextMap[k] = v;
+  }
   const safeRoom = normalizeStudyRoomCode(params.activeRoomCode || 'STUDY-204');
 
   for (const desk of params.desks) {
@@ -20686,7 +20691,7 @@ export function syncIndividualDeskPomodoroMapWithDesks(params: {
     }
   }
 
-  // Ensure the current user's desk and two companion study desks in the room exist so individual desks can always be controlled
+  // Ensure the current user's desk exists so their personal desk timer can always be controlled
   if (!nextMap[params.currentUid]) {
     nextMap[params.currentUid] = createIndividualStudyDeskPomodoroState({
       deskUid: params.currentUid,
@@ -20697,42 +20702,49 @@ export function syncIndividualDeskPomodoroMapWithDesks(params: {
       initialMinutes: 25,
       nowMs,
     });
+  } else {
+    nextMap[params.currentUid] = {
+      ...nextMap[params.currentUid],
+      roomCode: safeRoom,
+    };
   }
 
-  const companionDesks: ReadonlyArray<{
-    uid: string;
-    displayName: string;
-    subject: string;
-    positiveNote: string;
-    timerMinutes: number;
-  }> = [
-    {
-      uid: 'desk_peer_aravind',
-      displayName: 'Aravind Nair · Systems Desk',
-      subject: 'Distributed Consensus & Raft Proofs',
-      positiveNote: 'Running 45m deep-focus Pomodoro blocks.',
-      timerMinutes: 45,
-    },
-    {
-      uid: 'desk_peer_elena',
-      displayName: 'Elena Rostova · ML Research Desk',
-      subject: 'Transformer Attention Kernel Optimization',
-      positiveNote: 'Quiet 50m sprint — feel free to sync timers!',
-      timerMinutes: 50,
-    },
-  ];
+  if (!params.strictRealOnly) {
+    const companionDesks: ReadonlyArray<{
+      uid: string;
+      displayName: string;
+      subject: string;
+      positiveNote: string;
+      timerMinutes: number;
+    }> = [
+      {
+        uid: 'desk_peer_aravind',
+        displayName: 'Aravind Nair · Systems Desk',
+        subject: 'Distributed Consensus & Raft Proofs',
+        positiveNote: 'Running 45m deep-focus Pomodoro blocks.',
+        timerMinutes: 45,
+      },
+      {
+        uid: 'desk_peer_elena',
+        displayName: 'Elena Rostova · ML Research Desk',
+        subject: 'Transformer Attention Kernel Optimization',
+        positiveNote: 'Quiet 50m sprint — feel free to sync timers!',
+        timerMinutes: 50,
+      },
+    ];
 
-  for (const companion of companionDesks) {
-    if (!nextMap[companion.uid]) {
-      nextMap[companion.uid] = createIndividualStudyDeskPomodoroState({
-        deskUid: companion.uid,
-        displayName: companion.displayName,
-        roomCode: safeRoom,
-        subject: companion.subject,
-        positiveNote: companion.positiveNote,
-        initialMinutes: companion.timerMinutes,
-        nowMs,
-      });
+    for (const companion of companionDesks) {
+      if (!nextMap[companion.uid]) {
+        nextMap[companion.uid] = createIndividualStudyDeskPomodoroState({
+          deskUid: companion.uid,
+          displayName: companion.displayName,
+          roomCode: safeRoom,
+          subject: companion.subject,
+          positiveNote: companion.positiveNote,
+          initialMinutes: companion.timerMinutes,
+          nowMs,
+        });
+      }
     }
   }
 

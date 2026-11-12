@@ -1428,9 +1428,29 @@ async function startServer() {
             return;
           }
 
-          const entry = clients.get(registeredUid);
-          if (entry) {
-            entry.peer.activeStudyRoomCode = roomCode;
+          const existingEntry = clients.get(registeredUid);
+          if (existingEntry) {
+            existingEntry.ws = ws;
+            existingEntry.peer.activeStudyRoomCode = roomCode;
+            existingEntry.peer.currentMode = 'study';
+          } else {
+            clients.set(registeredUid, {
+              ws,
+              peer: {
+                uid: registeredUid,
+                displayName: sanitizeSafeText(String(msg.displayName || 'Scholar'), 64),
+                bio: 'Studying live on Mr. Stranger',
+                avatarUrl: '',
+                streakCount: 1,
+                participationPoints: 15,
+                privacyVisibility: 'everyone',
+                currentMode: 'study',
+                activeStudyRoomCode: roomCode,
+                activeGameId: null,
+                mood: 'Deep Work',
+                connectedAt: Date.now(),
+              },
+            });
           }
 
           studyDesks.set(registeredUid, {
@@ -1440,7 +1460,7 @@ async function startServer() {
             roomName: sanitizeSafeText(String(msg.roomName || `Study Room ${roomCode}`), 80),
             subject: sanitizeSafeText(subject, 100),
             positiveNote: sanitizeSafeText(positiveNote, 400),
-            timerMinutes: Math.min(240, Math.max(1, Number(msg.timerMinutes) || 25)),
+            timerMinutes: Math.min(720, Math.max(1, Number(msg.timerMinutes) || 25)),
             startedAt: Date.now(),
           });
           broadcastPresence();
@@ -1458,17 +1478,22 @@ async function startServer() {
           if (!detectSecurityThreat(rawText).safe) return;
           const chatMsg = JSON.stringify({
             type: 'study:chat',
-            id: `${Date.now()}-${registeredUid}`,
+            id: String(msg.id || `${Date.now()}-${registeredUid}`),
             roomCode: sanitizeSafeText(String(msg.roomCode || 'STUDY-GLOBAL'), 24),
             senderUid: registeredUid,
             senderName: sanitizeSafeText(String(msg.senderName || 'Scholar'), 64),
             text: sanitizeSafeText(rawText, 500),
             timestamp: Date.now(),
           });
+          let sentToSelf = false;
           for (const { ws: clientWs } of clients.values()) {
             if (clientWs.readyState === WebSocket.OPEN) {
               clientWs.send(chatMsg);
+              if (clientWs === ws) sentToSelf = true;
             }
+          }
+          if (!sentToSelf && ws.readyState === WebSocket.OPEN) {
+            ws.send(chatMsg);
           }
           return;
         }
@@ -1736,7 +1761,7 @@ async function startServer() {
 
     ws.on('close', () => {
       wsRateMap.delete(ws);
-      if (registeredUid) {
+      if (registeredUid && clients.get(registeredUid)?.ws === ws) {
         clients.delete(registeredUid);
         studyDesks.delete(registeredUid);
         for (const key of liveGameState.keys()) {

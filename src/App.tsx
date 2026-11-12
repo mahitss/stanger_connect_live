@@ -17512,22 +17512,42 @@ export default function App() {
               studyNotes={studyNotes}
               studyChat={studyChat}
               onJoinDesk={(roomCode, roomName, subject, positiveNote, timerMinutes) => {
+                const normalizedRoom = normalizeStudyRoomCode(roomCode || activeStudyRoomCode);
+                setActiveStudyRoomCode(normalizedRoom);
+                const nextDesk: StudyDeskItem = {
+                  uid: currentIdentity.uid,
+                  displayName: currentIdentity.displayName,
+                  roomCode: normalizedRoom,
+                  roomName: roomName || `Study Room ${normalizedRoom}`,
+                  subject: subject || 'Deep Work & Problem Solving',
+                  positiveNote: positiveNote || 'Focused in Study Room — every real timer-verified minute compounds.',
+                  timerMinutes: Math.max(1, Math.min(720, Number(timerMinutes) || 25)),
+                  startedAt: Date.now(),
+                };
+                setStudyDesks((prev) => [
+                  ...prev.filter((d) => d.uid !== currentIdentity.uid),
+                  nextDesk,
+                ]);
                 if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                   wsRef.current.send(
                     JSON.stringify({
                       type: 'study:join',
-                      roomCode,
-                      roomName,
+                      roomCode: normalizedRoom,
+                      roomName: nextDesk.roomName,
                       displayName: currentIdentity.displayName,
-                      subject,
-                      positiveNote,
-                      timerMinutes,
+                      subject: nextDesk.subject,
+                      positiveNote: nextDesk.positiveNote,
+                      timerMinutes: nextDesk.timerMinutes,
                     })
                   );
                 }
+                markFocusSessionStartedToday();
                 awardParticipation(15);
               }}
               onLeaveDesk={() => {
+                setStudyDesks((prev) =>
+                  prev.filter((d) => d.uid !== currentIdentity.uid)
+                );
                 if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                   wsRef.current.send(JSON.stringify({ type: 'study:leave' }));
                 }
@@ -17569,11 +17589,24 @@ export default function App() {
                 }
               }}
               onSendStudyChat={(roomCode, text) => {
+                const localMsgId = `schat_${Date.now()}_${currentIdentity.uid}`;
+                const localChatMsg: StudyChatMessage = {
+                  id: localMsgId,
+                  roomCode: normalizeStudyRoomCode(roomCode || activeStudyRoomCode),
+                  senderUid: currentIdentity.uid,
+                  senderName: currentIdentity.displayName,
+                  text,
+                  timestamp: Date.now(),
+                };
+                setStudyChat((prev) =>
+                  prev.some((m) => m.id === localMsgId) ? prev : [...prev, localChatMsg]
+                );
                 if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
                   wsRef.current.send(
                     JSON.stringify({
                       type: 'study:chat',
-                      roomCode,
+                      id: localMsgId,
+                      roomCode: localChatMsg.roomCode,
                       senderName: currentIdentity.displayName,
                       text,
                     })

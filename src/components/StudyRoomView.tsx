@@ -288,7 +288,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     return [...DEFAULT_SAVED_CUSTOM_FOCUS_DURATIONS];
   });
   const [keepCustomDurationOnRoomJoin, setKeepCustomDurationOnRoomJoin] =
-    useState<boolean>(true);
+    useState<boolean>(false);
   const [customDurationStatusToast, setCustomDurationStatusToast] = useState<
     string | null
   >(null);
@@ -566,6 +566,68 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     return () => window.clearInterval(timer);
   }, [isRunning, durationMinutes, activeBook.title, subject]);
 
+  const [localSeatedDesk, setLocalSeatedDesk] =
+    useState<StudyDeskItem | null>(null);
+
+  useEffect(() => {
+    const serverDesk = studyDesks.find((d) => d.uid === currentUid);
+    if (serverDesk) {
+      setLocalSeatedDesk(serverDesk);
+    }
+  }, [studyDesks, currentUid]);
+
+  const effectiveStudyDesks = React.useMemo(() => {
+    if (!localSeatedDesk) return studyDesks;
+    const withoutCurrent = studyDesks.filter((d) => d.uid !== currentUid);
+    return [localSeatedDesk, ...withoutCurrent];
+  }, [studyDesks, localSeatedDesk, currentUid]);
+
+  const seatCurrentUserAtDesk = (
+    roomCode: string,
+    roomName: string,
+    deskSubject: string,
+    deskNote: string,
+    timerMinutes: number
+  ) => {
+    const cleanCode = normalizeStudyRoomCode(roomCode);
+    const nextDesk: StudyDeskItem = {
+      uid: currentUid,
+      displayName: currentName,
+      roomCode: cleanCode,
+      roomName: roomName || `Study Room ${cleanCode}`,
+      subject: deskSubject,
+      positiveNote: deskNote,
+      timerMinutes,
+      startedAt: Date.now(),
+    };
+    setLocalSeatedDesk(nextDesk);
+    setIndividualDeskTimersMap((prev) => {
+      const selfId = `desk_self_${currentUid}`;
+      const existing = prev[selfId];
+      if (!existing) return prev;
+      const updatedSelf = startIndividualStudyDeskPomodoro(
+        setIndividualStudyDeskCustomDuration(existing, timerMinutes)
+      );
+      return {
+        ...prev,
+        [selfId]: {
+          ...updatedSelf,
+          roomCode: cleanCode,
+          subject: deskSubject,
+          note: deskNote,
+        },
+      };
+    });
+    onJoinDesk(cleanCode, roomName, deskSubject, deskNote, timerMinutes);
+  };
+
+  const leaveCurrentStudyDesk = () => {
+    closeAllStudyHardware();
+    setLocalSeatedDesk(null);
+    setLastJoinedRoomToast(null);
+    onLeaveDesk();
+  };
+
   // Individual Study Desk Custom-Duration Pomodoro Timers State
   const [individualDeskTimersMap, setIndividualDeskTimersMap] = useState<
     Record<string, IndividualStudyDeskPomodoroState>
@@ -588,6 +650,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       activeRoomCode,
       currentUid,
       currentName,
+      strictRealOnly: true,
     });
   });
 
@@ -595,10 +658,11 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setIndividualDeskTimersMap((prev) => {
       const synced = syncIndividualDeskPomodoroMapWithDesks({
         currentMap: prev,
-        desks: studyDesks.filter((d) => d.roomCode === activeRoomCode),
+        desks: effectiveStudyDesks.filter((d) => d.roomCode === activeRoomCode),
         activeRoomCode,
         currentUid,
         currentName,
+        strictRealOnly: true,
       });
       try {
         localStorage.setItem(
@@ -610,7 +674,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       }
       return synced;
     });
-  }, [studyDesks, activeRoomCode, currentUid, currentName]);
+  }, [effectiveStudyDesks, activeRoomCode, currentUid, currentName]);
 
   const hasAnyRunningIndividualDesk = (
     Object.values(individualDeskTimersMap) as IndividualStudyDeskPomodoroState[]
@@ -1230,13 +1294,14 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     const generated = generateStudyRoomCode('ROOM');
     const cleanTitle = sanitizeSafeText(newRoomTitle || `Study Room ${generated}`, 80);
     onChangeRoomCode(generated, cleanTitle);
-    onJoinDesk(
+    seatCurrentUserAtDesk(
       generated,
       cleanTitle,
       sanitizeSafeText(subject || `Studying: ${activeBook.title}`, 100),
       sanitizeSafeText(positiveNote || 'Let us crush our goals together!', 400),
       durationMinutes
     );
+    setIsRunning(true);
   };
 
   const handleJoinByCode = (e: React.FormEvent) => {
@@ -1244,13 +1309,14 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     const normalized = normalizeStudyRoomCode(joinCodeInput);
     if (!normalized) return;
     onChangeRoomCode(normalized, `Study Room ${normalized}`);
-    onJoinDesk(
+    seatCurrentUserAtDesk(
       normalized,
       `Study Room ${normalized}`,
       sanitizeSafeText(subject || `Studying: ${activeBook.title}`, 100),
       sanitizeSafeText(positiveNote || 'Studying live with friends.', 400),
       durationMinutes
     );
+    setIsRunning(true);
     setJoinCodeInput('');
   };
 
@@ -1282,7 +1348,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setSubject(resolved.subject);
     applyCustomStudyMinutes(targetFocusDuration, { startImmediately: true });
     onChangeRoomCode(resolved.roomCode, resolved.roomName);
-    onJoinDesk(
+    seatCurrentUserAtDesk(
       resolved.roomCode,
       resolved.roomName,
       sanitizeSafeText(resolved.subject, 100),
@@ -1306,11 +1372,6 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     setLastJoinedRoomToast(
       `Joined ${resolved.roomName} (${resolved.roomCode}) · ${targetFocusDuration}m live focus session started!`
     );
-    window.setTimeout(() => {
-      setLastJoinedRoomToast((prev) =>
-        prev && prev.includes(resolved.roomCode) ? null : prev
-      );
-    }, 5000);
   };
 
   const handleStartMindfulnessSession = (exerciseId: string) => {
@@ -1319,9 +1380,9 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
       MR_STRANGER_MINDFULNESS_EXERCISES[0];
     setActiveMindfulnessId(exercise.id);
     setSubject(`Mindfulness: ${exercise.title}`);
-    applyCustomStudyMinutes(exercise.durationMinutes);
+    applyCustomStudyMinutes(exercise.durationMinutes, { startImmediately: true });
     setIsRunning(true);
-    onJoinDesk(
+    seatCurrentUserAtDesk(
       activeRoomCode,
       newRoomTitle,
       `Mindfulness: ${exercise.title}`,
@@ -1352,7 +1413,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     const safeNote = sanitizeSafeText(trimmedNote, 400);
 
     // Sit at the desk and start the real timer; only record focus minutes that have actually elapsed!
-    onJoinDesk(activeRoomCode, newRoomTitle, safeSub, safeNote, durationMinutes);
+    seatCurrentUserAtDesk(activeRoomCode, newRoomTitle, safeSub, safeNote, durationMinutes);
     const verifiedMinutesSoFar = Math.max(
       1,
       Math.floor((elapsedSessionSeconds - alreadyRecordedSeconds) / 60)
@@ -1495,7 +1556,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     }
   };
 
-  const desksInCurrentRoom = studyDesks.filter((d) => d.roomCode === activeRoomCode);
+  const desksInCurrentRoom = effectiveStudyDesks.filter((d) => d.roomCode === activeRoomCode);
   const notesInCurrentRoom = studyNotes.filter(
     (n) => !n.roomCode || n.roomCode === activeRoomCode || activeRoomCode === 'STUDY-GLOBAL'
   );
@@ -1839,7 +1900,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
 
   const studyTogetherLobby = buildMrStrangerStudyTogetherLobby({
     activeRoomCode,
-    studyDesks,
+    studyDesks: effectiveStudyDesks,
     currentUid,
     currentName,
     currentTimerText: primaryTimerText,
@@ -1863,139 +1924,140 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         data-testid="mr-stranger-study-together-hero"
         className="rounded-xl border border-zinc-800/90 bg-gradient-to-br from-[#0A0A0F] via-[#090D16] to-[#08080A] p-6 lg:p-8 space-y-8 shadow-2xl"
       >
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8 items-stretch">
           {/* Left Hero Copy & 1-Click Join Actions (5 cols) */}
-          <div className="lg:col-span-5 space-y-5">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono uppercase tracking-wider">
-              <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span>{studyTogetherLobby.brandName} · 24/7 Global Study Sanctuary</span>
+          <div className="lg:col-span-5 flex flex-col justify-between space-y-5">
+            <div className="space-y-4">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-xs font-mono uppercase tracking-wider">
+                <Globe className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>{studyTogetherLobby.brandName} · 24/7 Global Study Sanctuary</span>
+              </div>
+
+              <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-[1.15]">
+                {studyTogetherLobby.heroTitle}
+              </h1>
+
+              <p className="text-sm sm:text-base text-zinc-300 leading-relaxed">
+                {studyTogetherLobby.heroSubtitle}
+              </p>
+
+              {/* Primary 1-Click Join CTA & Mindfulness Breather Toggle */}
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  data-testid="study-together-join-now-btn"
+                  onClick={() => handleQuickJoinStudyTogetherRoom()}
+                  className="px-5 py-3 text-sm font-bold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded-md transition-all shadow-lg shadow-emerald-500/10 flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
+                >
+                  <Play className="w-4 h-4 fill-zinc-950 shrink-0" />
+                  <span>
+                    {isSeated
+                      ? `Studying Live in ${activeRoomCode}`
+                      : 'Study Together now'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="study-mindfulness-breather-toggle"
+                  onClick={() => setIsMindfulnessDrawerOpen((prev) => !prev)}
+                  aria-expanded={isMindfulnessDrawerOpen}
+                  className={`px-4 py-3 text-xs font-semibold rounded-md border transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer ${
+                    isMindfulnessDrawerOpen
+                      ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
+                      : 'bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 border-zinc-700/80'
+                  }`}
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>5-Min Mindfulness Breather</span>
+                </button>
+              </div>
+
+              {lastJoinedRoomToast && (
+                <div
+                  role="status"
+                  data-testid="study-together-joined-banner"
+                  className="p-3 rounded-md bg-emerald-500/15 border border-emerald-500/40 text-xs text-emerald-200 flex items-center justify-between gap-2"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span className="truncate">{lastJoinedRoomToast}</span>
+                  </div>
+                  <span className="font-mono text-[11px] text-emerald-300 shrink-0">
+                    Live Sync Active
+                  </span>
+                </div>
+              )}
             </div>
 
-            <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-[1.15]">
-              {studyTogetherLobby.heroTitle}
-            </h1>
-
-            <p className="text-sm sm:text-base text-zinc-300 leading-relaxed">
-              {studyTogetherLobby.heroSubtitle}
-            </p>
-
-            {/* Primary 1-Click Join CTA & Mindfulness Breather Toggle */}
-            <div className="flex flex-wrap items-center gap-3 pt-1">
-              <button
-                type="button"
-                data-testid="study-together-join-now-btn"
-                onClick={() => handleQuickJoinStudyTogetherRoom()}
-                className="px-6 py-3 text-sm font-bold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded-md transition-all shadow-lg shadow-emerald-500/10 flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer"
-              >
-                <Play className="w-4 h-4 fill-zinc-950 shrink-0" />
-                <span>
-                  {isSeated
-                    ? `Studying Live in ${activeRoomCode}`
-                    : 'Study Together now'}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                data-testid="study-mindfulness-breather-toggle"
-                onClick={() => setIsMindfulnessDrawerOpen((prev) => !prev)}
-                aria-expanded={isMindfulnessDrawerOpen}
-                className={`px-4 py-3 text-xs font-semibold rounded-md border transition-colors flex items-center gap-2 whitespace-nowrap shrink-0 cursor-pointer ${
-                  isMindfulnessDrawerOpen
-                    ? 'bg-sky-500/15 text-sky-300 border-sky-500/40'
-                    : 'bg-zinc-900/90 hover:bg-zinc-800 text-zinc-200 border-zinc-700/80'
-                }`}
-              >
-                <Sparkles className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                <span>5-Min Mindfulness Breather</span>
-              </button>
-            </div>
-
-            {lastJoinedRoomToast && (
-              <div
-                role="status"
-                data-testid="study-together-joined-banner"
-                className="p-3 rounded-md bg-emerald-500/15 border border-emerald-500/40 text-xs text-emerald-200 flex items-center justify-between gap-2"
-              >
+            <div className="space-y-4">
+              {/* Quick Live Room Status Strip */}
+              <div className="pt-3 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-zinc-400 border-t border-zinc-800/80">
                 <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>{lastJoinedRoomToast}</span>
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+                  <span className="font-mono font-semibold text-white tabular-nums">
+                    {desksInCurrentRoom.length}
+                  </span>
+                  <span>
+                    {desksInCurrentRoom.length === 1 ? 'scholar' : 'scholars'} seated in this room
+                  </span>
                 </div>
-                <span className="font-mono text-[11px] text-emerald-300 shrink-0">
-                  Live Sync Active
-                </span>
+                <div className="font-mono text-zinc-300">
+                  Active Room:{' '}
+                  <strong className="text-emerald-400">
+                    {studyTogetherLobby.activeRoomPreset.title}
+                  </strong>
+                </div>
               </div>
-            )}
 
-            {/* Quick Live Room Status Strip */}
-            <div className="pt-2 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-zinc-400 border-t border-zinc-800/80">
-              <div className="flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="font-mono font-semibold text-white tabular-nums">
-                  {desksInCurrentRoom.length}
-                </span>
-                <span>
-                  {desksInCurrentRoom.length === 1 ? 'scholar' : 'scholars'} seated in this room right now
-                </span>
-              </div>
-              <span aria-hidden="true" className="text-zinc-700">
-                ·
-              </span>
-              <div className="font-mono text-zinc-300">
-                Active Room:{' '}
-                <strong className="text-emerald-400">
-                  {studyTogetherLobby.activeRoomPreset.title}
-                </strong>
-              </div>
-            </div>
-
-            {/* Verified Worked / Studied Time Ledger */}
-            <div
-              data-testid="study-room-verified-time-ledger"
-              className="p-3.5 rounded-lg bg-zinc-950/90 border border-emerald-500/30 grid grid-cols-2 sm:grid-cols-4 gap-3"
-            >
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
-                  Live Timer Elapsed
+              {/* Symmetrical 2x2 Verified Worked / Studied Time Ledger */}
+              <div
+                data-testid="study-room-verified-time-ledger"
+                className="p-3.5 rounded-lg bg-zinc-950/95 border border-emerald-500/30 grid grid-cols-2 gap-3"
+              >
+                <div className="p-2.5 rounded bg-[#0A0A0E] border border-zinc-800/80">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                    Live Timer Elapsed
+                  </div>
+                  <div
+                    data-testid="study-room-ledger-live-elapsed"
+                    className="text-sm font-mono font-bold text-amber-300 tabular-nums mt-0.5"
+                  >
+                    {formatStudyTimerHMS(elapsedSessionSeconds, true)}
+                  </div>
                 </div>
-                <div
-                  data-testid="study-room-ledger-live-elapsed"
-                  className="text-sm font-mono font-bold text-amber-300 tabular-nums mt-0.5"
-                >
-                  {formatStudyTimerHMS(elapsedSessionSeconds, true)}
+                <div className="p-2.5 rounded bg-[#0A0A0E] border border-zinc-800/80">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                    Studied Today
+                  </div>
+                  <div
+                    data-testid="study-room-ledger-studied-today"
+                    className="text-sm font-mono font-bold text-emerald-400 tabular-nums mt-0.5"
+                  >
+                    {todayFocusMinutes}m ({Math.floor(todayFocusMinutes / 60)}h {todayFocusMinutes % 60}m)
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
-                  Studied Today
+                <div className="p-2.5 rounded bg-[#0A0A0E] border border-zinc-800/80">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                    7-Day Studied Total
+                  </div>
+                  <div
+                    data-testid="study-room-ledger-7day-total"
+                    className="text-sm font-mono font-bold text-sky-400 tabular-nums mt-0.5"
+                  >
+                    {weeklyActivitySummary?.totalFocusMinutes ?? todayFocusMinutes} mins
+                  </div>
                 </div>
-                <div
-                  data-testid="study-room-ledger-studied-today"
-                  className="text-sm font-mono font-bold text-emerald-400 tabular-nums mt-0.5"
-                >
-                  {todayFocusMinutes} mins ({Math.floor(todayFocusMinutes / 60)}h {todayFocusMinutes % 60}m)
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
-                  7-Day Studied Total
-                </div>
-                <div
-                  data-testid="study-room-ledger-7day-total"
-                  className="text-sm font-mono font-bold text-sky-400 tabular-nums mt-0.5"
-                >
-                  {weeklyActivitySummary?.totalFocusMinutes ?? todayFocusMinutes} mins
-                </div>
-              </div>
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
-                  Verified Sessions
-                </div>
-                <div
-                  data-testid="study-room-ledger-sessions-count"
-                  className="text-sm font-mono font-bold text-white tabular-nums mt-0.5"
-                >
-                  {mergedSessions.length} completed
+                <div className="p-2.5 rounded bg-[#0A0A0E] border border-zinc-800/80">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                    Verified Sessions
+                  </div>
+                  <div
+                    data-testid="study-room-ledger-sessions-count"
+                    className="text-sm font-mono font-bold text-white tabular-nums mt-0.5"
+                  >
+                    {mergedSessions.length} completed
+                  </div>
                 </div>
               </div>
             </div>
@@ -2004,29 +2066,29 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           {/* Right Live Multi-Scholar Video/Avatar Focus Grid Stage (7 cols) */}
           <div
             data-testid="mr-stranger-live-study-grid"
-            className="lg:col-span-7 rounded-xl border border-zinc-800 bg-[#050507] p-4 sm:p-5 space-y-4 relative overflow-hidden"
+            className="lg:col-span-7 rounded-xl border border-zinc-800 bg-[#050507] p-4 sm:p-5 flex flex-col justify-between space-y-4 relative overflow-hidden"
           >
             {/* Stage Top Floating Bar: Active Room Badge + Floating Pomodoro Timer */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-800/80 pb-3.5">
-              <div className="flex items-center gap-2.5">
-                <span className="px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <span className="px-2.5 py-1 text-[11px] font-mono font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 rounded shrink-0">
                   {studyTogetherLobby.activeRoomPreset.badgeLabel}
                 </span>
-                <div>
-                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                    <span>{studyTogetherLobby.activeRoomPreset.title}</span>
-                    <span className="text-xs font-mono text-zinc-400">
+                <div className="min-w-0">
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2 truncate">
+                    <span className="truncate">{studyTogetherLobby.activeRoomPreset.title}</span>
+                    <span className="text-xs font-mono text-zinc-400 shrink-0">
                       ({studyTogetherLobby.activeRoomPreset.roomCode})
                     </span>
                   </h2>
-                  <p className="text-[11px] text-zinc-400">
+                  <p className="text-[11px] text-zinc-400 truncate">
                     {studyTogetherLobby.activeRoomPreset.tagline}
                   </p>
                 </div>
               </div>
 
               {/* Floating StudyTogether-Style Timer Pill */}
-              <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-md bg-zinc-900/95 border border-zinc-700/80 shadow-inner">
+              <div className="flex items-center gap-2.5 px-3.5 py-1.5 rounded-md bg-zinc-900/95 border border-zinc-700/80 shadow-inner shrink-0">
                 <Clock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <div className="text-right">
                   <div className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
@@ -2044,16 +2106,32 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
 
             {/* Live Scholar Camera / Avatar Grid (Real Seated Users Only) */}
             {desksInCurrentRoom.length === 0 ? (
-              <div className="p-8 rounded-lg border border-zinc-800/80 bg-zinc-950/80 text-center space-y-2">
-                <p className="text-sm font-semibold text-white">
-                  No scholars seated in {activeRoomCode} yet
-                </p>
-                <p className="text-xs text-zinc-400">
-                  Click &ldquo;+ Take Your Seat in Grid&rdquo; or &ldquo;Study Together now&rdquo; to sit at your desk and start your live verified study timer.
-                </p>
+              <div className="p-8 rounded-lg border border-zinc-800/80 bg-zinc-950/80 text-center space-y-3 my-auto">
+                <div className="w-10 h-10 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto">
+                  <Users className="w-5 h-5 text-emerald-400" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold text-white">
+                    No scholars seated in {activeRoomCode} yet
+                  </p>
+                  <p className="text-xs text-zinc-400 max-w-md mx-auto">
+                    Click &ldquo;Study Together now&rdquo;, &ldquo;+ Take Your Seat in Grid&rdquo;, or any &ldquo;Join now&rdquo; room card below to sit at your desk and start your live verified study timer.
+                  </p>
+                </div>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    data-testid="study-grid-empty-join-btn"
+                    onClick={() => handleQuickJoinStudyTogetherRoom()}
+                    className="px-4 py-2 text-xs font-bold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded-md transition-colors inline-flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-zinc-950 shrink-0" />
+                    <span>Join {activeRoomCode} Now</span>
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 my-auto">
                 {desksInCurrentRoom.slice(0, 4).map((desk) => {
                   const isCurrentUser = desk.uid === currentUid;
                   return (
@@ -2064,23 +2142,30 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                           ? 'live-grid-tile-current-user'
                           : `live-grid-tile-${desk.uid}`
                       }
-                      className={`group relative rounded-lg overflow-hidden border aspect-[16/10] bg-zinc-950 flex flex-col justify-between p-3 transition-all ${
+                      className={`group relative rounded-lg overflow-hidden border min-h-[164px] bg-gradient-to-br from-zinc-950 via-[#090D14] to-zinc-950 flex flex-col justify-between p-4 transition-all ${
                         isCurrentUser
                           ? 'border-emerald-500/70 ring-1 ring-emerald-500/30'
                           : 'border-zinc-800/90 hover:border-zinc-700'
                       }`}
                     >
                       <div className="relative z-10 flex items-center justify-between gap-2">
-                        <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-black/75 border border-white/10 text-xs font-semibold text-white truncate">
+                        <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded bg-black/80 border border-white/10 text-xs font-semibold text-white truncate">
+                          <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
                           <span className="truncate">{desk.displayName}</span>
+                          {isCurrentUser && (
+                            <span className="text-[10px] font-mono text-emerald-300 uppercase">
+                              (You)
+                            </span>
+                          )}
                         </div>
-                        <span className="px-2 py-0.5 rounded bg-black/75 border border-white/10 text-[11px] font-mono text-emerald-300 tabular-nums shrink-0">
+                        <span className="px-2 py-1 rounded bg-black/80 border border-emerald-500/30 text-[11px] font-mono font-bold text-emerald-300 tabular-nums shrink-0">
                           {isCurrentUser
-                            ? formatStudyTimerHMS(elapsedSessionSeconds, true)
+                            ? primaryTimerText
                             : `${desk.timerMinutes}m target`}
                         </span>
                       </div>
-                      <div className="relative z-10 space-y-1">
+
+                      <div className="relative z-10 space-y-2 pt-3">
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-300/90">
                             {isCurrentUser
@@ -2089,19 +2174,82 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                                 : 'Seated · Timer Paused'
                               : 'Seated in Room'}
                           </span>
+                          <span className="text-[10px] font-mono text-zinc-400">
+                            {desk.roomCode}
+                          </span>
                         </div>
                         <p className="text-xs font-medium text-zinc-100 truncate">
                           {desk.subject}
                         </p>
+                        {isCurrentUser && (
+                          <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-800/80">
+                            <button
+                              type="button"
+                              data-testid="live-grid-tile-toggle-timer-btn"
+                              onClick={() => setIsRunning((prev) => !prev)}
+                              className="px-2.5 py-1 rounded text-[11px] font-mono font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 transition-colors cursor-pointer"
+                            >
+                              {isRunning ? 'Pause Timer' : 'Resume Timer'}
+                            </button>
+                            <button
+                              type="button"
+                              data-testid="live-grid-tile-leave-btn"
+                              onClick={leaveCurrentStudyDesk}
+                              className="px-2.5 py-1 rounded text-[11px] font-mono text-rose-300 hover:bg-rose-500/20 border border-rose-500/30 transition-colors cursor-pointer"
+                            >
+                              Leave Desk
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
                 })}
+                {desksInCurrentRoom.length === 1 && (
+                  <div
+                    data-testid="live-grid-companion-invite-slot"
+                    className="rounded-lg border border-zinc-800/90 bg-[#080A0F] min-h-[164px] p-4 flex flex-col justify-between"
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-mono uppercase tracking-wider text-zinc-400">
+                        Open Study Partner Desk #2
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800 text-[10px] font-mono text-emerald-300">
+                        {activeRoomCode}
+                      </span>
+                    </div>
+                    <div className="space-y-1 py-2">
+                      <p className="text-xs font-semibold text-white">
+                        Invite a study partner to sit next to you
+                      </p>
+                      <p className="text-[11px] text-zinc-400 leading-relaxed">
+                        Share your room code or invite link so peers can join your synchronized {durationMinutes}m focus block in real time.
+                      </p>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-zinc-800/80">
+                      <button
+                        type="button"
+                        onClick={() => handleCopyInvite('code')}
+                        className="px-2.5 py-1 rounded text-[11px] font-mono bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border border-zinc-700 transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Copy className="w-3 h-3 shrink-0" />
+                        <span>{copiedFeedback === 'code' ? 'Copied Code!' : `Copy ${activeRoomCode}`}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyInvite('link')}
+                        className="px-2.5 py-1 rounded text-[11px] font-mono font-semibold bg-white hover:bg-zinc-200 text-black transition-colors cursor-pointer"
+                      >
+                        {copiedFeedback === 'link' ? 'Link Copied!' : 'Share Invite Link'}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
             {/* Stage Footer Bar: Quick Seat Status + Room Participants */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-1 text-xs text-zinc-400">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-zinc-800/80 text-xs text-zinc-400">
               <div className="flex items-center gap-2">
                 <Users className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>
@@ -2115,15 +2263,25 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 {!isSeated ? (
                   <button
                     type="button"
+                    data-testid="study-stage-take-seat-btn"
                     onClick={() => handleQuickJoinStudyTogetherRoom()}
-                    className="px-3 py-1 text-xs font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded transition-colors cursor-pointer"
+                    className="px-3 py-1.5 text-xs font-semibold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 rounded transition-colors cursor-pointer"
                   >
                     + Take Your Seat in Grid
                   </button>
                 ) : (
-                  <span className="text-emerald-400 font-mono text-[11px]">
-                    Your desk is live in {activeRoomCode}
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400 font-mono text-[11px]">
+                      Seated Live in {activeRoomCode}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={leaveCurrentStudyDesk}
+                      className="px-2.5 py-1 text-[11px] font-mono text-rose-300 hover:bg-rose-500/20 border border-rose-500/30 rounded transition-colors cursor-pointer"
+                    >
+                      Leave
+                    </button>
+                  </div>
                 )}
               </div>
             </div>
@@ -2248,7 +2406,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                 className="w-full h-2 rounded-lg appearance-none bg-zinc-800 accent-emerald-400 cursor-pointer"
               />
 
-              <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <div className="grid grid-cols-5 gap-1.5">
                 {([-15, -5, 5, 15, 30] as const).map((delta) => (
                   <button
                     key={delta}
@@ -2257,9 +2415,9 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                     data-testid={`study-room-custom-duration-step-${
                       delta > 0 ? `plus-${delta}` : `minus-${Math.abs(delta)}`
                     }`}
-                    className="px-2.5 py-1 text-xs font-mono bg-[#0A0A0C] hover:bg-zinc-900 text-zinc-200 border border-zinc-800 rounded transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                    className="px-2 py-1 text-xs font-mono bg-[#0A0A0C] hover:bg-zinc-900 text-zinc-200 border border-zinc-800 rounded transition-colors cursor-pointer whitespace-nowrap text-center"
                   >
-                    Target {delta > 0 ? `+${delta}m` : `${delta}m`}
+                    {delta > 0 ? `+${delta}m` : `${delta}m`}
                   </button>
                 ))}
               </div>
@@ -2491,77 +2649,158 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
           </div>
         </div>
 
-        {/* 4 Signature StudyTogether-Style Room Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-          {filteredLobbyRooms.map((room) => (
-            <div
-              key={room.id}
-              data-testid={`study-lobby-card-${room.id}`}
-              className={`rounded-lg border overflow-hidden flex flex-col justify-between bg-[#050507] transition-all ${
-                room.isActiveRoom
-                  ? 'border-emerald-500/70 ring-1 ring-emerald-500/30'
-                  : 'border-zinc-800/90 hover:border-zinc-700'
-              }`}
-            >
-              <div>
-                {/* Room Cover Image & Category Badge */}
-                <div className="relative h-36 overflow-hidden bg-zinc-900">
-                  <img
-                    src={room.coverImage}
-                    alt={room.title}
-                    className="w-full h-full object-cover opacity-75"
-                    loading="lazy"
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#050507] via-black/30 to-black/40" />
-
-                  <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
-                    <span className="px-2.5 py-0.5 rounded bg-black/80 border border-white/15 text-[11px] font-mono font-semibold text-emerald-300">
-                      {room.badgeLabel}
-                    </span>
-                    <span className="px-2 py-0.5 rounded bg-black/80 border border-white/10 text-[11px] font-mono text-zinc-200 tabular-nums">
-                      {studyDesks.filter((d) => d.roomCode === room.roomCode).length} seated
-                    </span>
-                  </div>
-
-                  <div className="absolute bottom-2.5 left-3 right-3">
-                    <h3 className="text-base font-bold text-white truncate">
-                      {room.title}
-                    </h3>
-                  </div>
+        {/* Active Joined Room Status & Quick Controls inside Lobby */}
+        {(isSeated || lastJoinedRoomToast) && (
+          <div
+            data-testid="study-lobby-active-room-bar"
+            className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/40 flex flex-wrap items-center justify-between gap-3"
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-white flex flex-wrap items-center gap-2">
+                  <span>
+                    Active Desk: {studyTogetherLobby.activeRoomPreset.title} ({activeRoomCode})
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/40 text-[11px] font-mono text-emerald-300 tabular-nums">
+                    {isRunning ? `Running · ${primaryTimerText}` : `Paused · ${primaryTimerText}`}
+                  </span>
                 </div>
-
-                {/* Room Description & Metadata */}
-                <div className="p-4 space-y-3">
-                  <div className="text-[11px] font-mono text-emerald-400">
-                    {room.tagline}
-                  </div>
-                  <p className="text-xs text-zinc-300 leading-relaxed">
-                    {room.description}
-                  </p>
-                  <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-1 border-t border-zinc-800/80">
-                    <span>Code: {room.roomCode}</span>
-                    <span>{room.defaultDurationMinutes}m block</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 1-Click "Join now" Button */}
-              <div className="p-4 pt-0">
-                <button
-                  type="button"
-                  data-testid={`study-together-join-room-${room.id}`}
-                  onClick={() => handleQuickJoinStudyTogetherRoom(room.id)}
-                  className={`w-full py-2.5 px-4 text-xs font-bold rounded-md transition-colors flex items-center justify-center gap-1.5 cursor-pointer ${
-                    room.isCurrentUserSeatedHere
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
-                      : 'bg-white hover:bg-zinc-200 text-black'
-                  }`}
-                >
-                  <span>{room.ctaLabel}</span>
-                </button>
+                <p className="text-[11px] text-emerald-200/90 truncate mt-0.5">
+                  {lastJoinedRoomToast ||
+                    `Studying "${subject || activeBook.title}" · Elapsed verified time: ${formatStudyTimerHMS(elapsedSessionSeconds, true)}`}
+                </p>
               </div>
             </div>
-          ))}
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                data-testid="study-lobby-bar-toggle-timer-btn"
+                onClick={() => setIsRunning((prev) => !prev)}
+                className="px-3 py-1.5 text-xs font-mono font-semibold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded transition-colors cursor-pointer"
+              >
+                {isRunning ? 'Pause Timer' : 'Resume Timer'}
+              </button>
+              <button
+                type="button"
+                data-testid="study-lobby-bar-scroll-stage-btn"
+                onClick={() => {
+                  const heroEl = document.querySelector(
+                    '[data-testid="mr-stranger-study-together-hero"]'
+                  );
+                  heroEl?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="px-3 py-1.5 text-xs font-mono text-zinc-200 hover:text-white bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-700 rounded transition-colors cursor-pointer"
+              >
+                View Live Stage ↑
+              </button>
+              <button
+                type="button"
+                data-testid="study-lobby-bar-leave-btn"
+                onClick={leaveCurrentStudyDesk}
+                className="px-3 py-1.5 text-xs font-mono text-rose-300 hover:bg-rose-500/20 border border-rose-500/30 rounded transition-colors cursor-pointer"
+              >
+                Leave Room
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 4 Signature StudyTogether-Style Room Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          {filteredLobbyRooms.map((room) => {
+            const roomSeatedCount = effectiveStudyDesks.filter(
+              (d) => d.roomCode === room.roomCode
+            ).length;
+            return (
+              <div
+                key={room.id}
+                data-testid={`study-lobby-card-${room.id}`}
+                className={`rounded-lg border overflow-hidden flex flex-col justify-between bg-[#050507] transition-all ${
+                  room.isCurrentUserSeatedHere
+                    ? 'border-emerald-500/80 ring-1 ring-emerald-500/30'
+                    : room.isActiveRoom
+                    ? 'border-zinc-700'
+                    : 'border-zinc-800/90 hover:border-zinc-700'
+                }`}
+              >
+                <div>
+                  {/* Room Cover Image & Category Badge */}
+                  <div className="relative h-36 overflow-hidden bg-zinc-900">
+                    <img
+                      src={room.coverImage}
+                      alt={room.title}
+                      className="w-full h-full object-cover opacity-75"
+                      loading="lazy"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#050507] via-black/30 to-black/40" />
+
+                    <div className="absolute top-3 left-3 right-3 flex items-center justify-between gap-2">
+                      <span className="px-2.5 py-0.5 rounded bg-black/80 border border-white/15 text-[11px] font-mono font-semibold text-emerald-300">
+                        {room.badgeLabel}
+                      </span>
+                      <span
+                        data-testid={`study-lobby-seated-count-${room.id}`}
+                        className="px-2 py-0.5 rounded bg-black/80 border border-white/10 text-[11px] font-mono text-zinc-200 tabular-nums"
+                      >
+                        {roomSeatedCount} seated
+                      </span>
+                    </div>
+
+                    <div className="absolute bottom-2.5 left-3 right-3">
+                      <h3 className="text-base font-bold text-white truncate">
+                        {room.title}
+                      </h3>
+                    </div>
+                  </div>
+
+                  {/* Room Description & Metadata */}
+                  <div className="p-4 space-y-3">
+                    <div className="text-[11px] font-mono text-emerald-400">
+                      {room.tagline}
+                    </div>
+                    <p className="text-xs text-zinc-300 leading-relaxed">
+                      {room.description}
+                    </p>
+                    <div className="flex items-center justify-between text-[11px] font-mono text-zinc-400 pt-1 border-t border-zinc-800/80">
+                      <span>Code: {room.roomCode}</span>
+                      <span>{room.defaultDurationMinutes}m block</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 1-Click "Join now" Button + Leave Option When Seated */}
+                <div className="p-4 pt-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    data-testid={`study-together-join-room-${room.id}`}
+                    onClick={() => handleQuickJoinStudyTogetherRoom(room.id)}
+                    className={`flex-1 py-2.5 px-3 text-xs font-bold rounded-md transition-colors flex items-center justify-center gap-1.5 whitespace-nowrap cursor-pointer ${
+                      room.isCurrentUserSeatedHere
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 hover:bg-emerald-500/30'
+                        : 'bg-white hover:bg-zinc-200 text-black'
+                    }`}
+                  >
+                    <Play className="w-3.5 h-3.5 shrink-0" />
+                    <span>
+                      {room.isCurrentUserSeatedHere ? 'Joined · Live' : room.ctaLabel}
+                    </span>
+                  </button>
+                  {room.isCurrentUserSeatedHere && (
+                    <button
+                      type="button"
+                      data-testid={`study-together-leave-room-${room.id}`}
+                      onClick={leaveCurrentStudyDesk}
+                      className="py-2.5 px-3 text-xs font-mono font-semibold rounded-md bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 transition-colors whitespace-nowrap cursor-pointer shrink-0"
+                    >
+                      Leave
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -2653,27 +2892,27 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
             {isSeated ? (
               <button
                 type="button"
-                onClick={() => {
-                  closeAllStudyHardware();
-                  onLeaveDesk();
-                }}
-                className="px-4 py-2 text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded-md hover:bg-rose-500/25 transition-colors whitespace-nowrap shrink-0"
+                data-testid="study-header-leave-desk-btn"
+                onClick={leaveCurrentStudyDesk}
+                className="px-4 py-2 text-xs font-semibold bg-rose-500/15 text-rose-300 border border-rose-500/30 rounded-md hover:bg-rose-500/25 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
               >
                 Leave Study Desk
               </button>
             ) : (
               <button
                 type="button"
-                onClick={() =>
-                  onJoinDesk(
+                data-testid="study-header-sit-desk-btn"
+                onClick={() => {
+                  seatCurrentUserAtDesk(
                     activeRoomCode,
                     newRoomTitle,
                     subject || `Studying: ${activeBook.title}`,
                     'Every real timer-verified minute compounds.',
                     durationMinutes
-                  )
-                }
-                className="px-4 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0 max-w-full truncate"
+                  );
+                  setIsRunning(true);
+                }}
+                className="px-4 py-2 text-xs font-semibold bg-white hover:bg-zinc-200 text-black rounded-md transition-colors whitespace-nowrap shrink-0 max-w-full truncate cursor-pointer"
               >
                 Sit at Desk in {activeRoomCode}
               </button>
@@ -3194,8 +3433,8 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
             </div>
 
             {/* Quick Soundscape Layer Toggles Right in the Balance Bar */}
-            <div className="lg:col-span-5 flex flex-wrap items-center justify-start lg:justify-end gap-1.5">
-              <span className="text-[11px] font-mono text-zinc-400 mr-1 whitespace-nowrap">
+            <div className="lg:col-span-5 flex flex-wrap items-center justify-start lg:justify-end gap-1">
+              <span className="text-[11px] font-mono text-zinc-400 mr-0.5 whitespace-nowrap">
                 Layer Mix:
               </span>
               {AMBIENT_SOUNDSCAPES.map((sound) => {
@@ -3211,7 +3450,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                     aria-pressed={isTrackOn}
                     onClick={() => handleToggleSoundscapeLayer(sound.id)}
                     data-testid={`study-room-quick-sound-${sound.id}`}
-                    className={`px-2.5 py-1 rounded text-[11px] font-mono border flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                    className={`px-2 py-1 rounded text-[11px] font-mono border flex items-center gap-1 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
                       isTrackOn
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-semibold'
                         : 'bg-[#0A0A0C] text-zinc-400 border-zinc-800 hover:border-zinc-700 hover:text-zinc-200'
