@@ -6970,22 +6970,6 @@ export default function App() {
 
             <button
               type="button"
-              onClick={() => setActivePage('talk')}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
-                activePage === 'talk'
-                  ? 'bg-white text-black'
-                  : 'text-zinc-400 hover:bg-zinc-900 hover:text-white'
-              }`}
-            >
-              <span className="flex items-center gap-2.5">
-                <PhoneCall className="w-4 h-4" />
-                <span>Talking Mode</span>
-              </span>
-              <span className="text-[11px] font-mono">WebRTC</span>
-            </button>
-
-            <button
-              type="button"
               onClick={() => setActivePage('study')}
               className={`w-full flex items-center justify-between px-3 py-2.5 rounded-md text-xs font-semibold transition-colors whitespace-nowrap shrink-0 ${
                 activePage === 'study'
@@ -17470,9 +17454,9 @@ export default function App() {
           )}
 
           {/* ================================================================
-              PAGE 2: SIDEBAR CHAT MODE (INSTAGRAM-STYLE REQUEST -> ACCEPT -> CLICK PROFILE TO CHAT)
+              PAGE 2: SIDEBAR CHAT MODE (INSTAGRAM-STYLE REQUEST -> ACCEPT -> CLICK PROFILE FOR CHAT, VOICE & VIDEO CALL)
               ================================================================ */}
-          {activePage === 'chat' && (
+          {(activePage === 'chat' || activePage === 'talk') && (
             <InstagramStyleChatModeView
               currentUid={currentIdentity.uid}
               currentDisplayName={currentIdentity.displayName}
@@ -17492,17 +17476,6 @@ export default function App() {
               onClearChatError={() => setChatError('')}
               onSendDirectMessage={handleSendDirectMessage}
               onNavigateToHub={() => setActivePage('hub')}
-            />
-          )}
-
-          {/* ================================================================
-              PAGE 3: SIDEBAR TALKING MODE (VOICE & VIDEO CALLS)
-              ================================================================ */}
-          {activePage === 'talk' && (
-            <TalkingRoomView
-              currentUid={currentIdentity.uid}
-              currentName={currentIdentity.displayName}
-              acceptedPeers={acceptedOnlinePeers}
               incomingSignal={incomingCallSignal}
               onSendSignal={(toUid, callType, signalData) => {
                 if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {

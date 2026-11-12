@@ -19601,12 +19601,12 @@ export const WORKSPACE_COMMAND_PALETTE_ITEMS: readonly WorkspaceCommandItem[] = 
   },
   {
     id: 'nav_talking_room',
-    title: 'Join Live Voice & Video Talking Lounge',
-    subtitle: 'Real-time WebRTC audio/video calling room with screen & mic controls',
+    title: 'Voice & Video Call in Chat Mode',
+    subtitle: 'Start an Instagram-style WebRTC voice or video call from an accepted profile chat',
     category: 'Social & QR',
     shortcut: 'G V',
-    keywords: ['voice', 'video', 'call', 'talking', 'lounge', 'webrtc', 'audio'],
-    targetPage: 'talk',
+    keywords: ['voice', 'video', 'call', 'talking', 'chat', 'webrtc', 'audio'],
+    targetPage: 'chat',
     actionType: 'navigate',
   },
   {
@@ -29652,6 +29652,7 @@ export interface InstagramChatModeEvaluation {
   outgoingPendingRequests: InstagramChatRequestItem[];
   acceptedProfiles: InstagramAcceptedProfileItem[];
   isChatBoxOpen: boolean;
+  canStartVoiceOrVideoCall: boolean;
   activeOpenChatProfile: InstagramAcceptedProfileItem | null;
   activeConversationMessages: DirectMessageDoc[];
 }
@@ -29831,6 +29832,7 @@ export function evaluateInstagramStyleChatModeState(params: {
     outgoingPendingRequests,
     acceptedProfiles,
     isChatBoxOpen,
+    canStartVoiceOrVideoCall: isChatBoxOpen,
     activeOpenChatProfile,
     activeConversationMessages,
   };

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Volume2,
   VolumeX,
@@ -11,6 +11,12 @@ import {
   ArrowLeft,
   Sparkles,
   Lock,
+  Phone,
+  PhoneOff,
+  Video,
+  VideoOff,
+  Mic,
+  MicOff,
 } from 'lucide-react';
 import {
   ConnectionRequestDoc,
@@ -19,8 +25,16 @@ import {
   evaluateInstagramStyleChatModeState,
   formatInstagramStyleHandle,
   deriveAvatarInitials,
+  formatTimerMMSS,
 } from '../utils/rules';
 import type { OnlinePeer } from '../../server';
+
+export interface IncomingWebRtcCallSignal {
+  fromUid: string;
+  fromName: string;
+  callType: 'audio' | 'video';
+  signalData: Record<string, unknown>;
+}
 
 export interface InstagramStyleChatModeViewProps {
   currentUid: string;
@@ -44,12 +58,24 @@ export interface InstagramStyleChatModeViewProps {
   onClearChatError: () => void;
   onSendDirectMessage: (e: React.FormEvent) => void;
   onNavigateToHub: () => void;
+  incomingSignal?: IncomingWebRtcCallSignal | null;
+  onSendSignal?: (
+    toUid: string,
+    callType: 'audio' | 'video',
+    signalData: Record<string, unknown>
+  ) => void;
+  onClearIncomingSignal?: () => void;
 }
+
+const RTC_CONFIG: RTCConfiguration = {
+  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+};
 
 export const InstagramStyleChatModeView: React.FC<
   InstagramStyleChatModeViewProps
 > = ({
   currentUid,
+  currentDisplayName,
   e2eeFingerprint,
   uiSoundPrefs,
   onToggleUiSoundEffects,
@@ -66,10 +92,29 @@ export const InstagramStyleChatModeView: React.FC<
   onClearChatError,
   onSendDirectMessage,
   onNavigateToHub,
+  incomingSignal = null,
+  onSendSignal,
+  onClearIncomingSignal,
 }) => {
   const [inboxTab, setInboxTab] = useState<'profiles' | 'requests'>('profiles');
   const [recentAcceptanceNotice, setRecentAcceptanceNotice] =
     useState<string>('');
+
+  // In-Chat Voice & Video Call State (Instagram Direct Call inside Chat)
+  const [callStatus, setCallStatus] = useState<
+    'idle' | 'ringing' | 'calling' | 'connected'
+  >('idle');
+  const [callType, setCallType] = useState<'audio' | 'video'>('audio');
+  const [callPartnerUid, setCallPartnerUid] = useState<string>('');
+  const [callSeconds, setCallSeconds] = useState<number>(0);
+  const [micMuted, setMicMuted] = useState<boolean>(false);
+  const [camOff, setCamOff] = useState<boolean>(false);
+  const [mediaNotice, setMediaNotice] = useState<string>('');
+
+  const localVideoRef = useRef<HTMLVideoElement | null>(null);
+  const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
+  const peerConnRef = useRef<RTCPeerConnection | null>(null);
+  const localStreamRef = useRef<MediaStream | null>(null);
 
   const evaluation = evaluateInstagramStyleChatModeState({
     currentUid,
@@ -90,6 +135,220 @@ export const InstagramStyleChatModeView: React.FC<
 
   const acceptedUidSet = new Set(acceptedProfiles.map((p) => p.uid));
 
+  const cleanupCall = () => {
+    if (peerConnRef.current) {
+      try {
+        peerConnRef.current.close();
+      } catch {
+        // ignore
+      }
+      peerConnRef.current = null;
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((t) => t.stop());
+      localStreamRef.current = null;
+    }
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    setCallStatus('idle');
+    setCallPartnerUid('');
+    setCallSeconds(0);
+    setMicMuted(false);
+    setCamOff(false);
+    setMediaNotice('');
+  };
+
+  useEffect(() => {
+    return () => cleanupCall();
+  }, []);
+
+  // Tick call duration timer while calling or connected
+  useEffect(() => {
+    if (callStatus !== 'calling' && callStatus !== 'connected') {
+      setCallSeconds(0);
+      return;
+    }
+    const id = window.setInterval(() => {
+      setCallSeconds((prev) => prev + 1);
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [callStatus]);
+
+  const acquireLocalMedia = async (
+    mode: 'audio' | 'video'
+  ): Promise<MediaStream | null> => {
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== 'function'
+    ) {
+      setMediaNotice(
+        mode === 'video'
+          ? 'Video Call active (Signaling connected · Camera standby)'
+          : 'Voice Call active (Signaling connected · Mic standby)'
+      );
+      return null;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+        video: mode === 'video',
+      });
+      localStreamRef.current = stream;
+      if (localVideoRef.current && mode === 'video') {
+        localVideoRef.current.srcObject = stream;
+      }
+      setMediaNotice(
+        mode === 'video'
+          ? 'Camera & Microphone live for encrypted video call'
+          : 'Microphone live for encrypted voice call'
+      );
+      return stream;
+    } catch {
+      setMediaNotice(
+        mode === 'video'
+          ? 'Encrypted Video Call active (Camera/Mic in standby on this device)'
+          : 'Encrypted Voice Call active (Microphone in standby on this device)'
+      );
+      return null;
+    }
+  };
+
+  const createPeerConnection = (targetUid: string, mode: 'audio' | 'video') => {
+    if (typeof RTCPeerConnection === 'undefined') return null;
+    const pc = new RTCPeerConnection(RTC_CONFIG);
+    pc.onicecandidate = (event) => {
+      if (event.candidate && onSendSignal) {
+        onSendSignal(targetUid, mode, {
+          type: 'candidate',
+          candidate: event.candidate,
+        });
+      }
+    };
+    pc.ontrack = (event) => {
+      if (remoteVideoRef.current && event.streams[0]) {
+        remoteVideoRef.current.srcObject = event.streams[0];
+      }
+    };
+    peerConnRef.current = pc;
+    return pc;
+  };
+
+  const handleStartInChatCall = async (
+    targetUid: string,
+    mode: 'audio' | 'video'
+  ) => {
+    if (!targetUid || !acceptedUidSet.has(targetUid)) return;
+    setCallPartnerUid(targetUid);
+    setCallType(mode);
+    setCallStatus('calling');
+    setCamOff(mode === 'audio');
+
+    const stream = await acquireLocalMedia(mode);
+    const pc = createPeerConnection(targetUid, mode);
+    if (pc) {
+      if (stream) {
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      }
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        if (onSendSignal) {
+          onSendSignal(targetUid, mode, { type: 'offer', sdp: offer });
+        }
+      } catch {
+        // Ignore SDP error in offline/local preview
+      }
+    }
+  };
+
+  const handleAcceptIncomingCall = async () => {
+    if (!incomingSignal) return;
+    const { fromUid, callType: incomingMode, signalData } = incomingSignal;
+    onSelectChatProfileUid(fromUid);
+    setCallPartnerUid(fromUid);
+    setCallType(incomingMode);
+    setCallStatus('connected');
+    setCamOff(incomingMode === 'audio');
+
+    const stream = await acquireLocalMedia(incomingMode);
+    const pc = createPeerConnection(fromUid, incomingMode);
+    if (pc && signalData.sdp) {
+      if (stream) {
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      }
+      try {
+        await pc.setRemoteDescription(
+          new RTCSessionDescription(signalData.sdp as RTCSessionDescriptionInit)
+        );
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+        if (onSendSignal) {
+          onSendSignal(fromUid, incomingMode, { type: 'answer', sdp: answer });
+        }
+      } catch {
+        // Ignore SDP error
+      }
+    }
+    if (onClearIncomingSignal) {
+      onClearIncomingSignal();
+    }
+  };
+
+  useEffect(() => {
+    if (!incomingSignal) return;
+    const { signalData } = incomingSignal;
+
+    const handleSignal = async () => {
+      if (signalData.type === 'offer') {
+        setCallStatus('ringing');
+      } else if (signalData.type === 'answer' && peerConnRef.current) {
+        await peerConnRef.current.setRemoteDescription(
+          new RTCSessionDescription(signalData.sdp as RTCSessionDescriptionInit)
+        );
+        setCallStatus('connected');
+        onClearIncomingSignal?.();
+      } else if (signalData.type === 'candidate' && peerConnRef.current) {
+        await peerConnRef.current.addIceCandidate(
+          new RTCIceCandidate(signalData.candidate as RTCIceCandidateInit)
+        );
+        onClearIncomingSignal?.();
+      } else if (signalData.type === 'hangup') {
+        cleanupCall();
+        onClearIncomingSignal?.();
+      }
+    };
+
+    handleSignal().catch(() => {
+      // ignore WebRTC signal error
+    });
+  }, [incomingSignal]);
+
+  const handleToggleMuteMic = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((t) => {
+        t.enabled = !t.enabled;
+      });
+    }
+    setMicMuted((prev) => !prev);
+  };
+
+  const handleToggleCamera = () => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getVideoTracks().forEach((t) => {
+        t.enabled = !t.enabled;
+      });
+    }
+    setCamOff((prev) => !prev);
+  };
+
+  const handleHangupCall = () => {
+    if (callPartnerUid && onSendSignal) {
+      onSendSignal(callPartnerUid, callType, { type: 'hangup' });
+    }
+    cleanupCall();
+  };
+
   const handleAcceptIncomingRequest = (reqItem: {
     requestId: string;
     uid: string;
@@ -98,11 +357,10 @@ export const InstagramStyleChatModeView: React.FC<
     const rawReq = requests.find((r) => r.id === reqItem.requestId);
     if (!rawReq) return;
     onRespondRequest(rawReq, 'accepted');
-    // Keep chat closed until user clicks the accepted profile (Instagram flow)
     onSelectChatProfileUid('');
     setInboxTab('profiles');
     setRecentAcceptanceNotice(
-      `You accepted ${reqItem.displayName}'s request. Click on their profile card to open your chat.`
+      `You accepted ${reqItem.displayName}'s request. Click on their profile card to open your chat, voice call, or video call.`
     );
   };
 
@@ -124,28 +382,33 @@ export const InstagramStyleChatModeView: React.FC<
     onSelectChatProfileUid(profileUid);
   };
 
+  const isCurrentProfileInCall =
+    Boolean(activeOpenChatProfile) &&
+    (callStatus === 'calling' || callStatus === 'connected') &&
+    callPartnerUid === activeOpenChatProfile?.uid;
+
   return (
     <section
       className="space-y-6"
       aria-label="Real-Time Chat Mode"
       data-testid="instagram-style-chat-mode"
       data-chat-box-open={isChatBoxOpen ? 'true' : 'false'}
+      data-in-chat-call-status={callStatus}
     >
       {/* Top Header Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-zinc-800/80 pb-4">
         <div className="space-y-1">
           <div className="flex flex-wrap items-center gap-2.5">
             <h1 className="text-2xl font-bold tracking-tight text-white">
-              Real-Time Chat Mode
+              Real-Time Chat &amp; Calling
             </h1>
             <span className="px-2.5 py-0.5 text-[11px] font-mono font-semibold rounded bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-              Request · Accept · Click Profile to Chat
+              Request · Accept · Click Profile for Chat, Voice &amp; Video Call
             </span>
           </div>
           <p className="text-sm text-zinc-400">
-            No chat box opens automatically. Accept a connection request first,
-            then click on the person&apos;s profile to open your private
-            encrypted chat.
+            Accept a connection request first, then click on the person&apos;s
+            profile to open direct messages, voice calls, or video calls.
           </p>
         </div>
 
@@ -178,6 +441,62 @@ export const InstagramStyleChatModeView: React.FC<
         </div>
       </div>
 
+      {/* Incoming Voice / Video Call Ringing Banner inside Chat Mode */}
+      {incomingSignal && callStatus === 'ringing' && (
+        <div
+          data-testid="chat-incoming-call-banner"
+          className="p-4 rounded-xl bg-[#0A0A0C] border border-emerald-500/60 flex flex-wrap items-center justify-between gap-4"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center text-emerald-300">
+              {incomingSignal.callType === 'video' ? (
+                <Video className="w-5 h-5" />
+              ) : (
+                <Phone className="w-5 h-5" />
+              )}
+            </div>
+            <div>
+              <div className="text-sm font-bold text-white">
+                Incoming{' '}
+                {incomingSignal.callType === 'video' ? 'Video' : 'Voice'} Call
+                from {incomingSignal.fromName}
+              </div>
+              <p className="text-xs text-zinc-400">
+                Accept to open their chat and join the encrypted WebRTC{' '}
+                {incomingSignal.callType} call.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleAcceptIncomingCall}
+              data-testid="chat-accept-incoming-call-btn"
+              className="px-4 py-2 text-xs font-bold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded-md cursor-pointer"
+            >
+              Accept {incomingSignal.callType === 'video' ? 'Video' : 'Voice'}{' '}
+              Call
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                onSendSignal?.(
+                  incomingSignal.fromUid,
+                  incomingSignal.callType,
+                  { type: 'hangup' }
+                );
+                onClearIncomingSignal?.();
+                setCallStatus('idle');
+              }}
+              data-testid="chat-decline-incoming-call-btn"
+              className="px-4 py-2 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-md cursor-pointer"
+            >
+              Decline
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Confirmation Notice After Accepting a Request */}
       {recentAcceptanceNotice && (
         <div
@@ -198,7 +517,7 @@ export const InstagramStyleChatModeView: React.FC<
         </div>
       )}
 
-      {/* Main 12-Col Layout: Left 5 Cols = Profiles & Requests Inbox, Right 7 Cols = Profile-Gated Stage */}
+      {/* Main 12-Col Layout: Left 5 Cols = Profiles & Requests Inbox, Right 7 Cols = Profile-Gated Chat & Call Stage */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* LEFT COLUMN: ACCEPTED PROFILES & MESSAGE REQUESTS INBOX */}
         <div className="lg:col-span-5 p-5 rounded-xl border border-zinc-800/90 bg-[#0A0A0C] space-y-5">
@@ -271,7 +590,8 @@ export const InstagramStyleChatModeView: React.FC<
                   {incomingPendingRequests.length === 1 ? '' : 's'}
                 </div>
                 <div className="text-[11px] text-zinc-300">
-                  Accept their request first to unlock their profile for chat.
+                  Accept their request first to unlock their profile for chat
+                  &amp; calling.
                 </div>
               </div>
               <button
@@ -285,7 +605,7 @@ export const InstagramStyleChatModeView: React.FC<
             </div>
           )}
 
-          {/* TAB 1: ACCEPTED PROFILES LIST (CLICK PROFILE TO OPEN CHAT) */}
+          {/* TAB 1: ACCEPTED PROFILES LIST (CLICK PROFILE TO OPEN CHAT & CALLS) */}
           {inboxTab === 'profiles' && (
             <div className="space-y-3" data-testid="chat-accepted-profiles-list">
               <div className="flex items-center justify-between text-xs text-zinc-400 px-0.5">
@@ -293,7 +613,7 @@ export const InstagramStyleChatModeView: React.FC<
                   Your Accepted Profiles ({acceptedProfiles.length})
                 </span>
                 <span className="font-mono text-[11px] text-emerald-400">
-                  Click profile to open chat
+                  Click profile to chat or call
                 </span>
               </div>
 
@@ -306,9 +626,9 @@ export const InstagramStyleChatModeView: React.FC<
                     No Accepted Profiles Yet
                   </div>
                   <p className="leading-relaxed">
-                    Just like Instagram, a chat box only opens after someone
-                    sends a request, you accept it, and you click on their
-                    profile.
+                    Just like Instagram, direct messages, voice calls, and video
+                    calls unlock after someone sends a request, you accept it,
+                    and you click on their profile.
                   </p>
                   <div className="flex flex-wrap items-center gap-2 pt-1">
                     {incomingPendingRequests.length > 0 && (
@@ -606,18 +926,20 @@ export const InstagramStyleChatModeView: React.FC<
                 <div className="space-y-4 max-w-lg w-full">
                   <div className="space-y-1.5">
                     <h2 className="text-xl font-bold text-white">
-                      Click on an Accepted Profile to Open Chat
+                      Click on an Accepted Profile to Chat or Call
                     </h2>
                     <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
                       Your connection request is accepted. Select a person&apos;s
-                      profile below to open your private direct message box with
-                      them.
+                      profile below to open your private chat, voice call, or
+                      video call with them.
                     </p>
                   </div>
 
                   <div
                     className={`grid grid-cols-1 ${
-                      acceptedProfiles.length > 1 ? 'sm:grid-cols-2' : 'max-w-xs mx-auto'
+                      acceptedProfiles.length > 1
+                        ? 'sm:grid-cols-2'
+                        : 'max-w-xs mx-auto'
                     } gap-3 pt-2 text-left`}
                   >
                     {acceptedProfiles.map((profile) => (
@@ -650,14 +972,14 @@ export const InstagramStyleChatModeView: React.FC<
                 <div className="space-y-4 max-w-lg w-full">
                   <div className="space-y-1.5">
                     <h2 className="text-xl font-bold text-white">
-                      Accept Incoming Request First to Unlock Chat
+                      Accept Incoming Request First to Unlock Chat &amp; Calls
                     </h2>
                     <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
                       You have {incomingPendingRequests.length} pending
                       connection request
                       {incomingPendingRequests.length === 1 ? '' : 's'}. Accept
                       them below, then click on their profile to open the chat
-                      box.
+                      box, voice call, or video call.
                     </p>
                   </div>
 
@@ -705,12 +1027,12 @@ export const InstagramStyleChatModeView: React.FC<
                 <div className="space-y-5 max-w-md">
                   <div className="space-y-2">
                     <h2 className="text-xl font-bold text-white">
-                      Your Direct Messages Are Request-Gated
+                      Direct Messages, Voice &amp; Video Calls Are Request-Gated
                     </h2>
                     <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed">
                       Chat boxes never open on their own. When someone sends you
                       a request, accept them in your Requests inbox and click on
-                      their profile to open your private chat.
+                      their profile to message, voice call, or video call them.
                     </p>
                   </div>
 
@@ -742,10 +1064,10 @@ export const InstagramStyleChatModeView: React.FC<
                         STEP 03
                       </div>
                       <div className="font-bold text-white">
-                        Click Profile to Chat
+                        Chat, Voice or Video Call
                       </div>
                       <p className="text-[11px] text-zinc-400">
-                        Tap their accepted profile card to open the chat box.
+                        Tap their accepted profile to chat or start a call.
                       </p>
                     </div>
                   </div>
@@ -765,12 +1087,12 @@ export const InstagramStyleChatModeView: React.FC<
               )}
             </div>
           ) : (
-            /* ACTIVE PROFILE DIRECT CHAT WINDOW (OPENED ONLY AFTER CLICKING AN ACCEPTED PROFILE) */
+            /* ACTIVE PROFILE DIRECT CHAT & CALL WINDOW (OPENED ONLY AFTER CLICKING AN ACCEPTED PROFILE) */
             <div
               data-testid="chat-mode-active-conversation"
-              className="p-6 rounded-xl border border-zinc-800/90 bg-[#0A0A0C] flex flex-col h-[560px] justify-between"
+              className="p-6 rounded-xl border border-zinc-800/90 bg-[#0A0A0C] flex flex-col min-h-[560px] justify-between space-y-4"
             >
-              {/* Top Clicked Profile Header Bar */}
+              {/* Top Clicked Profile Header Bar with Instagram-Style Voice Call & Video Call Actions */}
               <div className="border-b border-zinc-800/80 pb-4 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="relative w-11 h-11 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-sm font-bold text-white shrink-0">
@@ -810,24 +1132,58 @@ export const InstagramStyleChatModeView: React.FC<
                       <span>·</span>
                       <span className="inline-flex items-center gap-1 font-mono text-[11px] text-zinc-400">
                         <ShieldCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-                        Invite-Verified Chat
+                        Invite-Verified Chat &amp; Call
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <span className="text-xs text-zinc-400 font-mono tabular-nums">
-                    {activeConversationMessages.length}{' '}
-                    {activeConversationMessages.length === 1
-                      ? 'message'
-                      : 'messages'}
-                  </span>
+                {/* Instagram-Style In-Chat Voice Call & Video Call Controls */}
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
                   <button
                     type="button"
-                    onClick={() => onSelectChatProfileUid('')}
+                    onClick={() =>
+                      handleStartInChatCall(activeOpenChatProfile.uid, 'audio')
+                    }
+                    data-testid="chat-header-voice-call-btn"
+                    title={`Start voice call with ${activeOpenChatProfile.displayName}`}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                      isCurrentProfileInCall && callType === 'audio'
+                        ? 'bg-emerald-400 text-zinc-950 border-emerald-400 font-bold'
+                        : 'bg-[#050507] hover:bg-zinc-900 text-zinc-200 border-zinc-800 hover:border-zinc-600'
+                    }`}
+                  >
+                    <Phone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Voice Call</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleStartInChatCall(activeOpenChatProfile.uid, 'video')
+                    }
+                    data-testid="chat-header-video-call-btn"
+                    title={`Start video call with ${activeOpenChatProfile.displayName}`}
+                    className={`px-3 py-1.5 text-xs font-semibold rounded-md border inline-flex items-center gap-1.5 transition-colors cursor-pointer whitespace-nowrap shrink-0 ${
+                      isCurrentProfileInCall && callType === 'video'
+                        ? 'bg-emerald-400 text-zinc-950 border-emerald-400 font-bold'
+                        : 'bg-[#050507] hover:bg-zinc-900 text-zinc-200 border-zinc-800 hover:border-zinc-600'
+                    }`}
+                  >
+                    <Video className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                    <span>Video Call</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isCurrentProfileInCall) {
+                        handleHangupCall();
+                      }
+                      onSelectChatProfileUid('');
+                    }}
                     data-testid="chat-close-profile-btn"
-                    className="px-3 py-1.5 text-xs font-semibold bg-[#050507] hover:bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-md inline-flex items-center gap-1.5 cursor-pointer"
+                    className="px-3 py-1.5 text-xs font-semibold bg-[#050507] hover:bg-zinc-900 text-zinc-300 border border-zinc-800 rounded-md inline-flex items-center gap-1.5 cursor-pointer whitespace-nowrap shrink-0"
                   >
                     <ArrowLeft className="w-3.5 h-3.5 shrink-0" />
                     <span>Back to Profiles</span>
@@ -835,8 +1191,174 @@ export const InstagramStyleChatModeView: React.FC<
                 </div>
               </div>
 
+              {/* IN-CHAT LIVE VOICE / VIDEO CALL DRAWER (INSTAGRAM DIRECT CALL VIEW) */}
+              {isCurrentProfileInCall && (
+                <div
+                  data-testid="chat-active-call-drawer"
+                  data-call-type={callType}
+                  className="p-4 rounded-xl bg-[#050507] border border-emerald-500/40 space-y-4"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/80 pb-3">
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                      <span
+                        data-testid="chat-active-call-mode-label"
+                        className="font-bold text-white"
+                      >
+                        {callType === 'video'
+                          ? 'In-Chat Live Video Call'
+                          : 'In-Chat Live Voice Call'}{' '}
+                        with {activeOpenChatProfile.displayName}
+                      </span>
+                      <span className="text-zinc-500">·</span>
+                      <span
+                        data-testid="chat-active-call-timer"
+                        className="font-mono text-emerald-400 font-semibold tabular-nums"
+                      >
+                        {formatTimerMMSS(callSeconds)}
+                      </span>
+                    </div>
+                    <span className="text-[11px] font-mono text-zinc-400">
+                      {mediaNotice || 'Encrypted WebRTC P2P Stream'}
+                    </span>
+                  </div>
+
+                  {callType === 'video' ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div className="relative aspect-video rounded-lg bg-[#0A0A0C] border border-zinc-800 overflow-hidden flex flex-col items-center justify-center">
+                        <video
+                          ref={localVideoRef}
+                          autoPlay
+                          playsInline
+                          muted
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <div className="w-11 h-11 rounded-full bg-zinc-900/90 border border-zinc-700 flex items-center justify-center text-xs font-bold text-white">
+                            {deriveAvatarInitials(currentDisplayName)}
+                          </div>
+                        </div>
+                        <div className="absolute bottom-2.5 left-2.5 px-2 py-0.5 rounded bg-black/80 border border-zinc-800 text-[11px] font-mono text-zinc-200">
+                          You ({camOff ? 'Camera Off' : 'Video Ready'})
+                        </div>
+                      </div>
+
+                      <div className="relative aspect-video rounded-lg bg-[#0A0A0C] border border-zinc-800 overflow-hidden flex flex-col items-center justify-center">
+                        <video
+                          ref={remoteVideoRef}
+                          autoPlay
+                          playsInline
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none space-y-1.5">
+                          <div className="w-12 h-12 rounded-full bg-zinc-900/90 border border-emerald-500/50 flex items-center justify-center text-sm font-bold text-white">
+                            {activeOpenChatProfile.avatarInitials}
+                          </div>
+                          <span className="text-xs font-semibold text-zinc-200">
+                            {activeOpenChatProfile.displayName}
+                          </span>
+                          <span className="text-[11px] font-mono text-emerald-400">
+                            {callStatus === 'connected'
+                              ? 'Connected'
+                              : 'Ringing on Chat...'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="py-5 px-4 rounded-lg bg-[#0A0A0C] border border-zinc-800/90 flex items-center justify-around gap-4">
+                      <div className="flex flex-col items-center space-y-1.5">
+                        <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-sm font-bold text-white">
+                          {deriveAvatarInitials(currentDisplayName)}
+                        </div>
+                        <span className="text-xs font-semibold text-white">
+                          You
+                        </span>
+                        <span className="text-[11px] font-mono text-zinc-400">
+                          {micMuted ? 'Mic Muted' : 'Mic Active'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col items-center space-y-1">
+                        <span className="px-2.5 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-[11px] font-mono text-emerald-300">
+                          Voice Call · {formatTimerMMSS(callSeconds)}
+                        </span>
+                        <span className="text-[11px] text-zinc-500 font-mono">
+                          {callStatus === 'connected'
+                            ? 'Audio Connected'
+                            : 'Calling...'}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col items-center space-y-1.5">
+                        <div className="w-14 h-14 rounded-full bg-zinc-900 border border-emerald-500/50 flex items-center justify-center text-sm font-bold text-white">
+                          {activeOpenChatProfile.avatarInitials}
+                        </div>
+                        <span className="text-xs font-semibold text-white">
+                          {activeOpenChatProfile.displayName}
+                        </span>
+                        <span className="text-[11px] font-mono text-emerald-400">
+                          {activeOpenChatProfile.handle}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* In-Call Controls */}
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
+                    <button
+                      type="button"
+                      onClick={handleToggleMuteMic}
+                      data-testid="chat-call-mute-mic-btn"
+                      className={`px-3.5 py-2 text-xs font-semibold rounded-md border inline-flex items-center gap-1.5 cursor-pointer ${
+                        micMuted
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                          : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-800'
+                      }`}
+                    >
+                      {micMuted ? (
+                        <MicOff className="w-3.5 h-3.5 shrink-0" />
+                      ) : (
+                        <Mic className="w-3.5 h-3.5 shrink-0" />
+                      )}
+                      <span>{micMuted ? 'Unmute Mic' : 'Mute Mic'}</span>
+                    </button>
+
+                    {callType === 'video' && (
+                      <button
+                        type="button"
+                        onClick={handleToggleCamera}
+                        data-testid="chat-call-toggle-cam-btn"
+                        className={`px-3.5 py-2 text-xs font-semibold rounded-md border inline-flex items-center gap-1.5 cursor-pointer ${
+                          camOff
+                            ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                            : 'bg-zinc-900 hover:bg-zinc-800 text-zinc-200 border-zinc-800'
+                        }`}
+                      >
+                        {camOff ? (
+                          <VideoOff className="w-3.5 h-3.5 shrink-0" />
+                        ) : (
+                          <Video className="w-3.5 h-3.5 shrink-0" />
+                        )}
+                        <span>{camOff ? 'Turn Camera On' : 'Turn Camera Off'}</span>
+                      </button>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleHangupCall}
+                      data-testid="chat-call-hangup-btn"
+                      className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-500 text-white rounded-md inline-flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <PhoneOff className="w-3.5 h-3.5 shrink-0" />
+                      <span>End Call</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
               {/* Conversation Thread + Instagram-Style Top Profile Summary */}
-              <div className="flex-1 overflow-y-auto py-4 space-y-4">
+              <div className="flex-1 overflow-y-auto py-3 space-y-4 max-h-[340px]">
                 <div className="p-4 rounded-lg bg-[#050507] border border-zinc-900 flex flex-col items-center text-center space-y-1.5">
                   <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-700 flex items-center justify-center text-sm font-bold text-white">
                     {activeOpenChatProfile.avatarInitials}
@@ -853,12 +1375,15 @@ export const InstagramStyleChatModeView: React.FC<
                 </div>
 
                 {activeConversationMessages.length === 0 ? (
-                  <div className="py-8 text-center text-xs text-zinc-400 space-y-1">
+                  <div className="py-6 text-center text-xs text-zinc-400 space-y-1">
                     <p className="text-white font-semibold">
-                      Direct Chat Unlocked with{' '}
+                      Direct Chat &amp; Calling Unlocked with{' '}
                       {activeOpenChatProfile.displayName}
                     </p>
-                    <p>Send your first real-time message below.</p>
+                    <p>
+                      Send a message below or use Voice Call / Video Call in the
+                      top bar.
+                    </p>
                   </div>
                 ) : (
                   activeConversationMessages.map((msg) => {

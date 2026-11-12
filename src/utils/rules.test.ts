@@ -11736,9 +11736,10 @@ test('evaluateInstagramStyleChatModeState enforces Instagram-style Request -> Ac
   assert.equal(acceptedUnclickedState.acceptedProfiles.length, 1);
   assert.equal(acceptedUnclickedState.acceptedProfiles[0].displayName, 'Aarav Mehta');
   assert.equal(acceptedUnclickedState.isChatBoxOpen, false);
+  assert.equal(acceptedUnclickedState.canStartVoiceOrVideoCall, false);
   assert.equal(acceptedUnclickedState.activeOpenChatProfile, null);
 
-  // 4. User clicks on the accepted profile (selectedProfileUid === 'usr_aarav'): chat box opens for that profile
+  // 4. User clicks on the accepted profile (selectedProfileUid === 'usr_aarav'): chat box and voice/video calling unlock for that profile
   const clickedProfileState = evaluateInstagramStyleChatModeState({
     currentUid: 'usr_mahit',
     selectedProfileUid: 'usr_aarav',
@@ -11766,6 +11767,7 @@ test('evaluateInstagramStyleChatModeState enforces Instagram-style Request -> Ac
     ],
   });
   assert.equal(clickedProfileState.isChatBoxOpen, true);
+  assert.equal(clickedProfileState.canStartVoiceOrVideoCall, true);
   assert.equal(clickedProfileState.activeOpenChatProfile?.uid, 'usr_aarav');
   assert.equal(clickedProfileState.activeOpenChatProfile?.handle, '@aarav_mehta');
   assert.equal(clickedProfileState.activeConversationMessages.length, 1);
