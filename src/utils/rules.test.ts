@@ -521,6 +521,10 @@ import {
   buildPaymentInvoicePdfSpec,
   computePomodoroVisualCountdownMetrics,
   evaluateInstagramStyleChatModeState,
+  STUDY_30DAY_ACTIVITY_PDF_MIME_TYPE,
+  buildStudy30DayActivityPdfFilename,
+  computeProductivityStreakAudit,
+  buildStudy30DayActivityAndStreaksPdfReportSpec,
 } from './rules.ts';
 
 test('Personal 24-hour mood history CSV export filters strictly to current user, excludes stale >24h events, reconciles live mood, and escapes CSV cells', () => {
@@ -11772,3 +11776,55 @@ test('evaluateInstagramStyleChatModeState enforces Instagram-style Request -> Ac
   assert.equal(clickedProfileState.activeOpenChatProfile?.handle, '@aarav_mehta');
   assert.equal(clickedProfileState.activeConversationMessages.length, 1);
 });
+
+test('buildStudy30DayActivityAndStreaksPdfReportSpec generates a formatted 2-page PDF report with 30-day study room activity, room breakdown, and productivity streaks', () => {
+  const summary = buildFocusHistory30DaySummary({
+    todayDateKey: '2026-11-13',
+    todayFocusMinutes: 140,
+    dailyTargetMinutes: 120,
+    activeRoomCode: 'STUDY-SOLO',
+    roomFilter: 'ALL',
+    strictRealOnly: false,
+  });
+
+  const report = buildStudy30DayActivityAndStreaksPdfReportSpec({
+    summary,
+    scholarName: 'Mahit Saxena',
+    activeRoomCode: 'STUDY-SOLO',
+    loginStreakDays: 14,
+    referenceTimestampMs: Date.UTC(2026, 10, 13, 17, 30, 0),
+  });
+
+  assert.equal(report.mimeType, STUDY_30DAY_ACTIVITY_PDF_MIME_TYPE);
+  assert.equal(
+    report.filename,
+    'mr-stranger-30day-study-report-study-solo-2026-11-13.pdf'
+  );
+  assert.equal(report.pageCount, 2);
+  assert.equal(report.dailyRows.length, 30);
+  assert.equal(report.streakAudit.loginStreakDays, 14);
+  assert.ok(report.streakAudit.currentFocusStreakDays >= 1);
+  assert.ok(report.streakAudit.longestFocusStreakDays >= 1);
+  assert.ok(report.streakAudit.roomBreakdown.length >= 1);
+  assert.ok(report.verificationDigest.startsWith('MRS-30D-'));
+
+  // Verify valid 2-page %PDF-1.4 document with cross-reference table and both pages
+  assert.ok(report.pdfContent.startsWith('%PDF-1.4\n'));
+  assert.ok(report.pdfContent.includes('/Count 2'));
+  assert.ok(report.pdfContent.includes('xref\n0 9\n'));
+  assert.ok(report.pdfContent.trimEnd().endsWith('%%EOF'));
+  assert.ok(
+    report.pdfContent.includes(
+      'MR. STRANGER SANCTUARY - 30-DAY STUDY ACTIVITY & PRODUCTIVITY STREAKS REPORT'
+    )
+  );
+  assert.ok(
+    report.pdfContent.includes(
+      'REAL-TIMER VERIFIED STUDY ROOM TELEMETRY & STREAK AUDIT CERTIFICATE'
+    )
+  );
+  assert.ok(report.pdfContent.includes('Mahit Saxena'));
+  assert.ok(report.pdfContent.includes('STUDY-SOLO'));
+  assert.ok(report.dataUrl.startsWith('data:application/pdf;charset=utf-8,'));
+});
+

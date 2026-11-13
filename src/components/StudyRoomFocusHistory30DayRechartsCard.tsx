@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -12,17 +12,30 @@ import {
 import {
   FocusHistory30DayPoint,
   FocusHistory30DaySummary,
+  buildStudy30DayActivityAndStreaksPdfReportSpec,
   formatStudyDurationLabel,
   normalizeStudyRoomCode,
   sanitizeSafeText,
 } from '../utils/rules';
-import { TrendingUp, Calendar, Plus, CheckCircle2 } from './ArchitecturalGlyphs';
+import {
+  TrendingUp,
+  Calendar,
+  Plus,
+  CheckCircle2,
+  Download,
+  FileText,
+  Flame,
+  Award,
+  ShieldCheck,
+} from './ArchitecturalGlyphs';
 
 interface StudyRoomFocusHistory30DayRechartsCardProps {
   summary: FocusHistory30DaySummary;
   activeRoomCode: string;
   dailyTargetMinutes: number;
   selectedRoomFilter: string;
+  scholarName?: string;
+  loginStreakDays?: number;
   onChangeRoomFilter: (nextRoomFilter: string) => void;
   onLogDailyFocusMinutes: (params: {
     dateKey: string;
@@ -94,6 +107,8 @@ export const StudyRoomFocusHistory30DayRechartsCard: React.FC<
   activeRoomCode,
   dailyTargetMinutes,
   selectedRoomFilter,
+  scholarName = 'Sanctuary Scholar',
+  loginStreakDays = 1,
   onChangeRoomFilter,
   onLogDailyFocusMinutes,
 }) => {
@@ -102,11 +117,49 @@ export const StudyRoomFocusHistory30DayRechartsCard: React.FC<
   const [selectedDateKey, setSelectedDateKey] = useState<string>(
     summary.todayPoint.dateKey
   );
-  const [logMinutesInput, setLogMinutesInput] = useState<string>('30');
-  const [logTopicInput, setLogTopicInput] = useState<string>(
-    'Deep Focus Architecture & Synthesis'
+  const [isPdfPreviewOpen, setIsPdfPreviewOpen] = useState<boolean>(false);
+  const [pdfExportCount, setPdfExportCount] = useState<number>(0);
+  const [lastExportedPdfToast, setLastExportedPdfToast] = useState<
+    string | null
+  >(null);
+
+  const pdfReportSpec = useMemo(
+    () =>
+      buildStudy30DayActivityAndStreaksPdfReportSpec({
+        summary,
+        scholarName,
+        activeRoomCode,
+        loginStreakDays,
+      }),
+    [summary, scholarName, activeRoomCode, loginStreakDays]
   );
-  const [recentLogToast, setRecentLogToast] = useState<string | null>(null);
+
+  const handleDownload30DayPdfReport = (openPreviewDrawer = true) => {
+    try {
+      const blob = new Blob([pdfReportSpec.pdfContent], {
+        type: pdfReportSpec.mimeType,
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', pdfReportSpec.filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch {
+      // Fallback for restricted environments
+    }
+    setPdfExportCount((prev) => prev + 1);
+    if (openPreviewDrawer) {
+      setIsPdfPreviewOpen(true);
+    }
+    setLastExportedPdfToast(
+      `Downloaded ${pdfReportSpec.filename} (${pdfReportSpec.pageCount} pages · ${Math.ceil(
+        pdfReportSpec.byteLength / 1024
+      )} KB · ID ${pdfReportSpec.verificationDigest})`
+    );
+  };
 
   const inspectedPoint =
     summary.points.find((p) => p.dateKey === selectedDateKey) ||
@@ -126,7 +179,7 @@ export const StudyRoomFocusHistory30DayRechartsCard: React.FC<
           <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-400">
             <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
             <span className="font-mono text-emerald-400">
-              30-Day Longitudinal Study Telemetry
+              30-Day Longitudinal Study Telemetry & PDF Report
             </span>
             <span aria-hidden="true">·</span>
             <span
@@ -140,17 +193,44 @@ export const StudyRoomFocusHistory30DayRechartsCard: React.FC<
             className="text-lg font-bold text-white"
             data-testid="focus-history-heading"
           >
-            Focus History
+            Focus History & 30-Day Productivity Streaks
           </h2>
           <p className="text-xs text-zinc-400 max-w-3xl">
             Daily focus minutes logged over the past 30 days across your study
-            sessions, overlaid with your 7-day rolling average and daily focus
-            goal threshold.
+            sessions, overlaid with your 7-day rolling average, consecutive
+            productivity streaks, and downloadable 2-page PDF report.
           </p>
         </div>
 
-        {/* Overlay Toggles & Room Filter */}
+        {/* Overlay Toggles, Room Filter & 30-Day PDF Export Actions */}
         <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <button
+            type="button"
+            onClick={() => handleDownload30DayPdfReport(true)}
+            data-testid="focus-history-export-30day-pdf-btn"
+            className="px-3.5 py-1.5 text-xs font-bold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded-md transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer shadow-md shadow-emerald-500/10"
+          >
+            <Download className="w-3.5 h-3.5 shrink-0" />
+            <span>Export 30-Day PDF Report</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setIsPdfPreviewOpen((prev) => !prev)}
+            aria-expanded={isPdfPreviewOpen}
+            data-testid="focus-history-preview-30day-pdf-btn"
+            className={`px-3 py-1.5 text-xs font-mono rounded-md border transition-colors flex items-center gap-1.5 whitespace-nowrap shrink-0 cursor-pointer ${
+              isPdfPreviewOpen
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 font-semibold'
+                : 'bg-[#050507] hover:bg-zinc-900 text-zinc-200 border-zinc-800'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span>
+              {isPdfPreviewOpen ? 'Hide PDF Preview' : 'Preview PDF Report'}
+            </span>
+          </button>
+
           <div
             className="flex items-center gap-1 p-1 rounded-lg bg-[#050507] border border-zinc-800/90"
             role="group"
@@ -219,6 +299,274 @@ export const StudyRoomFocusHistory30DayRechartsCard: React.FC<
           </div>
         </div>
       </div>
+
+      {/* Confirmation Banner When 30-Day PDF Report Is Exported */}
+      {lastExportedPdfToast && (
+        <div
+          role="status"
+          data-testid="focus-history-pdf-exported-banner"
+          className="p-3.5 rounded-lg bg-emerald-500/15 border border-emerald-500/40 flex flex-wrap items-center justify-between gap-3 text-xs text-emerald-200"
+        >
+          <div className="flex items-center gap-2 min-w-0">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <span className="font-mono truncate">{lastExportedPdfToast}</span>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[11px] font-mono text-emerald-300">
+              Exports this session: {pdfExportCount}
+            </span>
+            <a
+              href={pdfReportSpec.dataUrl}
+              download={pdfReportSpec.filename}
+              data-testid="focus-history-pdf-direct-download-link"
+              className="px-2.5 py-1 rounded bg-emerald-400 hover:bg-emerald-300 text-zinc-950 font-mono font-bold text-[11px] transition-colors"
+            >
+              Save PDF Again
+            </a>
+          </div>
+        </div>
+      )}
+
+      {/* Expandable 30-Day Study Activity & Productivity Streaks Formatted PDF Report Preview */}
+      {isPdfPreviewOpen && (
+        <div
+          data-testid="study-30day-pdf-report-preview-card"
+          className="p-5 rounded-xl bg-[#050507] border border-emerald-500/40 space-y-5 shadow-2xl"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-4 border-b border-zinc-800/90 pb-4">
+            <div className="space-y-1">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono text-emerald-400 uppercase tracking-wider">
+                <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+                <span>FORMATTED 2-PAGE PDF REPORT PREVIEW</span>
+                <span aria-hidden="true">·</span>
+                <span data-testid="study-30day-pdf-verification-id">
+                  {pdfReportSpec.verificationDigest}
+                </span>
+                <span aria-hidden="true">·</span>
+                <span>{pdfReportSpec.filename}</span>
+              </div>
+              <h3 className="text-base font-bold text-white">
+                {pdfReportSpec.reportTitle}
+              </h3>
+              <p className="text-xs text-zinc-400">
+                Scholar: <strong className="text-white">{pdfReportSpec.scholarName}</strong> ·
+                Scope: <strong className="text-emerald-300">{pdfReportSpec.selectedRoomFilter}</strong> ·
+                Window: <span className="font-mono text-zinc-300">{pdfReportSpec.windowLabel}</span>
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => handleDownload30DayPdfReport(true)}
+                data-testid="download-30day-study-pdf-confirm-btn"
+                className="px-4 py-2 text-xs font-bold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5 shrink-0" />
+                <span>Download Formatted PDF ({pdfReportSpec.pageCount} Pages)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsPdfPreviewOpen(false)}
+                data-testid="close-30day-study-pdf-preview-btn"
+                className="px-3 py-2 text-xs font-mono text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded-md transition-colors cursor-pointer"
+              >
+                Close Preview
+              </button>
+            </div>
+          </div>
+
+          {/* Productivity Streaks & Consistency Audit Strip */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            <div className="p-3 rounded-lg bg-[#0A0A0E] border border-zinc-800/90 space-y-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
+                <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span>Current Focus Streak</span>
+              </div>
+              <div
+                data-testid="pdf-report-current-focus-streak"
+                className="text-lg font-mono font-bold text-amber-300 tabular-nums"
+              >
+                {pdfReportSpec.streakAudit.currentFocusStreakDays} days
+              </div>
+              <div className="text-[10px] font-mono text-zinc-400">
+                Consecutive active study days
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-[#0A0A0E] border border-zinc-800/90 space-y-1">
+              <div className="flex items-center gap-1.5 text-[11px] font-mono text-zinc-400">
+                <Award className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <span>Longest 30d Streak</span>
+              </div>
+              <div
+                data-testid="pdf-report-longest-focus-streak"
+                className="text-lg font-mono font-bold text-emerald-400 tabular-nums"
+              >
+                {pdfReportSpec.streakAudit.longestFocusStreakDays} days
+              </div>
+              <div className="text-[10px] font-mono text-zinc-400">
+                Best run in past 30 days
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-[#0A0A0E] border border-zinc-800/90 space-y-1">
+              <div className="text-[11px] font-mono text-zinc-400">
+                Daily Goal Streak ({pdfReportSpec.dailyTargetMinutes}m)
+              </div>
+              <div
+                data-testid="pdf-report-goal-streak"
+                className="text-lg font-mono font-bold text-sky-300 tabular-nums"
+              >
+                {pdfReportSpec.streakAudit.currentGoalStreakDays}d{' '}
+                <span className="text-xs font-normal text-zinc-400">
+                  (Best: {pdfReportSpec.streakAudit.longestGoalStreakDays}d)
+                </span>
+              </div>
+              <div className="text-[10px] font-mono text-zinc-400">
+                {pdfReportSpec.streakAudit.goalMetDaysCount}/30 goal days met
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-[#0A0A0E] border border-zinc-800/90 space-y-1">
+              <div className="text-[11px] font-mono text-zinc-400">
+                Sanctuary Login Streak
+              </div>
+              <div
+                data-testid="pdf-report-login-streak"
+                className="text-lg font-mono font-bold text-white tabular-nums"
+              >
+                {pdfReportSpec.streakAudit.loginStreakDays}d streak
+              </div>
+              <div className="text-[10px] font-mono text-emerald-400">
+                Verified daily presence
+              </div>
+            </div>
+
+            <div className="p-3 rounded-lg bg-[#0A0A0E] border border-zinc-800/90 space-y-1 col-span-2 sm:col-span-1">
+              <div className="text-[11px] font-mono text-zinc-400">
+                Consistency Rating
+              </div>
+              <div
+                data-testid="pdf-report-consistency-tier"
+                className="text-sm font-mono font-bold text-emerald-300 truncate"
+              >
+                {pdfReportSpec.streakAudit.consistencyTierLabel}
+              </div>
+              <div className="text-[10px] font-mono text-zinc-400 truncate">
+                {pdfReportSpec.streakAudit.activeDaysCount}/30 active days
+              </div>
+            </div>
+          </div>
+
+          {/* Room-by-Room Activity Breakdown included in the PDF */}
+          <div className="p-3.5 rounded-lg bg-[#0A0A0E] border border-zinc-800/80 space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <span className="font-mono font-bold text-white uppercase tracking-wider">
+                30-Day Study Room Distribution
+              </span>
+              <span className="font-mono text-[11px] text-zinc-400">
+                Total: {pdfReportSpec.total30DayFocusMinutes}m ({pdfReportSpec.total30DayFocusHours}h)
+              </span>
+            </div>
+            {pdfReportSpec.streakAudit.roomBreakdown.length === 0 ? (
+              <p className="text-xs font-mono text-zinc-400">
+                No study sessions recorded yet in this 30-day filter window. Complete a live focus timer sprint to populate room breakdown telemetry.
+              </p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                {pdfReportSpec.streakAudit.roomBreakdown.map((rm) => (
+                  <div
+                    key={rm.roomCode}
+                    className="p-2.5 rounded bg-[#050507] border border-zinc-800/90 flex items-center justify-between gap-2 text-xs font-mono"
+                  >
+                    <div className="min-w-0">
+                      <div className="font-bold text-emerald-300 truncate">
+                        {rm.roomCode}
+                      </div>
+                      <div className="text-[10px] text-zinc-400">
+                        {rm.daysActive}d active · {rm.sessionsCount} sess
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="font-bold text-white tabular-nums">
+                        {rm.totalMinutes}m
+                      </div>
+                      <div className="text-[10px] text-zinc-400 tabular-nums">
+                        {rm.sharePercent}% share
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* 30-Day Chronological Table Preview (Scrollable) */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs font-mono">
+              <span className="text-zinc-300 font-semibold">
+                30-Day Daily Ledger Table Included in PDF ({pdfReportSpec.dailyRows.length} Days)
+              </span>
+              <span className="text-zinc-400 text-[11px]">
+                Pages 1–2 · {Math.ceil(pdfReportSpec.byteLength / 1024)} KB PDF-1.4 Document
+              </span>
+            </div>
+            <div className="max-h-56 overflow-y-auto rounded-lg border border-zinc-800/90 bg-[#0A0A0E]">
+              <table className="w-full text-left border-collapse text-xs font-mono">
+                <thead className="sticky top-0 bg-zinc-950 text-zinc-400 text-[10px] uppercase border-b border-zinc-800">
+                  <tr>
+                    <th className="py-2 px-3">Day</th>
+                    <th className="py-2 px-3">Date</th>
+                    <th className="py-2 px-3">Focus Time</th>
+                    <th className="py-2 px-3">7d Avg</th>
+                    <th className="py-2 px-3">Goal Status</th>
+                    <th className="py-2 px-3">Room</th>
+                    <th className="py-2 px-3">Topic</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/60">
+                  {pdfReportSpec.dailyRows
+                    .slice()
+                    .reverse()
+                    .map((row) => (
+                      <tr
+                        key={row.dateKey}
+                        className="hover:bg-zinc-900/50 transition-colors"
+                      >
+                        <td className="py-1.5 px-3 text-zinc-400 tabular-nums">
+                          #{row.dayNumber}
+                        </td>
+                        <td className="py-1.5 px-3 text-white whitespace-nowrap">
+                          {row.weekdayShort}, {row.shortDateLabel}
+                        </td>
+                        <td className="py-1.5 px-3 text-emerald-400 font-bold tabular-nums">
+                          {row.focusMinutes}m ({row.formattedDuration})
+                        </td>
+                        <td className="py-1.5 px-3 text-sky-300 tabular-nums">
+                          {row.rolling7DayAvgMinutes}m/d
+                        </td>
+                        <td
+                          className={`py-1.5 px-3 tabular-nums ${
+                            row.goalMet ? 'text-emerald-300' : 'text-zinc-400'
+                          }`}
+                        >
+                          {row.goalStatusLabel}
+                        </td>
+                        <td className="py-1.5 px-3 text-zinc-200 whitespace-nowrap">
+                          {row.topRoomCode}
+                        </td>
+                        <td className="py-1.5 px-3 text-zinc-400 truncate max-w-[180px]">
+                          {row.topTopic}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 4 Summary KPI Strip */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

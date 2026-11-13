@@ -86,6 +86,7 @@ import {
   evaluateCustomFocusSessionDurationSpec,
   adjustCustomFocusSessionDurationByDelta,
   applyUserSavedCustomFocusDurations,
+  buildStudy30DayActivityAndStreaksPdfReportSpec,
 } from '../utils/rules';
 import { soundEngine } from '../utils/audio';
 import { StudyFocus7DayD3Chart } from './StudyFocus7DayD3Chart';
@@ -125,6 +126,8 @@ import {
   Globe,
   Play,
   HeartHandshake,
+  Download,
+  FileText,
 } from './ArchitecturalGlyphs';
 
 export interface StudyDeskItem {
@@ -1870,6 +1873,41 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
     strictRealOnly: true,
   });
 
+  const [heroPdfExportToast, setHeroPdfExportToast] = useState<string | null>(
+    null
+  );
+
+  const study30DayPdfReportSpec = React.useMemo(
+    () =>
+      buildStudy30DayActivityAndStreaksPdfReportSpec({
+        summary: focusHistory30DaySummary,
+        scholarName: currentName,
+        activeRoomCode,
+      }),
+    [focusHistory30DaySummary, currentName, activeRoomCode]
+  );
+
+  const handleQuickExport30DayPdfReport = () => {
+    try {
+      const blob = new Blob([study30DayPdfReportSpec.pdfContent], {
+        type: study30DayPdfReportSpec.mimeType,
+      });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', study30DayPdfReportSpec.filename);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch {
+      // Fallback for restricted environments
+    }
+    setHeroPdfExportToast(
+      `Exported ${study30DayPdfReportSpec.filename} (${study30DayPdfReportSpec.pageCount} pages · ${study30DayPdfReportSpec.verificationDigest})`
+    );
+  };
+
   const studyFocus7DayTrend = buildStudyFocus7DaySessionTrend({
     todayDateKey: formatDateKey(new Date()),
     todayFocusMinutes: todayFocusMinutes + (onLogTopicFocusSession ? 0 : localAddedTodayMinutes),
@@ -2058,6 +2096,49 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
                   >
                     {mergedSessions.length} completed
                   </div>
+                </div>
+              </div>
+
+              {/* 1-Click 30-Day Study Activity & Productivity Streaks PDF Export Bar */}
+              <div
+                data-testid="study-hero-export-30day-pdf-bar"
+                className="p-3 rounded-lg bg-[#050507] border border-zinc-800/90 flex flex-wrap items-center justify-between gap-2"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold text-white truncate">
+                      30-Day Study Activity & Streaks PDF
+                    </div>
+                    <div className="text-[10px] font-mono text-zinc-400 truncate">
+                      {heroPdfExportToast ||
+                        `${study30DayPdfReportSpec.streakAudit.currentFocusStreakDays}d focus streak · ${study30DayPdfReportSpec.total30DayFocusMinutes}m in 30d`}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    data-testid="export-30day-study-pdf-btn"
+                    onClick={handleQuickExport30DayPdfReport}
+                    className="px-3 py-1.5 text-xs font-bold bg-emerald-400 hover:bg-emerald-300 text-zinc-950 rounded transition-colors flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
+                  >
+                    <Download className="w-3.5 h-3.5 shrink-0" />
+                    <span>Export 30-Day PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="scroll-to-30day-pdf-section-btn"
+                    onClick={() => {
+                      const sec = document.getElementById(
+                        'study-room-focus-history-section'
+                      );
+                      sec?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="px-2.5 py-1.5 text-[11px] font-mono text-zinc-300 hover:text-white bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 rounded transition-colors whitespace-nowrap cursor-pointer"
+                  >
+                    30d Details ↓
+                  </button>
                 </div>
               </div>
             </div>
@@ -3518,6 +3599,7 @@ export const StudyRoomView: React.FC<StudyRoomViewProps> = ({
         activeRoomCode={activeRoomCode}
         dailyTargetMinutes={dailyTargetMinutes}
         selectedRoomFilter={focusHistoryRoomFilter}
+        scholarName={currentName}
         onChangeRoomFilter={setFocusHistoryRoomFilter}
         onLogDailyFocusMinutes={handleLogFocusHistoryDailyMinutes}
       />

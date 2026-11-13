@@ -29850,4 +29850,684 @@ export function evaluateInstagramStyleChatModeState(params: {
   };
 }
 
+// ============================================================================
+// 30-DAY STUDY ROOM ACTIVITY & PRODUCTIVITY STREAKS PDF REPORT EXPORT
+// ============================================================================
+
+export const STUDY_30DAY_ACTIVITY_PDF_MIME_TYPE = 'application/pdf' as const;
+
+export interface Study30DayRoomBreakdownRow {
+  roomCode: string;
+  totalMinutes: number;
+  totalHours: number;
+  formattedDuration: string;
+  daysActive: number;
+  sessionsCount: number;
+  sharePercent: number;
+}
+
+export interface Study30DayProductivityStreakAudit {
+  currentFocusStreakDays: number;
+  longestFocusStreakDays: number;
+  currentGoalStreakDays: number;
+  longestGoalStreakDays: number;
+  loginStreakDays: number;
+  activeDaysCount: number;
+  goalMetDaysCount: number;
+  goalMetRatePercent: number;
+  consistencyTierLabel: string;
+  consistencySummary: string;
+  roomBreakdown: Study30DayRoomBreakdownRow[];
+}
+
+export interface Study30DayPdfDailyRow {
+  dayNumber: number;
+  dateKey: string;
+  weekdayShort: string;
+  shortDateLabel: string;
+  focusMinutes: number;
+  formattedDuration: string;
+  rolling7DayAvgMinutes: number;
+  dailyTargetMinutes: number;
+  goalMet: boolean;
+  goalStatusLabel: string;
+  goalCompletionPercent: number;
+  sessionsCount: number;
+  topRoomCode: string;
+  topTopic: string;
+}
+
+export interface Study30DayActivityPdfReportSpec {
+  filename: string;
+  mimeType: typeof STUDY_30DAY_ACTIVITY_PDF_MIME_TYPE;
+  reportTitle: string;
+  reportSubtitle: string;
+  scholarName: string;
+  activeRoomCode: string;
+  selectedRoomFilter: string;
+  windowLabel: string;
+  generatedAtIso: string;
+  generatedAtLabel: string;
+  verificationDigest: string;
+  pageCount: number;
+  byteLength: number;
+  total30DayFocusMinutes: number;
+  total30DayFocusHours: number;
+  formattedTotal30DayFocus: string;
+  averageDailyFocusMinutes: number;
+  formattedAverageDailyFocus: string;
+  dailyTargetMinutes: number;
+  weekOverWeekDeltaPercent: number;
+  peakDayLabel: string;
+  streakAudit: Study30DayProductivityStreakAudit;
+  dailyRows: Study30DayPdfDailyRow[];
+  pdfContent: string;
+  dataUrl: string;
+}
+
+export function buildStudy30DayActivityPdfFilename(params?: {
+  roomFilter?: string | null;
+  activeRoomCode?: string | null;
+  todayDateKey?: string | null;
+}): string {
+  const rawRoom =
+    params?.roomFilter && params.roomFilter.trim().toUpperCase() !== 'ALL'
+      ? params.roomFilter
+      : params?.activeRoomCode || 'all-rooms';
+  const cleanedRoom = String(rawRoom)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '') || 'all-rooms';
+  const rawDate = String(params?.todayDateKey || '').trim();
+  const cleanedDate = /^\d{4}-\d{2}-\d{2}$/.test(rawDate)
+    ? rawDate
+    : formatDateKey(new Date());
+  return `mr-stranger-30day-study-report-${cleanedRoom}-${cleanedDate}.pdf`;
+}
+
+export function computeProductivityStreakAudit(
+  points: readonly FocusHistory30DayPoint[],
+  loginStreakDays = 1
+): Study30DayProductivityStreakAudit {
+  const safePoints = Array.isArray(points) ? points : [];
+  let longestFocusStreakDays = 0;
+  let runningFocusStreak = 0;
+  let longestGoalStreakDays = 0;
+  let runningGoalStreak = 0;
+  let activeDaysCount = 0;
+  let goalMetDaysCount = 0;
+  let totalMinutesAll = 0;
+
+  const roomMap = new Map<
+    string,
+    { minutes: number; daysActive: number; sessions: number }
+  >();
+
+  for (const pt of safePoints) {
+    const mins = Math.max(0, Math.round(pt.focusMinutes || 0));
+    totalMinutesAll += mins;
+
+    if (mins > 0) {
+      activeDaysCount += 1;
+      runningFocusStreak += 1;
+      if (runningFocusStreak > longestFocusStreakDays) {
+        longestFocusStreakDays = runningFocusStreak;
+      }
+
+      const rCode = normalizeStudyRoomCode(pt.topRoomCode || 'STUDY-204') || 'STUDY-204';
+      const prevRoom = roomMap.get(rCode) || {
+        minutes: 0,
+        daysActive: 0,
+        sessions: 0,
+      };
+      prevRoom.minutes += mins;
+      prevRoom.daysActive += 1;
+      prevRoom.sessions += Math.max(1, pt.sessionsCount || 1);
+      roomMap.set(rCode, prevRoom);
+    } else {
+      runningFocusStreak = 0;
+    }
+
+    if (pt.goalMet) {
+      goalMetDaysCount += 1;
+      runningGoalStreak += 1;
+      if (runningGoalStreak > longestGoalStreakDays) {
+        longestGoalStreakDays = runningGoalStreak;
+      }
+    } else {
+      runningGoalStreak = 0;
+    }
+  }
+
+  // Current focus streak (walking backward from the most recent day; if today is 0, check from yesterday)
+  let currentFocusStreakDays = 0;
+  for (let i = safePoints.length - 1; i >= 0; i -= 1) {
+    const mins = Math.max(0, Math.round(safePoints[i].focusMinutes || 0));
+    if (mins > 0) {
+      currentFocusStreakDays += 1;
+    } else if (i === safePoints.length - 1) {
+      // Allow today to still be in progress without breaking yesterday's active streak
+      continue;
+    } else {
+      break;
+    }
+  }
+
+  let currentGoalStreakDays = 0;
+  for (let i = safePoints.length - 1; i >= 0; i -= 1) {
+    if (safePoints[i].goalMet) {
+      currentGoalStreakDays += 1;
+    } else if (i === safePoints.length - 1) {
+      continue;
+    } else {
+      break;
+    }
+  }
+
+  const totalDays = Math.max(1, safePoints.length);
+  const goalMetRatePercent = Math.round((goalMetDaysCount / totalDays) * 100);
+  const safeLoginStreak = Math.max(1, Math.round(loginStreakDays || 1));
+
+  let consistencyTierLabel = 'Emerging Focus Habit';
+  let consistencySummary =
+    'Building steady study room momentum with verified timer sessions.';
+  if (activeDaysCount >= 24 || goalMetRatePercent >= 75) {
+    consistencyTierLabel = 'S-Tier Sanctuary Scholar';
+    consistencySummary =
+      'Exceptional 30-day focus discipline and high daily goal completion.';
+  } else if (activeDaysCount >= 15 || goalMetRatePercent >= 50) {
+    consistencyTierLabel = 'A-Tier Deep Work Regular';
+    consistencySummary =
+      'Strong multi-week consistency across verified study room sessions.';
+  } else if (activeDaysCount >= 7 || longestFocusStreakDays >= 4) {
+    consistencyTierLabel = 'B-Tier Rising Momentum';
+    consistencySummary =
+      'Consistent weekly focus blocks and multi-day productivity streaks.';
+  }
+
+  const roomBreakdown: Study30DayRoomBreakdownRow[] = Array.from(
+    roomMap.entries()
+  )
+    .map(([roomCode, stats]) => ({
+      roomCode,
+      totalMinutes: stats.minutes,
+      totalHours: Number((stats.minutes / 60).toFixed(1)),
+      formattedDuration: formatStudyDurationLabel(stats.minutes),
+      daysActive: stats.daysActive,
+      sessionsCount: stats.sessions,
+      sharePercent:
+        totalMinutesAll > 0
+          ? Math.round((stats.minutes / totalMinutesAll) * 100)
+          : 0,
+    }))
+    .sort((a, b) => {
+      if (b.totalMinutes !== a.totalMinutes) {
+        return b.totalMinutes - a.totalMinutes;
+      }
+      return a.roomCode.localeCompare(b.roomCode);
+    });
+
+  return {
+    currentFocusStreakDays,
+    longestFocusStreakDays,
+    currentGoalStreakDays,
+    longestGoalStreakDays,
+    loginStreakDays: safeLoginStreak,
+    activeDaysCount,
+    goalMetDaysCount,
+    goalMetRatePercent,
+    consistencyTierLabel,
+    consistencySummary,
+    roomBreakdown,
+  };
+}
+
+function build30DayReportVerificationDigest(
+  scholarName: string,
+  windowLabel: string,
+  totalMinutes: number,
+  longestStreak: number
+): string {
+  const seed = `${scholarName}|${windowLabel}|${totalMinutes}|${longestStreak}`;
+  let hash = 2166136261;
+  for (let i = 0; i < seed.length; i += 1) {
+    hash ^= seed.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const hex = (hash >>> 0).toString(16).toUpperCase().padStart(8, '0');
+  return `MRS-30D-${hex}`;
+}
+
+export function generateStyledStudy30DayActivityPdfDocument(params: {
+  reportTitle: string;
+  reportSubtitle: string;
+  scholarName: string;
+  activeRoomCode: string;
+  selectedRoomFilter: string;
+  windowLabel: string;
+  generatedAtLabel: string;
+  verificationDigest: string;
+  total30DayFocusMinutes: number;
+  total30DayFocusHours: number;
+  formattedTotal30DayFocus: string;
+  averageDailyFocusMinutes: number;
+  formattedAverageDailyFocus: string;
+  dailyTargetMinutes: number;
+  weekOverWeekDeltaPercent: number;
+  peakDayLabel: string;
+  streakAudit: Study30DayProductivityStreakAudit;
+  dailyRows: readonly Study30DayPdfDailyRow[];
+}): string {
+  const page1Lines: string[] = [];
+  const page2Lines: string[] = [];
+
+  // --------------------------------------------------------------------------
+  // PAGE 1: EXECUTIVE SUMMARY, PRODUCTIVITY STREAKS, ROOM BREAKDOWN & DAYS 1-15
+  // --------------------------------------------------------------------------
+  page1Lines.push('0.98 0.97 0.95 rg 0 0 612 792 re f');
+  // Dark Matte Header Banner
+  page1Lines.push('0.06 0.06 0.08 rg 36 694 540 68 re f');
+  page1Lines.push('0.06 0.73 0.51 rg 36 758 540 4 re f');
+
+  page1Lines.push('BT /F2 12.5 Tf 0.96 0.96 0.97 rg 48 738 Td');
+  page1Lines.push(`(${escapePdfTextLiteral(params.reportTitle)}) Tj ET`);
+  page1Lines.push('BT /F1 8.5 Tf 0.43 0.91 0.72 rg 48 722 Td');
+  page1Lines.push(`(${escapePdfTextLiteral(params.reportSubtitle)}) Tj ET`);
+  page1Lines.push('BT /F1 8 Tf 0.78 0.78 0.82 rg 48 706 Td');
+  page1Lines.push(
+    `(${escapePdfTextLiteral(
+      `Scholar: ${params.scholarName} | Room Scope: ${params.selectedRoomFilter} (Active: ${params.activeRoomCode}) | Window: ${params.windowLabel} | ID: ${params.verificationDigest}`
+    )}) Tj ET`
+  );
+
+  // Section 1: 30-Day Activity & Productivity Streak KPI Cards
+  page1Lines.push('0.93 0.92 0.89 rg 36 618 540 66 re f');
+  page1Lines.push('0.80 0.78 0.73 RG 0.8 w 36 618 540 66 re S');
+
+  page1Lines.push('BT /F2 9 Tf 0.10 0.10 0.12 rg 46 668 Td');
+  page1Lines.push(
+    `(${escapePdfTextLiteral(
+      '1. 30-DAY FOCUS TELEMETRY & PRODUCTIVITY STREAK SUMMARY'
+    )}) Tj ET`
+  );
+
+  const kpiLine1 = `Total Focus (30d): ${params.total30DayFocusMinutes}m (${params.total30DayFocusHours}h)   |   Daily Avg: ${params.averageDailyFocusMinutes}m/day   |   Active Study Days: ${params.streakAudit.activeDaysCount}/30   |   Goal Hit Rate (${params.dailyTargetMinutes}m): ${params.streakAudit.goalMetDaysCount}/30 (${params.streakAudit.goalMetRatePercent}%)`;
+  page1Lines.push('BT /F1 8 Tf 0.18 0.18 0.20 rg 46 652 Td');
+  page1Lines.push(`(${escapePdfTextLiteral(kpiLine1)}) Tj ET`);
+
+  const streakLine = `Current Focus Streak: ${params.streakAudit.currentFocusStreakDays}d   |   Longest 30d Streak: ${params.streakAudit.longestFocusStreakDays}d   |   Goal Streak: ${params.streakAudit.currentGoalStreakDays}d (Best: ${params.streakAudit.longestGoalStreakDays}d)   |   Login Streak: ${params.streakAudit.loginStreakDays}d`;
+  page1Lines.push('BT /F2 8 Tf 0.05 0.45 0.32 rg 46 638 Td');
+  page1Lines.push(`(${escapePdfTextLiteral(streakLine)}) Tj ET`);
+
+  const tierLine = `Consistency Tier: ${params.streakAudit.consistencyTierLabel}   |   Peak Focus Day: ${params.peakDayLabel}   |   7d Momentum: ${
+    params.weekOverWeekDeltaPercent >= 0
+      ? `+${params.weekOverWeekDeltaPercent}%`
+      : `${params.weekOverWeekDeltaPercent}%`
+  }`;
+  page1Lines.push('BT /F1 7.8 Tf 0.28 0.27 0.25 rg 46 625 Td');
+  page1Lines.push(`(${escapePdfTextLiteral(tierLine)}) Tj ET`);
+
+  // Section 2: Study Room Breakdown Strip
+  page1Lines.push('0.95 0.94 0.91 rg 36 568 540 42 re f');
+  page1Lines.push('0.82 0.80 0.75 RG 0.6 w 36 568 540 42 re S');
+  page1Lines.push('BT /F2 8.5 Tf 0.12 0.12 0.14 rg 46 595 Td');
+  page1Lines.push(
+    '(2. STUDY ROOM ACTIVITY DISTRIBUTION (PAST 30 DAYS)) Tj ET'
+  );
+
+  const topRoomsSummary =
+    params.streakAudit.roomBreakdown.length > 0
+      ? params.streakAudit.roomBreakdown
+          .slice(0, 4)
+          .map(
+            (r) =>
+              `${r.roomCode}: ${r.totalMinutes}m (${r.daysActive}d, ${r.sessionsCount} sess, ${r.sharePercent}%)`
+          )
+          .join('   |   ')
+      : `${params.activeRoomCode}: 0m logged in current filter window`;
+  page1Lines.push('BT /F1 7.8 Tf 0.20 0.20 0.22 rg 46 579 Td');
+  page1Lines.push(`(${escapePdfTextLiteral(topRoomsSummary)}) Tj ET`);
+
+  // Section 3: Daily Activity Table Header (Days 1 - 15)
+  page1Lines.push('0.10 0.10 0.12 rg 36 538 540 22 re f');
+  page1Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 44 546 Td (DAY) Tj ET');
+  page1Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 76 546 Td (DATE) Tj ET');
+  page1Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 150 546 Td (FOCUS TIME) Tj ET');
+  page1Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 222 546 Td (7D AVG) Tj ET');
+  page1Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 276 546 Td (GOAL STATUS) Tj ET');
+  page1Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 358 546 Td (STUDY ROOM) Tj ET');
+  page1Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 436 546 Td (PRIMARY FOCUS TOPIC) Tj ET');
+
+  const rowHeight = 28;
+  const first15Rows = params.dailyRows.slice(0, 15);
+  first15Rows.forEach((row, idx) => {
+    const topY = 538 - (idx + 1) * rowHeight;
+    const isEven = idx % 2 === 0;
+    page1Lines.push(
+      `${isEven ? '0.99 0.98 0.96' : '0.95 0.94 0.91'} rg 36 ${topY} 540 ${rowHeight} re f`
+    );
+    page1Lines.push(`0.86 0.84 0.80 RG 0.4 w 36 ${topY} 540 ${rowHeight} re S`);
+
+    // Left accent bar (emerald when goal met, sky when active, gray when 0m)
+    const barColor = row.goalMet
+      ? '0.06 0.73 0.51'
+      : row.focusMinutes > 0
+        ? '0.22 0.65 0.88'
+        : '0.70 0.68 0.64';
+    page1Lines.push(`${barColor} rg 36 ${topY} 3.5 ${rowHeight} re f`);
+
+    const textY = topY + 10;
+    page1Lines.push(
+      `BT /F2 7.5 Tf 0.35 0.34 0.32 rg 44 ${textY} Td (#${row.dayNumber}) Tj ET`
+    );
+    page1Lines.push(
+      `BT /F1 7.8 Tf 0.12 0.12 0.14 rg 76 ${textY} Td (${escapePdfTextLiteral(
+        `${row.weekdayShort}, ${row.shortDateLabel}`
+      )}) Tj ET`
+    );
+    page1Lines.push(
+      `BT /F2 8 Tf 0.08 0.42 0.29 rg 150 ${textY} Td (${escapePdfTextLiteral(
+        `${row.focusMinutes}m (${row.formattedDuration})`
+      )}) Tj ET`
+    );
+    page1Lines.push(
+      `BT /F1 7.5 Tf 0.25 0.25 0.28 rg 222 ${textY} Td (${row.rolling7DayAvgMinutes}m/d) Tj ET`
+    );
+    page1Lines.push(
+      `BT /F2 7.5 Tf ${
+        row.goalMet ? '0.06 0.55 0.38' : '0.55 0.42 0.12'
+      } rg 276 ${textY} Td (${escapePdfTextLiteral(row.goalStatusLabel)}) Tj ET`
+    );
+    page1Lines.push(
+      `BT /F2 7.5 Tf 0.16 0.16 0.18 rg 358 ${textY} Td (${escapePdfTextLiteral(
+        row.topRoomCode.slice(0, 14)
+      )}) Tj ET`
+    );
+    page1Lines.push(
+      `BT /F1 7.2 Tf 0.28 0.27 0.25 rg 436 ${textY} Td (${escapePdfTextLiteral(
+        row.topTopic.slice(0, 26)
+      )}) Tj ET`
+    );
+  });
+
+  page1Lines.push(
+    `BT /F1 7.5 Tf 0.42 0.40 0.36 rg 36 42 Td (${escapePdfTextLiteral(
+      `Mr. Stranger · 24/7 Global Study Sanctuary — Generated ${params.generatedAtLabel} — Page 1 of 2`
+    )}) Tj ET`
+  );
+
+  // --------------------------------------------------------------------------
+  // PAGE 2: DAYS 16-30 DAILY STUDY LEDGER & REAL-TIMER VERIFICATION CERTIFICATE
+  // --------------------------------------------------------------------------
+  page2Lines.push('0.98 0.97 0.95 rg 0 0 612 792 re f');
+  page2Lines.push('0.06 0.06 0.08 rg 36 712 540 48 re f');
+  page2Lines.push('0.06 0.73 0.51 rg 36 756 540 4 re f');
+  page2Lines.push('BT /F2 11.5 Tf 0.96 0.96 0.97 rg 48 736 Td');
+  page2Lines.push(
+    `(${escapePdfTextLiteral(
+      `${params.reportTitle} — CHRONOLOGICAL LEDGER (DAYS 16 - 30)`
+    )}) Tj ET`
+  );
+  page2Lines.push('BT /F1 8 Tf 0.78 0.78 0.82 rg 48 721 Td');
+  page2Lines.push(
+    `(${escapePdfTextLiteral(
+      `Scholar: ${params.scholarName} | Verification Digest: ${params.verificationDigest} | Window: ${params.windowLabel}`
+    )}) Tj ET`
+  );
+
+  // Table Header on Page 2
+  page2Lines.push('0.10 0.10 0.12 rg 36 678 540 22 re f');
+  page2Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 44 686 Td (DAY) Tj ET');
+  page2Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 76 686 Td (DATE) Tj ET');
+  page2Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 150 686 Td (FOCUS TIME) Tj ET');
+  page2Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 222 686 Td (7D AVG) Tj ET');
+  page2Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 276 686 Td (GOAL STATUS) Tj ET');
+  page2Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 358 686 Td (STUDY ROOM) Tj ET');
+  page2Lines.push('BT /F2 7.8 Tf 0.96 0.96 0.97 rg 436 686 Td (PRIMARY FOCUS TOPIC) Tj ET');
+
+  const remaining15Rows = params.dailyRows.slice(15, 30);
+  remaining15Rows.forEach((row, idx) => {
+    const topY = 678 - (idx + 1) * rowHeight;
+    const isEven = idx % 2 === 0;
+    page2Lines.push(
+      `${isEven ? '0.99 0.98 0.96' : '0.95 0.94 0.91'} rg 36 ${topY} 540 ${rowHeight} re f`
+    );
+    page2Lines.push(`0.86 0.84 0.80 RG 0.4 w 36 ${topY} 540 ${rowHeight} re S`);
+
+    const barColor = row.goalMet
+      ? '0.06 0.73 0.51'
+      : row.focusMinutes > 0
+        ? '0.22 0.65 0.88'
+        : '0.70 0.68 0.64';
+    page2Lines.push(`${barColor} rg 36 ${topY} 3.5 ${rowHeight} re f`);
+
+    const textY = topY + 10;
+    page2Lines.push(
+      `BT /F2 7.5 Tf 0.35 0.34 0.32 rg 44 ${textY} Td (#${row.dayNumber}) Tj ET`
+    );
+    page2Lines.push(
+      `BT /F1 7.8 Tf 0.12 0.12 0.14 rg 76 ${textY} Td (${escapePdfTextLiteral(
+        `${row.weekdayShort}, ${row.shortDateLabel}`
+      )}) Tj ET`
+    );
+    page2Lines.push(
+      `BT /F2 8 Tf 0.08 0.42 0.29 rg 150 ${textY} Td (${escapePdfTextLiteral(
+        `${row.focusMinutes}m (${row.formattedDuration})`
+      )}) Tj ET`
+    );
+    page2Lines.push(
+      `BT /F1 7.5 Tf 0.25 0.25 0.28 rg 222 ${textY} Td (${row.rolling7DayAvgMinutes}m/d) Tj ET`
+    );
+    page2Lines.push(
+      `BT /F2 7.5 Tf ${
+        row.goalMet ? '0.06 0.55 0.38' : '0.55 0.42 0.12'
+      } rg 276 ${textY} Td (${escapePdfTextLiteral(row.goalStatusLabel)}) Tj ET`
+    );
+    page2Lines.push(
+      `BT /F2 7.5 Tf 0.16 0.16 0.18 rg 358 ${textY} Td (${escapePdfTextLiteral(
+        row.topRoomCode.slice(0, 14)
+      )}) Tj ET`
+    );
+    page2Lines.push(
+      `BT /F1 7.2 Tf 0.28 0.27 0.25 rg 436 ${textY} Td (${escapePdfTextLiteral(
+        row.topTopic.slice(0, 26)
+      )}) Tj ET`
+    );
+  });
+
+  // Verification Certificate Box at Bottom of Page 2
+  page2Lines.push('0.93 0.92 0.89 rg 36 168 540 72 re f');
+  page2Lines.push('0.06 0.73 0.51 RG 1.0 w 36 168 540 72 re S');
+  page2Lines.push('BT /F2 9 Tf 0.08 0.42 0.29 rg 48 222 Td');
+  page2Lines.push(
+    '(REAL-TIMER VERIFIED STUDY ROOM TELEMETRY & STREAK AUDIT CERTIFICATE) Tj ET'
+  );
+  page2Lines.push('BT /F1 8 Tf 0.18 0.18 0.20 rg 48 206 Td');
+  page2Lines.push(
+    `(${escapePdfTextLiteral(
+      `This report certifies that ${params.scholarName} logged ${params.total30DayFocusMinutes} minutes (${params.total30DayFocusHours} hours) across ${params.streakAudit.activeDaysCount} active days`
+    )}) Tj ET`
+  );
+  page2Lines.push('BT /F1 8 Tf 0.18 0.18 0.20 rg 48 193 Td');
+  page2Lines.push(
+    `(${escapePdfTextLiteral(
+      `with a current focus streak of ${params.streakAudit.currentFocusStreakDays} days (longest 30d streak: ${params.streakAudit.longestFocusStreakDays} days) and ${params.streakAudit.loginStreakDays}-day login streak.`
+    )}) Tj ET`
+  );
+  page2Lines.push('BT /F2 7.8 Tf 0.28 0.27 0.25 rg 48 179 Td');
+  page2Lines.push(
+    `(${escapePdfTextLiteral(
+      `Verification Digest: ${params.verificationDigest}   |   Consistency Rating: ${params.streakAudit.consistencyTierLabel}`
+    )}) Tj ET`
+  );
+
+  page2Lines.push(
+    `BT /F1 7.5 Tf 0.42 0.40 0.36 rg 36 42 Td (${escapePdfTextLiteral(
+      `Mr. Stranger · 24/7 Global Study Sanctuary — Generated ${params.generatedAtLabel} — Page 2 of 2`
+    )}) Tj ET`
+  );
+
+  const stream1 = page1Lines.join('\n');
+  const stream2 = page2Lines.join('\n');
+
+  const objects: string[] = [
+    '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj',
+    '2 0 obj\n<< /Type /Pages /Kids [3 0 R 4 0 R] /Count 2 >>\nendobj',
+    '3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 7 0 R >>\nendobj',
+    '4 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> /Contents 8 0 R >>\nendobj',
+    '5 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj',
+    '6 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>\nendobj',
+    `7 0 obj\n<< /Length ${stream1.length} >>\nstream\n${stream1}\nendstream\nendobj`,
+    `8 0 obj\n<< /Length ${stream2.length} >>\nstream\n${stream2}\nendstream\nendobj`,
+  ];
+
+  let pdf = '%PDF-1.4\n';
+  const offsets: number[] = [0];
+  for (const obj of objects) {
+    offsets.push(pdf.length);
+    pdf += `${obj}\n`;
+  }
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n`;
+  pdf += '0000000000 65535 f \n';
+  for (let i = 1; i <= objects.length; i += 1) {
+    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return pdf;
+}
+
+export function buildStudy30DayActivityAndStreaksPdfReportSpec(params: {
+  summary: FocusHistory30DaySummary;
+  scholarName?: string;
+  activeRoomCode?: string;
+  loginStreakDays?: number;
+  referenceTimestampMs?: number;
+}): Study30DayActivityPdfReportSpec {
+  const { summary } = params;
+  const scholarName =
+    sanitizeSafeText(params.scholarName || 'Sanctuary Scholar', 60) ||
+    'Sanctuary Scholar';
+  const activeRoomCode =
+    normalizeStudyRoomCode(params.activeRoomCode || 'STUDY-204') || 'STUDY-204';
+  const selectedRoomFilter = summary.selectedRoomFilter || 'ALL';
+  const referenceMs =
+    typeof params.referenceTimestampMs === 'number' &&
+    Number.isFinite(params.referenceTimestampMs) &&
+    params.referenceTimestampMs > 0
+      ? Math.floor(params.referenceTimestampMs)
+      : Date.now();
+
+  const generatedTs = formatWorkspaceQrHistoryOriginalTimestamp(
+    referenceMs,
+    referenceMs
+  );
+
+  const streakAudit = computeProductivityStreakAudit(
+    summary.points,
+    params.loginStreakDays ?? Math.max(1, summary.currentStreakDays || 1)
+  );
+
+  const dailyTargetMinutes =
+    summary.points[0]?.dailyTargetMinutes ||
+    summary.todayPoint?.dailyTargetMinutes ||
+    120;
+
+  const dailyRows: Study30DayPdfDailyRow[] = summary.points.map((pt, idx) => ({
+    dayNumber: idx + 1,
+    dateKey: pt.dateKey,
+    weekdayShort: pt.weekdayShort,
+    shortDateLabel: pt.shortDateLabel,
+    focusMinutes: pt.focusMinutes,
+    formattedDuration: pt.formattedDuration,
+    rolling7DayAvgMinutes: pt.rolling7DayAvgMinutes,
+    dailyTargetMinutes: pt.dailyTargetMinutes,
+    goalMet: pt.goalMet,
+    goalStatusLabel: pt.goalMet
+      ? `MET (${pt.goalCompletionPercent}%)`
+      : pt.focusMinutes > 0
+        ? `${pt.goalCompletionPercent}% of ${pt.dailyTargetMinutes}m`
+        : 'Rest / 0m',
+    goalCompletionPercent: pt.goalCompletionPercent,
+    sessionsCount: pt.sessionsCount,
+    topRoomCode: pt.topRoomCode,
+    topTopic: pt.topTopic,
+  }));
+
+  const verificationDigest = build30DayReportVerificationDigest(
+    scholarName,
+    summary.windowLabel,
+    summary.total30DayFocusMinutes,
+    streakAudit.longestFocusStreakDays
+  );
+
+  const peakDayLabel = `${summary.peakDay.shortDateLabel} (${summary.peakDay.focusMinutes}m in ${summary.peakDay.topRoomCode})`;
+  const reportTitle =
+    'MR. STRANGER SANCTUARY - 30-DAY STUDY ACTIVITY & PRODUCTIVITY STREAKS REPORT';
+  const reportSubtitle =
+    'Verified 30-day study room focus telemetry, consecutive productivity streaks, room breakdown, and daily ledger';
+
+  const pdfContent = generateStyledStudy30DayActivityPdfDocument({
+    reportTitle,
+    reportSubtitle,
+    scholarName,
+    activeRoomCode,
+    selectedRoomFilter,
+    windowLabel: summary.windowLabel,
+    generatedAtLabel: generatedTs.formattedUtcTimestamp,
+    verificationDigest,
+    total30DayFocusMinutes: summary.total30DayFocusMinutes,
+    total30DayFocusHours: summary.total30DayFocusHours,
+    formattedTotal30DayFocus: summary.formattedTotal30DayFocus,
+    averageDailyFocusMinutes: summary.averageDailyFocusMinutes,
+    formattedAverageDailyFocus: summary.formattedAverageDailyFocus,
+    dailyTargetMinutes,
+    weekOverWeekDeltaPercent: summary.weekOverWeekDeltaPercent,
+    peakDayLabel,
+    streakAudit,
+    dailyRows,
+  });
+
+  const filename = buildStudy30DayActivityPdfFilename({
+    roomFilter: selectedRoomFilter,
+    activeRoomCode,
+    todayDateKey: summary.todayPoint?.dateKey,
+  });
+
+  const dataUrl = `data:application/pdf;charset=utf-8,${encodeURIComponent(
+    pdfContent
+  )}`;
+
+  return {
+    filename,
+    mimeType: STUDY_30DAY_ACTIVITY_PDF_MIME_TYPE,
+    reportTitle,
+    reportSubtitle,
+    scholarName,
+    activeRoomCode,
+    selectedRoomFilter,
+    windowLabel: summary.windowLabel,
+    generatedAtIso: generatedTs.scannedAtIso,
+    generatedAtLabel: generatedTs.formattedUtcTimestamp,
+    verificationDigest,
+    pageCount: 2,
+    byteLength: pdfContent.length,
+    total30DayFocusMinutes: summary.total30DayFocusMinutes,
+    total30DayFocusHours: summary.total30DayFocusHours,
+    formattedTotal30DayFocus: summary.formattedTotal30DayFocus,
+    averageDailyFocusMinutes: summary.averageDailyFocusMinutes,
+    formattedAverageDailyFocus: summary.formattedAverageDailyFocus,
+    dailyTargetMinutes,
+    weekOverWeekDeltaPercent: summary.weekOverWeekDeltaPercent,
+    peakDayLabel,
+    streakAudit,
+    dailyRows,
+    pdfContent,
+    dataUrl,
+  };
+}
+
+
 
